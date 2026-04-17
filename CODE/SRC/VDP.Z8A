@@ -14,12 +14,12 @@ VDPWAIT         PUSH    AF
                 LD      A, 2
                 DI
                 OUT     (VDPCT), A
-                LD      A, #8F          ; select status reg S#2 (R#15=2)
+                LD      A, #8F          ; SELECT STATUS REG S#2 (R#15=2)
                 OUT     (VDPCT), A
 .WAIT           IN      A, (VDPST)
-                RRA                     ; CE into carry
+                RRA                     ; CE INTO CARRY
                 JR      C, .WAIT
-                XOR     A               ; restore S#0 selection
+                XOR     A               ; RESTORE S#0 SELECTION
                 DI
                 OUT     (VDPCT), A
                 LD      A, #8F
@@ -40,9 +40,9 @@ VDPWAIT         PUSH    AF
 SETVR           PUSH    AF
                 DI
                 LD      A, E
-                OUT     (VDPCT), A      ; write value byte first
+                OUT     (VDPCT), A      ; WRITE VALUE BYTE FIRST
                 POP     AF
-                OR      #80             ; reg number | #80 = register select
+                OR      #80             ; REG NUMBER | #80 = REGISTER SELECT
                 OUT     (VDPCT), A
                 EI
                 RET
@@ -57,12 +57,12 @@ SETVR           PUSH    AF
 
 VDPCMD          CALL    VDPWAIT
                 DI
-                LD      A, 32           ; start at R#32
+                LD      A, 32           ; START AT R#32
                 OUT     (VDPCT), A
-                LD      A, #91          ; R#17 (indirect register pointer)
+                LD      A, #91          ; R#17 (INDIRECT REGISTER POINTER)
                 OUT     (VDPCT), A
                 
-                LD      C, VDPPALC      ; VDP register data port
+                LD      C, VDPPALC      ; VDP REGISTER DATA PORT
                 REPT    15
                 OUTI
                 ENDR
@@ -105,6 +105,6 @@ HMMM            PUSH    AF
 ; - A: LOGICAL OP (VDP_IMP, VDP_XOR, ETC)
 ; -
 
-LMMM            LD      (IX+14), A      ; set command + logop
+LMMM            LD      (IX+14), A      ; SET COMMAND + LOGOP
                 CALL    VDPCMD
                 RET

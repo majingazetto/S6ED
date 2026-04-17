@@ -76,23 +76,23 @@ RG25SA          EQU     #FFFA
 RG26SA          EQU     #FFFB
 RG27SA          EQU     #FFFC
 
-CGPNT           EQU     #0004           ; ROM charset slot+address pointer
-                                        ; read via RDSLT from slot 0
+CGPNT           EQU     #0004           ; ROM CHARSET SLOT+ADDRESS POINTER
+                                        ; READ VIA RDSLT FROM SLOT 0
 
 
 ; --- EXTBIO / MAPPER           ----------------------------------------
 
 
 EXTBIO          EQU     #FFCA
-HOKVLD          EQU     #FB20           ; bit 0 = extended BIOS present
+HOKVLD          EQU     #FB20           ; BIT 0 = EXTENDED BIOS PRESENT
 ARG             EQU     #F847
 
-                ; mapper device / function
-MAP_DEV         EQU     4               ; D=4: memory mapper device
-MAPFNTBL      EQU     2              ; E=2: get jump table (→ HL)
-MAPFNVAR      EQU     1              ; E=1: get variable table (→ HL)
+                ; MAPPER DEVICE / FUNCTION
+MAP_DEV         EQU     4               ; D=4: MEMORY MAPPER DEVICE
+MAPFNTBL      EQU     2              ; E=2: GET JUMP TABLE (→ HL)
+MAPFNVAR      EQU     1              ; E=1: GET VARIABLE TABLE (→ HL)
 
-                ; mapper jump table offsets (from base returned by EXTBIO)
+                ; MAPPER JUMP TABLE OFFSETS (FROM BASE RETURNED BY EXTBIO)
 MJALLSEG      EQU     #00
 MJFRESEG      EQU     #03
 MJRDSEG       EQU     #06
@@ -102,7 +102,7 @@ MJCALLS       EQU     #0F
 MJPUTPH       EQU     #12
 MJGETPH       EQU     #15
 MJPUTP0       EQU     #18
-MJGETP0       EQU     #1B
+MJGETP0       EQU     %1
 MJPUTP1       EQU     #1E
 MJGETP1       EQU     #21
 MJPUTP2       EQU     #24
@@ -114,49 +114,49 @@ MJGETP3       EQU     #2D
 ; --- VDP PORTS                 ----------------------------------------
 
 
-VDPDR           EQU     #98             ; VDP data port (read/write)
-VDPCT           EQU     #99             ; VDP control port (register/status)
-VDPST           EQU     #99             ; VDP status port (read)
-VDPPAL          EQU     #9A             ; palette data
-VDPPALC         EQU     #9B             ; palette register
+VDPDR           EQU     #98             ; VDP DATA PORT (READ/WRITE)
+VDPCT           EQU     #99             ; VDP CONTROL PORT (REGISTER/STATUS)
+VDPST           EQU     #99             ; VDP STATUS PORT (READ)
+VDPPAL          EQU     #9A             ; PALETTE DATA
+VDPPALC         EQU     #9B             ; PALETTE REGISTER
 
 
 ; --- VDP COMMAND REGISTER VALUES   -----------------------------------
 
 
-                ; CMR (R#46) command codes
-VDP_HMMC        EQU     #F0             ; CPU → VRAM (byte-transfer)
-VDP_YMMM        EQU     #E0             ; VRAM → VRAM (Y only, same X)
-VDP_HMMM        EQU     #D0             ; VRAM → VRAM (byte-transfer)
-VDP_HMMV        EQU     #C0             ; Fill bytes
-VDP_LMMC        EQU     #B0             ; CPU → VRAM (dot-transfer)
-VDP_LMCM        EQU     #A0             ; VRAM → CPU (dot-transfer)
-VDP_LMMM        EQU     #90             ; VRAM → VRAM (dot-transfer)
-VDP_LMMV        EQU     #80             ; Fill dots
-VDP_LINE        EQU     #70             ; Draw line
-VDP_SRCH        EQU     #60             ; Search for color
-VDP_PSET        EQU     #50             ; Plot dot
-VDPOINT       EQU     #40             ; Get dot color
-VDP_STOP        EQU     #20             ; Stop command
+                ; CMR (R#46) COMMAND CODES
+VDP_HMMC        EQU     #F0             ; CPU → VRAM (BYTE-TRANSFER)
+VDP_YMMM        EQU     #E0             ; VRAM → VRAM (Y ONLY, SAME X)
+VDP_HMMM        EQU     #D0             ; VRAM → VRAM (BYTE-TRANSFER)
+VDP_HMMV        EQU     #C0             ; FILL BYTES
+VDP_LMMC        EQU     #B0             ; CPU → VRAM (DOT-TRANSFER)
+VDP_LMCM        EQU     #A0             ; VRAM → CPU (DOT-TRANSFER)
+VDP_LMMM        EQU     #90             ; VRAM → VRAM (DOT-TRANSFER)
+VDP_LMMV        EQU     #80             ; FILL DOTS
+VDP_LINE        EQU     #70             ; DRAW LINE
+VDP_SRCH        EQU     #60             ; SEARCH FOR COLOR
+VDP_PSET        EQU     #50             ; PLOT DOT
+VDPOINT       EQU     #40             ; GET DOT COLOR
+VDP_STOP        EQU     #20             ; STOP COMMAND
 VDP_NOP         EQU     #00
 
-                ; ARG (R#45) DIY bits
-VDP_DIY         EQU     #04             ; set: direction Y = up (default down)
-VDP_DIX         EQU     #02             ; set: direction X = left (default right)
-VDP_EQ          EQU     #01             ; SRCH: stop if equal (default not-equal)
-VDP_MXS         EQU     #20             ; source in page 1
-VDP_MXD         EQU     #10             ; dest in page 1
+                ; ARG (R#45) DIY BITS
+VDP_DIY         EQU     #04             ; SET: DIRECTION Y = UP (DEFAULT DOWN)
+VDP_DIX         EQU     #02             ; SET: DIRECTION X = LEFT (DEFAULT RIGHT)
+VDP_EQ          EQU     #01             ; SRCH: STOP IF EQUAL (DEFAULT NOT-EQUAL)
+VDP_MXS         EQU     #20             ; SOURCE IN PAGE 1
+VDP_MXD         EQU     #10             ; DEST IN PAGE 1
 
-                ; Logical operations (CMR bits 3-0, used with LMMM/LMMV/LMMC)
+                ; LOGICAL OPERATIONS (CMR BITS 3-0, USED WITH LMMM/LMMV/LMMC)
 VDP_IMP         EQU     #00             ; SRC → DST
 VDP_AND         EQU     #01
 VDP_OR          EQU     #02
 VDP_XOR         EQU     #03
 VDP_NOT         EQU     #04
-VDP_TIMP        EQU     #08             ; transparent (color 0 not written)
+VDP_TIMP        EQU     #08             ; TRANSPARENT (COLOR 0 NOT WRITTEN)
 VDP_TAND        EQU     #09
 VDP_TOR         EQU     #0A
-VDP_TXOR        EQU     #0B
+VDP_TXOR        EQU     %0
 VDP_TNOT        EQU     #0C
 
 
@@ -172,7 +172,7 @@ _CONOUT         EQU     #02
 _DIRIO          EQU     #06
 _INNOE          EQU     #08
 _STROUT         EQU     #09
-_CONST          EQU     #0B
+_CONST          EQU     %0
 _BUFIN          EQU     #0A
 
 _FOPEN          EQU     #0F
@@ -184,7 +184,7 @@ _WRBLK          EQU     #26
 _RDBLK          EQU     #27
 _TERM0          EQU     #00
 
-                ; DOS2 calls
+                ; DOS2 CALLS
 _OPEN           EQU     #43
 _CREATE         EQU     #44
 _CLOSE          EQU     #45
@@ -229,28 +229,28 @@ BS              EQU     #08
 TAB             EQU     #09
 LF              EQU     #0A
 CR              EQU     #0D
-ESC             EQU     #1B
+ESC             EQU     %1
 DEL             EQU     #7F
 
-                ; MSX cursor keys (returned by CHGET)
+                ; MSX CURSOR KEYS (RETURNED BY CHGET)
 CRIGHT          EQU     #1C
 CLEFT           EQU     #1D
 CUP             EQU     #1E
 CDOWN           EQU     #1F
 
-                ; MSX function key codes
+                ; MSX FUNCTION KEY CODES
 F1KEY           EQU     #F1
 F2KEY           EQU     #F2
 F3KEY           EQU     #F3
 F4KEY           EQU     #F4
 F5KEY           EQU     #F5
 
-                ; Control keys
+                ; CONTROL KEYS
 CTRL_A          EQU     #01
 CTRL_C          EQU     #03
 CTRL_F          EQU     #06
 CTRL_G          EQU     #07
-CTRL_K          EQU     #0B
+CTRL_K          EQU     %0
 CTRL_L          EQU     #0C
 CTRL_N          EQU     #0E
 CTRL_O          EQU     #0F

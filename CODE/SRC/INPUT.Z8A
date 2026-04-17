@@ -2,9 +2,9 @@
 ;                                       * INPUT                                *
 ;                                       ****************************************
 ;
-; Keyboard input and main dispatch loop.
-; Uses CHGET (blocking) for normal input.
-; Special key sequences (function keys, cursor, etc.) decoded here.
+; KEYBOARD INPUT AND MAIN DISPATCH LOOP.
+; USES CHGET (BLOCKING) FOR NORMAL INPUT.
+; SPECIAL KEY SEQUENCES (FUNCTION KEYS, CURSOR, ETC.) DECODED HERE.
 
 
 ; --- KEYREAD                   ----------------------------------------
@@ -12,12 +12,12 @@
 ; - KEYREAD ----------
 ; - BLOCKING KEY READ WITH SPECIAL KEY DECODE
 ; - OUTPUT:
-; -     A:  KEY CODE (printable) or special code (see HARD.Z8A)
-; -     HL: EXTENDED KEY CODE (0 if simple key, or function key index)
+; -     A:  KEY CODE (PRINTABLE) OR SPECIAL CODE (SEE HARD.Z8A)
+; -     HL: EXTENDED KEY CODE (0 IF SIMPLE KEY, OR FUNCTION KEY INDEX)
 ; -
 
 KEYREAD         CALL    CHGET
-                ; TODO: decode extended sequences (F-keys return 2-char sequences)
+                ; TODO: DECODE EXTENDED SEQUENCES (F-KEYS RETURN 2-CHAR SEQUENCES)
                 RET
 
 
@@ -28,18 +28,18 @@ KEYREAD         CALL    CHGET
 ; -
 
 MAINLOOP        CALL    KEYREAD
-                ; TODO: dispatch on A
-                ; Printable (20H-7EH): EDINSCHR / EDOVRCHR
+                ; TODO: DISPATCH ON A
+                ; PRINTABLE (#20-#7E): EDINSCHR / EDOVRCHR
                 ; CR:        EDNWLIN
                 ; BS:        EDDELBK
                 ; DEL:       EDDELCHR
-                ; CRIGHT:    EDMOVCHR right
-                ; CLEFT:     EDMOVCHR left
-                ; CUP:       EDMOVROW up
-                ; CDOWN:     EDMOVROW down
+                ; CRIGHT:    EDMOVCHR RIGHT
+                ; CLEFT:     EDMOVCHR LEFT
+                ; CUP:       EDMOVROW UP
+                ; CDOWN:     EDMOVROW DOWN
                 ; CTRL_S:    FILESAVE
-                ; CTRL_O:    FILEOPEN (load)
+                ; CTRL_O:    FILEOPEN (LOAD)
                 ; CTRL_N:    FILENEW
                 ; CTRL_Q:    EDQUIT
-                ; ESC:       menu activation (future)
+                ; ESC:       MENU ACTIVATION (FUTURE)
                 JP      MAINLOOP

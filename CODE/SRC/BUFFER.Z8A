@@ -2,21 +2,21 @@
 ;                                       * TEXT BUFFER                          *
 ;                                       ****************************************
 ;
-; Line directory: flat array at DIRPAGE (#4000), in a dedicated mapper segment
-;   (DIRSEG). Allocated at startup, banked into page 1 via PUTP1, never switched.
-;   Direct access: entry N is at DIRPAGE + N*3.
-;   Entry layout: [1: seg][2: word offset within that text segment]
-;   Capacity: MAXLINES = 5460 entries (16384 / 3 = 5461, rounded down)
+; LINE DIRECTORY: FLAT ARRAY AT DIRPAGE (#4000), IN A DEDICATED MAPPER SEGMENT
+;   (DIRSEG). ALLOCATED AT STARTUP, BANKED INTO PAGE 1 VIA PUTP1, NEVER SWITCHED.
+;   DIRECT ACCESS: ENTRY N IS AT DIRPAGE + N*3.
+;   ENTRY LAYOUT: [1: SEG][2: WORD OFFSET WITHIN THAT TEXT SEGMENT]
+;   CAPACITY: MAXLINES = 5460 ENTRIES (16384 / 3 = 5461, ROUNDED DOWN)
 ;
-; Text segments: accessed via page 2 window (TXPAGE = #8000).
-;   PUTP2 to switch segment in; copy data; PUTP2 to switch next as needed.
-;   Multiple segments allocated as file grows (ALLSEG).
+; TEXT SEGMENTS: ACCESSED VIA PAGE 2 WINDOW (TXPAGE = #8000).
+;   PUTP2 TO SWITCH SEGMENT IN; COPY DATA; PUTP2 TO SWITCH NEXT AS NEEDED.
+;   MULTIPLE SEGMENTS ALLOCATED AS FILE GROWS (ALLSEG).
 ;
-; Line record (in text segment):
-;   [1 byte : text_len]   (0-80)
-;   [N bytes: text]       raw chars
-;   [N bytes: attr]       one attr byte per char
-;   Max: 1 + 80 + 80 = 161 bytes (LINEREC)
+; LINE RECORD (IN TEXT SEGMENT):
+;   [1 BYTE : TEXT_LEN]   (0-80)
+;   [N BYTES: TEXT]       RAW CHARS
+;   [N BYTES: ATTR]       ONE ATTR BYTE PER CHAR
+;   MAX: 1 + 80 + 80 = 161 BYTES (LINEREC)
 
 
 ; --- BUFINIT                   ----------------------------------------
@@ -27,12 +27,12 @@
 ; -
 
 BUFINIT         ; TODO:
-                ; 1. ALLSEG (user) → A = dir segment; store in DIRSEG
-                ;    PUTP1 A        → bank it into page 1 (DIRPAGE)
-                ; 2. ALLSEG (user) → A = first text segment; store in TXSEG
-                ;    PUTP2 A        → bank it into page 2 (TXPAGE)
-                ; 3. Write empty line record at TXPAGE+0: DEFB 0
-                ; 4. Write dir entry 0: (DIRPAGE+0) = TXSEG, (DIRPAGE+1) = 0, (DIRPAGE+2) = 0
+                ; 1. ALLSEG (USER) → A = DIR SEGMENT; STORE IN DIRSEG
+                ;    PUTP1 A        → BANK IT INTO PAGE 1 (DIRPAGE)
+                ; 2. ALLSEG (USER) → A = FIRST TEXT SEGMENT; STORE IN TXSEG
+                ;    PUTP2 A        → BANK IT INTO PAGE 2 (TXPAGE)
+                ; 3. WRITE EMPTY LINE RECORD AT TXPAGE+0: DEFB 0
+                ; 4. WRITE DIR ENTRY 0: (DIRPAGE+0) = TXSEG, (DIRPAGE+1) = 0, (DIRPAGE+2) = 0
                 ; 5. TOTLINES = 1, TOPLINE = 0, DOCLINE = 0, CURX = 0, CURY = 0
                 RET
 
@@ -46,21 +46,21 @@ BUFINIT         ; TODO:
 ; -     A:  SEGMENT NUMBER
 ; -     DE: BYTE OFFSET WITHIN SEGMENT
 ; -
-; - USES: HL (entry address), DE (offset), A (seg)
+; - USES: HL (ENTRY ADDRESS), DE (OFFSET), A (SEG)
 ; -
 
-DIRREAD         ; Compute entry address: HL = DIRPAGE + HL*3
+DIRREAD         ; COMPUTE ENTRY ADDRESS: HL = DIRPAGE + HL*3
                 ADD     HL, HL          ; HL * 2
                 LD      D, H
                 LD      E, L            ; DE = HL*2
-                ADD     HL, HL          ; oops — need HL*3 not HL*4
-                ; Correct: HL*3 = HL*2 + HL (original)
-                ; entry address = DIRPAGE + line*3
-                ; TODO: implement properly (16-bit multiply by 3)
-                ; LD HL, DIRPAGE + line*3
-                ; A = (HL)         ; segment
+                ADD     HL, HL          ; OOPS — NEED HL*3 NOT HL*4
+                ; CORRECT: HL*3 = HL*2 + HL (ORIGINAL)
+                ; ENTRY ADDRESS = DIRPAGE + LINE*3
+                ; TODO: IMPLEMENT PROPERLY (16-BIT MULTIPLY BY 3)
+                ; LD HL, DIRPAGE + LINE*3
+                ; A = (HL)         ; SEGMENT
                 ; INC HL
-                ; E = (HL) / INC HL / D = (HL)  ; offset word
+                ; E = (HL) / INC HL / D = (HL)  ; OFFSET WORD
                 RET
 
 
@@ -74,10 +74,10 @@ DIRREAD         ; Compute entry address: HL = DIRPAGE + HL*3
 ; -
 
 DIRWRITE        ; TODO:
-                ; entry_addr = DIRPAGE + HL*3
-                ; (entry_addr+0) = A   (segment)
-                ; (entry_addr+1) = E   (offset low)
-                ; (entry_addr+2) = D   (offset high)
+                ; ENTRY_ADDR = DIRPAGE + HL*3
+                ; (ENTRY_ADDR+0) = A   (SEGMENT)
+                ; (ENTRY_ADDR+1) = E   (OFFSET LOW)
+                ; (ENTRY_ADDR+2) = D   (OFFSET HIGH)
                 RET
 
 
@@ -89,10 +89,10 @@ DIRWRITE        ; TODO:
 ; -
 
 LINEREAD        ; TODO:
-                ; 1. DIRREAD HL → A=seg, DE=offset
-                ; 2. CP (TXSEG): if same segment already banked, skip PUTP2
-                ;    else: PUTP2 A / LD (TXSEG), A
-                ; 3. LD HL, TXPAGE / ADD HL, DE   → source address
+                ; 1. DIRREAD HL → A=SEG, DE=OFFSET
+                ; 2. CP (TXSEG): IF SAME SEGMENT ALREADY BANKED, SKIP PUTP2
+                ;    ELSE: PUTP2 A / LD (TXSEG), A
+                ; 3. LD HL, TXPAGE / ADD HL, DE   → SOURCE ADDRESS
                 ; 4. LD DE, WORKBUF / LD BC, LINEREC / LDIR
                 RET
 
@@ -105,15 +105,15 @@ LINEREAD        ; TODO:
 ; -
 
 LINEWRT         ; TODO:
-                ; 1. DIRREAD → A=seg, DE=offset
-                ; 2. Bank segment if not current (PUTP2 / update TXSEG)
-                ; 3. Compute old record size: old = (TXPAGE + DE) → text_len
-                ;    old_bytes = 1 + old*2
-                ;    new_bytes = 1 + WORKBUF[0]*2
-                ; 4. If new_bytes == old_bytes: LDIR WORKBUF → TXPAGE+DE
-                ;    Else: repack segment tail; update dir[HL] offset/seg;
-                ;          cascade-update dir[HL+1..] offsets in same segment;
-                ;          if segment full → ALLSEG, split at current line
+                ; 1. DIRREAD → A=SEG, DE=OFFSET
+                ; 2. BANK SEGMENT IF NOT CURRENT (PUTP2 / UPDATE TXSEG)
+                ; 3. COMPUTE OLD RECORD SIZE: OLD = (TXPAGE + DE) → TEXT_LEN
+                ;    OLD_BYTES = 1 + OLD*2
+                ;    NEW_BYTES = 1 + WORKBUF[0]*2
+                ; 4. IF NEW_BYTES == OLD_BYTES: LDIR WORKBUF → TXPAGE+DE
+                ;    ELSE: REPACK SEGMENT TAIL; UPDATE DIR[HL] OFFSET/SEG;
+                ;          CASCADE-UPDATE DIR[HL+1..] OFFSETS IN SAME SEGMENT;
+                ;          IF SEGMENT FULL → ALLSEG, SPLIT AT CURRENT LINE
                 RET
 
 
@@ -125,11 +125,11 @@ LINEWRT         ; TODO:
 ; -
 
 LINEINS         ; TODO:
-                ; 1. Shift DIRPAGE entries [N+1..TOTLINES] down by DIRSIZ bytes
-                ;    (LDIR from top downward — use LDDR)
-                ; 2. ALLSEG / use current TXSEG space for new empty record
-                ; 3. Write dir[N+1]: current seg, offset after line N record
-                ; 4. Write empty record (text_len=0) at that offset
+                ; 1. SHIFT DIRPAGE ENTRIES [N+1..TOTLINES] DOWN BY DIRSIZ BYTES
+                ;    (LDIR FROM TOP DOWNWARD — USE LDDR)
+                ; 2. ALLSEG / USE CURRENT TXSEG SPACE FOR NEW EMPTY RECORD
+                ; 3. WRITE DIR[N+1]: CURRENT SEG, OFFSET AFTER LINE N RECORD
+                ; 4. WRITE EMPTY RECORD (TEXT_LEN=0) AT THAT OFFSET
                 ; 5. TOTLINES++
                 RET
 
@@ -142,7 +142,7 @@ LINEINS         ; TODO:
 ; -
 
 LINEDEL         ; TODO:
-                ; 1. Free record space in text segment (compact in-place)
-                ; 2. Shift DIRPAGE entries [N+1..TOTLINES] up by DIRSIZ (LDIR)
+                ; 1. FREE RECORD SPACE IN TEXT SEGMENT (COMPACT IN-PLACE)
+                ; 2. SHIFT DIRPAGE ENTRIES [N+1..TOTLINES] UP BY DIRSIZ (LDIR)
                 ; 3. TOTLINES--
                 RET

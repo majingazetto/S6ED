@@ -2,9 +2,9 @@
 ;                                       * FILE I/O                             *
 ;                                       ****************************************
 ;
-; Uses high-level DSK* wrappers from BDOS.Z8A (DOS1/DOS2 transparent).
-; DOS2 mode: handle-based (DSKOPEN, DSKREAD, DSKWRITE, DSKCLOSE).
-; DOS1 fallback: FCB-based (same wrappers, BDOS.Z8A handles transparently).
+; USES HIGH-LEVEL DSK* WRAPPERS FROM BDOS.Z8A (DOS1/DOS2 TRANSPARENT).
+; DOS2 MODE: HANDLE-BASED (DSKOPEN, DSKREAD, DSKWRITE, DSKCLOSE).
+; DOS1 FALLBACK: FCB-BASED (SAME WRAPPERS, BDOS.Z8A HANDLES TRANSPARENTLY).
 
 
 ; --- FILENEW                   ----------------------------------------
@@ -14,9 +14,9 @@
 ; -
 
 FILENEW         ; TODO:
-                ; If MODIFIED: prompt to save (call EDQUIT logic sans termination)
-                ; BUFINIT (free all segments, reset directory)
-                ; Clear FILENAME
+                ; IF MODIFIED: PROMPT TO SAVE (CALL EDQUIT LOGIC SANS TERMINATION)
+                ; BUFINIT (FREE ALL SEGMENTS, RESET DIRECTORY)
+                ; CLEAR FILENAME
                 ; REDRAW, DRWSTAT
                 RET
 
@@ -29,14 +29,14 @@ FILENEW         ; TODO:
 ; -
 
 FILELOAD        ; TODO:
-                ; 1. FILENEW (clear existing buffer)
-                ; 2. DSKOPEN HL → A=handle, DEHL=size
-                ; 3. Stream read: buffer 256-byte chunks, split on CR/LF
-                ;    For each complete line: LINEWRT to segment, update directory
-                ;    Allocate new segments as needed via ALLSEG
+                ; 1. FILENEW (CLEAR EXISTING BUFFER)
+                ; 2. DSKOPEN HL → A=HANDLE, DEHL=SIZE
+                ; 3. STREAM READ: BUFFER 256-BYTE CHUNKS, SPLIT ON CR/LF
+                ;    FOR #EAC COMPLETE LINE: LINEWRT TO SEGMENT, UPDATE DIRECTORY
+                ;    ALLOCATE NEW SEGMENTS AS NEEDED VIA ALLSEG
                 ; 4. DSKCLOSE
-                ; 5. TOTLINES = lines read; TOPLINE=0; DOCLINE=0; CURX=0; CURY=0
-                ; 6. Copy filename to FILENAME var
+                ; 5. TOTLINES = LINES READ; TOPLINE=0; DOCLINE=0; CURX=0; CURY=0
+                ; 6. COPY FILENAME TO FILENAME VAR
                 ; 7. MODIFIED = 0
                 ; 8. REDRAW, DRWGUT, DRWSCRL, DRWSTAT
                 RET
@@ -50,10 +50,10 @@ FILELOAD        ; TODO:
 ; -
 
 FILESAVE        ; TODO:
-                ; 1. If FILENAME[0] = 0: FSAVEAS
-                ; 2. DSKCREATE FILENAME → handle
-                ; 3. Walk directory 0..TOTLINES-1:
-                ;    LINEREAD → WORKBUF → write text+LF via DSKWRITE
+                ; 1. IF FILENAME[0] = 0: FSAVEAS
+                ; 2. DSKCREATE FILENAME → HANDLE
+                ; 3. WALK DIRECTORY 0..TOTLINES-1:
+                ;    LINEREAD → WORKBUF → WRITE TEXT+LF VIA DSKWRITE
                 ; 4. DSKCLOSE
                 ; 5. MODIFIED = 0
                 ; 6. DRWSTAT
@@ -67,7 +67,7 @@ FILESAVE        ; TODO:
 ; -
 
 FSAVEAS      ; TODO:
-                ; 1. Draw input box (status bar or mini dialog)
-                ; 2. Read filename via BUFIN
-                ; 3. Copy to FILENAME, call FILESAVE
+                ; 1. DRAW INPUT BOX (STATUS BAR OR MINI DIALOG)
+                ; 2. READ FILENAME VIA BUFIN
+                ; 3. COPY TO FILENAME, CALL FILESAVE
                 RET

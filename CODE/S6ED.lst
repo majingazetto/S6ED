@@ -1,9 +1,9 @@
 # file opened: S6ED.Z8A
   1   0000              ; **********************************************
   2   0000              ; * S6ED                                       *
-  3   0000              ; * MSX2 Screen 6 Text Editor                  *
-  4   0000              ; * 80 cols x 24 rows, 6x8 font, DOS2/Nextor  *
-  5   0000              ; * 2024 - 2025 Coded by Armando Perez         *
+  3   0000              ; * MSX2 SCREEN 6 TEXT EDITOR                  *
+  4   0000              ; * 80 COLS X 24 ROWS, 6X8 FONT, DOS2/NEXTOR  *
+  5   0000              ; * 2024 - 2025 CODED BY ARMANDO PEREZ         *
   6   0000              ; **********************************************
   7   0000
   8   0000                              OUTPUT  S6ED.COM
@@ -11,18 +11,18 @@
  10   0000              ; --- MACROS                    ----------------------------------------
  11   0000
  12   0000
- 13   0000                              ; Infinite loop / breakpoint
+ 13   0000                              ; INFINITE LOOP / BREAKPOINT
  14   0000                              MACRO   BRK
  15   0000 ~                            DI
  16   0000 ~                            JP      $
  17   0000                              ENDM
  18   0000
- 19   0000                              ; ORG with padding (does not discard code)
- 20   0000                              MACRO PADORG addr
- 21   0000 ~                            IF $ < addr
- 22   0000 ~                            BLOCK addr-$
+ 19   0000                              ; ORG WITH PADDING (DOES NOT DISCARD CODE)
+ 20   0000                              MACRO PADORG ADDR
+ 21   0000 ~                            IF $ < ADDR
+ 22   0000 ~                            BLOCK ADDR-$
  23   0000 ~                            ENDIF
- 24   0000 ~                            ORG addr
+ 24   0000 ~                            ORG ADDR
  25   0000                              ENDM
  26   0000
  27   0000
@@ -109,23 +109,23 @@
  76+  0000              RG26SA          EQU     #FFFB
  77+  0000              RG27SA          EQU     #FFFC
  78+  0000
- 79+  0000              CGPNT           EQU     #0004           ; ROM charset slot+address pointer
- 80+  0000                                                      ; read via RDSLT from slot 0
+ 79+  0000              CGPNT           EQU     #0004           ; ROM CHARSET SLOT+ADDRESS POINTER
+ 80+  0000                                                      ; READ VIA RDSLT FROM SLOT 0
  81+  0000
  82+  0000
  83+  0000              ; --- EXTBIO / MAPPER           ----------------------------------------
  84+  0000
  85+  0000
  86+  0000              EXTBIO          EQU     #FFCA
- 87+  0000              HOKVLD          EQU     #FB20           ; bit 0 = extended BIOS present
+ 87+  0000              HOKVLD          EQU     #FB20           ; BIT 0 = EXTENDED BIOS PRESENT
  88+  0000              ARG             EQU     #F847
  89+  0000
- 90+  0000                              ; mapper device / function
- 91+  0000              MAP_DEV         EQU     4               ; D=4: memory mapper device
- 92+  0000              MAPFNTBL      EQU     2              ; E=2: get jump table (→ HL)
- 93+  0000              MAPFNVAR      EQU     1              ; E=1: get variable table (→ HL)
+ 90+  0000                              ; MAPPER DEVICE / FUNCTION
+ 91+  0000              MAP_DEV         EQU     4               ; D=4: MEMORY MAPPER DEVICE
+ 92+  0000              MAPFNTBL      EQU     2              ; E=2: GET JUMP TABLE (→ HL)
+ 93+  0000              MAPFNVAR      EQU     1              ; E=1: GET VARIABLE TABLE (→ HL)
  94+  0000
- 95+  0000                              ; mapper jump table offsets (from base returned by EXTBIO)
+ 95+  0000                              ; MAPPER JUMP TABLE OFFSETS (FROM BASE RETURNED BY EXTBIO)
  96+  0000              MJALLSEG      EQU     #00
  97+  0000              MJFRESEG      EQU     #03
  98+  0000              MJRDSEG       EQU     #06
@@ -135,7 +135,7 @@
 102+  0000              MJPUTPH       EQU     #12
 103+  0000              MJGETPH       EQU     #15
 104+  0000              MJPUTP0       EQU     #18
-105+  0000              MJGETP0       EQU     #1B
+105+  0000              MJGETP0       EQU     %1
 106+  0000              MJPUTP1       EQU     #1E
 107+  0000              MJGETP1       EQU     #21
 108+  0000              MJPUTP2       EQU     #24
@@ -147,49 +147,49 @@
 114+  0000              ; --- VDP PORTS                 ----------------------------------------
 115+  0000
 116+  0000
-117+  0000              VDPDR           EQU     #98             ; VDP data port (read/write)
-118+  0000              VDPCT           EQU     #99             ; VDP control port (register/status)
-119+  0000              VDPST           EQU     #99             ; VDP status port (read)
-120+  0000              VDPPAL          EQU     #9A             ; palette data
-121+  0000              VDPPALC         EQU     #9B             ; palette register
+117+  0000              VDPDR           EQU     #98             ; VDP DATA PORT (READ/WRITE)
+118+  0000              VDPCT           EQU     #99             ; VDP CONTROL PORT (REGISTER/STATUS)
+119+  0000              VDPST           EQU     #99             ; VDP STATUS PORT (READ)
+120+  0000              VDPPAL          EQU     #9A             ; PALETTE DATA
+121+  0000              VDPPALC         EQU     #9B             ; PALETTE REGISTER
 122+  0000
 123+  0000
 124+  0000              ; --- VDP COMMAND REGISTER VALUES   -----------------------------------
 125+  0000
 126+  0000
-127+  0000                              ; CMR (R#46) command codes
-128+  0000              VDP_HMMC        EQU     #F0             ; CPU → VRAM (byte-transfer)
-129+  0000              VDP_YMMM        EQU     #E0             ; VRAM → VRAM (Y only, same X)
-130+  0000              VDP_HMMM        EQU     #D0             ; VRAM → VRAM (byte-transfer)
-131+  0000              VDP_HMMV        EQU     #C0             ; Fill bytes
-132+  0000              VDP_LMMC        EQU     #B0             ; CPU → VRAM (dot-transfer)
-133+  0000              VDP_LMCM        EQU     #A0             ; VRAM → CPU (dot-transfer)
-134+  0000              VDP_LMMM        EQU     #90             ; VRAM → VRAM (dot-transfer)
-135+  0000              VDP_LMMV        EQU     #80             ; Fill dots
-136+  0000              VDP_LINE        EQU     #70             ; Draw line
-137+  0000              VDP_SRCH        EQU     #60             ; Search for color
-138+  0000              VDP_PSET        EQU     #50             ; Plot dot
-139+  0000              VDPOINT       EQU     #40             ; Get dot color
-140+  0000              VDP_STOP        EQU     #20             ; Stop command
+127+  0000                              ; CMR (R#46) COMMAND CODES
+128+  0000              VDP_HMMC        EQU     #F0             ; CPU → VRAM (BYTE-TRANSFER)
+129+  0000              VDP_YMMM        EQU     #E0             ; VRAM → VRAM (Y ONLY, SAME X)
+130+  0000              VDP_HMMM        EQU     #D0             ; VRAM → VRAM (BYTE-TRANSFER)
+131+  0000              VDP_HMMV        EQU     #C0             ; FILL BYTES
+132+  0000              VDP_LMMC        EQU     #B0             ; CPU → VRAM (DOT-TRANSFER)
+133+  0000              VDP_LMCM        EQU     #A0             ; VRAM → CPU (DOT-TRANSFER)
+134+  0000              VDP_LMMM        EQU     #90             ; VRAM → VRAM (DOT-TRANSFER)
+135+  0000              VDP_LMMV        EQU     #80             ; FILL DOTS
+136+  0000              VDP_LINE        EQU     #70             ; DRAW LINE
+137+  0000              VDP_SRCH        EQU     #60             ; SEARCH FOR COLOR
+138+  0000              VDP_PSET        EQU     #50             ; PLOT DOT
+139+  0000              VDPOINT       EQU     #40             ; GET DOT COLOR
+140+  0000              VDP_STOP        EQU     #20             ; STOP COMMAND
 141+  0000              VDP_NOP         EQU     #00
 142+  0000
-143+  0000                              ; ARG (R#45) DIY bits
-144+  0000              VDP_DIY         EQU     #04             ; set: direction Y = up (default down)
-145+  0000              VDP_DIX         EQU     #02             ; set: direction X = left (default right)
-146+  0000              VDP_EQ          EQU     #01             ; SRCH: stop if equal (default not-equal)
-147+  0000              VDP_MXS         EQU     #20             ; source in page 1
-148+  0000              VDP_MXD         EQU     #10             ; dest in page 1
+143+  0000                              ; ARG (R#45) DIY BITS
+144+  0000              VDP_DIY         EQU     #04             ; SET: DIRECTION Y = UP (DEFAULT DOWN)
+145+  0000              VDP_DIX         EQU     #02             ; SET: DIRECTION X = LEFT (DEFAULT RIGHT)
+146+  0000              VDP_EQ          EQU     #01             ; SRCH: STOP IF EQUAL (DEFAULT NOT-EQUAL)
+147+  0000              VDP_MXS         EQU     #20             ; SOURCE IN PAGE 1
+148+  0000              VDP_MXD         EQU     #10             ; DEST IN PAGE 1
 149+  0000
-150+  0000                              ; Logical operations (CMR bits 3-0, used with LMMM/LMMV/LMMC)
+150+  0000                              ; LOGICAL OPERATIONS (CMR BITS 3-0, USED WITH LMMM/LMMV/LMMC)
 151+  0000              VDP_IMP         EQU     #00             ; SRC → DST
 152+  0000              VDP_AND         EQU     #01
 153+  0000              VDP_OR          EQU     #02
 154+  0000              VDP_XOR         EQU     #03
 155+  0000              VDP_NOT         EQU     #04
-156+  0000              VDP_TIMP        EQU     #08             ; transparent (color 0 not written)
+156+  0000              VDP_TIMP        EQU     #08             ; TRANSPARENT (COLOR 0 NOT WRITTEN)
 157+  0000              VDP_TAND        EQU     #09
 158+  0000              VDP_TOR         EQU     #0A
-159+  0000              VDP_TXOR        EQU     #0B
+159+  0000              VDP_TXOR        EQU     %0
 160+  0000              VDP_TNOT        EQU     #0C
 161+  0000
 162+  0000
@@ -205,7 +205,7 @@
 172+  0000              _DIRIO          EQU     #06
 173+  0000              _INNOE          EQU     #08
 174+  0000              _STROUT         EQU     #09
-175+  0000              _CONST          EQU     #0B
+175+  0000              _CONST          EQU     %0
 176+  0000              _BUFIN          EQU     #0A
 177+  0000
 178+  0000              _FOPEN          EQU     #0F
@@ -217,7 +217,7 @@
 184+  0000              _RDBLK          EQU     #27
 185+  0000              _TERM0          EQU     #00
 186+  0000
-187+  0000                              ; DOS2 calls
+187+  0000                              ; DOS2 CALLS
 188+  0000              _OPEN           EQU     #43
 189+  0000              _CREATE         EQU     #44
 190+  0000              _CLOSE          EQU     #45
@@ -262,28 +262,28 @@
 229+  0000              TAB             EQU     #09
 230+  0000              LF              EQU     #0A
 231+  0000              CR              EQU     #0D
-232+  0000              ESC             EQU     #1B
+232+  0000              ESC             EQU     %1
 233+  0000              DEL             EQU     #7F
 234+  0000
-235+  0000                              ; MSX cursor keys (returned by CHGET)
+235+  0000                              ; MSX CURSOR KEYS (RETURNED BY CHGET)
 236+  0000              CRIGHT          EQU     #1C
 237+  0000              CLEFT           EQU     #1D
 238+  0000              CUP             EQU     #1E
 239+  0000              CDOWN           EQU     #1F
 240+  0000
-241+  0000                              ; MSX function key codes
+241+  0000                              ; MSX FUNCTION KEY CODES
 242+  0000              F1KEY           EQU     #F1
 243+  0000              F2KEY           EQU     #F2
 244+  0000              F3KEY           EQU     #F3
 245+  0000              F4KEY           EQU     #F4
 246+  0000              F5KEY           EQU     #F5
 247+  0000
-248+  0000                              ; Control keys
+248+  0000                              ; CONTROL KEYS
 249+  0000              CTRL_A          EQU     #01
 250+  0000              CTRL_C          EQU     #03
 251+  0000              CTRL_F          EQU     #06
 252+  0000              CTRL_G          EQU     #07
-253+  0000              CTRL_K          EQU     #0B
+253+  0000              CTRL_K          EQU     %0
 254+  0000              CTRL_L          EQU     #0C
 255+  0000              CTRL_N          EQU     #0E
 256+  0000              CTRL_O          EQU     #0F
@@ -313,43 +313,43 @@
  14+  0000              ; --- SCREEN LAYOUT             ----------------------------------------
  15+  0000
  16+  0000
- 17+  0000                              ; Character grid
- 18+  0000              SCRCOLS         EQU     80              ; text area columns
- 19+  0000              SCRROWS         EQU     24              ; text area rows (rows 1-24)
- 20+  0000              CELLW           EQU     6               ; cell width in pixels
- 21+  0000              CELLH           EQU     8               ; cell height in pixels
+ 17+  0000                              ; CHARACTER GRID
+ 18+  0000              SCRCOLS         EQU     80              ; TEXT AREA COLUMNS
+ 19+  0000              SCRROWS         EQU     24              ; TEXT AREA ROWS (ROWS 1-24)
+ 20+  0000              CELLW           EQU     6               ; CELL WIDTH IN PIXELS
+ 21+  0000              CELLH           EQU     8               ; CELL HEIGHT IN PIXELS
  22+  0000
- 23+  0000                              ; Pixel layout
- 24+  0000              GUTL_PX         EQU     24              ; left gutter width (4 chars × 6px)
- 25+  0000              GUTR_PX         EQU     8               ; right gutter width (scrollbar)
- 26+  0000              TXAREAPX       EQU     480             ; text area width (80 × 6px)
- 27+  0000              TXORG_X         EQU     GUTL_PX         ; text area X origin
- 28+  0000              TXORG_Y         EQU     CELLH           ; text area Y origin (skip menu row 0)
- 29+  0000              SCRTOTY      EQU     212             ; total screen height in pixels
+ 23+  0000                              ; PIXEL LAYOUT
+ 24+  0000              GUTL_PX         EQU     24              ; LEFT GUTTER WIDTH (4 CHARS × 6PX)
+ 25+  0000              GUTR_PX         EQU     8               ; RIGHT GUTTER WIDTH (SCROLLBAR)
+ 26+  0000              TXAREAPX       EQU     480             ; TEXT AREA WIDTH (80 × 6PX)
+ 27+  0000              TXORG_X         EQU     GUTL_PX         ; TEXT AREA X ORIGIN
+ 28+  0000              TXORG_Y         EQU     CELLH           ; TEXT AREA Y ORIGIN (SKIP MENU ROW 0)
+ 29+  0000              SCRTOTY      EQU     212             ; TOTAL SCREEN HEIGHT IN PIXELS
  30+  0000
- 31+  0000                              ; Rows (in character units)
- 32+  0000              MNUROW          EQU     0               ; menu bar row
- 33+  0000              TXRFIRST    EQU     1               ; first text row
- 34+  0000              TXRLAST     EQU     24              ; last text row
- 35+  0000              STBROW          EQU     25              ; status bar row
+ 31+  0000                              ; ROWS (IN CHARACTER UNITS)
+ 32+  0000              MNUROW          EQU     0               ; MENU BAR ROW
+ 33+  0000              TXRFIRST    EQU     1               ; FIRST TEXT ROW
+ 34+  0000              TXRLAST     EQU     24              ; LAST TEXT ROW
+ 35+  0000              STBROW          EQU     25              ; STATUS BAR ROW
  36+  0000
  37+  0000
  38+  0000              ; --- VRAM MAP                  ----------------------------------------
  39+  0000
  40+  0000
- 41+  0000              VR_DISP         EQU     #00000          ; display bitmap (128 B/line × 212 lines)
- 42+  0000              VR_SAT          EQU     #06A00          ; sprite attribute table
- 43+  0000              VR_SGT          EQU     #06C00          ; sprite generator table
+ 41+  0000              VR_DISP         EQU     #00000          ; DISPLAY BITMAP (128 B/LINE × 212 LINES)
+ 42+  0000              VR_SAT          EQU     #06A00          ; SPRITE ATTRIBUTE TABLE
+ 43+  0000              VR_SGT          EQU     #06C00          ; SPRITE GENERATOR TABLE
  44+  0000
- 45+  0000              VR_FNORM        EQU     #07000          ; font: Normal        (256 × 16 bytes)
- 46+  0000              VR_FBOLD        EQU     #08000          ; font: Bold
- 47+  0000              VR_FITAL        EQU     #09000          ; font: Italic
- 48+  0000              VR_FBI          EQU     #0A000          ; font: Bold+Italic
+ 45+  0000              VR_FNORM        EQU     #07000          ; FONT: NORMAL        (256 × 16 BYTES)
+ 46+  0000              VR_FBOLD        EQU     #08000          ; FONT: BOLD
+ 47+  0000              VR_FITAL        EQU     #09000          ; FONT: ITALIC
+ 48+  0000              VR_FBI          EQU     #0A000          ; FONT: BOLD+ITALIC
  49+  0000
- 50+  0000                              ; Font table geometry (all tables identical structure)
- 51+  0000                              ;   32 glyphs per row → 8 rows (256 total)
- 52+  0000                              ;   Glyph N: SX = (N % 32) * 6,  SY = table_SY + (N / 32) * 8
- 53+  0000                              ;   table_SY = (VR_Fxxx - VR_DISP) / 128
+ 50+  0000                              ; FONT TABLE GEOMETRY (ALL TABLES IDENTICAL STRUCTURE)
+ 51+  0000                              ;   32 GLYPHS PER ROW → 8 ROWS (256 TOTAL)
+ 52+  0000                              ;   GLYPH N: SX = (N % 32) * 6,  SY = TABLE_SY + (N / 32) * 8
+ 53+  0000                              ;   TABLE_SY = (VR_FXXX - VR_DISP) / 128
  54+  0000              FNORM_SY        EQU     (VR_FNORM - VR_DISP) / 128     ; = 56
  55+  0000              FBOLD_SY        EQU     (VR_FBOLD - VR_DISP) / 128     ; = 64
  56+  0000              FITAL_SY        EQU     (VR_FITAL - VR_DISP) / 128     ; = 72
@@ -359,41 +359,41 @@
  60+  0000              ; --- PALETTE                   ----------------------------------------
  61+  0000
  62+  0000
- 63+  0000                              ; Color indices (SCREEN 6, 4 colors)
- 64+  0000              COL_BG          EQU     0               ; background
- 65+  0000              COL_FG          EQU     1               ; normal text / foreground
- 66+  0000              COL_UI          EQU     2               ; UI chrome (gutters, menu, status)
- 67+  0000              COL_HI          EQU     3               ; cursor / highlight / accent
+ 63+  0000                              ; COLOR INDICES (SCREEN 6, 4 COLORS)
+ 64+  0000              COL_BG          EQU     0               ; BACKGROUND
+ 65+  0000              COL_FG          EQU     1               ; NORMAL TEXT / FOREGROUND
+ 66+  0000              COL_UI          EQU     2               ; UI CHROME (GUTTERS, MENU, STATUS)
+ 67+  0000              COL_HI          EQU     3               ; CURSOR / HIGHLIGHT / ACCENT
  68+  0000
  69+  0000
  70+  0000              ; --- CHARACTER ATTRIBUTES      ----------------------------------------
  71+  0000
  72+  0000
- 73+  0000                              ; Attr byte bit definitions (per cell, stored alongside text)
- 74+  0000              ATRBOLD       EQU     #01             ; bit 0
- 75+  0000              ATRITAL       EQU     #02             ; bit 1
- 76+  0000              ATRUNDR       EQU     #04             ; bit 2
- 77+  0000              ATRINV        EQU     #08             ; bit 3  (inverse video)
- 78+  0000              ATRFMSK   EQU     #03             ; bits 0-1 → font variant index
+ 73+  0000                              ; ATTR BYTE BIT DEFINITIONS (PER CELL, STORED ALONGSIDE TEXT)
+ 74+  0000              ATRBOLD       EQU     #01             ; BIT 0
+ 75+  0000              ATRITAL       EQU     #02             ; BIT 1
+ 76+  0000              ATRUNDR       EQU     #04             ; BIT 2
+ 77+  0000              ATRINV        EQU     #08             ; BIT 3  (INVERSE VIDEO)
+ 78+  0000              ATRFMSK   EQU     #03             ; BITS 0-1 → FONT VARIANT INDEX
  79+  0000
  80+  0000
  81+  0000              ; --- TEXT BUFFER / MAPPER      ----------------------------------------
  82+  0000
  83+  0000
- 84+  0000              MAXLINES        EQU     5460            ; max document lines
- 85+  0000                                                      ;   16384 / DIRSIZ = 5461; use 5460
- 86+  0000              DIRSIZ          EQU     3               ; bytes per line directory entry
- 87+  0000                                                      ;   [1: segment] [2: word offset]
- 88+  0000              LINEREC         EQU     161             ; max line record: 1 + 80 + 80
- 89+  0000              TEXTCOLS        EQU     80              ; max chars per line
- 90+  0000              WORKSIZ         EQU     LINEREC         ; work buffer size (= max record)
+ 84+  0000              MAXLINES        EQU     5460            ; MAX DOCUMENT LINES
+ 85+  0000                                                      ;   16384 / DIRSIZ = 5461; USE 5460
+ 86+  0000              DIRSIZ          EQU     3               ; BYTES PER LINE DIRECTORY ENTRY
+ 87+  0000                                                      ;   [1: SEGMENT] [2: WORD OFFSET]
+ 88+  0000              LINEREC         EQU     161             ; MAX LINE RECORD: 1 + 80 + 80
+ 89+  0000              TEXTCOLS        EQU     80              ; MAX CHARS PER LINE
+ 90+  0000              WORKSIZ         EQU     LINEREC         ; WORK BUFFER SIZE (= MAX RECORD)
  91+  0000
- 92+  0000              DIRPAGE         EQU     #4000           ; page 1 — line directory (fixed segment)
- 93+  0000              TXPAGE          EQU     #8000           ; page 2 — text window (switched)
+ 92+  0000              DIRPAGE         EQU     #4000           ; PAGE 1 — LINE DIRECTORY (FIXED SEGMENT)
+ 93+  0000              TXPAGE          EQU     #8000           ; PAGE 2 — TEXT WINDOW (SWITCHED)
  94+  0000
- 95+  0000                              ; Segment allocation type (for ALL_SEG)
- 96+  0000              SEG_USER        EQU     0               ; A=0: allocate user segment
- 97+  0000              SEG_SYS         EQU     1               ; A=1: allocate system segment
+ 95+  0000                              ; SEGMENT ALLOCATION TYPE (FOR ALL_SEG)
+ 96+  0000              SEG_USER        EQU     0               ; A=0: ALLOCATE USER SEGMENT
+ 97+  0000              SEG_SYS         EQU     1               ; A=1: ALLOCATE SYSTEM SEGMENT
  98+  0000
  99+  0000
 100+  0000              ; --- LANGUAGE MODES            ----------------------------------------
@@ -410,8 +410,8 @@
 111+  0000
 112+  0000
 113+  0000
-114+  0000              INS_MODE        EQU     1               ; insert
-115+  0000              OVR_MODE        EQU     0               ; overwrite
+114+  0000              INS_MODE        EQU     1               ; INSERT
+115+  0000              OVR_MODE        EQU     0               ; OVERWRITE
 116+  0000
 # file closed: CONST.Z8A
  33   0000
@@ -683,7 +683,7 @@
 233+  0231 B3                           OR      E
 234+  0232 EB                           EX      DE,HL
 235+  0233 E1                           POP     HL
-236+  0234 C0                           RET     NZ                      ; > 64k
+236+  0234 C0                           RET     NZ                      ; > 64K
 237+  0235
 238+  0235                              ; HL SIZE
 239+  0235                              ; DE LOW CURRENT
@@ -753,8 +753,8 @@
 303+  0268
 304+  0268
 305+  0268              ; - DCLOSE  ----------
-306+  0268              ; - DOS2 CLOSE FH
-307+  0268              ; - B: FH
+306+  0268              ; - DOS2 CLOSE #F
+307+  0268              ; - B: #F
 308+  0268              ; -
 309+  0268
 310+  0268 0E 45        DCLOSE          LD      C,_CLOSE
@@ -763,8 +763,8 @@
 313+  026D
 314+  026D
 315+  026D              ; - DREAD ------------
-316+  026D              ; - DOS2 READ BYTES FROM FH
-317+  026D              ; - B: FH
+316+  026D              ; - DOS2 READ BYTES FROM #F
+317+  026D              ; - B: #F
 318+  026D              ; - HL: BYTES TO READ
 319+  026D              ; - DE: BUFFER ADDRESS
 320+  026D              ; -
@@ -774,8 +774,8 @@
 324+  0272
 325+  0272
 326+  0272              ; - DWRITE -----------
-327+  0272              ; - DOS2 WRITE BYTES TO FH
-328+  0272              ; - B: FH
+327+  0272              ; - DOS2 WRITE BYTES TO #F
+328+  0272              ; - B: #F
 329+  0272              ; - HL: BYTES TO WRITE
 330+  0272              ; - DE: FROM BUFFER ADDRESS
 331+  0272              ; -
@@ -789,7 +789,7 @@
 339+  0277              ; - DOS2 CREATE FILE
 340+  0277              ; - HL: FILENAME ASCIIZ
 341+  0277              ; - OUTPUT:
-342+  0277              ; -     A: FH
+342+  0277              ; -     A: #F
 343+  0277              ; -
 344+  0277
 345+  0277 EB           DCREATE         EX      DE,HL
@@ -812,7 +812,7 @@
 362+  0286
 363+  0286              ; - DGETREM ----------
 364+  0286              ; - GET REMAINING SIZE
-365+  0286              ; - B: OPENED FH
+365+  0286              ; - B: OPENED #F
 366+  0286              ; - OUTPUT:
 367+  0286              ; -     DE:HL REM. SIZE
 368+  0286              ; -
@@ -856,7 +856,7 @@
 406+  02C0
 407+  02C0
 408+  02C0              ; - DGETMAX -----------
-409+  02C0              ; - B: FH
+409+  02C0              ; - B: #F
 410+  02C0              ; - HL: SIZE TO READ
 411+  02C0              ; - OUTPUT:
 412+  02C0              ; -     HL: MAX SIZE
@@ -879,7 +879,7 @@
 429+  02C7              ; -     A: FILEHANDLE
 430+  02C7              ; -
 431+  02C7
-432+  02C7 3A 29 09     DSKCREATE       LD      A,(DOS2)
+432+  02C7 3A 29 09     DSKCREAT       LD      A,(DOS2)
 433+  02CA A7                           AND     A
 434+  02CB C2 77 02                     JP      NZ,DCREATE
 435+  02CE
@@ -888,7 +888,7 @@
 438+  02CE CD 5A 01                     CALL    BUILDFCB
 439+  02D1 CD BD 01                     CALL    FMAKE
 440+  02D4 D8                           RET     C
-441+  02D5 3E 01                        LD      A,1 ; FAKE FH
+441+  02D5 3E 01                        LD      A,1 ; FAKE #F
 442+  02D7 C9                           RET
 443+  02D8
 444+  02D8
@@ -910,14 +910,14 @@
 460+  02DF CD 5A 01                     CALL    BUILDFCB
 461+  02E2 CD 93 01                     CALL    FOPEN
 462+  02E5 D8                           RET     C
-463+  02E6 3E 01                        LD      A,1 ; FAKE FH
+463+  02E6 3E 01                        LD      A,1 ; FAKE #F
 464+  02E8 C9                           RET
 465+  02E9
 466+  02E9
 467+  02E9
 468+  02E9              ; - DSKCLOSE ---------
-469+  02E9              ; - FCB/FH FILE CLOSE
-470+  02E9              ; - A: FH
+469+  02E9              ; - FCB/#F FILE CLOSE
+470+  02E9              ; - A: #F
 471+  02E9              ; -
 472+  02E9
 473+  02E9 47           DSKCLOSE        LD      B,A
@@ -929,7 +929,7 @@
 479+  02F4
 480+  02F4
 481+  02F4              ; - DSKREAD -----------
-482+  02F4              ; - A: FH
+482+  02F4              ; - A: #F
 483+  02F4              ; - HL: BYTES TO READ
 484+  02F4              ; - DE: BUFFER ADDRESS
 485+  02F4              ; - (FROM LAST POINTER)
@@ -949,7 +949,7 @@
 499+  0307
 500+  0307
 501+  0307              ; - DSKWRITE -----------
-502+  0307              ; - A: FH
+502+  0307              ; - A: #F
 503+  0307              ; - HL: BYTES TO WRITE
 504+  0307              ; - DE: FROM BUFFER ADRESS
 505+  0307              ; - (TO LAST POINTER)
@@ -966,7 +966,7 @@
 516+  0317
 517+  0317
 518+  0317              ; - DSKSEEK ----------
-519+  0317              ; - A: FH
+519+  0317              ; - A: #F
 520+  0317              ; - DEHL: POINTER
 521+  0317              ; -
 522+  0317
@@ -996,7 +996,7 @@
 546+  032F              ; - DSKGETRE ---------
 547+  032F              ; - GET REMAINING SIZE
 548+  032F              ; - OF OPENED FILE
-549+  032F              ; - A: FH
+549+  032F              ; - A: #F
 550+  032F              ; - OUTPUT:
 551+  032F              ; -     DEHL: REM. SIZE
 552+  032F              ; -
@@ -1011,7 +1011,7 @@
 561+  033A              ; - DSKGETMA -------
 562+  033A              ; - GET MAX SIZE
 563+  033A              ; - HL: SIZE TO READ
-564+  033A              ; - A: FH
+564+  033A              ; - A: #F
 565+  033A              ; - OUTPUT: MAX SIZE
 566+  033A              ; -
 567+  033A
@@ -1334,28 +1334,28 @@
  33+  042A              ; --- STRING                           ----------------------------------------
  34+  042A
  35+  042A
- 36+  042A              ; Combined routine for conversion of different sized binary numbers into
- 37+  042A              ; directly printable ASCII(Z)-string
- 38+  042A              ; Input value in registers, number size and -related to that- registers to fill
- 39+  042A              ; is selected by calling the correct entry:
+ 36+  042A              ; COMBINED ROUTINE FOR CONVERSION OF DIFFERENT SIZED BINARY NUMBERS INTO
+ 37+  042A              ; DIRECTLY PRINTABLE ASCII(Z)-STRING
+ 38+  042A              ; INPUT VALUE IN REGISTERS, NUMBER SIZE AND -RELATED TO THAT- REGISTERS TO FILL
+ 39+  042A              ; IS SELECTED BY CALLING THE CORRECT ENTRY:
  40+  042A              ;
- 41+  042A              ;  entry  inputregister(s)  decimal value 0 to:
- 42+  042A              ;   B2D8             A                    255  (3 digits)
+ 41+  042A              ;  ENTRY  INPUTREGISTER(S)  DECIMAL VALUE 0 TO:
+ 42+  042A              ;   B2D8             A                    255  (3 DIGITS)
  43+  042A              ;   B2D16           HL                  65535   5   "
  44+  042A              ;   B2D24         E:HL               16777215   8   "
  45+  042A              ;   B2D32        DE:HL             4294967295  10   "
  46+  042A              ;   B2D48     BC:DE:HL        281474976710655  15   "
  47+  042A              ;   B2D64  IX:BC:DE:HL   18446744073709551615  20   "
  48+  042A              ;
- 49+  042A              ; The resulting string is placed into a small buffer attached to this routine,
- 50+  042A              ; this buffer needs no initialization and can be modified as desired.
- 51+  042A              ; The number is aligned to the right, and leading 0's are replaced with spaces.
- 52+  042A              ; On exit HL points to the first digit, (B)C = number of decimals
- 53+  042A              ; This way any re-alignment / postprocessing is made easy.
- 54+  042A              ; Changes: AF,BC,DE,HL,IX
- 55+  042A              ; P.S. some examples below
+ 49+  042A              ; THE RESULTING STRING IS PLACED INTO A SMALL BUFFER ATTACHED TO THIS ROUTINE,
+ 50+  042A              ; THIS BUFFER NEEDS NO INITIALIZATION AND CAN BE MODIFIED AS DESIRED.
+ 51+  042A              ; THE NUMBER IS ALIGNED TO THE RIGHT, AND LEADING 0'S ARE REPLACED WITH SPACES.
+ 52+  042A              ; ON EXIT HL POINTS TO THE FIRST DIGIT, (B)C = NUMBER OF DECIMALS
+ 53+  042A              ; THIS WAY ANY RE-ALIGNMENT / POSTPROCESSING IS MADE EASY.
+ 54+  042A              ; CHANGES: AF,BC,DE,HL,IX
+ 55+  042A              ; P.S. SOME EXAMPLES BELOW
  56+  042A
- 57+  042A              ; by Alwin Henseler
+ 57+  042A              ; BY ALWIN HENSELER
  58+  042A
  59+  042A
  60+  042A 26 00        B2D8            LD      H,0
@@ -1363,80 +1363,80 @@
  62+  042D 1E 00        B2D16           LD      E,0
  63+  042F 16 00        B2D24           LD      D,0
  64+  0431 01 00 00     B2D32           LD      BC,0
- 65+  0434 DD 21 00 00  B2D48           LD      IX,0            ; zero all non-used bits
+ 65+  0434 DD 21 00 00  B2D48           LD      IX,0            ; ZERO ALL NON-USED BITS
  66+  0438 22 EC 0A     B2D64           LD      (B2DINV),HL
  67+  043B ED 53 EE 0A                  LD      (B2DINV + 2),DE
  68+  043F ED 43 F0 0A                  LD      (B2DINV + 4),BC
- 69+  0443 DD 22 F2 0A                  LD      (B2DINV + 6),IX ; place full 64-bit input value in buffer
+ 69+  0443 DD 22 F2 0A                  LD      (B2DINV + 6),IX ; PLACE FULL 64-BIT INPUT VALUE IN BUFFER
  70+  0447 21 F4 0A                     LD      HL,B2DBUF
  71+  044A 11 F5 0A                     LD      DE,B2DBUF + 1
  72+  044D 36 20                        LD      (HL)," "
- 73+  044F              B2DFILC         EQU     $ - 1           ; address of fill-character
+ 73+  044F              B2DFILC         EQU     $ - 1           ; ADDRESS OF FILL-CHARACTER
  74+  044F 01 12 00                     LD      BC,18
- 75+  0452 ED B0                        LDIR                    ; fill 1st 19 bytes of buffer with spaces
- 76+  0454 ED 43 07 0B                  LD      (B2DEND-1),BC   ; set BCD value to "0" & place terminating 0
- 77+  0458 1E 01                        LD      E,1             ; no. of bytes in BCD value
- 78+  045A 21 F4 0A                     LD      HL,B2DINV + 8   ; (address MSB input)+1
+ 75+  0452 ED B0                        LDIR                    ; FILL 1ST 19 BYTES OF BUFFER WITH SPACES
+ 76+  0454 ED 43 07 0B                  LD      (B2DEND-1),BC   ; SET BCD VALUE TO "0" & PLACE TERMINATING 0
+ 77+  0458 1E 01                        LD      E,1             ; NO. OF BYTES IN BCD VALUE
+ 78+  045A 21 F4 0A                     LD      HL,B2DINV + 8   ; (ADDRESS MSB INPUT)+1
  79+  045D 01 09 09                     LD      BC,#0909
  80+  0460 AF                           XOR     A
  81+  0461 05           B2DSKP0         DEC     B
- 82+  0462 28 29                        JR      Z,B2DSIZ        ; all 0: continue with postprocessing
+ 82+  0462 28 29                        JR      Z,B2DSIZ        ; ALL 0: CONTINUE WITH POSTPROCESSING
  83+  0464 2B                           DEC     HL
- 84+  0465 B6                           OR      (HL)            ; find first byte <>0
+ 84+  0465 B6                           OR      (HL)            ; FIND FIRST BYTE <>0
  85+  0466 28 F9                        JR      Z,B2DSKP0
  86+  0468 0D           B2DFND1         DEC     C
  87+  0469 17                           RLA
- 88+  046A 30 FC                        JR      NC,B2DFND1      ; determine no. of most significant 1-bit
+ 88+  046A 30 FC                        JR      NC,B2DFND1      ; DETERMINE NO. OF MOST SIGNIFICANT 1-BIT
  89+  046C 1F                           RRA
- 90+  046D 57                           LD      D,A             ; byte from binary input value
+ 90+  046D 57                           LD      D,A             ; BYTE FROM BINARY INPUT VALUE
  91+  046E E5           B2DLUS2         PUSH    HL
  92+  046F C5                           PUSH    BC
- 93+  0470 21 07 0B     B2DLUS1         LD      HL,B2DEND - 1   ; address LSB of BCD value
- 94+  0473 43                           LD      B,E             ; current length of BCD value in bytes
- 95+  0474 CB 12                        RL      D               ; highest bit from input value -> carry
+ 93+  0470 21 07 0B     B2DLUS1         LD      HL,B2DEND - 1   ; ADDRESS LSB OF BCD VALUE
+ 94+  0473 43                           LD      B,E             ; CURRENT LENGTH OF BCD VALUE IN BYTES
+ 95+  0474 CB 12                        RL      D               ; HIGHEST BIT FROM INPUT VALUE -> CARRY
  96+  0476 7E           B2DLUS0         LD      A,(HL)
  97+  0477 8F                           ADC     A,A
  98+  0478 27                           DAA
- 99+  0479 77                           LD      (HL),A          ; double 1 BCD byte from intermediate result
+ 99+  0479 77                           LD      (HL),A          ; DOUBLE 1 BCD BYTE FROM INTERMEDIATE RESULT
 100+  047A 2B                           DEC     HL
-101+  047B 10 F9                        DJNZ    B2DLUS0         ; and go on to double entire BCD value (+carry!)
+101+  047B 10 F9                        DJNZ    B2DLUS0         ; AND GO ON TO DOUBLE ENTIRE BCD VALUE (+CARRY!)
 102+  047D 30 03                        JR      NC,B2DNXT
-103+  047F 1C                           INC     E               ; carry at MSB -> BCD value grew 1 byte larger
-104+  0480 36 01                        LD      (HL),1          ; initialize new MSB of BCD value
+103+  047F 1C                           INC     E               ; CARRY AT MSB -> BCD VALUE GREW 1 BYTE LARGER
+104+  0480 36 01                        LD      (HL),1          ; INITIALIZE NEW MSB OF BCD VALUE
 105+  0482 0D           B2DNXT          DEC     C
-106+  0483 20 EB                        JR      NZ,B2DLUS1      ; repeat for remaining bits from 1 input byte
-107+  0485 C1                           POP     BC              ; no. of remaining bytes in input value
-108+  0486 0E 08                        LD      C,8             ; reset bit-counter
-109+  0488 E1                           POP     HL              ; pointer to byte from input value
+106+  0483 20 EB                        JR      NZ,B2DLUS1      ; REPEAT FOR REMAINING BITS FROM 1 INPUT BYTE
+107+  0485 C1                           POP     BC              ; NO. OF REMAINING BYTES IN INPUT VALUE
+108+  0486 0E 08                        LD      C,8             ; RESET BIT-COUNTER
+109+  0488 E1                           POP     HL              ; POINTER TO BYTE FROM INPUT VALUE
 110+  0489 2B                           DEC     HL
-111+  048A 56                           LD      D,(HL)          ; get next group of 8 bits
-112+  048B 10 E1                        DJNZ    B2DLUS2         ; and repeat until last byte from input value
-113+  048D 21 08 0B     B2DSIZ          LD      HL,B2DEND       ; address of terminating 0
-114+  0490 4B                           LD      C,E             ; size of BCD value in bytes
+111+  048A 56                           LD      D,(HL)          ; GET NEXT GROUP OF 8 BITS
+112+  048B 10 E1                        DJNZ    B2DLUS2         ; AND REPEAT UNTIL LAST BYTE FROM INPUT VALUE
+113+  048D 21 08 0B     B2DSIZ          LD      HL,B2DEND       ; ADDRESS OF TERMINATING 0
+114+  0490 4B                           LD      C,E             ; SIZE OF BCD VALUE IN BYTES
 115+  0491 B7                           OR      A
-116+  0492 ED 42                        SBC     HL,BC           ; calculate address of MSB BCD
+116+  0492 ED 42                        SBC     HL,BC           ; CALCULATE ADDRESS OF MSB BCD
 117+  0494 54                           LD      D,H
 118+  0495 5D                           LD      E,L
 119+  0496 ED 42                        SBC     HL,BC
-120+  0498 EB                           EX      DE,HL           ; HL=address BCD value, DE=start of decimal value
-121+  0499 41                           LD      B,C             ; no. of bytes BCD
-122+  049A CB 21                        SLA     C               ; no. of bytes decimal (possibly 1 too high)
+120+  0498 EB                           EX      DE,HL           ; HL=ADDRESS BCD VALUE, DE=START OF DECIMAL VALUE
+121+  0499 41                           LD      B,C             ; NO. OF BYTES BCD
+122+  049A CB 21                        SLA     C               ; NO. OF BYTES DECIMAL (POSSIBLY 1 TOO HIGH)
 123+  049C 3E 30                        LD      A,'0'
-124+  049E ED 6F                        RLD                     ; shift bits 4-7 of (HL) into bit 0-3 of A
-125+  04A0 FE 30                        CP      '0'             ; (HL) was > 9h?
-126+  04A2 20 06                        JR      NZ,B2DEXPH      ; if yes, start with recording high digit
-127+  04A4 0D                           DEC     C               ; correct number of decimals
-128+  04A5 13                           INC     DE              ; correct start address
-129+  04A6 18 04                        JR      B2DEXPL         ; continue with converting low digit
-130+  04A8 ED 6F        B2DEXP          RLD                     ; shift high digit (HL) into low digit of A
-131+  04AA 12           B2DEXPH         LD      (DE),A          ; record resulting ASCII-code
+124+  049E ED 6F                        RLD                     ; SHIFT BITS 4-7 OF (HL) INTO BIT 0-3 OF A
+125+  04A0 FE 30                        CP      '0'             ; (HL) WAS > #9?
+126+  04A2 20 06                        JR      NZ,B2DEXPH      ; IF YES, START WITH RECORDING HIGH DIGIT
+127+  04A4 0D                           DEC     C               ; CORRECT NUMBER OF DECIMALS
+128+  04A5 13                           INC     DE              ; CORRECT START ADDRESS
+129+  04A6 18 04                        JR      B2DEXPL         ; CONTINUE WITH CONVERTING LOW DIGIT
+130+  04A8 ED 6F        B2DEXP          RLD                     ; SHIFT HIGH DIGIT (HL) INTO LOW DIGIT OF A
+131+  04AA 12           B2DEXPH         LD      (DE),A          ; RECORD RESULTING ASCII-CODE
 132+  04AB 13                           INC     DE
 133+  04AC ED 6F        B2DEXPL         RLD
 134+  04AE 12                           LD      (DE),A
 135+  04AF 13                           INC     DE
-136+  04B0 23                           INC     HL              ; next BCD-byte
-137+  04B1 10 F5                        DJNZ    B2DEXP          ; and go on to convert each BCD-byte into 2 ASCII
-138+  04B3 ED 42                        SBC     HL,BC           ; return with HL pointing to 1st decimal
+136+  04B0 23                           INC     HL              ; NEXT BCD-BYTE
+137+  04B1 10 F5                        DJNZ    B2DEXP          ; AND GO ON TO CONVERT #EAC BCD-BYTE INTO 2 ASCII
+138+  04B3 ED 42                        SBC     HL,BC           ; RETURN WITH HL POINTING TO 1ST DECIMAL
 139+  04B5 C9                           RET
 140+  04B6
 141+  04B6
@@ -1481,10 +1481,10 @@
 180+  04E4
 181+  04E4 C5                           PUSH    BC
 182+  04E5
-183+  04E5                              ; x 10 = x2 + x8
+183+  04E5                              ; X 10 = X2 + X8
 184+  04E5
 185+  04E5
-186+  04E5                              ; x 2
+186+  04E5                              ; X 2
 187+  04E5
 188+  04E5 CB 25                        SLA     L
 189+  04E7 CB 14                        RL      H
@@ -1494,13 +1494,13 @@
 193+  04ED D5                           PUSH    DE
 194+  04EE E5                           PUSH    HL
 195+  04EF
-196+  04EF                              ; x 4
+196+  04EF                              ; X 4
 197+  04EF CB 15                        RL      L
 198+  04F1 CB 14                        RL      H
 199+  04F3 CB 13                        RL      E
 200+  04F5 CB 12                        RL      D
 201+  04F7
-202+  04F7                              ; x 8
+202+  04F7                              ; X 8
 203+  04F7 CB 15                        RL      L
 204+  04F9 CB 14                        RL      H
 205+  04FB CB 13                        RL      E
@@ -1823,12 +1823,12 @@
  14+  0614 3E 02                        LD      A, 2
  15+  0616 F3                           DI
  16+  0617 D3 99                        OUT     (VDPCT), A
- 17+  0619 3E 8F                        LD      A, #8F          ; select status reg S#2 (R#15=2)
+ 17+  0619 3E 8F                        LD      A, #8F          ; SELECT STATUS REG S#2 (R#15=2)
  18+  061B D3 99                        OUT     (VDPCT), A
  19+  061D DB 99        .WAIT           IN      A, (VDPST)
- 20+  061F 1F                           RRA                     ; CE into carry
+ 20+  061F 1F                           RRA                     ; CE INTO CARRY
  21+  0620 38 FB                        JR      C, .WAIT
- 22+  0622 AF                           XOR     A               ; restore S#0 selection
+ 22+  0622 AF                           XOR     A               ; RESTORE S#0 SELECTION
  23+  0623 F3                           DI
  24+  0624 D3 99                        OUT     (VDPCT), A
  25+  0626 3E 8F                        LD      A, #8F
@@ -1849,9 +1849,9 @@
  40+  062D F5           SETVR           PUSH    AF
  41+  062E F3                           DI
  42+  062F 7B                           LD      A, E
- 43+  0630 D3 99                        OUT     (VDPCT), A      ; write value byte first
+ 43+  0630 D3 99                        OUT     (VDPCT), A      ; WRITE VALUE BYTE FIRST
  44+  0632 F1                           POP     AF
- 45+  0633 F6 80                        OR      #80             ; reg number | #80 = register select
+ 45+  0633 F6 80                        OR      #80             ; REG NUMBER | #80 = REGISTER SELECT
  46+  0635 D3 99                        OUT     (VDPCT), A
  47+  0637 FB                           EI
  48+  0638 C9                           RET
@@ -1866,12 +1866,12 @@
  57+  0639
  58+  0639 CD 13 06     VDPCMD          CALL    VDPWAIT
  59+  063C F3                           DI
- 60+  063D 3E 20                        LD      A, 32           ; start at R#32
+ 60+  063D 3E 20                        LD      A, 32           ; START AT R#32
  61+  063F D3 99                        OUT     (VDPCT), A
- 62+  0641 3E 91                        LD      A, #91          ; R#17 (indirect register pointer)
+ 62+  0641 3E 91                        LD      A, #91          ; R#17 (INDIRECT REGISTER POINTER)
  63+  0643 D3 99                        OUT     (VDPCT), A
  64+  0645
- 65+  0645 0E 9B                        LD      C, VDPPALC      ; VDP register data port
+ 65+  0645 0E 9B                        LD      C, VDPPALC      ; VDP REGISTER DATA PORT
  66+  0647                              REPT    15
  67+  0647 ED A3       >                OUTI
  67+  0649 ED A3       >                OUTI
@@ -1928,7 +1928,7 @@
 105+  067D              ; - A: LOGICAL OP (VDP_IMP, VDP_XOR, ETC)
 106+  067D              ; -
 107+  067D
-108+  067D DD 77 0E     LMMM            LD      (IX+14), A      ; set command + logop
+108+  067D DD 77 0E     LMMM            LD      (IX+14), A      ; SET COMMAND + LOGOP
 109+  0680 CD 39 06                     CALL    VDPCMD
 110+  0683 C9                           RET
 111+  0684
@@ -1939,17 +1939,17 @@
   2+  0684              ;                                       * FONT                                 *
   3+  0684              ;                                       ****************************************
   4+  0684              ;
-  5+  0684              ; Reads the MSX ROM 6×8 charset (256 glyphs × 8 bytes, 1bpp, bits 7-2 used).
-  6+  0684              ; Expands into 4 VRAM font tables: Normal / Bold / Italic / Bold+Italic.
-  7+  0684              ; Called once at startup before any rendering.
+  5+  0684              ; READS THE MSX ROM 6×8 CHARSET (256 GLYPHS × 8 BYTES, 1BPP, BITS 7-2 USED).
+  6+  0684              ; EXPANDS INTO 4 VRAM FONT TABLES: NORMAL / BOLD / ITALIC / BOLD+ITALIC.
+  7+  0684              ; CALLED ONCE AT STARTUP BEFORE ANY RENDERING.
   8+  0684              ;
-  9+  0684              ; ROM charset access: RDSLT from slot 0, address in CGPNT.
+  9+  0684              ; ROM CHARSET ACCESS: RDSLT FROM SLOT 0, ADDRESS IN CGPNT.
  10+  0684
  11+  0684
  12+  0684              ; --- ITALIC SHIFT TABLE        ----------------------------------------
  13+  0684
- 14+  0684                              ; Row shift offsets for italic (positive = shift pixels LEFT)
- 15+  0684                              ; Applied per-row when generating italic glyphs
+ 14+  0684                              ; ROW SHIFT OFFSETS FOR ITALIC (POSITIVE = SHIFT PIXELS LEFT)
+ 15+  0684                              ; APPLIED PER-ROW WHEN GENERATING ITALIC GLYPHS
  16+  0684 01 01 01 01  ITALSHFT      DEFB    1, 1, 1, 1, 0, -1, -1, -1
  16+  0688 00 FF FF FF
  17+  068C
@@ -1962,16 +1962,16 @@
  24+  068C              ; -
  25+  068C
  26+  068C              FONTINIT        ; TODO:
- 27+  068C                              ; 1. Read CGPNT to get charset slot and base address
- 28+  068C                              ; 2. For each of 256 glyphs (N = 0..255):
- 29+  068C                              ;    a. Read 8 bytes from ROM via RDSLT
- 30+  068C                              ;    b. Expand to Normal:   bits 7-2 → 6px of color 0/1, pad 2 right px
- 31+  068C                              ;    c. Expand to Bold:     normal_row | (normal_row >> 1)
- 32+  068C                              ;    d. Expand to Italic:   normal_row shifted per ITALSHFT table
- 33+  068C                              ;    e. Expand to B+I:      bold transform then italic shift
- 34+  068C                              ;    f. Upload each variant to its VRAM font table via HMMC or OTIR
- 35+  068C                              ; 3. Each glyph = 16 bytes in VRAM (6px × 8 rows = 2 B/row × 8 = 16)
- 36+  068C                              ;    Glyph N: SX = (N % 32) * 6, SY = table_SY + (N / 32) * 8
+ 27+  068C                              ; 1. READ CGPNT TO GET CHARSET SLOT AND BASE ADDRESS
+ 28+  068C                              ; 2. FOR #EAC OF 256 GLYPHS (N = 0..255):
+ 29+  068C                              ;    A. READ 8 BYTES FROM ROM VIA RDSLT
+ 30+  068C                              ;    B. EXPAND TO NORMAL:   BITS 7-2 → 6PX OF COLOR 0/1, PAD 2 RIGHT PX
+ 31+  068C                              ;    C. EXPAND TO BOLD:     NORMAL_ROW | (NORMAL_ROW >> 1)
+ 32+  068C                              ;    D. EXPAND TO ITALIC:   NORMAL_ROW SHIFTED PER ITALSHFT TABLE
+ 33+  068C                              ;    E. EXPAND TO B+I:      BOLD TRANSFORM THEN ITALIC SHIFT
+ 34+  068C                              ;    F. UPLOAD #EAC VARIANT TO ITS VRAM FONT TABLE VIA HMMC OR OTIR
+ 35+  068C                              ; 3. #EAC GLYPH = 16 BYTES IN VRAM (6PX × 8 ROWS = 2 B/ROW × 8 = 16)
+ 36+  068C                              ;    GLYPH N: SX = (N % 32) * 6, SY = TABLE_SY + (N / 32) * 8
  37+  068C C9                           RET
  38+  068D
  39+  068D
@@ -1979,9 +1979,9 @@
  41+  068D
  42+  068D              ; - EXPNORM ----------
  43+  068D              ; - EXPAND ONE 1BPP ROM ROW BYTE TO 2-BYTE VRAM ROW (NORMAL, SCREEN 6 2BPP)
- 44+  068D              ; - A:  ROM ROW BYTE (bits 7-2 = 6 pixels)
- 45+  068D              ; - HL: DESTINATION VRAM ROW BUFFER (2 bytes)
- 46+  068D              ; - NOTE: COLOR 1 = pixel on, COLOR 0 = pixel off
+ 44+  068D              ; - A:  ROM ROW BYTE (BITS 7-2 = 6 PIXELS)
+ 45+  068D              ; - HL: DESTINATION VRAM ROW BUFFER (2 BYTES)
+ 46+  068D              ; - NOTE: COLOR 1 = PIXEL ON, COLOR 0 = PIXEL OFF
  47+  068D              ; -
  48+  068D
  49+  068D              EXPNORM         ; TODO
@@ -1993,7 +1993,7 @@
  55+  068E              ; - A: ROM ROW BYTE
  56+  068E              ; -
  57+  068E
- 58+  068E              EXPBOLD         ; TODO: A = A | (A >> 1), then EXPNORM
+ 58+  068E              EXPBOLD         ; TODO: A = A | (A >> 1), THEN EXPNORM
  59+  068E C9                           RET
  60+  068F
  61+  068F
@@ -2003,7 +2003,7 @@
  65+  068F              ; - B:   ROW INDEX (0-7)
  66+  068F              ; -
  67+  068F
- 68+  068F              EXPITAL         ; TODO: look up ITALSHFT[B], shift A accordingly, then EXPNORM
+ 68+  068F              EXPITAL         ; TODO: LOOK UP ITALSHFT[B], SHIFT A ACCORDINGLY, THEN EXPNORM
  69+  068F C9                           RET
  70+  0690
 # file closed: FONT.Z8A
@@ -2013,35 +2013,35 @@
   2+  0690              ;                                       * MAPPER MANAGER                       *
   3+  0690              ;                                       ****************************************
   4+  0690              ;
-  5+  0690              ; Uses DOS2/Nextor mapper support routines found via EXTBIO.
-  6+  0690              ; NEVER use OUT (0FEH) directly — always go through MPUTP2.
+  5+  0690              ; USES DOS2/NEXTOR MAPPER SUPPORT ROUTINES FOUND VIA EXTBIO.
+  6+  0690              ; NEVER USE OUT (#0FE) DIRECTLY — ALWAYS GO THROUGH MPUTP2.
   7+  0690              ;
-  8+  0690              ; Init: call MAPINIT at startup. Stores entry addresses in VARS.
-  9+  0690              ; After init: call ALLSEG, FRESEG, RDSEG, WRSEG, PUTP1, GETP1, PUTP2, GETP2.
+  8+  0690              ; INIT: CALL MAPINIT AT STARTUP. STORES ENTRY ADDRESSES IN VARS.
+  9+  0690              ; AFTER INIT: CALL ALLSEG, FRESEG, RDSEG, WRSEG, PUTP1, GETP1, PUTP2, GETP2.
  10+  0690
  11+  0690
  12+  0690              ; --- MAPINIT                   ----------------------------------------
  13+  0690
  14+  0690              ; - MAPINIT ----------
  15+  0690              ; - LOCATE MAPPER MANAGER VIA EXTBIO
- 16+  0690              ; - FILL MAP_xxx JUMP TABLE ENTRIES IN VARS
+ 16+  0690              ; - FILL MAP_XXX JUMP TABLE ENTRIES IN VARS
  17+  0690              ; - OUTPUT:
- 18+  0690              ; -     CY = 1  NO MAPPER MANAGER (no extended BIOS or device not present)
+ 18+  0690              ; -     CY = 1  NO MAPPER MANAGER (NO EXTENDED BIOS OR DEVICE NOT PRESENT)
  19+  0690              ; -
  20+  0690
- 21+  0690              MAPINIT         ; Check HOKVLD bit 0: extended BIOS present?
+ 21+  0690              MAPINIT         ; CHECK HOKVLD BIT 0: EXTENDED BIOS PRESENT?
  22+  0690 3A 20 FB                     LD      A, (HOKVLD)
  23+  0693 1F                           RRA
- 24+  0694 D0                           RET     NC              ; bit 0 = 0: no extended BIOS
+ 24+  0694 D0                           RET     NC              ; BIT 0 = 0: NO EXTENDED BIOS
  25+  0695
- 26+  0695                              ; Call EXTBIO: D=4 (mapper device), E=2 (get jump table)
+ 26+  0695                              ; CALL EXTBIO: D=4 (MAPPER DEVICE), E=2 (GET JUMP TABLE)
  27+  0695 AF                           XOR     A               ; A=0
  28+  0696 16 04                        LD      D, MAP_DEV
  29+  0698 1E 02                        LD      E, MAPFNTBL
- 30+  069A CD CA FF                     CALL    EXTBIO          ; HL = jump table base
- 31+  069D                              ; IX, IY, alternate regs corrupted by EXTBIO — do not use
+ 30+  069A CD CA FF                     CALL    EXTBIO          ; HL = JUMP TABLE BASE
+ 31+  069D                              ; IX, IY, ALTERNATE REGS CORRUPTED BY EXTBIO — DO NOT USE
  32+  069D
- 33+  069D                              ; Store entry addresses from jump table
+ 33+  069D                              ; STORE ENTRY ADDRESSES FROM JUMP TABLE
  34+  069D E5                           PUSH    HL
  35+  069E 11 00 00                     LD      DE, MJALLSEG
  36+  06A1 19                           ADD     HL, DE
@@ -2089,8 +2089,8 @@
  78+  06E0 22 3A 09                     LD      (MGETP2), HL
  79+  06E3
  80+  06E3 3E FF                        LD      A, #FF
- 81+  06E5 32 2B 09                     LD      (MAPRDY), A    ; flag: mapper manager found
- 82+  06E8 A7                           AND     A               ; carry clear = success
+ 81+  06E5 32 2B 09                     LD      (MAPRDY), A    ; FLAG: MAPPER MANAGER FOUND
+ 82+  06E8 A7                           AND     A               ; CARRY CLEAR = SUCCESS
  83+  06E9 C9                           RET
  84+  06EA
  85+  06EA
@@ -2099,11 +2099,11 @@
  88+  06EA              ; - ALLSEG -----------
  89+  06EA              ; - ALLOCATE ONE 16KB USER SEGMENT (PRIMARY MAPPER)
  90+  06EA              ; - OUTPUT:
- 91+  06EA              ; -     A  = SEGMENT NUMBER (Fc = 0)
- 92+  06EA              ; -     Fc = 1  NO FREE SEGMENTS
+ 91+  06EA              ; -     A  = SEGMENT NUMBER (FC = 0)
+ 92+  06EA              ; -     FC = 1  NO FREE SEGMENTS
  93+  06EA              ; -
  94+  06EA
- 95+  06EA AF           ALLSEG          XOR     A               ; A=0: user segment, B=0: primary mapper
+ 95+  06EA AF           ALLSEG          XOR     A               ; A=0: USER SEGMENT, B=0: PRIMARY MAPPER
  96+  06EB 47                           LD      B, A
  97+  06EC 2A 2C 09                     LD      HL, (MALLSEG)
  98+  06EF CD E4 05                     CALL    CALHL
@@ -2116,10 +2116,10 @@
 105+  06F3              ; - FREE A PREVIOUSLY ALLOCATED SEGMENT
 106+  06F3              ; - A: SEGMENT NUMBER
 107+  06F3              ; - OUTPUT:
-108+  06F3              ; -     Fc = 1  ERROR (invalid or already free)
+108+  06F3              ; -     FC = 1  ERROR (INVALID OR ALREADY FREE)
 109+  06F3              ; -
 110+  06F3
-111+  06F3 06 00        FRESEG          LD      B, 0            ; B=0: primary mapper
+111+  06F3 06 00        FRESEG          LD      B, 0            ; B=0: PRIMARY MAPPER
 112+  06F5 2A 2E 09                     LD      HL, (MFRESEG)
 113+  06F8 CD E4 05                     CALL    CALHL
 114+  06FB C9                           RET
@@ -2161,7 +2161,7 @@
 150+  070C              ; --- PUTP1                     ----------------------------------------
 151+  070C
 152+  070C              ; - PUTP1 ------------
-153+  070C              ; - BANK SEGMENT INTO PAGE 1 (4000H-7FFFH) — LINE DIRECTORY WINDOW
+153+  070C              ; - BANK SEGMENT INTO PAGE 1 (#4000-#7FFF) — LINE DIRECTORY WINDOW
 154+  070C              ; - A: SEGMENT NUMBER
 155+  070C              ; - ALL REGISTERS PRESERVED
 156+  070C              ; -
@@ -2187,7 +2187,7 @@
 176+  071A              ; --- PUTP2                     ----------------------------------------
 177+  071A
 178+  071A              ; - PUTP2 ------------
-179+  071A              ; - BANK SEGMENT INTO PAGE 2 (8000H-BFFFH) — TEXT WINDOW
+179+  071A              ; - BANK SEGMENT INTO PAGE 2 (#8000-#BFFF) — TEXT WINDOW
 180+  071A              ; - A: SEGMENT NUMBER
 181+  071A              ; - ALL REGISTERS PRESERVED
 182+  071A              ; -
@@ -2216,21 +2216,21 @@
   2+  0728              ;                                       * TEXT BUFFER                          *
   3+  0728              ;                                       ****************************************
   4+  0728              ;
-  5+  0728              ; Line directory: flat array at DIRPAGE (#4000), in a dedicated mapper segment
-  6+  0728              ;   (DIRSEG). Allocated at startup, banked into page 1 via PUTP1, never switched.
-  7+  0728              ;   Direct access: entry N is at DIRPAGE + N*3.
-  8+  0728              ;   Entry layout: [1: seg][2: word offset within that text segment]
-  9+  0728              ;   Capacity: MAXLINES = 5460 entries (16384 / 3 = 5461, rounded down)
+  5+  0728              ; LINE DIRECTORY: FLAT ARRAY AT DIRPAGE (#4000), IN A DEDICATED MAPPER SEGMENT
+  6+  0728              ;   (DIRSEG). ALLOCATED AT STARTUP, BANKED INTO PAGE 1 VIA PUTP1, NEVER SWITCHED.
+  7+  0728              ;   DIRECT ACCESS: ENTRY N IS AT DIRPAGE + N*3.
+  8+  0728              ;   ENTRY LAYOUT: [1: SEG][2: WORD OFFSET WITHIN THAT TEXT SEGMENT]
+  9+  0728              ;   CAPACITY: MAXLINES = 5460 ENTRIES (16384 / 3 = 5461, ROUNDED DOWN)
  10+  0728              ;
- 11+  0728              ; Text segments: accessed via page 2 window (TXPAGE = #8000).
- 12+  0728              ;   PUTP2 to switch segment in; copy data; PUTP2 to switch next as needed.
- 13+  0728              ;   Multiple segments allocated as file grows (ALLSEG).
+ 11+  0728              ; TEXT SEGMENTS: ACCESSED VIA PAGE 2 WINDOW (TXPAGE = #8000).
+ 12+  0728              ;   PUTP2 TO SWITCH SEGMENT IN; COPY DATA; PUTP2 TO SWITCH NEXT AS NEEDED.
+ 13+  0728              ;   MULTIPLE SEGMENTS ALLOCATED AS FILE GROWS (ALLSEG).
  14+  0728              ;
- 15+  0728              ; Line record (in text segment):
- 16+  0728              ;   [1 byte : text_len]   (0-80)
- 17+  0728              ;   [N bytes: text]       raw chars
- 18+  0728              ;   [N bytes: attr]       one attr byte per char
- 19+  0728              ;   Max: 1 + 80 + 80 = 161 bytes (LINEREC)
+ 15+  0728              ; LINE RECORD (IN TEXT SEGMENT):
+ 16+  0728              ;   [1 BYTE : TEXT_LEN]   (0-80)
+ 17+  0728              ;   [N BYTES: TEXT]       RAW CHARS
+ 18+  0728              ;   [N BYTES: ATTR]       ONE ATTR BYTE PER CHAR
+ 19+  0728              ;   MAX: 1 + 80 + 80 = 161 BYTES (LINEREC)
  20+  0728
  21+  0728
  22+  0728              ; --- BUFINIT                   ----------------------------------------
@@ -2241,12 +2241,12 @@
  27+  0728              ; -
  28+  0728
  29+  0728              BUFINIT         ; TODO:
- 30+  0728                              ; 1. ALLSEG (user) → A = dir segment; store in DIRSEG
- 31+  0728                              ;    PUTP1 A        → bank it into page 1 (DIRPAGE)
- 32+  0728                              ; 2. ALLSEG (user) → A = first text segment; store in TXSEG
- 33+  0728                              ;    PUTP2 A        → bank it into page 2 (TXPAGE)
- 34+  0728                              ; 3. Write empty line record at TXPAGE+0: DEFB 0
- 35+  0728                              ; 4. Write dir entry 0: (DIRPAGE+0) = TXSEG, (DIRPAGE+1) = 0, (DIRPAGE+2) = 0
+ 30+  0728                              ; 1. ALLSEG (USER) → A = DIR SEGMENT; STORE IN DIRSEG
+ 31+  0728                              ;    PUTP1 A        → BANK IT INTO PAGE 1 (DIRPAGE)
+ 32+  0728                              ; 2. ALLSEG (USER) → A = FIRST TEXT SEGMENT; STORE IN TXSEG
+ 33+  0728                              ;    PUTP2 A        → BANK IT INTO PAGE 2 (TXPAGE)
+ 34+  0728                              ; 3. WRITE EMPTY LINE RECORD AT TXPAGE+0: DEFB 0
+ 35+  0728                              ; 4. WRITE DIR ENTRY 0: (DIRPAGE+0) = TXSEG, (DIRPAGE+1) = 0, (DIRPAGE+2) = 0
  36+  0728                              ; 5. TOTLINES = 1, TOPLINE = 0, DOCLINE = 0, CURX = 0, CURY = 0
  37+  0728 C9                           RET
  38+  0729
@@ -2260,21 +2260,21 @@
  46+  0729              ; -     A:  SEGMENT NUMBER
  47+  0729              ; -     DE: BYTE OFFSET WITHIN SEGMENT
  48+  0729              ; -
- 49+  0729              ; - USES: HL (entry address), DE (offset), A (seg)
+ 49+  0729              ; - USES: HL (ENTRY ADDRESS), DE (OFFSET), A (SEG)
  50+  0729              ; -
  51+  0729
- 52+  0729              DIRREAD         ; Compute entry address: HL = DIRPAGE + HL*3
+ 52+  0729              DIRREAD         ; COMPUTE ENTRY ADDRESS: HL = DIRPAGE + HL*3
  53+  0729 29                           ADD     HL, HL          ; HL * 2
  54+  072A 54                           LD      D, H
  55+  072B 5D                           LD      E, L            ; DE = HL*2
- 56+  072C 29                           ADD     HL, HL          ; oops — need HL*3 not HL*4
- 57+  072D                              ; Correct: HL*3 = HL*2 + HL (original)
- 58+  072D                              ; entry address = DIRPAGE + line*3
- 59+  072D                              ; TODO: implement properly (16-bit multiply by 3)
- 60+  072D                              ; LD HL, DIRPAGE + line*3
- 61+  072D                              ; A = (HL)         ; segment
+ 56+  072C 29                           ADD     HL, HL          ; OOPS — NEED HL*3 NOT HL*4
+ 57+  072D                              ; CORRECT: HL*3 = HL*2 + HL (ORIGINAL)
+ 58+  072D                              ; ENTRY ADDRESS = DIRPAGE + LINE*3
+ 59+  072D                              ; TODO: IMPLEMENT PROPERLY (16-BIT MULTIPLY BY 3)
+ 60+  072D                              ; LD HL, DIRPAGE + LINE*3
+ 61+  072D                              ; A = (HL)         ; SEGMENT
  62+  072D                              ; INC HL
- 63+  072D                              ; E = (HL) / INC HL / D = (HL)  ; offset word
+ 63+  072D                              ; E = (HL) / INC HL / D = (HL)  ; OFFSET WORD
  64+  072D C9                           RET
  65+  072E
  66+  072E
@@ -2288,10 +2288,10 @@
  74+  072E              ; -
  75+  072E
  76+  072E              DIRWRITE        ; TODO:
- 77+  072E                              ; entry_addr = DIRPAGE + HL*3
- 78+  072E                              ; (entry_addr+0) = A   (segment)
- 79+  072E                              ; (entry_addr+1) = E   (offset low)
- 80+  072E                              ; (entry_addr+2) = D   (offset high)
+ 77+  072E                              ; ENTRY_ADDR = DIRPAGE + HL*3
+ 78+  072E                              ; (ENTRY_ADDR+0) = A   (SEGMENT)
+ 79+  072E                              ; (ENTRY_ADDR+1) = E   (OFFSET LOW)
+ 80+  072E                              ; (ENTRY_ADDR+2) = D   (OFFSET HIGH)
  81+  072E C9                           RET
  82+  072F
  83+  072F
@@ -2303,10 +2303,10 @@
  89+  072F              ; -
  90+  072F
  91+  072F              LINEREAD        ; TODO:
- 92+  072F                              ; 1. DIRREAD HL → A=seg, DE=offset
- 93+  072F                              ; 2. CP (TXSEG): if same segment already banked, skip PUTP2
- 94+  072F                              ;    else: PUTP2 A / LD (TXSEG), A
- 95+  072F                              ; 3. LD HL, TXPAGE / ADD HL, DE   → source address
+ 92+  072F                              ; 1. DIRREAD HL → A=SEG, DE=OFFSET
+ 93+  072F                              ; 2. CP (TXSEG): IF SAME SEGMENT ALREADY BANKED, SKIP PUTP2
+ 94+  072F                              ;    ELSE: PUTP2 A / LD (TXSEG), A
+ 95+  072F                              ; 3. LD HL, TXPAGE / ADD HL, DE   → SOURCE ADDRESS
  96+  072F                              ; 4. LD DE, WORKBUF / LD BC, LINEREC / LDIR
  97+  072F C9                           RET
  98+  0730
@@ -2319,15 +2319,15 @@
 105+  0730              ; -
 106+  0730
 107+  0730              LINEWRT         ; TODO:
-108+  0730                              ; 1. DIRREAD → A=seg, DE=offset
-109+  0730                              ; 2. Bank segment if not current (PUTP2 / update TXSEG)
-110+  0730                              ; 3. Compute old record size: old = (TXPAGE + DE) → text_len
-111+  0730                              ;    old_bytes = 1 + old*2
-112+  0730                              ;    new_bytes = 1 + WORKBUF[0]*2
-113+  0730                              ; 4. If new_bytes == old_bytes: LDIR WORKBUF → TXPAGE+DE
-114+  0730                              ;    Else: repack segment tail; update dir[HL] offset/seg;
-115+  0730                              ;          cascade-update dir[HL+1..] offsets in same segment;
-116+  0730                              ;          if segment full → ALLSEG, split at current line
+108+  0730                              ; 1. DIRREAD → A=SEG, DE=OFFSET
+109+  0730                              ; 2. BANK SEGMENT IF NOT CURRENT (PUTP2 / UPDATE TXSEG)
+110+  0730                              ; 3. COMPUTE OLD RECORD SIZE: OLD = (TXPAGE + DE) → TEXT_LEN
+111+  0730                              ;    OLD_BYTES = 1 + OLD*2
+112+  0730                              ;    NEW_BYTES = 1 + WORKBUF[0]*2
+113+  0730                              ; 4. IF NEW_BYTES == OLD_BYTES: LDIR WORKBUF → TXPAGE+DE
+114+  0730                              ;    ELSE: REPACK SEGMENT TAIL; UPDATE DIR[HL] OFFSET/SEG;
+115+  0730                              ;          CASCADE-UPDATE DIR[HL+1..] OFFSETS IN SAME SEGMENT;
+116+  0730                              ;          IF SEGMENT FULL → ALLSEG, SPLIT AT CURRENT LINE
 117+  0730 C9                           RET
 118+  0731
 119+  0731
@@ -2339,11 +2339,11 @@
 125+  0731              ; -
 126+  0731
 127+  0731              LINEINS         ; TODO:
-128+  0731                              ; 1. Shift DIRPAGE entries [N+1..TOTLINES] down by DIRSIZ bytes
-129+  0731                              ;    (LDIR from top downward — use LDDR)
-130+  0731                              ; 2. ALLSEG / use current TXSEG space for new empty record
-131+  0731                              ; 3. Write dir[N+1]: current seg, offset after line N record
-132+  0731                              ; 4. Write empty record (text_len=0) at that offset
+128+  0731                              ; 1. SHIFT DIRPAGE ENTRIES [N+1..TOTLINES] DOWN BY DIRSIZ BYTES
+129+  0731                              ;    (LDIR FROM TOP DOWNWARD — USE LDDR)
+130+  0731                              ; 2. ALLSEG / USE CURRENT TXSEG SPACE FOR NEW EMPTY RECORD
+131+  0731                              ; 3. WRITE DIR[N+1]: CURRENT SEG, OFFSET AFTER LINE N RECORD
+132+  0731                              ; 4. WRITE EMPTY RECORD (TEXT_LEN=0) AT THAT OFFSET
 133+  0731                              ; 5. TOTLINES++
 134+  0731 C9                           RET
 135+  0732
@@ -2356,8 +2356,8 @@
 142+  0732              ; -
 143+  0732
 144+  0732              LINEDEL         ; TODO:
-145+  0732                              ; 1. Free record space in text segment (compact in-place)
-146+  0732                              ; 2. Shift DIRPAGE entries [N+1..TOTLINES] up by DIRSIZ (LDIR)
+145+  0732                              ; 1. FREE RECORD SPACE IN TEXT SEGMENT (COMPACT IN-PLACE)
+146+  0732                              ; 2. SHIFT DIRPAGE ENTRIES [N+1..TOTLINES] UP BY DIRSIZ (LDIR)
 147+  0732                              ; 3. TOTLINES--
 148+  0732 C9                           RET
 149+  0733
@@ -2372,7 +2372,7 @@
   6+  0733              ; --- REDRAW                    ----------------------------------------
   7+  0733
   8+  0733              ; - REDRAW -----------
-  9+  0733              ; - REDRAW ALL TEXT ROWS (TXRFIRST to TXRLAST)
+  9+  0733              ; - REDRAW ALL TEXT ROWS (TXRFIRST TO TXRLAST)
  10+  0733              ; -
  11+  0733
  12+  0733 06 01        REDRAW          LD      B, TXRFIRST
@@ -2408,7 +2408,7 @@
  42+  074A 22 19 0B                     LD      (VDP_DY), HL
  43+  074D
  44+  074D                              ; 2. RENDER COLS 0-79
- 45+  074D DD 21 13 0B                  LD      IX, VDP_CMDBLK
+ 45+  074D DD 21 13 0B                  LD      IX, VDPCMBLK
  46+  0751 0E 00                        LD      C, 0            ; COL COUNTER
  47+  0753 C5           .COLLOOP        PUSH    BC
  48+  0754
@@ -2465,7 +2465,7 @@
  99+  0791 87                           ADD     A, A            ; (CHAR / 32) * 8
 100+  0792
 101+  0792                              ; ADD FONT TABLE OFFSET BASED ON ATTR (BOLD/ITALIC)
-102+  0792                              ; LD      HL, FNORM_SY  ; ... etc
+102+  0792                              ; LD      HL, FNORM_SY  ; ... ETC
 103+  0792 6F                           LD      L, A
 104+  0793 26 00                        LD      H, 0
 105+  0795 11 E0 00                     LD      DE, FNORM_SY
@@ -2506,9 +2506,9 @@
   9+  07B8              ; - SCROLL TEXT AREA UP (8PX) TO SHOW NEXT LINE
  10+  07B8              ; -
  11+  07B8
- 12+  07B8 DD 21 13 0B  SCROLLDN        LD      IX, VDP_CMDBLK
+ 12+  07B8 DD 21 13 0B  SCROLLDN        LD      IX, VDPCMBLK
  13+  07BC
- 14+  07BC                              ; 1. MOVE 480x192 AREA (ROW 2..25 -> ROW 1..24)
+ 14+  07BC                              ; 1. MOVE 480X192 AREA (ROW 2..25 -> ROW 1..24)
  15+  07BC 21 18 00                     LD      HL, TXORG_X     ; 24
  16+  07BF 22 13 0B                     LD      (VDP_SX), HL
  17+  07C2 3E 10                        LD      A, TXORG_Y + 8  ; ROW 2 (START AT 16PX)
@@ -2557,8 +2557,8 @@
   2+  080B              ;                                       * EDIT OPERATIONS                      *
   3+  080B              ;                                       ****************************************
   4+  080B              ;
-  5+  080B              ; All editing operations work on WORKBUF (current line loaded by LINEREAD).
-  6+  080B              ; After each edit: LINEWRT to persist, PUTLINE to re-render, DRWGUT.
+  5+  080B              ; ALL EDITING OPERATIONS WORK ON WORKBUF (CURRENT LINE LOADED BY LINEREAD).
+  6+  080B              ; AFTER #EAC EDIT: LINEWRT TO PERSIST, PUTLINE TO RE-RENDER, DRWGUT.
   7+  080B
   8+  080B
   9+  080B              ; --- EDINSCHR                 ----------------------------------------
@@ -2570,13 +2570,13 @@
  15+  080B              ; -
  16+  080B
  17+  080B              EDINSCHR       ; TODO:
- 18+  080B                              ; 1. If WORKBUF[0] >= TEXTCOLS: bell, return (line full)
- 19+  080B                              ; 2. Shift text+attr right from CURX..len
- 20+  080B                              ; 3. Store A at text[CURX], E at attr[CURX]
+ 18+  080B                              ; 1. IF WORKBUF[0] >= TEXTCOLS: BELL, RETURN (LINE FULL)
+ 19+  080B                              ; 2. SHIFT TEXT+ATTR RIGHT FROM CURX..LEN
+ 20+  080B                              ; 3. STORE A AT TEXT[CURX], E AT ATTR[CURX]
  21+  080B                              ; 4. WORKBUF[0]++
  22+  080B                              ; 5. LINEWRT DOCLINE
- 23+  080B                              ; 6. PUTLINE CURY (redraw line)
- 24+  080B                              ; 7. Advance cursor right (EDMOVCHR)
+ 23+  080B                              ; 6. PUTLINE CURY (REDRAW LINE)
+ 24+  080B                              ; 7. ADVANCE CURSOR RIGHT (EDMOVCHR)
  25+  080B C9                           RET
  26+  080C
  27+  080C
@@ -2589,9 +2589,9 @@
  34+  080C              ; -
  35+  080C
  36+  080C              EDOVRCHR        ; TODO:
- 37+  080C                              ; 1. Store A at text[CURX], E at attr[CURX]
- 38+  080C                              ; 2. If CURX >= WORKBUF[0]: WORKBUF[0] = CURX+1
- 39+  080C                              ; 3. LINEWRT, PUTCHAR, EDMOVCHR right
+ 37+  080C                              ; 1. STORE A AT TEXT[CURX], E AT ATTR[CURX]
+ 38+  080C                              ; 2. IF CURX >= WORKBUF[0]: WORKBUF[0] = CURX+1
+ 39+  080C                              ; 3. LINEWRT, PUTCHAR, EDMOVCHR RIGHT
  40+  080C C9                           RET
  41+  080D
  42+  080D
@@ -2602,9 +2602,9 @@
  47+  080D              ; -
  48+  080D
  49+  080D              EDDELBK       ; TODO:
- 50+  080D                              ; If CURX = 0 and CURY = 0 (top of doc): bell, return
- 51+  080D                              ; If CURX = 0: join with previous line (EJOINPRV)
- 52+  080D                              ; Else: shift text+attr left, WORKBUF[0]--, LINEWRT, PUTLINE
+ 50+  080D                              ; IF CURX = 0 AND CURY = 0 (TOP OF DOC): BELL, RETURN
+ 51+  080D                              ; IF CURX = 0: JOIN WITH PREVIOUS LINE (EJOINPRV)
+ 52+  080D                              ; ELSE: SHIFT TEXT+ATTR LEFT, WORKBUF[0]--, LINEWRT, PUTLINE
  53+  080D C9                           RET
  54+  080E
  55+  080E
@@ -2615,8 +2615,8 @@
  60+  080E              ; -
  61+  080E
  62+  080E              EDDELCHR        ; TODO:
- 63+  080E                              ; If CURX >= WORKBUF[0]: join next line (EJOINEXT)
- 64+  080E                              ; Else: shift text+attr left, WORKBUF[0]--, LINEWRT, PUTLINE
+ 63+  080E                              ; IF CURX >= WORKBUF[0]: JOIN NEXT LINE (EJOINEXT)
+ 64+  080E                              ; ELSE: SHIFT TEXT+ATTR LEFT, WORKBUF[0]--, LINEWRT, PUTLINE
  65+  080E C9                           RET
  66+  080F
  67+  080F
@@ -2627,11 +2627,11 @@
  72+  080F              ; -
  73+  080F
  74+  080F              EDNWLIN       ; TODO:
- 75+  080F                              ; 1. Split WORKBUF at CURX:
- 76+  080F                              ;    - Tail (text[CURX..] + attr) → new WORKBUF, LINEINS DOCLINE+1
- 77+  080F                              ;    - Head (text[0..CURX-1] + attr) → WORKBUF, LINEWRT DOCLINE
- 78+  080F                              ; 2. Move cursor to col 0, next line (scroll if needed)
- 79+  080F                              ; 3. RDWROWS CURY..SCRROWS-1 (tail shifted down)
+ 75+  080F                              ; 1. SPLIT WORKBUF AT CURX:
+ 76+  080F                              ;    - TAIL (TEXT[CURX..] + ATTR) → NEW WORKBUF, LINEINS DOCLINE+1
+ 77+  080F                              ;    - HEAD (TEXT[0..CURX-1] + ATTR) → WORKBUF, LINEWRT DOCLINE
+ 78+  080F                              ; 2. MOVE CURSOR TO COL 0, NEXT LINE (SCROLL IF NEEDED)
+ 79+  080F                              ; 3. RDWROWS CURY..SCRROWS-1 (TAIL SHIFTED DOWN)
  80+  080F C9                           RET
  81+  0810
  82+  0810
@@ -2643,9 +2643,9 @@
  88+  0810              ; -
  89+  0810
  90+  0810              EDMOVCHR        ; TODO:
- 91+  0810                              ; Right: CURX++; if > len: wrap to next line
- 92+  0810                              ; Left:  CURX--; if < 0:  wrap to prev line end
- 93+  0810                              ; Redraw cursor (DRWCUR)
+ 91+  0810                              ; RIGHT: CURX++; IF > LEN: WRAP TO NEXT LINE
+ 92+  0810                              ; LEFT:  CURX--; IF < 0:  WRAP TO PREV LINE END
+ 93+  0810                              ; REDRAW CURSOR (DRWCUR)
  94+  0810 C9                           RET
  95+  0811
  96+  0811
@@ -2657,10 +2657,10 @@
 102+  0811              ; -
 103+  0811
 104+  0811              EDMOVROW        ; TODO:
-105+  0811                              ; Down: CURY++; if >= SCRROWS: scroll up 1 (SCRLUP)
-106+  0811                              ; Up:   CURY--; if < 0:        scroll down 1 (SCRLDN)
-107+  0811                              ; Clamp CURX to new line length
-108+  0811                              ; Redraw cursor
+105+  0811                              ; DOWN: CURY++; IF >= SCRROWS: SCROLL UP 1 (SCRLUP)
+106+  0811                              ; UP:   CURY--; IF < 0:        SCROLL DOWN 1 (SCRLDN)
+107+  0811                              ; CLAMP CURX TO NEW LINE LENGTH
+108+  0811                              ; REDRAW CURSOR
 109+  0811 C9                           RET
 110+  0812
 111+  0812
@@ -2671,11 +2671,11 @@
 116+  0812              ; -
 117+  0812
 118+  0812              EDQUIT          ; TODO:
-119+  0812                              ; If MODIFIED: prompt "Save changes? (Y/N/C)"
-120+  0812                              ;   Y → FILESAVE, then TERM
+119+  0812                              ; IF MODIFIED: PROMPT "SAVE CHANGES? (Y/N/C)"
+120+  0812                              ;   Y → FILESAVE, THEN TERM
 121+  0812                              ;   N → TERM
-122+  0812                              ;   C → return to editing
-123+  0812                              ; Else: TERM
+122+  0812                              ;   C → RETURN TO EDITING
+123+  0812                              ; ELSE: TERM
 124+  0812 C9                           RET
 125+  0813
 # file closed: EDIT.Z8A
@@ -2685,9 +2685,9 @@
   2+  0813              ;                                       * INPUT                                *
   3+  0813              ;                                       ****************************************
   4+  0813              ;
-  5+  0813              ; Keyboard input and main dispatch loop.
-  6+  0813              ; Uses CHGET (blocking) for normal input.
-  7+  0813              ; Special key sequences (function keys, cursor, etc.) decoded here.
+  5+  0813              ; KEYBOARD INPUT AND MAIN DISPATCH LOOP.
+  6+  0813              ; USES CHGET (BLOCKING) FOR NORMAL INPUT.
+  7+  0813              ; SPECIAL KEY SEQUENCES (FUNCTION KEYS, CURSOR, ETC.) DECODED HERE.
   8+  0813
   9+  0813
  10+  0813              ; --- KEYREAD                   ----------------------------------------
@@ -2695,12 +2695,12 @@
  12+  0813              ; - KEYREAD ----------
  13+  0813              ; - BLOCKING KEY READ WITH SPECIAL KEY DECODE
  14+  0813              ; - OUTPUT:
- 15+  0813              ; -     A:  KEY CODE (printable) or special code (see HARD.Z8A)
- 16+  0813              ; -     HL: EXTENDED KEY CODE (0 if simple key, or function key index)
+ 15+  0813              ; -     A:  KEY CODE (PRINTABLE) OR SPECIAL CODE (SEE HARD.Z8A)
+ 16+  0813              ; -     HL: EXTENDED KEY CODE (0 IF SIMPLE KEY, OR FUNCTION KEY INDEX)
  17+  0813              ; -
  18+  0813
  19+  0813 CD 9F 00     KEYREAD         CALL    CHGET
- 20+  0816                              ; TODO: decode extended sequences (F-keys return 2-char sequences)
+ 20+  0816                              ; TODO: DECODE EXTENDED SEQUENCES (F-KEYS RETURN 2-CHAR SEQUENCES)
  21+  0816 C9                           RET
  22+  0817
  23+  0817
@@ -2711,20 +2711,20 @@
  28+  0817              ; -
  29+  0817
  30+  0817 CD 13 08     MAINLOOP        CALL    KEYREAD
- 31+  081A                              ; TODO: dispatch on A
- 32+  081A                              ; Printable (20H-7EH): EDINSCHR / EDOVRCHR
+ 31+  081A                              ; TODO: DISPATCH ON A
+ 32+  081A                              ; PRINTABLE (#20-#7E): EDINSCHR / EDOVRCHR
  33+  081A                              ; CR:        EDNWLIN
  34+  081A                              ; BS:        EDDELBK
  35+  081A                              ; DEL:       EDDELCHR
- 36+  081A                              ; CRIGHT:    EDMOVCHR right
- 37+  081A                              ; CLEFT:     EDMOVCHR left
- 38+  081A                              ; CUP:       EDMOVROW up
- 39+  081A                              ; CDOWN:     EDMOVROW down
+ 36+  081A                              ; CRIGHT:    EDMOVCHR RIGHT
+ 37+  081A                              ; CLEFT:     EDMOVCHR LEFT
+ 38+  081A                              ; CUP:       EDMOVROW UP
+ 39+  081A                              ; CDOWN:     EDMOVROW DOWN
  40+  081A                              ; CTRL_S:    FILESAVE
- 41+  081A                              ; CTRL_O:    FILEOPEN (load)
+ 41+  081A                              ; CTRL_O:    FILEOPEN (LOAD)
  42+  081A                              ; CTRL_N:    FILENEW
  43+  081A                              ; CTRL_Q:    EDQUIT
- 44+  081A                              ; ESC:       menu activation (future)
+ 44+  081A                              ; ESC:       MENU ACTIVATION (FUTURE)
  45+  081A C3 17 08                     JP      MAINLOOP
  46+  081D
 # file closed: INPUT.Z8A
@@ -2739,16 +2739,16 @@
   7+  081D
   8+  081D              ; - DRWSTAT -------
   9+  081D              ; - DRAW / REFRESH STATUS BAR (ROW 25)
- 10+  081D              ; - FORMAT: " LANG | INS | Ln:NNNNN/NNNNN  Col:NNN | FILENAME"
+ 10+  081D              ; - FORMAT: " LANG | INS | LN:NNNNN/NNNNN  COL:NNN | FILENAME"
  11+  081D              ; -
  12+  081D
  13+  081D              DRWSTAT      ; TODO:
- 14+  081D                              ; 1. HMMV: fill row 25 with COL_UI (clear bar)
- 15+  081D                              ; 2. Render LANG text (LGNONE/Z80/BASIC/C/PYTHON → string)
- 16+  081D                              ; 3. Render INS/OVR
- 17+  081D                              ; 4. Render Ln:DOCLINE+1/TOTLINES
- 18+  081D                              ; 5. Render Col:CURX+1
- 19+  081D                              ; 6. Render FILENAME (truncated to fit)
+ 14+  081D                              ; 1. HMMV: FILL ROW 25 WITH COL_UI (CLEAR BAR)
+ 15+  081D                              ; 2. RENDER LANG TEXT (LGNONE/Z80/BASIC/C/PYTHON → STRING)
+ 16+  081D                              ; 3. RENDER INS/OVR
+ 17+  081D                              ; 4. RENDER LN:DOCLINE+1/TOTLINES
+ 18+  081D                              ; 5. RENDER COL:CURX+1
+ 19+  081D                              ; 6. RENDER FILENAME (TRUNCATED TO FIT)
  20+  081D C9                           RET
  21+  081E
  22+  081E
@@ -2760,8 +2760,8 @@
  28+  081E              ; -
  29+  081E
  30+  081E              DRWMENU     ; TODO:
- 31+  081E                              ; 1. HMMV: fill row 0 with COL_UI
- 32+  081E                              ; 2. Blit menu title strings at fixed column positions
+ 31+  081E                              ; 1. HMMV: FILL ROW 0 WITH COL_UI
+ 32+  081E                              ; 2. BLIT MENU TITLE STRINGS AT FIXED COLUMN POSITIONS
  33+  081E C9                           RET
  34+  081F
  35+  081F
@@ -2772,8 +2772,8 @@
  40+  081F              ; -
  41+  081F
  42+  081F              DRWGUT      ; TODO:
- 43+  081F                              ; For each viewport row 0..SCRROWS-1:
- 44+  081F                              ;   DRWLNUM row, TOPLINE + row
+ 43+  081F                              ; FOR #EAC VIEWPORT ROW 0..SCRROWS-1:
+ 44+  081F                              ;   DRWLNUM ROW, TOPLINE + ROW
  45+  081F C9                           RET
  46+  0820
  47+  0820
@@ -2786,11 +2786,11 @@
  54+  0820              ; -
  55+  0820
  56+  0820              DRWLNUM     ; TODO:
- 57+  0820                              ; Format HL as 4-char right-justified:
- 58+  0820                              ;   HL <= 9999:  decimal "   1" .. "9999"
- 59+  0820                              ;   HL <= 99999: k-notation " 10k" .. " 99k"
- 60+  0820                              ;   else:        m-notation "  1m"
- 61+  0820                              ; Blit 4 chars at DX=0, DY=TXORG_Y+B*CELLH via LMMM
+ 57+  0820                              ; FORMAT HL AS 4-CHAR RIGHT-JUSTIFIED:
+ 58+  0820                              ;   HL <= 9999:  DECIMAL "   1" .. "9999"
+ 59+  0820                              ;   HL <= 99999: K-NOTATION " 10K" .. " 99K"
+ 60+  0820                              ;   ELSE:        M-NOTATION "  1M"
+ 61+  0820                              ; BLIT 4 CHARS AT DX=0, DY=TXORG_Y+B*CELLH VIA LMMM
  62+  0820 C9                           RET
  63+  0821
  64+  0821
@@ -2801,10 +2801,10 @@
  69+  0821              ; -
  70+  0821
  71+  0821              DRWSCRL   ; TODO:
- 72+  0821                              ; thumb_h = max(4, (SCRROWS * 212) / TOTLINES)
- 73+  0821                              ; thumb_y = (TOPLINE * 212) / TOTLINES
- 74+  0821                              ; Erase old thumb: HMMV full gutter with COL_UI
- 75+  0821                              ; Draw new thumb: HMMV DX=512-GUTR_PX, DY=thumb_y, NX=GUTR_PX, NY=thumb_h, CLR=COL_HI
+ 72+  0821                              ; THUMB_H = MAX(4, (SCRROWS * 212) / TOTLINES)
+ 73+  0821                              ; THUMB_Y = (TOPLINE * 212) / TOTLINES
+ 74+  0821                              ; ERASE OLD THUMB: HMMV FULL GUTTER WITH COL_UI
+ 75+  0821                              ; DRAW NEW THUMB: HMMV DX=512-GUTR_PX, DY=THUMB_Y, NX=GUTR_PX, NY=THUMB_H, CLR=COL_HI
  76+  0821 C9                           RET
  77+  0822
  78+  0822
@@ -2832,14 +2832,14 @@
 100+  0823 F5           BLNKTICK        PUSH    AF
 101+  0824 3A 4B 09                     LD      A, (BLNKCNT)
 102+  0827 3C                           INC     A
-103+  0828 FE 1E                        CP      30              ; blink every 30 ticks (≈0.5s at 60Hz)
+103+  0828 FE 1E                        CP      30              ; BLINK EVERY 30 TICKS (≈0.5S AT 60HZ)
 104+  082A 38 0F                        JR      C, .END
 105+  082C AF                           XOR     A
 106+  082D 32 4B 09                     LD      (BLNKCNT), A
 107+  0830 3A 4A 09                     LD      A, (BLNKPH)
 108+  0833 EE 01                        XOR     1
 109+  0835 32 4A 09                     LD      (BLNKPH), A
-110+  0838 CD 22 08                     CALL    DRWCUR      ; toggle cursor
+110+  0838 CD 22 08                     CALL    DRWCUR      ; TOGGLE CURSOR
 111+  083B 32 4B 09     .END            LD      (BLNKCNT), A
 112+  083E F1                           POP     AF
 113+  083F C9                           RET
@@ -2851,9 +2851,9 @@
   2+  0840              ;                                       * FILE I/O                             *
   3+  0840              ;                                       ****************************************
   4+  0840              ;
-  5+  0840              ; Uses high-level DSK* wrappers from BDOS.Z8A (DOS1/DOS2 transparent).
-  6+  0840              ; DOS2 mode: handle-based (DSKOPEN, DSKREAD, DSKWRITE, DSKCLOSE).
-  7+  0840              ; DOS1 fallback: FCB-based (same wrappers, BDOS.Z8A handles transparently).
+  5+  0840              ; USES HIGH-LEVEL DSK* WRAPPERS FROM BDOS.Z8A (DOS1/DOS2 TRANSPARENT).
+  6+  0840              ; DOS2 MODE: HANDLE-BASED (DSKOPEN, DSKREAD, DSKWRITE, DSKCLOSE).
+  7+  0840              ; DOS1 FALLBACK: FCB-BASED (SAME WRAPPERS, BDOS.Z8A HANDLES TRANSPARENTLY).
   8+  0840
   9+  0840
  10+  0840              ; --- FILENEW                   ----------------------------------------
@@ -2863,9 +2863,9 @@
  14+  0840              ; -
  15+  0840
  16+  0840              FILENEW         ; TODO:
- 17+  0840                              ; If MODIFIED: prompt to save (call EDQUIT logic sans termination)
- 18+  0840                              ; BUFINIT (free all segments, reset directory)
- 19+  0840                              ; Clear FILENAME
+ 17+  0840                              ; IF MODIFIED: PROMPT TO SAVE (CALL EDQUIT LOGIC SANS TERMINATION)
+ 18+  0840                              ; BUFINIT (FREE ALL SEGMENTS, RESET DIRECTORY)
+ 19+  0840                              ; CLEAR FILENAME
  20+  0840                              ; REDRAW, DRWSTAT
  21+  0840 C9                           RET
  22+  0841
@@ -2878,14 +2878,14 @@
  29+  0841              ; -
  30+  0841
  31+  0841              FILELOAD        ; TODO:
- 32+  0841                              ; 1. FILENEW (clear existing buffer)
- 33+  0841                              ; 2. DSKOPEN HL → A=handle, DEHL=size
- 34+  0841                              ; 3. Stream read: buffer 256-byte chunks, split on CR/LF
- 35+  0841                              ;    For each complete line: LINEWRT to segment, update directory
- 36+  0841                              ;    Allocate new segments as needed via ALLSEG
+ 32+  0841                              ; 1. FILENEW (CLEAR EXISTING BUFFER)
+ 33+  0841                              ; 2. DSKOPEN HL → A=HANDLE, DEHL=SIZE
+ 34+  0841                              ; 3. STREAM READ: BUFFER 256-BYTE CHUNKS, SPLIT ON CR/LF
+ 35+  0841                              ;    FOR #EAC COMPLETE LINE: LINEWRT TO SEGMENT, UPDATE DIRECTORY
+ 36+  0841                              ;    ALLOCATE NEW SEGMENTS AS NEEDED VIA ALLSEG
  37+  0841                              ; 4. DSKCLOSE
- 38+  0841                              ; 5. TOTLINES = lines read; TOPLINE=0; DOCLINE=0; CURX=0; CURY=0
- 39+  0841                              ; 6. Copy filename to FILENAME var
+ 38+  0841                              ; 5. TOTLINES = LINES READ; TOPLINE=0; DOCLINE=0; CURX=0; CURY=0
+ 39+  0841                              ; 6. COPY FILENAME TO FILENAME VAR
  40+  0841                              ; 7. MODIFIED = 0
  41+  0841                              ; 8. REDRAW, DRWGUT, DRWSCRL, DRWSTAT
  42+  0841 C9                           RET
@@ -2899,10 +2899,10 @@
  50+  0842              ; -
  51+  0842
  52+  0842              FILESAVE        ; TODO:
- 53+  0842                              ; 1. If FILENAME[0] = 0: FSAVEAS
- 54+  0842                              ; 2. DSKCREATE FILENAME → handle
- 55+  0842                              ; 3. Walk directory 0..TOTLINES-1:
- 56+  0842                              ;    LINEREAD → WORKBUF → write text+LF via DSKWRITE
+ 53+  0842                              ; 1. IF FILENAME[0] = 0: FSAVEAS
+ 54+  0842                              ; 2. DSKCREATE FILENAME → HANDLE
+ 55+  0842                              ; 3. WALK DIRECTORY 0..TOTLINES-1:
+ 56+  0842                              ;    LINEREAD → WORKBUF → WRITE TEXT+LF VIA DSKWRITE
  57+  0842                              ; 4. DSKCLOSE
  58+  0842                              ; 5. MODIFIED = 0
  59+  0842                              ; 6. DRWSTAT
@@ -2916,9 +2916,9 @@
  67+  0843              ; -
  68+  0843
  69+  0843              FSAVEAS      ; TODO:
- 70+  0843                              ; 1. Draw input box (status bar or mini dialog)
- 71+  0843                              ; 2. Read filename via BUFIN
- 72+  0843                              ; 3. Copy to FILENAME, call FILESAVE
+ 70+  0843                              ; 1. DRAW INPUT BOX (STATUS BAR OR MINI DIALOG)
+ 71+  0843                              ; 2. READ FILENAME VIA BUFIN
+ 72+  0843                              ; 3. COPY TO FILENAME, CALL FILESAVE
  73+  0843 C9                           RET
  74+  0844
 # file closed: FILEIO.Z8A
@@ -2928,13 +2928,13 @@
   2+  0844              ;                                       * PARAMS                               *
   3+  0844              ;                                       ****************************************
   4+  0844              ;
-  5+  0844              ; Parses DOS command-line parameters via EXTPARM (BDOS.Z8A).
-  6+  0844              ; S6ED accepts one optional parameter: the filename to open.
-  7+  0844              ; No /X switches defined yet — scaffold is ready for future additions.
+  5+  0844              ; PARSES DOS COMMAND-LINE PARAMETERS VIA EXTPARM (BDOS.Z8A).
+  6+  0844              ; S6ED ACCEPTS ONE OPTIONAL PARAMETER: THE FILENAME TO OPEN.
+  7+  0844              ; NO /X SWITCHES DEFINED YET — SCAFFOLD IS READY FOR FUTURE ADDITIONS.
   8+  0844              ;
-  9+  0844              ; Call PARAMS from INIT after BUFINIT.
- 10+  0844              ; On return: CY=0  filename found → FILENAME is populated (ASCIIZ)
- 11+  0844              ;            CY=1  no filename given → open empty buffer
+  9+  0844              ; CALL PARAMS FROM INIT AFTER BUFINIT.
+ 10+  0844              ; ON RETURN: CY=0  FILENAME FOUND → FILENAME IS POPULATED (ASCIIZ)
+ 11+  0844              ;            CY=1  NO FILENAME GIVEN → OPEN EMPTY BUFFER
  12+  0844
  13+  0844
  14+  0844              ; --- PARAMS                    ----------------------------------------
@@ -2942,18 +2942,18 @@
  16+  0844              ; - PARAMS -----------
  17+  0844              ; - PARSE COMMAND LINE, FIND FILENAME
  18+  0844              ; - OUTPUT:
- 19+  0844              ; -     CY = 0  FILENAME copied to FILENAME (VARS)
+ 19+  0844              ; -     CY = 0  FILENAME COPIED TO FILENAME (VARS)
  20+  0844              ; -     CY = 1  NO FILENAME PARAM FOUND
  21+  0844              ; -
  22+  0844
  23+  0844 21 C9 09     PARAMS          LD      HL, PARBUF
  24+  0847 CD AE 03                     CALL    EXTPARM
- 25+  084A D8                           RET     C               ; no params at all → CY=1
+ 25+  084A D8                           RET     C               ; NO PARAMS AT ALL → CY=1
  26+  084B
- 27+  084B                              ; --- check each param for a bare filename (not starting '/')
+ 27+  084B                              ; --- CHECK #EAC PARAM FOR A BARE FILENAME (NOT STARTING '/')
  28+  084B
  29+  084B CD 4F 08                     CALL    CHKFILE
- 30+  084E C9                           RET                     ; CY from CHKFILE propagates
+ 30+  084E C9                           RET                     ; CY FROM CHKFILE PROPAGATES
  31+  084F
  32+  084F
  33+  084F              ; --- CHKFILE                   ----------------------------------------
@@ -2962,25 +2962,25 @@
  36+  084F              ; - FIND FIRST PARAM NOT STARTING WITH '/'
  37+  084F              ; - COPIES IT TO FILENAME (ASCIIZ)
  38+  084F              ; - OUTPUT:
- 39+  084F              ; -     CY = 0  FILENAME set
+ 39+  084F              ; -     CY = 0  FILENAME SET
  40+  084F              ; -     CY = 1  NOT FOUND
  41+  084F              ; -
  42+  084F
- 43+  084F 3A C9 09     CHKFILE         LD      A, (PARBUF)     ; total param count
+ 43+  084F 3A C9 09     CHKFILE         LD      A, (PARBUF)     ; TOTAL PARAM COUNT
  44+  0852 47                           LD      B, A
  45+  0853 0E 00                        LD      C, 0
  46+  0855 C5           .LOOP           PUSH    BC
  47+  0856 21 C9 09                     LD      HL, PARBUF
  48+  0859 11 A1 09                     LD      DE, PARMTMP
  49+  085C 79                           LD      A, C
- 50+  085D CD F0 03                     CALL    GETPARAM        ; → copies param C to PARMTMP, HL=PARMTMP
+ 50+  085D CD F0 03                     CALL    GETPARAM        ; → COPIES PARAM C TO PARMTMP, HL=PARMTMP
  51+  0860 7E                           LD      A, (HL)
  52+  0861 FE 2F                        CP      '/'
- 53+  0863 20 06                        JR      NZ, .FOUND      ; not a switch → filename
+ 53+  0863 20 06                        JR      NZ, .FOUND      ; NOT A SWITCH → FILENAME
  54+  0865 C1                           POP     BC
  55+  0866 0C                           INC     C
  56+  0867 10 EC                        DJNZ    .LOOP
- 57+  0869 37                           SCF                     ; not found
+ 57+  0869 37                           SCF                     ; NOT FOUND
  58+  086A C9                           RET
  59+  086B
  60+  086B C1           .FOUND          POP     BC
@@ -3001,7 +3001,7 @@
  75+  087D
  76+  087D              ; - CHKPARAM ---------
  77+  087D              ; - CHECK PARAM STRING AND SET FLAG VAR IF FOUND
- 78+  087D              ; - HL: PARAM DATA (DEFB size / DEFM string)
+ 78+  087D              ; - HL: PARAM DATA (DEFB SIZE / DEFM STRING)
  79+  087D              ; - DE: FLAG VARIABLE ADDRESS
  80+  087D              ; - A:  VALUE TO STORE IF FOUND
  81+  087D              ; - OUTPUT:
@@ -3065,7 +3065,7 @@
 139+  08BE 38 0F                        JR      C, .CHKERR
 140+  08C0 FE 5B                        CP      'Z' + 1
 141+  08C2 30 0B                        JR      NC, .CHKERR
-142+  08C4 F6 20                        OR      %00100000       ; to lowercase
+142+  08C4 F6 20                        OR      %00100000       ; TO LOWERCASE
 143+  08C6 BE                           CP      (HL)
 144+  08C7 20 06                        JR      NZ, .CHKERR
 145+  08C9 23           .CHKOK          INC     HL
@@ -3086,43 +3086,43 @@
  71   08D1              ; - PROGRAM ENTRY POINT
  72   08D1              ; -
  73   08D1
- 74   08D1 31 00 F0     INIT            LD      SP, #F000       ; safe stack top below DOS2 kernel
+ 74   08D1 31 00 F0     INIT            LD      SP, #F000       ; SAFE STACK TOP BELOW DOS2 KERNEL
  75   08D4
- 76   08D4                              ; Detect DOS version
+ 76   08D4                              ; DETECT DOS VERSION
  77   08D4 CD 47 01                     CALL    DOSVER
- 78   08D7 38 30                        JR      C, .NODOS2      ; carry = DOS1 only
+ 78   08D7 38 30                        JR      C, .NODOS2      ; CARRY = DOS1 ONLY
  79   08D9
- 80   08D9                              ; Locate mapper manager
+ 80   08D9                              ; LOCATE MAPPER MANAGER
  81   08D9 CD 90 06                     CALL    MAPINIT
  82   08DC 38 34                        JR      C, .NOMAP
  83   08DE
- 84   08DE                              ; Initialize screen
+ 84   08DE                              ; INITIALIZE SCREEN
  85   08DE CD 1B 09                     CALL    SCRINIT
  86   08E1
- 87   08E1                              ; Initialize font tables in VRAM
+ 87   08E1                              ; INITIALIZE FONT TABLES IN VRAM
  88   08E1 CD 8C 06                     CALL    FONTINIT
  89   08E4
- 90   08E4                              ; Install blink TIMI hook
+ 90   08E4                              ; INSTALL BLINK TIMI HOOK
  91   08E4 CD 1C 09                     CALL    HKBLINK
  92   08E7
- 93   08E7                              ; Initialize empty text buffer
+ 93   08E7                              ; INITIALIZE EMPTY TEXT BUFFER
  94   08E7 CD 28 07                     CALL    BUFINIT
  95   08EA
- 96   08EA                              ; Check command-line params: optional filename to load
+ 96   08EA                              ; CHECK COMMAND-LINE PARAMS: OPTIONAL FILENAME TO LOAD
  97   08EA CD 44 08                     CALL    PARAMS
- 98   08ED 38 08                        JR      C, .NOARG       ; CY=1 → no filename given
+ 98   08ED 38 08                        JR      C, .NOARG       ; CY=1 → NO FILENAME GIVEN
  99   08EF 21 4C 09                     LD      HL, FILENAME
 100   08F2 CD 41 08                     CALL    FILELOAD
 101   08F5 18 0F                        JR      .READY
 102   08F7
-103   08F7              .NOARG          ; Draw initial screen (empty buffer)
+103   08F7              .NOARG          ; DRAW INITIAL SCREEN (EMPTY BUFFER)
 104   08F7 CD 33 07                     CALL    REDRAW
 105   08FA CD 1E 08                     CALL    DRWMENU
 106   08FD CD 1F 08                     CALL    DRWGUT
 107   0900 CD 21 08                     CALL    DRWSCRL
 108   0903 CD 1D 08                     CALL    DRWSTAT
 109   0906
-110   0906              .READY          ; Enter main editor loop
+110   0906              .READY          ; ENTER MAIN EDITOR LOOP
 111   0906 C3 17 08                     JP      MAINLOOP
 112   0909
 113   0909 11 03 01     .NODOS2         LD      DE, ENODOS2
@@ -3141,13 +3141,13 @@
 126   091B              ; -
 127   091B
 128   091B              SCRINIT      ; TODO:
-129   091B                              ; 1. CALL CHGMOD with A=6 (SCREEN 6, GR5)
-130   091B                              ;    or set VDP registers directly for finer control
-131   091B                              ; 2. Set palette: COL_BG, COL_FG, COL_UI, COL_HI
-132   091B                              ;    via ports 9AH/9BH or BIOS PALETTE routine
-133   091B                              ; 3. HMMV: clear entire VRAM display area (512×212, CLR=0)
-134   091B                              ; 4. Turn off key click: LD A,0 / LD (CLIKSW),A
-135   091B                              ; 5. Erase function key display: CALL ERAFNK
+129   091B                              ; 1. CALL CHGMOD WITH A=6 (SCREEN 6, GR5)
+130   091B                              ;    OR SET VDP REGISTERS DIRECTLY FOR FINER CONTROL
+131   091B                              ; 2. SET PALETTE: COL_BG, COL_FG, COL_UI, COL_HI
+132   091B                              ;    VIA PORTS #9A/#9B OR BIOS PALETTE ROUTINE
+133   091B                              ; 3. HMMV: CLEAR ENTIRE VRAM DISPLAY AREA (512×212, CLR=0)
+134   091B                              ; 4. TURN OFF KEY CLICK: LD A,0 / LD (CLIKSW),A
+135   091B                              ; 5. ERASE FUNCTION KEY DISPLAY: CALL ERAFNK
 136   091B C9                           RET
 137   091C
 138   091C
@@ -3181,75 +3181,75 @@
   8+  0929              ; --- SYSTEM                    ----------------------------------------
   9+  0929
  10+  0929
- 11+  0929 00           DOS2            DEFB    0               ; FF = DOS2/Nextor present, 00 = DOS1
- 12+  092A 00           UNAPISET        DEFB    0               ; BDOS.Z8A UNAPI flag (unused in S6ED)
- 13+  092B 00           MAPRDY         DEFB    0               ; FF = mapper manager found
+ 11+  0929 00           DOS2            DEFB    0               ; FF = DOS2/NEXTOR PRESENT, 00 = DOS1
+ 12+  092A 00           UNAPISET        DEFB    0               ; BDOS.Z8A UNAPI FLAG (UNUSED IN S6ED)
+ 13+  092B 00           MAPRDY         DEFB    0               ; FF = MAPPER MANAGER FOUND
  14+  092C
  15+  092C
  16+  092C              ; --- MAPPER JUMP TABLE ENTRIES ----------------------------------------
  17+  092C
- 18+  092C                              ; Filled at init by MAPINIT (EXTBIO → HOKVLD check)
- 19+  092C 00 00        MALLSEG      DEFW    0               ; ALL_SEG entry address
- 20+  092E 00 00        MFRESEG      DEFW    0               ; FRE_SEG entry address
- 21+  0930 00 00        MRDSEG       DEFW    0               ; RD_SEG  entry address
- 22+  0932 00 00        MWRSEG       DEFW    0               ; WR_SEG  entry address
- 23+  0934 00 00        MPUTP1       DEFW    0               ; PUT_P1  entry address (page 1: dir)
- 24+  0936 00 00        MGETP1       DEFW    0               ; GET_P1  entry address
- 25+  0938 00 00        MPUTP2       DEFW    0               ; PUT_P2  entry address (page 2: text)
- 26+  093A 00 00        MGETP2       DEFW    0               ; GET_P2  entry address
+ 18+  092C                              ; FILLED AT INIT BY MAPINIT (EXTBIO → HOKVLD CHECK)
+ 19+  092C 00 00        MALLSEG      DEFW    0               ; ALL_SEG ENTRY ADDRESS
+ 20+  092E 00 00        MFRESEG      DEFW    0               ; FRE_SEG ENTRY ADDRESS
+ 21+  0930 00 00        MRDSEG       DEFW    0               ; RD_SEG  ENTRY ADDRESS
+ 22+  0932 00 00        MWRSEG       DEFW    0               ; WR_SEG  ENTRY ADDRESS
+ 23+  0934 00 00        MPUTP1       DEFW    0               ; PUT_P1  ENTRY ADDRESS (PAGE 1: DIR)
+ 24+  0936 00 00        MGETP1       DEFW    0               ; GET_P1  ENTRY ADDRESS
+ 25+  0938 00 00        MPUTP2       DEFW    0               ; PUT_P2  ENTRY ADDRESS (PAGE 2: TEXT)
+ 26+  093A 00 00        MGETP2       DEFW    0               ; GET_P2  ENTRY ADDRESS
  27+  093C
  28+  093C
  29+  093C              ; --- SEGMENTS                  ----------------------------------------
  30+  093C
- 31+  093C 00           DIRSEG          DEFB    0               ; segment number banked at page 1 (dir)
- 32+  093D 00           TXSEG           DEFB    0               ; segment number banked at page 2 (text)
+ 31+  093C 00           DIRSEG          DEFB    0               ; SEGMENT NUMBER BANKED AT PAGE 1 (DIR)
+ 32+  093D 00           TXSEG           DEFB    0               ; SEGMENT NUMBER BANKED AT PAGE 2 (TEXT)
  33+  093E
  34+  093E
  35+  093E              ; --- CURSOR / VIEWPORT         ----------------------------------------
  36+  093E
  37+  093E
- 38+  093E 00           CURX            DEFB    0               ; cursor column (0-79, doc space)
- 39+  093F 00           CURY            DEFB    0              ; cursor row    (0-23, viewport)
- 40+  0940 00           CURSEG          DEFB    0               ; segment currently banked at page 2
+ 38+  093E 00           CURX            DEFB    0               ; CURSOR COLUMN (0-79, DOC SPACE)
+ 39+  093F 00           CURY            DEFB    0              ; CURSOR ROW    (0-23, VIEWPORT)
+ 40+  0940 00           CURSEG          DEFB    0               ; SEGMENT CURRENTLY BANKED AT PAGE 2
  41+  0941
- 42+  0941 00 00        TOPLINE         DEFW    0               ; first visible document line (0-based)
- 43+  0943 00 00        DOCLINE         DEFW    0               ; cursor document line (= TOPLINE + CURY)
- 44+  0945 01 00        TOTLINES        DEFW    1               ; total lines in document
+ 42+  0941 00 00        TOPLINE         DEFW    0               ; FIRST VISIBLE DOCUMENT LINE (0-BASED)
+ 43+  0943 00 00        DOCLINE         DEFW    0               ; CURSOR DOCUMENT LINE (= TOPLINE + CURY)
+ 44+  0945 01 00        TOTLINES        DEFW    1               ; TOTAL LINES IN DOCUMENT
  45+  0947
  46+  0947
  47+  0947              ; --- EDITOR STATE              ----------------------------------------
  48+  0947
  49+  0947
- 50+  0947 00           MODIFIED        DEFB    0               ; FF = buffer modified since last save
- 51+  0948 01           INSMODE         DEFB    INS_MODE        ; insert (FF) or overwrite (00)
- 52+  0949 00           LANGMODE        DEFB    LGNONE       ; current language/tokenizer mode
- 53+  094A 00           BLNKPH       DEFB    0               ; cursor blink phase (toggled by TIMI)
- 54+  094B 00           BLNKCNT         DEFB    0               ; blink tick counter
+ 50+  0947 00           MODIFIED        DEFB    0               ; FF = BUFFER MODIFIED SINCE LAST SAVE
+ 51+  0948 01           INSMODE         DEFB    INS_MODE        ; INSERT (FF) OR OVERWRITE (00)
+ 52+  0949 00           LANGMODE        DEFB    LGNONE       ; CURRENT LANGUAGE/TOKENIZER MODE
+ 53+  094A 00           BLNKPH       DEFB    0               ; CURSOR BLINK PHASE (TOGGLED BY TIMI)
+ 54+  094B 00           BLNKCNT         DEFB    0               ; BLINK TICK COUNTER
  55+  094C
  56+  094C
  57+  094C              ; --- FILE                      ----------------------------------------
  58+  094C
  59+  094C
- 60+  094C 00 00 00...  FILENAME        DEFS    40, 0           ; current filename (ASCIIZ)
- 61+  0974 00           FILEHAND        DEFB    0               ; open file handle
+ 60+  094C 00 00 00...  FILENAME        DEFS    40, 0           ; CURRENT FILENAME (ASCIIZ)
+ 61+  0974 00           FILEHAND        DEFB    0               ; OPEN FILE HANDLE
  62+  0975
- 63+  0975 00 00 00 00  FSIZETMP        DEFS    4               ; temp for BDOS size calculations
- 64+  0979 00 00 00...  FCB             DEFS    SIZEFCB         ; FCB for DOS1 I/O
+ 63+  0975 00 00 00 00  FSIZETMP        DEFS    4               ; TEMP FOR BDOS SIZE CALCULATIONS
+ 64+  0979 00 00 00...  FCB             DEFS    SIZEFCB         ; FCB FOR DOS1 I/O
  65+  099E
  66+  099E
  67+  099E              ; --- PARAMS                    ----------------------------------------
  68+  099E
- 69+  099E                              ; Command-line parameter parsing (PARAMS.Z8A / BDOS EXTPARM)
- 70+  099E 00           PSIZE           DEFB    0               ; FNDPARAM: current param string size
- 71+  099F 00 00        PPNT            DEFW    0               ; FNDPARAM: pointer to param string
- 72+  09A1 00 00 00...  PARMTMP         DEFS    40              ; CHKFILE: temp copy of one param
- 73+  09C9 00 00 00...  PARBUF          DEFS    128             ; EXTPARM raw output buffer
+ 69+  099E                              ; COMMAND-LINE PARAMETER PARSING (PARAMS.Z8A / BDOS EXTPARM)
+ 70+  099E 00           PSIZE           DEFB    0               ; FNDPARAM: CURRENT PARAM STRING SIZE
+ 71+  099F 00 00        PPNT            DEFW    0               ; FNDPARAM: POINTER TO PARAM STRING
+ 72+  09A1 00 00 00...  PARMTMP         DEFS    40              ; CHKFILE: TEMP COPY OF ONE PARAM
+ 73+  09C9 00 00 00...  PARBUF          DEFS    128             ; EXTPARM RAW OUTPUT BUFFER
  74+  0A49
  75+  0A49
  76+  0A49              ; --- WORK BUFFER               ----------------------------------------
  77+  0A49
- 78+  0A49                              ; Flat 161-byte buffer: [1: text_len] [80: text] [80: attr]
- 79+  0A49                              ; Loaded from mapper segment for current line being edited
+ 78+  0A49                              ; FLAT 161-BYTE BUFFER: [1: TEXT_LEN] [80: TEXT] [80: ATTR]
+ 79+  0A49                              ; LOADED FROM MAPPER SEGMENT FOR CURRENT LINE BEING EDITED
  80+  0A49
  81+  0A49 00 00 00...  WORKBUF         DEFS    WORKSIZ
  82+  0AEA
@@ -3257,48 +3257,48 @@
  84+  0AEA              ; --- BLINK HANDLER             ----------------------------------------
  85+  0AEA
  86+  0AEA
- 87+  0AEA 00 00        PRVHTIMI      DEFW    0               ; saved original HTIMI hook vector
+ 87+  0AEA 00 00        PRVHTIMI      DEFW    0               ; SAVED ORIGINAL HTIMI HOOK VECTOR
  88+  0AEC
  89+  0AEC
  90+  0AEC              ; --- GENERIC / UTIL            ----------------------------------------
  91+  0AEC
- 92+  0AEC                              ; B2D conversion buffers (from GENERIC.Z8A)
+ 92+  0AEC                              ; B2D CONVERSION BUFFERS (FROM GENERIC.Z8A)
  93+  0AEC 00 00 00...  B2DINV          DEFS    8
  94+  0AF4 00 00 00...  B2DBUF          DEFS    20
  95+  0B08 00           B2DEND          DEFS    1
  96+  0B09
- 97+  0B09                              ; Function keys save buffer
+ 97+  0B09                              ; FUNCTION KEYS SAVE BUFFER
  98+  0B09 00 00 00...  FNKBUF          DEFS    10
  99+  0B13
 100+  0B13
 101+  0B13              ; --- LINE DIRECTORY            ----------------------------------------
 102+  0B13
-103+  0B13                              ; Lives at DIRPAGE (#4000) in a dedicated mapper segment.
-104+  0B13                              ; Allocated at startup by BUFINIT, banked into page 1 via
-105+  0B13                              ; PUTP1 — never switched. Accessed as flat array directly.
-106+  0B13                              ; Capacity: MAXLINES entries × DIRSIZ bytes = 16380 bytes.
+103+  0B13                              ; LIVES AT DIRPAGE (#4000) IN A DEDICATED MAPPER SEGMENT.
+104+  0B13                              ; ALLOCATED AT STARTUP BY BUFINIT, BANKED INTO PAGE 1 VIA
+105+  0B13                              ; PUTP1 — NEVER SWITCHED. ACCESSED AS FLAT ARRAY DIRECTLY.
+106+  0B13                              ; CAPACITY: MAXLINES ENTRIES × DIRSIZ BYTES = 16380 BYTES.
 107+  0B13
 108+  0B13
 109+  0B13
 110+  0B13              ; --- VDP COMMAND BLOCK          ----------------------------------------
 111+  0B13
-112+  0B13                              ; Standard 15-byte block for R#32 to R#46
+112+  0B13                              ; STANDARD 15-BYTE BLOCK FOR R#32 TO R#46
 113+  0B13
-114+  0B13 00 00 00...  VDP_CMDBLK      DEFS    15
-115+  0B22              VDP_SX          EQU     VDP_CMDBLK + 0  ; word
-116+  0B22              VDP_SY          EQU     VDP_CMDBLK + 2  ; word
-117+  0B22              VDP_DX          EQU     VDP_CMDBLK + 4  ; word
-118+  0B22              VDP_DY          EQU     VDP_CMDBLK + 6  ; word
-119+  0B22              VDP_NX          EQU     VDP_CMDBLK + 8  ; word
-120+  0B22              VDP_NY          EQU     VDP_CMDBLK + 10 ; word
-121+  0B22              VDP_CLR         EQU     VDP_CMDBLK + 12 ; byte
-122+  0B22              VDP_ARG         EQU     VDP_CMDBLK + 13 ; byte
-123+  0B22              VDP_CMD         EQU     VDP_CMDBLK + 14 ; byte
+114+  0B13 00 00 00...  VDPCMBLK      DEFS    15
+115+  0B22              VDP_SX          EQU     VDPCMBLK + 0  ; WORD
+116+  0B22              VDP_SY          EQU     VDPCMBLK + 2  ; WORD
+117+  0B22              VDP_DX          EQU     VDPCMBLK + 4  ; WORD
+118+  0B22              VDP_DY          EQU     VDPCMBLK + 6  ; WORD
+119+  0B22              VDP_NX          EQU     VDPCMBLK + 8  ; WORD
+120+  0B22              VDP_NY          EQU     VDPCMBLK + 10 ; WORD
+121+  0B22              VDP_CLR         EQU     VDPCMBLK + 12 ; BYTE
+122+  0B22              VDP_ARG         EQU     VDPCMBLK + 13 ; BYTE
+123+  0B22              VDP_CMD         EQU     VDPCMBLK + 14 ; BYTE
 124+  0B22
 125+  0B22
 126+  0B22 55 6E 6B 6E  UNKNOWN         DEFM    "Unknown("
 126+  0B26 6F 77 6E 28
-127+  0B2A 00 00 00...  .CODE           DEFS    5               ; room for "NNN)$"
+127+  0B2A 00 00 00...  .CODE           DEFS    5               ; ROOM FOR "NNN)$"
 128+  0B2F
 129+  0B2F              ENDVARS
 130+  0B2F

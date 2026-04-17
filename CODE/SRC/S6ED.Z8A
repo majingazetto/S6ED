@@ -1,8 +1,8 @@
 ; **********************************************
 ; * S6ED                                       *
-; * MSX2 Screen 6 Text Editor                  *
-; * 80 cols x 24 rows, 6x8 font, DOS2/Nextor  *
-; * 2024 - 2025 Coded by Armando Perez         *
+; * MSX2 SCREEN 6 TEXT EDITOR                  *
+; * 80 COLS X 24 ROWS, 6X8 FONT, DOS2/NEXTOR  *
+; * 2024 - 2025 CODED BY ARMANDO PEREZ         *
 ; **********************************************
 
                 OUTPUT  S6ED.COM
@@ -10,18 +10,18 @@
 ; --- MACROS                    ----------------------------------------
 
 
-                ; Infinite loop / breakpoint
+                ; INFINITE LOOP / BREAKPOINT
                 MACRO   BRK
                 DI
                 JP      $
                 ENDM
 
-                ; ORG with padding (does not discard code)
-                MACRO PADORG addr
-                IF $ < addr
-                BLOCK addr-$
+                ; ORG WITH PADDING (DOES NOT DISCARD CODE)
+                MACRO PADORG ADDR
+                IF $ < ADDR
+                BLOCK ADDR-$
                 ENDIF
-                ORG addr
+                ORG ADDR
                 ENDM
 
 
@@ -71,43 +71,43 @@ ENOMAP       DEFM    "No mapper manager found.$"
 ; - PROGRAM ENTRY POINT
 ; -
 
-INIT            LD      SP, #F000       ; safe stack top below DOS2 kernel
+INIT            LD      SP, #F000       ; SAFE STACK TOP BELOW DOS2 KERNEL
 
-                ; Detect DOS version
+                ; DETECT DOS VERSION
                 CALL    DOSVER
-                JR      C, .NODOS2      ; carry = DOS1 only
+                JR      C, .NODOS2      ; CARRY = DOS1 ONLY
 
-                ; Locate mapper manager
+                ; LOCATE MAPPER MANAGER
                 CALL    MAPINIT
                 JR      C, .NOMAP
 
-                ; Initialize screen
+                ; INITIALIZE SCREEN
                 CALL    SCRINIT
 
-                ; Initialize font tables in VRAM
+                ; INITIALIZE FONT TABLES IN VRAM
                 CALL    FONTINIT
 
-                ; Install blink TIMI hook
+                ; INSTALL BLINK TIMI HOOK
                 CALL    HKBLINK
 
-                ; Initialize empty text buffer
+                ; INITIALIZE EMPTY TEXT BUFFER
                 CALL    BUFINIT
 
-                ; Check command-line params: optional filename to load
+                ; CHECK COMMAND-LINE PARAMS: OPTIONAL FILENAME TO LOAD
                 CALL    PARAMS
-                JR      C, .NOARG       ; CY=1 → no filename given
+                JR      C, .NOARG       ; CY=1 → NO FILENAME GIVEN
                 LD      HL, FILENAME
                 CALL    FILELOAD
                 JR      .READY
 
-.NOARG          ; Draw initial screen (empty buffer)
+.NOARG          ; DRAW INITIAL SCREEN (EMPTY BUFFER)
                 CALL    REDRAW
                 CALL    DRWMENU
                 CALL    DRWGUT
                 CALL    DRWSCRL
                 CALL    DRWSTAT
 
-.READY          ; Enter main editor loop
+.READY          ; ENTER MAIN EDITOR LOOP
                 JP      MAINLOOP
 
 .NODOS2         LD      DE, ENODOS2
@@ -126,13 +126,13 @@ INIT            LD      SP, #F000       ; safe stack top below DOS2 kernel
 ; -
 
 SCRINIT      ; TODO:
-                ; 1. CALL CHGMOD with A=6 (SCREEN 6, GR5)
-                ;    or set VDP registers directly for finer control
-                ; 2. Set palette: COL_BG, COL_FG, COL_UI, COL_HI
-                ;    via ports 9AH/9BH or BIOS PALETTE routine
-                ; 3. HMMV: clear entire VRAM display area (512×212, CLR=0)
-                ; 4. Turn off key click: LD A,0 / LD (CLIKSW),A
-                ; 5. Erase function key display: CALL ERAFNK
+                ; 1. CALL CHGMOD WITH A=6 (SCREEN 6, GR5)
+                ;    OR SET VDP REGISTERS DIRECTLY FOR FINER CONTROL
+                ; 2. SET PALETTE: COL_BG, COL_FG, COL_UI, COL_HI
+                ;    VIA PORTS #9A/#9B OR BIOS PALETTE ROUTINE
+                ; 3. HMMV: CLEAR ENTIRE VRAM DISPLAY AREA (512×212, CLR=0)
+                ; 4. TURN OFF KEY CLICK: LD A,0 / LD (CLIKSW),A
+                ; 5. ERASE FUNCTION KEY DISPLAY: CALL ERAFNK
                 RET
 
 

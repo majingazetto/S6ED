@@ -7,16 +7,16 @@
 
 ; - DRWSTAT -------
 ; - DRAW / REFRESH STATUS BAR (ROW 25)
-; - FORMAT: " LANG | INS | Ln:NNNNN/NNNNN  Col:NNN | FILENAME"
+; - FORMAT: " LANG | INS | LN:NNNNN/NNNNN  COL:NNN | FILENAME"
 ; -
 
 DRWSTAT      ; TODO:
-                ; 1. HMMV: fill row 25 with COL_UI (clear bar)
-                ; 2. Render LANG text (LGNONE/Z80/BASIC/C/PYTHON → string)
-                ; 3. Render INS/OVR
-                ; 4. Render Ln:DOCLINE+1/TOTLINES
-                ; 5. Render Col:CURX+1
-                ; 6. Render FILENAME (truncated to fit)
+                ; 1. HMMV: FILL ROW 25 WITH COL_UI (CLEAR BAR)
+                ; 2. RENDER LANG TEXT (LGNONE/Z80/BASIC/C/PYTHON → STRING)
+                ; 3. RENDER INS/OVR
+                ; 4. RENDER LN:DOCLINE+1/TOTLINES
+                ; 5. RENDER COL:CURX+1
+                ; 6. RENDER FILENAME (TRUNCATED TO FIT)
                 RET
 
 
@@ -28,8 +28,8 @@ DRWSTAT      ; TODO:
 ; -
 
 DRWMENU     ; TODO:
-                ; 1. HMMV: fill row 0 with COL_UI
-                ; 2. Blit menu title strings at fixed column positions
+                ; 1. HMMV: FILL ROW 0 WITH COL_UI
+                ; 2. BLIT MENU TITLE STRINGS AT FIXED COLUMN POSITIONS
                 RET
 
 
@@ -40,8 +40,8 @@ DRWMENU     ; TODO:
 ; -
 
 DRWGUT      ; TODO:
-                ; For each viewport row 0..SCRROWS-1:
-                ;   DRWLNUM row, TOPLINE + row
+                ; FOR #EAC VIEWPORT ROW 0..SCRROWS-1:
+                ;   DRWLNUM ROW, TOPLINE + ROW
                 RET
 
 
@@ -54,11 +54,11 @@ DRWGUT      ; TODO:
 ; -
 
 DRWLNUM     ; TODO:
-                ; Format HL as 4-char right-justified:
-                ;   HL <= 9999:  decimal "   1" .. "9999"
-                ;   HL <= 99999: k-notation " 10k" .. " 99k"
-                ;   else:        m-notation "  1m"
-                ; Blit 4 chars at DX=0, DY=TXORG_Y+B*CELLH via LMMM
+                ; FORMAT HL AS 4-CHAR RIGHT-JUSTIFIED:
+                ;   HL <= 9999:  DECIMAL "   1" .. "9999"
+                ;   HL <= 99999: K-NOTATION " 10K" .. " 99K"
+                ;   ELSE:        M-NOTATION "  1M"
+                ; BLIT 4 CHARS AT DX=0, DY=TXORG_Y+B*CELLH VIA LMMM
                 RET
 
 
@@ -69,10 +69,10 @@ DRWLNUM     ; TODO:
 ; -
 
 DRWSCRL   ; TODO:
-                ; thumb_h = max(4, (SCRROWS * 212) / TOTLINES)
-                ; thumb_y = (TOPLINE * 212) / TOTLINES
-                ; Erase old thumb: HMMV full gutter with COL_UI
-                ; Draw new thumb: HMMV DX=512-GUTR_PX, DY=thumb_y, NX=GUTR_PX, NY=thumb_h, CLR=COL_HI
+                ; THUMB_H = MAX(4, (SCRROWS * 212) / TOTLINES)
+                ; THUMB_Y = (TOPLINE * 212) / TOTLINES
+                ; ERASE OLD THUMB: HMMV FULL GUTTER WITH COL_UI
+                ; DRAW NEW THUMB: HMMV DX=512-GUTR_PX, DY=THUMB_Y, NX=GUTR_PX, NY=THUMB_H, CLR=COL_HI
                 RET
 
 
@@ -100,14 +100,14 @@ DRWCUR      ; TODO:
 BLNKTICK        PUSH    AF
                 LD      A, (BLNKCNT)
                 INC     A
-                CP      30              ; blink every 30 ticks (≈0.5s at 60Hz)
+                CP      30              ; BLINK EVERY 30 TICKS (≈0.5S AT 60HZ)
                 JR      C, .END
                 XOR     A
                 LD      (BLNKCNT), A
                 LD      A, (BLNKPH)
                 XOR     1
                 LD      (BLNKPH), A
-                CALL    DRWCUR      ; toggle cursor
+                CALL    DRWCUR      ; TOGGLE CURSOR
 .END            LD      (BLNKCNT), A
                 POP     AF
                 RET

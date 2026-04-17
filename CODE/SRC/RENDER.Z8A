@@ -6,7 +6,7 @@
 ; --- REDRAW                    ----------------------------------------
 
 ; - REDRAW -----------
-; - REDRAW ALL TEXT ROWS (TXRFIRST to TXRLAST)
+; - REDRAW ALL TEXT ROWS (TXRFIRST TO TXRLAST)
 ; -
 
 REDRAW          LD      B, TXRFIRST
@@ -42,7 +42,7 @@ RENDEROW        PUSH    BC
                 LD      (VDP_DY), HL
 
                 ; 2. RENDER COLS 0-79
-                LD      IX, VDP_CMDBLK
+                LD      IX, VDPCMBLK
                 LD      C, 0            ; COL COUNTER
 .COLLOOP        PUSH    BC
                 
@@ -99,7 +99,7 @@ RENDEROW        PUSH    BC
                 ADD     A, A            ; (CHAR / 32) * 8
                 
                 ; ADD FONT TABLE OFFSET BASED ON ATTR (BOLD/ITALIC)
-                ; LD      HL, FNORM_SY  ; ... etc
+                ; LD      HL, FNORM_SY  ; ... ETC
                 LD      L, A
                 LD      H, 0
                 LD      DE, FNORM_SY

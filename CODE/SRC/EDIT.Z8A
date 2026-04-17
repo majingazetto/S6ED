@@ -2,8 +2,8 @@
 ;                                       * EDIT OPERATIONS                      *
 ;                                       ****************************************
 ;
-; All editing operations work on WORKBUF (current line loaded by LINEREAD).
-; After each edit: LINEWRT to persist, PUTLINE to re-render, DRWGUT.
+; ALL EDITING OPERATIONS WORK ON WORKBUF (CURRENT LINE LOADED BY LINEREAD).
+; AFTER #EAC EDIT: LINEWRT TO PERSIST, PUTLINE TO RE-RENDER, DRWGUT.
 
 
 ; --- EDINSCHR                 ----------------------------------------
@@ -15,13 +15,13 @@
 ; -
 
 EDINSCHR       ; TODO:
-                ; 1. If WORKBUF[0] >= TEXTCOLS: bell, return (line full)
-                ; 2. Shift text+attr right from CURX..len
-                ; 3. Store A at text[CURX], E at attr[CURX]
+                ; 1. IF WORKBUF[0] >= TEXTCOLS: BELL, RETURN (LINE FULL)
+                ; 2. SHIFT TEXT+ATTR RIGHT FROM CURX..LEN
+                ; 3. STORE A AT TEXT[CURX], E AT ATTR[CURX]
                 ; 4. WORKBUF[0]++
                 ; 5. LINEWRT DOCLINE
-                ; 6. PUTLINE CURY (redraw line)
-                ; 7. Advance cursor right (EDMOVCHR)
+                ; 6. PUTLINE CURY (REDRAW LINE)
+                ; 7. ADVANCE CURSOR RIGHT (EDMOVCHR)
                 RET
 
 
@@ -34,9 +34,9 @@ EDINSCHR       ; TODO:
 ; -
 
 EDOVRCHR        ; TODO:
-                ; 1. Store A at text[CURX], E at attr[CURX]
-                ; 2. If CURX >= WORKBUF[0]: WORKBUF[0] = CURX+1
-                ; 3. LINEWRT, PUTCHAR, EDMOVCHR right
+                ; 1. STORE A AT TEXT[CURX], E AT ATTR[CURX]
+                ; 2. IF CURX >= WORKBUF[0]: WORKBUF[0] = CURX+1
+                ; 3. LINEWRT, PUTCHAR, EDMOVCHR RIGHT
                 RET
 
 
@@ -47,9 +47,9 @@ EDOVRCHR        ; TODO:
 ; -
 
 EDDELBK       ; TODO:
-                ; If CURX = 0 and CURY = 0 (top of doc): bell, return
-                ; If CURX = 0: join with previous line (EJOINPRV)
-                ; Else: shift text+attr left, WORKBUF[0]--, LINEWRT, PUTLINE
+                ; IF CURX = 0 AND CURY = 0 (TOP OF DOC): BELL, RETURN
+                ; IF CURX = 0: JOIN WITH PREVIOUS LINE (EJOINPRV)
+                ; ELSE: SHIFT TEXT+ATTR LEFT, WORKBUF[0]--, LINEWRT, PUTLINE
                 RET
 
 
@@ -60,8 +60,8 @@ EDDELBK       ; TODO:
 ; -
 
 EDDELCHR        ; TODO:
-                ; If CURX >= WORKBUF[0]: join next line (EJOINEXT)
-                ; Else: shift text+attr left, WORKBUF[0]--, LINEWRT, PUTLINE
+                ; IF CURX >= WORKBUF[0]: JOIN NEXT LINE (EJOINEXT)
+                ; ELSE: SHIFT TEXT+ATTR LEFT, WORKBUF[0]--, LINEWRT, PUTLINE
                 RET
 
 
@@ -72,11 +72,11 @@ EDDELCHR        ; TODO:
 ; -
 
 EDNWLIN       ; TODO:
-                ; 1. Split WORKBUF at CURX:
-                ;    - Tail (text[CURX..] + attr) → new WORKBUF, LINEINS DOCLINE+1
-                ;    - Head (text[0..CURX-1] + attr) → WORKBUF, LINEWRT DOCLINE
-                ; 2. Move cursor to col 0, next line (scroll if needed)
-                ; 3. RDWROWS CURY..SCRROWS-1 (tail shifted down)
+                ; 1. SPLIT WORKBUF AT CURX:
+                ;    - TAIL (TEXT[CURX..] + ATTR) → NEW WORKBUF, LINEINS DOCLINE+1
+                ;    - HEAD (TEXT[0..CURX-1] + ATTR) → WORKBUF, LINEWRT DOCLINE
+                ; 2. MOVE CURSOR TO COL 0, NEXT LINE (SCROLL IF NEEDED)
+                ; 3. RDWROWS CURY..SCRROWS-1 (TAIL SHIFTED DOWN)
                 RET
 
 
@@ -88,9 +88,9 @@ EDNWLIN       ; TODO:
 ; -
 
 EDMOVCHR        ; TODO:
-                ; Right: CURX++; if > len: wrap to next line
-                ; Left:  CURX--; if < 0:  wrap to prev line end
-                ; Redraw cursor (DRWCUR)
+                ; RIGHT: CURX++; IF > LEN: WRAP TO NEXT LINE
+                ; LEFT:  CURX--; IF < 0:  WRAP TO PREV LINE END
+                ; REDRAW CURSOR (DRWCUR)
                 RET
 
 
@@ -102,10 +102,10 @@ EDMOVCHR        ; TODO:
 ; -
 
 EDMOVROW        ; TODO:
-                ; Down: CURY++; if >= SCRROWS: scroll up 1 (SCRLUP)
-                ; Up:   CURY--; if < 0:        scroll down 1 (SCRLDN)
-                ; Clamp CURX to new line length
-                ; Redraw cursor
+                ; DOWN: CURY++; IF >= SCRROWS: SCROLL UP 1 (SCRLUP)
+                ; UP:   CURY--; IF < 0:        SCROLL DOWN 1 (SCRLDN)
+                ; CLAMP CURX TO NEW LINE LENGTH
+                ; REDRAW CURSOR
                 RET
 
 
@@ -116,9 +116,9 @@ EDMOVROW        ; TODO:
 ; -
 
 EDQUIT          ; TODO:
-                ; If MODIFIED: prompt "Save changes? (Y/N/C)"
-                ;   Y → FILESAVE, then TERM
+                ; IF MODIFIED: PROMPT "SAVE CHANGES? (Y/N/C)"
+                ;   Y → FILESAVE, THEN TERM
                 ;   N → TERM
-                ;   C → return to editing
-                ; Else: TERM
+                ;   C → RETURN TO EDITING
+                ; ELSE: TERM
                 RET

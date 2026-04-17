@@ -2,13 +2,13 @@
 ;                                       * PARAMS                               *
 ;                                       ****************************************
 ;
-; Parses DOS command-line parameters via EXTPARM (BDOS.Z8A).
-; S6ED accepts one optional parameter: the filename to open.
-; No /X switches defined yet — scaffold is ready for future additions.
+; PARSES DOS COMMAND-LINE PARAMETERS VIA EXTPARM (BDOS.Z8A).
+; S6ED ACCEPTS ONE OPTIONAL PARAMETER: THE FILENAME TO OPEN.
+; NO /X SWITCHES DEFINED YET — SCAFFOLD IS READY FOR FUTURE ADDITIONS.
 ;
-; Call PARAMS from INIT after BUFINIT.
-; On return: CY=0  filename found → FILENAME is populated (ASCIIZ)
-;            CY=1  no filename given → open empty buffer
+; CALL PARAMS FROM INIT AFTER BUFINIT.
+; ON RETURN: CY=0  FILENAME FOUND → FILENAME IS POPULATED (ASCIIZ)
+;            CY=1  NO FILENAME GIVEN → OPEN EMPTY BUFFER
 
 
 ; --- PARAMS                    ----------------------------------------
@@ -16,18 +16,18 @@
 ; - PARAMS -----------
 ; - PARSE COMMAND LINE, FIND FILENAME
 ; - OUTPUT:
-; -     CY = 0  FILENAME copied to FILENAME (VARS)
+; -     CY = 0  FILENAME COPIED TO FILENAME (VARS)
 ; -     CY = 1  NO FILENAME PARAM FOUND
 ; -
 
 PARAMS          LD      HL, PARBUF
                 CALL    EXTPARM
-                RET     C               ; no params at all → CY=1
+                RET     C               ; NO PARAMS AT ALL → CY=1
 
-                ; --- check each param for a bare filename (not starting '/')
+                ; --- CHECK #EAC PARAM FOR A BARE FILENAME (NOT STARTING '/')
 
                 CALL    CHKFILE
-                RET                     ; CY from CHKFILE propagates
+                RET                     ; CY FROM CHKFILE PROPAGATES
 
 
 ; --- CHKFILE                   ----------------------------------------
@@ -36,25 +36,25 @@ PARAMS          LD      HL, PARBUF
 ; - FIND FIRST PARAM NOT STARTING WITH '/'
 ; - COPIES IT TO FILENAME (ASCIIZ)
 ; - OUTPUT:
-; -     CY = 0  FILENAME set
+; -     CY = 0  FILENAME SET
 ; -     CY = 1  NOT FOUND
 ; -
 
-CHKFILE         LD      A, (PARBUF)     ; total param count
+CHKFILE         LD      A, (PARBUF)     ; TOTAL PARAM COUNT
                 LD      B, A
                 LD      C, 0
 .LOOP           PUSH    BC
                 LD      HL, PARBUF
                 LD      DE, PARMTMP
                 LD      A, C
-                CALL    GETPARAM        ; → copies param C to PARMTMP, HL=PARMTMP
+                CALL    GETPARAM        ; → COPIES PARAM C TO PARMTMP, HL=PARMTMP
                 LD      A, (HL)
                 CP      '/'
-                JR      NZ, .FOUND      ; not a switch → filename
+                JR      NZ, .FOUND      ; NOT A SWITCH → FILENAME
                 POP     BC
                 INC     C
                 DJNZ    .LOOP
-                SCF                     ; not found
+                SCF                     ; NOT FOUND
                 RET
 
 .FOUND          POP     BC
@@ -75,7 +75,7 @@ CHKFILE         LD      A, (PARBUF)     ; total param count
 
 ; - CHKPARAM ---------
 ; - CHECK PARAM STRING AND SET FLAG VAR IF FOUND
-; - HL: PARAM DATA (DEFB size / DEFM string)
+; - HL: PARAM DATA (DEFB SIZE / DEFM STRING)
 ; - DE: FLAG VARIABLE ADDRESS
 ; - A:  VALUE TO STORE IF FOUND
 ; - OUTPUT:
@@ -139,7 +139,7 @@ FNDPARAM        LD      (PSIZE), A
                 JR      C, .CHKERR
                 CP      'Z' + 1
                 JR      NC, .CHKERR
-                OR      %00100000       ; to lowercase
+                OR      %00100000       ; TO LOWERCASE
                 CP      (HL)
                 JR      NZ, .CHKERR
 .CHKOK          INC     HL

@@ -14,43 +14,43 @@ VERSION
 ; --- SCREEN LAYOUT             ----------------------------------------
 
 
-                ; Character grid
-SCRCOLS         EQU     80              ; text area columns
-SCRROWS         EQU     24              ; text area rows (rows 1-24)
-CELLW           EQU     6               ; cell width in pixels
-CELLH           EQU     8               ; cell height in pixels
+                ; CHARACTER GRID
+SCRCOLS         EQU     80              ; TEXT AREA COLUMNS
+SCRROWS         EQU     24              ; TEXT AREA ROWS (ROWS 1-24)
+CELLW           EQU     6               ; CELL WIDTH IN PIXELS
+CELLH           EQU     8               ; CELL HEIGHT IN PIXELS
 
-                ; Pixel layout
-GUTL_PX         EQU     24              ; left gutter width (4 chars × 6px)
-GUTR_PX         EQU     8               ; right gutter width (scrollbar)
-TXAREAPX       EQU     480             ; text area width (80 × 6px)
-TXORG_X         EQU     GUTL_PX         ; text area X origin
-TXORG_Y         EQU     CELLH           ; text area Y origin (skip menu row 0)
-SCRTOTY      EQU     212             ; total screen height in pixels
+                ; PIXEL LAYOUT
+GUTL_PX         EQU     24              ; LEFT GUTTER WIDTH (4 CHARS × 6PX)
+GUTR_PX         EQU     8               ; RIGHT GUTTER WIDTH (SCROLLBAR)
+TXAREAPX       EQU     480             ; TEXT AREA WIDTH (80 × 6PX)
+TXORG_X         EQU     GUTL_PX         ; TEXT AREA X ORIGIN
+TXORG_Y         EQU     CELLH           ; TEXT AREA Y ORIGIN (SKIP MENU ROW 0)
+SCRTOTY      EQU     212             ; TOTAL SCREEN HEIGHT IN PIXELS
 
-                ; Rows (in character units)
-MNUROW          EQU     0               ; menu bar row
-TXRFIRST    EQU     1               ; first text row
-TXRLAST     EQU     24              ; last text row
-STBROW          EQU     25              ; status bar row
+                ; ROWS (IN CHARACTER UNITS)
+MNUROW          EQU     0               ; MENU BAR ROW
+TXRFIRST    EQU     1               ; FIRST TEXT ROW
+TXRLAST     EQU     24              ; LAST TEXT ROW
+STBROW          EQU     25              ; STATUS BAR ROW
 
 
 ; --- VRAM MAP                  ----------------------------------------
 
 
-VR_DISP         EQU     #00000          ; display bitmap (128 B/line × 212 lines)
-VR_SAT          EQU     #06A00          ; sprite attribute table
-VR_SGT          EQU     #06C00          ; sprite generator table
+VR_DISP         EQU     #00000          ; DISPLAY BITMAP (128 B/LINE × 212 LINES)
+VR_SAT          EQU     #06A00          ; SPRITE ATTRIBUTE TABLE
+VR_SGT          EQU     #06C00          ; SPRITE GENERATOR TABLE
 
-VR_FNORM        EQU     #07000          ; font: Normal        (256 × 16 bytes)
-VR_FBOLD        EQU     #08000          ; font: Bold
-VR_FITAL        EQU     #09000          ; font: Italic
-VR_FBI          EQU     #0A000          ; font: Bold+Italic
+VR_FNORM        EQU     #07000          ; FONT: NORMAL        (256 × 16 BYTES)
+VR_FBOLD        EQU     #08000          ; FONT: BOLD
+VR_FITAL        EQU     #09000          ; FONT: ITALIC
+VR_FBI          EQU     #0A000          ; FONT: BOLD+ITALIC
 
-                ; Font table geometry (all tables identical structure)
-                ;   32 glyphs per row → 8 rows (256 total)
-                ;   Glyph N: SX = (N % 32) * 6,  SY = table_SY + (N / 32) * 8
-                ;   table_SY = (VR_Fxxx - VR_DISP) / 128
+                ; FONT TABLE GEOMETRY (ALL TABLES IDENTICAL STRUCTURE)
+                ;   32 GLYPHS PER ROW → 8 ROWS (256 TOTAL)
+                ;   GLYPH N: SX = (N % 32) * 6,  SY = TABLE_SY + (N / 32) * 8
+                ;   TABLE_SY = (VR_FXXX - VR_DISP) / 128
 FNORM_SY        EQU     (VR_FNORM - VR_DISP) / 128     ; = 56
 FBOLD_SY        EQU     (VR_FBOLD - VR_DISP) / 128     ; = 64
 FITAL_SY        EQU     (VR_FITAL - VR_DISP) / 128     ; = 72
@@ -60,41 +60,41 @@ FBI_SY          EQU     (VR_FBI   - VR_DISP) / 128     ; = 80
 ; --- PALETTE                   ----------------------------------------
 
 
-                ; Color indices (SCREEN 6, 4 colors)
-COL_BG          EQU     0               ; background
-COL_FG          EQU     1               ; normal text / foreground
-COL_UI          EQU     2               ; UI chrome (gutters, menu, status)
-COL_HI          EQU     3               ; cursor / highlight / accent
+                ; COLOR INDICES (SCREEN 6, 4 COLORS)
+COL_BG          EQU     0               ; BACKGROUND
+COL_FG          EQU     1               ; NORMAL TEXT / FOREGROUND
+COL_UI          EQU     2               ; UI CHROME (GUTTERS, MENU, STATUS)
+COL_HI          EQU     3               ; CURSOR / HIGHLIGHT / ACCENT
 
 
 ; --- CHARACTER ATTRIBUTES      ----------------------------------------
 
 
-                ; Attr byte bit definitions (per cell, stored alongside text)
-ATRBOLD       EQU     #01             ; bit 0
-ATRITAL       EQU     #02             ; bit 1
-ATRUNDR       EQU     #04             ; bit 2
-ATRINV        EQU     #08             ; bit 3  (inverse video)
-ATRFMSK   EQU     #03             ; bits 0-1 → font variant index
+                ; ATTR BYTE BIT DEFINITIONS (PER CELL, STORED ALONGSIDE TEXT)
+ATRBOLD       EQU     #01             ; BIT 0
+ATRITAL       EQU     #02             ; BIT 1
+ATRUNDR       EQU     #04             ; BIT 2
+ATRINV        EQU     #08             ; BIT 3  (INVERSE VIDEO)
+ATRFMSK   EQU     #03             ; BITS 0-1 → FONT VARIANT INDEX
 
 
 ; --- TEXT BUFFER / MAPPER      ----------------------------------------
 
 
-MAXLINES        EQU     5460            ; max document lines
-                                        ;   16384 / DIRSIZ = 5461; use 5460
-DIRSIZ          EQU     3               ; bytes per line directory entry
-                                        ;   [1: segment] [2: word offset]
-LINEREC         EQU     161             ; max line record: 1 + 80 + 80
-TEXTCOLS        EQU     80              ; max chars per line
-WORKSIZ         EQU     LINEREC         ; work buffer size (= max record)
+MAXLINES        EQU     5460            ; MAX DOCUMENT LINES
+                                        ;   16384 / DIRSIZ = 5461; USE 5460
+DIRSIZ          EQU     3               ; BYTES PER LINE DIRECTORY ENTRY
+                                        ;   [1: SEGMENT] [2: WORD OFFSET]
+LINEREC         EQU     161             ; MAX LINE RECORD: 1 + 80 + 80
+TEXTCOLS        EQU     80              ; MAX CHARS PER LINE
+WORKSIZ         EQU     LINEREC         ; WORK BUFFER SIZE (= MAX RECORD)
 
-DIRPAGE         EQU     #4000           ; page 1 — line directory (fixed segment)
-TXPAGE          EQU     #8000           ; page 2 — text window (switched)
+DIRPAGE         EQU     #4000           ; PAGE 1 — LINE DIRECTORY (FIXED SEGMENT)
+TXPAGE          EQU     #8000           ; PAGE 2 — TEXT WINDOW (SWITCHED)
 
-                ; Segment allocation type (for ALL_SEG)
-SEG_USER        EQU     0               ; A=0: allocate user segment
-SEG_SYS         EQU     1               ; A=1: allocate system segment
+                ; SEGMENT ALLOCATION TYPE (FOR ALL_SEG)
+SEG_USER        EQU     0               ; A=0: ALLOCATE USER SEGMENT
+SEG_SYS         EQU     1               ; A=1: ALLOCATE SYSTEM SEGMENT
 
 
 ; --- LANGUAGE MODES            ----------------------------------------
@@ -111,5 +111,5 @@ LGPYTHN     EQU     4
 
 
 
-INS_MODE        EQU     1               ; insert
-OVR_MODE        EQU     0               ; overwrite
+INS_MODE        EQU     1               ; INSERT
+OVR_MODE        EQU     0               ; OVERWRITE

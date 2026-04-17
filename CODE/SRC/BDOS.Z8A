@@ -233,7 +233,7 @@ GETMAXSZ        PUSH    HL
                 OR      E
                 EX      DE,HL
                 POP     HL
-                RET     NZ                      ; > 64k
+                RET     NZ                      ; > 64K
                 
                 ; HL SIZE
                 ; DE LOW CURRENT
@@ -303,8 +303,8 @@ DOPEN           EX      DE,HL
 
 
 ; - DCLOSE  ----------
-; - DOS2 CLOSE FH
-; - B: FH
+; - DOS2 CLOSE #F
+; - B: #F
 ; - 
 
 DCLOSE          LD      C,_CLOSE
@@ -313,8 +313,8 @@ DCLOSE          LD      C,_CLOSE
 
 
 ; - DREAD ------------
-; - DOS2 READ BYTES FROM FH
-; - B: FH
+; - DOS2 READ BYTES FROM #F
+; - B: #F
 ; - HL: BYTES TO READ
 ; - DE: BUFFER ADDRESS
 ; - 
@@ -324,8 +324,8 @@ DREAD           LD      C,_READ
 
                 
 ; - DWRITE -----------
-; - DOS2 WRITE BYTES TO FH
-; - B: FH
+; - DOS2 WRITE BYTES TO #F
+; - B: #F
 ; - HL: BYTES TO WRITE
 ; - DE: FROM BUFFER ADDRESS
 ; - 
@@ -339,7 +339,7 @@ DWRITE          LD      C,_WRITE
 ; - DOS2 CREATE FILE
 ; - HL: FILENAME ASCIIZ
 ; - OUTPUT: 
-; -     A: FH
+; -     A: #F
 ; - 
 
 DCREATE         EX      DE,HL
@@ -362,7 +362,7 @@ DDEL            EX      DE,HL
 
 ; - DGETREM ----------
 ; - GET REMAINING SIZE
-; - B: OPENED FH
+; - B: OPENED #F
 ; - OUTPUT: 
 ; -     DE:HL REM. SIZE
 ; - 
@@ -406,7 +406,7 @@ DGETREM         LD      DE,0
 
 
 ; - DGETMAX -----------
-; - B: FH
+; - B: #F
 ; - HL: SIZE TO READ
 ; - OUTPUT: 
 ; -     HL: MAX SIZE
@@ -429,7 +429,7 @@ DGETMAX         PUSH    HL
 ; -     A: FILEHANDLE
 ; -
 
-DSKCREATE       LD      A,(DOS2)
+DSKCREAT       LD      A,(DOS2)
                 AND     A
                 JP      NZ,DCREATE
 
@@ -438,7 +438,7 @@ DSKCREATE       LD      A,(DOS2)
                 CALL    BUILDFCB
                 CALL    FMAKE
                 RET     C
-                LD      A,1 ; FAKE FH
+                LD      A,1 ; FAKE #F
                 RET
 
 
@@ -460,14 +460,14 @@ DSKOPEN         LD      A,(DOS2)
                 CALL    BUILDFCB
                 CALL    FOPEN
                 RET     C
-                LD      A,1 ; FAKE FH
+                LD      A,1 ; FAKE #F
                 RET
 
 
 
 ; - DSKCLOSE ---------
-; - FCB/FH FILE CLOSE
-; - A: FH
+; - FCB/#F FILE CLOSE
+; - A: #F
 ; -
 
 DSKCLOSE        LD      B,A
@@ -479,7 +479,7 @@ DSKCLOSE        LD      B,A
 
 
 ; - DSKREAD -----------
-; - A: FH
+; - A: #F
 ; - HL: BYTES TO READ
 ; - DE: BUFFER ADDRESS
 ; - (FROM LAST POINTER)
@@ -499,7 +499,7 @@ DSKREAD         LD      B,A
 
 
 ; - DSKWRITE -----------
-; - A: FH
+; - A: #F
 ; - HL: BYTES TO WRITE
 ; - DE: FROM BUFFER ADRESS
 ; - (TO LAST POINTER)
@@ -516,7 +516,7 @@ DSKWRITE        LD      B,A
 
 
 ; - DSKSEEK ----------
-; - A: FH
+; - A: #F
 ; - DEHL: POINTER
 ; - 
 
@@ -546,7 +546,7 @@ DSKDEL          LD      A,(DOS2)
 ; - DSKGETRE ---------
 ; - GET REMAINING SIZE
 ; - OF OPENED FILE
-; - A: FH
+; - A: #F
 ; - OUTPUT:
 ; -     DEHL: REM. SIZE
 ; - 
@@ -561,7 +561,7 @@ DSKGETRE        LD      B,A
 ; - DSKGETMA -------
 ; - GET MAX SIZE
 ; - HL: SIZE TO READ
-; - A: FH
+; - A: #F
 ; - OUTPUT: MAX SIZE
 ; - 
 

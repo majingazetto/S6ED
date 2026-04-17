@@ -2,35 +2,35 @@
 ;                                       * MAPPER MANAGER                       *
 ;                                       ****************************************
 ;
-; Uses DOS2/Nextor mapper support routines found via EXTBIO.
-; NEVER use OUT (0FEH) directly — always go through MPUTP2.
+; USES DOS2/NEXTOR MAPPER SUPPORT ROUTINES FOUND VIA EXTBIO.
+; NEVER USE OUT (#0FE) DIRECTLY — ALWAYS GO THROUGH MPUTP2.
 ;
-; Init: call MAPINIT at startup. Stores entry addresses in VARS.
-; After init: call ALLSEG, FRESEG, RDSEG, WRSEG, PUTP1, GETP1, PUTP2, GETP2.
+; INIT: CALL MAPINIT AT STARTUP. STORES ENTRY ADDRESSES IN VARS.
+; AFTER INIT: CALL ALLSEG, FRESEG, RDSEG, WRSEG, PUTP1, GETP1, PUTP2, GETP2.
 
 
 ; --- MAPINIT                   ----------------------------------------
 
 ; - MAPINIT ----------
 ; - LOCATE MAPPER MANAGER VIA EXTBIO
-; - FILL MAP_xxx JUMP TABLE ENTRIES IN VARS
+; - FILL MAP_XXX JUMP TABLE ENTRIES IN VARS
 ; - OUTPUT:
-; -     CY = 1  NO MAPPER MANAGER (no extended BIOS or device not present)
+; -     CY = 1  NO MAPPER MANAGER (NO EXTENDED BIOS OR DEVICE NOT PRESENT)
 ; -
 
-MAPINIT         ; Check HOKVLD bit 0: extended BIOS present?
+MAPINIT         ; CHECK HOKVLD BIT 0: EXTENDED BIOS PRESENT?
                 LD      A, (HOKVLD)
                 RRA
-                RET     NC              ; bit 0 = 0: no extended BIOS
+                RET     NC              ; BIT 0 = 0: NO EXTENDED BIOS
 
-                ; Call EXTBIO: D=4 (mapper device), E=2 (get jump table)
+                ; CALL EXTBIO: D=4 (MAPPER DEVICE), E=2 (GET JUMP TABLE)
                 XOR     A               ; A=0
                 LD      D, MAP_DEV
                 LD      E, MAPFNTBL
-                CALL    EXTBIO          ; HL = jump table base
-                ; IX, IY, alternate regs corrupted by EXTBIO — do not use
+                CALL    EXTBIO          ; HL = JUMP TABLE BASE
+                ; IX, IY, ALTERNATE REGS CORRUPTED BY EXTBIO — DO NOT USE
 
-                ; Store entry addresses from jump table
+                ; STORE ENTRY ADDRESSES FROM JUMP TABLE
                 PUSH    HL
                 LD      DE, MJALLSEG
                 ADD     HL, DE
@@ -78,8 +78,8 @@ MAPINIT         ; Check HOKVLD bit 0: extended BIOS present?
                 LD      (MGETP2), HL
 
                 LD      A, #FF
-                LD      (MAPRDY), A    ; flag: mapper manager found
-                AND     A               ; carry clear = success
+                LD      (MAPRDY), A    ; FLAG: MAPPER MANAGER FOUND
+                AND     A               ; CARRY CLEAR = SUCCESS
                 RET
 
 
@@ -88,11 +88,11 @@ MAPINIT         ; Check HOKVLD bit 0: extended BIOS present?
 ; - ALLSEG -----------
 ; - ALLOCATE ONE 16KB USER SEGMENT (PRIMARY MAPPER)
 ; - OUTPUT:
-; -     A  = SEGMENT NUMBER (Fc = 0)
-; -     Fc = 1  NO FREE SEGMENTS
+; -     A  = SEGMENT NUMBER (FC = 0)
+; -     FC = 1  NO FREE SEGMENTS
 ; -
 
-ALLSEG          XOR     A               ; A=0: user segment, B=0: primary mapper
+ALLSEG          XOR     A               ; A=0: USER SEGMENT, B=0: PRIMARY MAPPER
                 LD      B, A
                 LD      HL, (MALLSEG)
                 CALL    CALHL
@@ -105,10 +105,10 @@ ALLSEG          XOR     A               ; A=0: user segment, B=0: primary mapper
 ; - FREE A PREVIOUSLY ALLOCATED SEGMENT
 ; - A: SEGMENT NUMBER
 ; - OUTPUT:
-; -     Fc = 1  ERROR (invalid or already free)
+; -     FC = 1  ERROR (INVALID OR ALREADY FREE)
 ; -
 
-FRESEG          LD      B, 0            ; B=0: primary mapper
+FRESEG          LD      B, 0            ; B=0: PRIMARY MAPPER
                 LD      HL, (MFRESEG)
                 CALL    CALHL
                 RET
@@ -150,7 +150,7 @@ WRSEG           LD      HL, (MWRSEG)
 ; --- PUTP1                     ----------------------------------------
 
 ; - PUTP1 ------------
-; - BANK SEGMENT INTO PAGE 1 (4000H-7FFFH) — LINE DIRECTORY WINDOW
+; - BANK SEGMENT INTO PAGE 1 (#4000-#7FFF) — LINE DIRECTORY WINDOW
 ; - A: SEGMENT NUMBER
 ; - ALL REGISTERS PRESERVED
 ; -
@@ -176,7 +176,7 @@ GETP1           LD      HL, (MGETP1)
 ; --- PUTP2                     ----------------------------------------
 
 ; - PUTP2 ------------
-; - BANK SEGMENT INTO PAGE 2 (8000H-BFFFH) — TEXT WINDOW
+; - BANK SEGMENT INTO PAGE 2 (#8000-#BFFF) — TEXT WINDOW
 ; - A: SEGMENT NUMBER
 ; - ALL REGISTERS PRESERVED
 ; -

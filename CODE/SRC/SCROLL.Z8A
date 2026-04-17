@@ -9,9 +9,9 @@
 ; - SCROLL TEXT AREA UP (8PX) TO SHOW NEXT LINE
 ; -
 
-SCROLLDN        LD      IX, VDP_CMDBLK
+SCROLLDN        LD      IX, VDPCMBLK
                 
-                ; 1. MOVE 480x192 AREA (ROW 2..25 -> ROW 1..24)
+                ; 1. MOVE 480X192 AREA (ROW 2..25 -> ROW 1..24)
                 LD      HL, TXORG_X     ; 24
                 LD      (VDP_SX), HL
                 LD      A, TXORG_Y + 8  ; ROW 2 (START AT 16PX)
