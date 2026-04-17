@@ -15,6 +15,7 @@ ASM				= sjasmplus
 SYMFILE			= $(basename $(SOURCE)).sym
 LSTFILE			= $(basename $(SOURCE)).lst
 SRC_DIR			= SRC
+RES_DIR			= ../RES
 
 # 	=========================================================================
 # 	VARS
@@ -28,7 +29,8 @@ ALL_SOURCES_GEN	= $(shell find $(SRC_DIR) -type f -name "*.Z8A" ! -wholename "*.
 #	=========================================================================
 
 INCLUDES 		= -I.	\
-				  -I$(SRC_DIR) \
+			  -I$(RES_DIR) \
+			  -I$(SRC_DIR) \
 
 DEFINES			= -DON=1\
 				  -DOFF=0\
@@ -37,9 +39,7 @@ DEFINES			= -DON=1\
 
 DSKFILE			= S6ED.DSK
 DSKTOOL			= ../../MSXTOOLS/bin/dsktool
-DSKBASE			= ../../msx_dma_sw/modules/yamanooto/driver/RES/YAMARD.DSK
-DOS2SYS			= ../../MSXTOOLS/RES/MSXDOS2.SYS
-DOS2COM			= ../../MSXTOOLS/RES/COMMAND2.COM
+DSKBASE			= $(RES_DIR)/DOS2.DSK
 
 # -	 All Target --------------------------------------------------------------
 
@@ -56,8 +56,8 @@ dsk: $(DSKFILE)
 
 $(DSKFILE): $(OUTPUT) TEST.TXT
 	@cp $(DSKBASE) $(DSKFILE)
-	@$(DSKTOOL) D $(DSKFILE) *.*
-	@$(DSKTOOL) A $(DSKFILE) $(DOS2SYS) $(DOS2COM) $(OUTPUT) TEST.TXT
+	@$(DSKTOOL) D $(DSKFILE) $(OUTPUT) TEST.TXT
+	@$(DSKTOOL) A $(DSKFILE) $(OUTPUT) TEST.TXT
 
 # -	 Build Target ------------------------------------------------------------
 

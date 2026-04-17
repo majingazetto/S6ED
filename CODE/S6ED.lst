@@ -1,0 +1,3699 @@
+# file opened: S6ED.Z8A
+  1   0000              ; **********************************************
+  2   0000              ; * S6ED                                       *
+  3   0000              ; * MSX2 SCREEN 6 TEXT EDITOR                  *
+  4   0000              ; * 80 COLS X 24 ROWS, 6X8 FONT, DOS2/NEXTOR  *
+  5   0000              ; * 2024 - 2025 CODED BY ARMANDO PEREZ         *
+  6   0000              ; **********************************************
+  7   0000
+  8   0000                              OUTPUT  S6ED.COM
+  9   0000
+ 10   0000              ; --- MACROS                    ----------------------------------------
+ 11   0000
+ 12   0000
+ 13   0000                              ; INFINITE LOOP / BREAKPOINT
+ 14   0000                              MACRO   BRK
+ 15   0000 ~                            DI
+ 16   0000 ~                            JP      $
+ 17   0000                              ENDM
+ 18   0000
+ 19   0000                              ; ORG WITH PADDING (DOES NOT DISCARD CODE)
+ 20   0000                              MACRO PADORG ADDR
+ 21   0000 ~                            IF $ < ADDR
+ 22   0000 ~                            BLOCK ADDR-$
+ 23   0000 ~                            ENDIF
+ 24   0000 ~                            ORG ADDR
+ 25   0000                              ENDM
+ 26   0000
+ 27   0000
+ 28   0000              ; --- CONST / INCLUDES          ----------------------------------------
+ 29   0000
+ 30   0000
+ 31   0000                              INCLUDE HARD.Z8A
+# file opened: HARD.Z8A
+  1+  0000              ;                                       ****************************************
+  2+  0000              ;                                       * HARD CONSTANTS                        *
+  3+  0000              ;                                       ****************************************
+  4+  0000
+  5+  0000
+  6+  0000              ; --- SYSTEM                            ----------------------------------------
+  7+  0000
+  8+  0000
+  9+  0000              SYSTEM          EQU     #2D
+ 10+  0000
+ 11+  0000
+ 12+  0000              ; --- BIOS                              ----------------------------------------
+ 13+  0000
+ 14+  0000
+ 15+  0000              ENASCR_B        EQU     #44
+ 16+  0000              DISSCR_B        EQU     #41
+ 17+  0000              WRTVDP_B        EQU     #47
+ 18+  0000              WRTVRM          EQU     #4D
+ 19+  0000              FILVRM_B        EQU     #56
+ 20+  0000              LDIRVM_B        EQU     #5C
+ 21+  0000              LDIRMV_B        EQU     #59
+ 22+  0000              CHGMOD          EQU     #5F
+ 23+  0000              SNSMAT          EQU     #141
+ 24+  0000              ENASLT          EQU     #24
+ 25+  0000              RSLREG          EQU     #138
+ 26+  0000              RDSLT           EQU     #0C
+ 27+  0000              WRSLT           EQU     #14
+ 28+  0000              CHPUT           EQU     #A2
+ 29+  0000              CALSLT          EQU     #1C
+ 30+  0000              DCOMPR_B        EQU     #20
+ 31+  0000              KILBUF          EQU     #156
+ 32+  0000              CHSNS           EQU     #9C
+ 33+  0000              CHGET           EQU     #9F
+ 34+  0000              EXTBIOS         EQU     #15F
+ 35+  0000              SUBROM          EQU     #15C
+ 36+  0000              CLS             EQU     #00C3
+ 37+  0000              EXTROM          EQU     #015F
+ 38+  0000              RDVDP           EQU     #013E
+ 39+  0000              ERAFNK          EQU     #CC
+ 40+  0000              DSPFNK          EQU     #CF
+ 41+  0000              BREAKX          EQU     #B7
+ 42+  0000
+ 43+  0000
+ 44+  0000              ; --- SYSTEM VARS               ----------------------------------------
+ 45+  0000
+ 46+  0000
+ 47+  0000              HTIMI           EQU     #FD9F
+ 48+  0000              HKEYI           EQU     #FD9A
+ 49+  0000              CLIKSW          EQU     #F3DB
+ 50+  0000              SCRMOD          EQU     #FCAF
+ 51+  0000              RG0SAV          EQU     #F3DF
+ 52+  0000              RG1SAV          EQU     RG0SAV + 1
+ 53+  0000              RG3SAV          EQU     RG0SAV + 3
+ 54+  0000              RG4SAV          EQU     RG0SAV + 4
+ 55+  0000              RG6SAV          EQU     RG0SAV + 6
+ 56+  0000              RG7SAV          EQU     RG0SAV + 7
+ 57+  0000              EXPTBL          EQU     #FCC1
+ 58+  0000              SLTTBL          EQU     #FCC5
+ 59+  0000              EXTVDP          EQU     #FFE7
+ 60+  0000              EXBRSA          EQU     #FAF8
+ 61+  0000              RAMAD0          EQU     #F341
+ 62+  0000              RAMAD1          EQU     #F342
+ 63+  0000              RAMAD2          EQU     #F343
+ 64+  0000              RAMAD3          EQU     #F344
+ 65+  0000              CNSDFG          EQU     #F3DE
+ 66+  0000              FNKSTR          EQU     #F87F
+ 67+  0000              REPCNT          EQU     #F3F7
+ 68+  0000              JIFFY           EQU     #FC9E
+ 69+  0000              STATFL          EQU     #F3E7
+ 70+  0000
+ 71+  0000              RG10SA          EQU     #FFE9
+ 72+  0000              RG18SA          EQU     #FFF1
+ 73+  0000              RG19SA          EQU     #FFF2
+ 74+  0000              RG23SA          EQU     #FFF6
+ 75+  0000              RG25SA          EQU     #FFFA
+ 76+  0000              RG26SA          EQU     #FFFB
+ 77+  0000              RG27SA          EQU     #FFFC
+ 78+  0000
+ 79+  0000              CGPNT           EQU     #0004           ; ROM CHARSET SLOT+ADDRESS POINTER
+ 80+  0000                                                      ; READ VIA RDSLT FROM SLOT 0
+ 81+  0000
+ 82+  0000
+ 83+  0000              ; --- EXTBIO / MAPPER           ----------------------------------------
+ 84+  0000
+ 85+  0000
+ 86+  0000              EXTBIO          EQU     #FFCA
+ 87+  0000              HOKVLD          EQU     #FB20           ; BIT 0 = EXTENDED BIOS PRESENT
+ 88+  0000              ARG             EQU     #F847
+ 89+  0000
+ 90+  0000                              ; MAPPER DEVICE / FUNCTION
+ 91+  0000              MAP_DEV         EQU     4               ; D=4: MEMORY MAPPER DEVICE
+ 92+  0000              MAPFNTBL      EQU     2              ; E=2: GET JUMP TABLE (→ HL)
+ 93+  0000              MAPFNVAR      EQU     1              ; E=1: GET VARIABLE TABLE (→ HL)
+ 94+  0000
+ 95+  0000                              ; MAPPER JUMP TABLE OFFSETS (FROM BASE RETURNED BY EXTBIO)
+ 96+  0000              MJALLSEG      EQU     #00
+ 97+  0000              MJFRESEG      EQU     #03
+ 98+  0000              MJRDSEG       EQU     #06
+ 99+  0000              MJWRSEG       EQU     #09
+100+  0000              MJCALSEG      EQU     #0C
+101+  0000              MJCALLS       EQU     #0F
+102+  0000              MJPUTPH       EQU     #12
+103+  0000              MJGETPH       EQU     #15
+104+  0000              MJPUTP0       EQU     #18
+105+  0000              MJGETP0       EQU     #1B
+106+  0000              MJPUTP1       EQU     #1E
+107+  0000              MJGETP1       EQU     #21
+108+  0000              MJPUTP2       EQU     #24
+109+  0000              MJGETP2       EQU     #27
+110+  0000              MJPUTP3       EQU     #2A            ; NOP
+111+  0000              MJGETP3       EQU     #2D
+112+  0000
+113+  0000
+114+  0000              ; --- VDP PORTS                 ----------------------------------------
+115+  0000
+116+  0000
+117+  0000              VDPDR           EQU     #98             ; VDP DATA PORT (READ/WRITE)
+118+  0000              VDPCT           EQU     #99             ; VDP CONTROL PORT (REGISTER/STATUS)
+119+  0000              VDPST           EQU     #99             ; VDP STATUS PORT (READ)
+120+  0000              VDPPAL          EQU     #9A             ; PALETTE DATA
+121+  0000              VDPPALC         EQU     #9B             ; PALETTE REGISTER
+122+  0000
+123+  0000
+124+  0000              ; --- VDP COMMAND REGISTER VALUES   -----------------------------------
+125+  0000
+126+  0000
+127+  0000                              ; CMR (R#46) COMMAND CODES
+128+  0000              VDP_HMMC        EQU     #F0             ; CPU → VRAM (BYTE-TRANSFER)
+129+  0000              VDP_YMMM        EQU     #E0             ; VRAM → VRAM (Y ONLY, SAME X)
+130+  0000              VDP_HMMM        EQU     #D0             ; VRAM → VRAM (BYTE-TRANSFER)
+131+  0000              VDP_HMMV        EQU     #C0             ; FILL BYTES
+132+  0000              VDP_LMMC        EQU     #B0             ; CPU → VRAM (DOT-TRANSFER)
+133+  0000              VDP_LMCM        EQU     #A0             ; VRAM → CPU (DOT-TRANSFER)
+134+  0000              VDP_LMMM        EQU     #90             ; VRAM → VRAM (DOT-TRANSFER)
+135+  0000              VDP_LMMV        EQU     #80             ; FILL DOTS
+136+  0000              VDP_LINE        EQU     #70             ; DRAW LINE
+137+  0000              VDP_SRCH        EQU     #60             ; SEARCH FOR COLOR
+138+  0000              VDP_PSET        EQU     #50             ; PLOT DOT
+139+  0000              VDPOINT       EQU     #40             ; GET DOT COLOR
+140+  0000              VDP_STOP        EQU     #20             ; STOP COMMAND
+141+  0000              VDP_NOP         EQU     #00
+142+  0000
+143+  0000                              ; ARG (R#45) DIY BITS
+144+  0000              VDP_DIY         EQU     #04             ; SET: DIRECTION Y = UP (DEFAULT DOWN)
+145+  0000              VDP_DIX         EQU     #02             ; SET: DIRECTION X = LEFT (DEFAULT RIGHT)
+146+  0000              VDP_EQ          EQU     #01             ; SRCH: STOP IF EQUAL (DEFAULT NOT-EQUAL)
+147+  0000              VDP_MXS         EQU     #20             ; SOURCE IN PAGE 1
+148+  0000              VDP_MXD         EQU     #10             ; DEST IN PAGE 1
+149+  0000
+150+  0000                              ; LOGICAL OPERATIONS (CMR BITS 3-0, USED WITH LMMM/LMMV/LMMC)
+151+  0000              VDP_IMP         EQU     #00             ; SRC → DST
+152+  0000              VDP_AND         EQU     #01
+153+  0000              VDP_OR          EQU     #02
+154+  0000              VDP_XOR         EQU     #03
+155+  0000              VDP_NOT         EQU     #04
+156+  0000              VDP_TIMP        EQU     #08             ; TRANSPARENT (COLOR 0 NOT WRITTEN)
+157+  0000              VDP_TAND        EQU     #09
+158+  0000              VDP_TOR         EQU     #0A
+159+  0000              VDP_TXOR        EQU     #0B
+160+  0000              VDP_TNOT        EQU     #0C
+161+  0000
+162+  0000
+163+  0000              ; --- BDOS                      ----------------------------------------
+164+  0000
+165+  0000
+166+  0000              DOS             EQU     #05
+167+  0000
+168+  0000              _PARAMS         EQU     #80
+169+  0000
+170+  0000              _CONIN          EQU     #01
+171+  0000              _CONOUT         EQU     #02
+172+  0000              _DIRIO          EQU     #06
+173+  0000              _INNOE          EQU     #08
+174+  0000              _STROUT         EQU     #09
+175+  0000              _CONST          EQU     #0B
+176+  0000              _BUFIN          EQU     #0A
+177+  0000
+178+  0000              _FOPEN          EQU     #0F
+179+  0000              _FCLOSE         EQU     #10
+180+  0000              _FMAKE          EQU     #16
+181+  0000              _FDEL           EQU     #13
+182+  0000              _SETDTA         EQU     #1A
+183+  0000              _WRBLK          EQU     #26
+184+  0000              _RDBLK          EQU     #27
+185+  0000              _TERM0          EQU     #00
+186+  0000
+187+  0000                              ; DOS2 CALLS
+188+  0000              _OPEN           EQU     #43
+189+  0000              _CREATE         EQU     #44
+190+  0000              _CLOSE          EQU     #45
+191+  0000              _READ           EQU     #48
+192+  0000              _WRITE          EQU     #49
+193+  0000              _SEEK           EQU     #4A
+194+  0000              _DELETE         EQU     #4D
+195+  0000              _DEFAB          EQU     #63
+196+  0000              _DEFER          EQU     #64
+197+  0000              _DOSVER         EQU     #6F
+198+  0000              _FFIRST         EQU     #40
+199+  0000              _TERM           EQU     #62
+200+  0000
+201+  0000
+202+  0000              ; --- DOS FCB OFFSETS           ----------------------------------------
+203+  0000
+204+  0000
+205+  0000              FDRIVE          EQU     0
+206+  0000              FFILNAME        EQU     1
+207+  0000              FFILEXT         EQU     9
+208+  0000              FCURBLK         EQU     12
+209+  0000              FRECSIZ         EQU     14
+210+  0000              FFILSIZ         EQU     16
+211+  0000              FDATE           EQU     20
+212+  0000              FTIME           EQU     22
+213+  0000              FDEVID          EQU     24
+214+  0000              FDIRLOC         EQU     25
+215+  0000              FTOPCLUS        EQU     26
+216+  0000              FLSTCLUS        EQU     28
+217+  0000              FRELLOC         EQU     30
+218+  0000              FCURREC         EQU     32
+219+  0000              FRNDREC         EQU     33
+220+  0000              SIZEFCB         EQU     37
+221+  0000
+222+  0000
+223+  0000              ; --- ASCII                     ----------------------------------------
+224+  0000
+225+  0000
+226+  0000              NUL             EQU     0
+227+  0000              BEL             EQU     #07
+228+  0000              BS              EQU     #08
+229+  0000              TAB             EQU     #09
+230+  0000              LF              EQU     #0A
+231+  0000              CR              EQU     #0D
+232+  0000              ESC             EQU     #1B
+233+  0000              DEL             EQU     #7F
+234+  0000
+235+  0000                              ; MSX CURSOR KEYS (RETURNED BY CHGET)
+236+  0000              CRIGHT          EQU     #1C
+237+  0000              CLEFT           EQU     #1D
+238+  0000              CUP             EQU     #1E
+239+  0000              CDOWN           EQU     #1F
+240+  0000
+241+  0000                              ; MSX FUNCTION KEY CODES
+242+  0000              F1KEY           EQU     #F1
+243+  0000              F2KEY           EQU     #F2
+244+  0000              F3KEY           EQU     #F3
+245+  0000              F4KEY           EQU     #F4
+246+  0000              F5KEY           EQU     #F5
+247+  0000
+248+  0000                              ; CONTROL KEYS
+249+  0000              CTRL_A          EQU     #01
+250+  0000              CTRL_C          EQU     #03
+251+  0000              CTRL_F          EQU     #06
+252+  0000              CTRL_G          EQU     #07
+253+  0000              CTRL_K          EQU     #0B
+254+  0000              CTRL_L          EQU     #0C
+255+  0000              CTRL_N          EQU     #0E
+256+  0000              CTRL_O          EQU     #0F
+257+  0000              CTRL_Q          EQU     #11
+258+  0000              CTRL_R          EQU     #12
+259+  0000              CTRL_S          EQU     #13
+260+  0000              CTRL_V          EQU     #16
+261+  0000              CTRL_X          EQU     #18
+262+  0000              CTRL_Z          EQU     #1A
+263+  0000
+# file closed: HARD.Z8A
+ 32   0000                              INCLUDE CONST.Z8A
+# file opened: CONST.Z8A
+  1+  0000              ;                                       ****************************************
+  2+  0000              ;                                       * CONSTANTS                            *
+  3+  0000              ;                                       ****************************************
+  4+  0000
+  5+  0000
+  6+  0000              ; --- VERSION                   ----------------------------------------
+  7+  0000
+  8+  0000
+  9+  0000              VERSION
+ 10+  0000              .MAJOR          EQU     "0"
+ 11+  0000              .MINOR          EQU     "1"
+ 12+  0000
+ 13+  0000
+ 14+  0000              ; --- SCREEN LAYOUT             ----------------------------------------
+ 15+  0000
+ 16+  0000
+ 17+  0000                              ; CHARACTER GRID
+ 18+  0000              SCRCOLS         EQU     80              ; TEXT AREA COLUMNS
+ 19+  0000              SCRROWS         EQU     24              ; TEXT AREA ROWS (ROWS 1-24)
+ 20+  0000              CELLW           EQU     6               ; CELL WIDTH IN PIXELS
+ 21+  0000              CELLH           EQU     8               ; CELL HEIGHT IN PIXELS
+ 22+  0000
+ 23+  0000                              ; PIXEL LAYOUT
+ 24+  0000              GUTL_PX         EQU     24              ; LEFT GUTTER WIDTH (4 CHARS × 6PX)
+ 25+  0000              GUTR_PX         EQU     8               ; RIGHT GUTTER WIDTH (SCROLLBAR)
+ 26+  0000              TXAREAPX       EQU     480             ; TEXT AREA WIDTH (80 × 6PX)
+ 27+  0000              TXORG_X         EQU     GUTL_PX         ; TEXT AREA X ORIGIN
+ 28+  0000              TXORG_Y         EQU     CELLH           ; TEXT AREA Y ORIGIN (SKIP MENU ROW 0)
+ 29+  0000              SCRTOTY      EQU     212             ; TOTAL SCREEN HEIGHT IN PIXELS
+ 30+  0000
+ 31+  0000                              ; ROWS (IN CHARACTER UNITS)
+ 32+  0000              MNUROW          EQU     0               ; MENU BAR ROW
+ 33+  0000              TXRFIRST    EQU     1               ; FIRST TEXT ROW
+ 34+  0000              TXRLAST     EQU     24              ; LAST TEXT ROW
+ 35+  0000              STBROW          EQU     25              ; STATUS BAR ROW
+ 36+  0000
+ 37+  0000
+ 38+  0000              ; --- VRAM MAP                  ----------------------------------------
+ 39+  0000
+ 40+  0000
+ 41+  0000              VR_DISP         EQU     #00000          ; DISPLAY BITMAP (128 B/LINE × 212 LINES)
+ 42+  0000              VR_SAT          EQU     #06A00          ; SPRITE ATTRIBUTE TABLE
+ 43+  0000              VR_SGT          EQU     #06C00          ; SPRITE GENERATOR TABLE
+ 44+  0000
+ 45+  0000              VR_FNORM        EQU     #07000          ; FONT: NORMAL        (256 × 16 BYTES)
+ 46+  0000              VR_FBOLD        EQU     #08000          ; FONT: BOLD
+ 47+  0000              VR_FITAL        EQU     #09000          ; FONT: ITALIC
+ 48+  0000              VR_FBI          EQU     #0A000          ; FONT: BOLD+ITALIC
+ 49+  0000
+ 50+  0000                              ; FONT TABLE GEOMETRY (ALL TABLES IDENTICAL STRUCTURE)
+ 51+  0000                              ;   32 GLYPHS PER ROW → 8 ROWS (256 TOTAL)
+ 52+  0000                              ;   GLYPH N: SX = (N % 32) * 6,  SY = TABLE_SY + (N / 32) * 8
+ 53+  0000                              ;   TABLE_SY = (VR_FXXX - VR_DISP) / 128
+ 54+  0000              FNORM_SY        EQU     (VR_FNORM - VR_DISP) / 128     ; = 56
+ 55+  0000              FBOLD_SY        EQU     (VR_FBOLD - VR_DISP) / 128     ; = 64
+ 56+  0000              FITAL_SY        EQU     (VR_FITAL - VR_DISP) / 128     ; = 72
+ 57+  0000              FBI_SY          EQU     (VR_FBI   - VR_DISP) / 128     ; = 80
+ 58+  0000
+ 59+  0000
+ 60+  0000              ; --- PALETTE                   ----------------------------------------
+ 61+  0000
+ 62+  0000
+ 63+  0000                              ; COLOR INDICES (SCREEN 6, 4 COLORS)
+ 64+  0000              COL_BG          EQU     0               ; BACKGROUND
+ 65+  0000              COL_FG          EQU     1               ; NORMAL TEXT / FOREGROUND
+ 66+  0000              COL_UI          EQU     2               ; UI CHROME (GUTTERS, MENU, STATUS)
+ 67+  0000              COL_HI          EQU     3               ; CURSOR / HIGHLIGHT / ACCENT
+ 68+  0000
+ 69+  0000
+ 70+  0000              ; --- CHARACTER ATTRIBUTES      ----------------------------------------
+ 71+  0000
+ 72+  0000
+ 73+  0000                              ; ATTR BYTE BIT DEFINITIONS (PER CELL, STORED ALONGSIDE TEXT)
+ 74+  0000              ATRBOLD       EQU     #01             ; BIT 0
+ 75+  0000              ATRITAL       EQU     #02             ; BIT 1
+ 76+  0000              ATRUNDR       EQU     #04             ; BIT 2
+ 77+  0000              ATRINV        EQU     #08             ; BIT 3  (INVERSE VIDEO)
+ 78+  0000              ATRFMSK   EQU     #03             ; BITS 0-1 → FONT VARIANT INDEX
+ 79+  0000
+ 80+  0000
+ 81+  0000              ; --- TEXT BUFFER / MAPPER      ----------------------------------------
+ 82+  0000
+ 83+  0000
+ 84+  0000              MAXLINES        EQU     5460            ; MAX DOCUMENT LINES
+ 85+  0000                                                      ;   16384 / DIRSIZ = 5461; USE 5460
+ 86+  0000              DIRSIZ          EQU     3               ; BYTES PER LINE DIRECTORY ENTRY
+ 87+  0000                                                      ;   [1: SEGMENT] [2: WORD OFFSET]
+ 88+  0000              LINEREC         EQU     161             ; MAX LINE RECORD: 1 + 80 + 80
+ 89+  0000              TEXTCOLS        EQU     80              ; MAX CHARS PER LINE
+ 90+  0000              WORKSIZ         EQU     LINEREC         ; WORK BUFFER SIZE (= MAX RECORD)
+ 91+  0000
+ 92+  0000              DIRPAGE         EQU     #4000           ; PAGE 1 — LINE DIRECTORY (FIXED SEGMENT)
+ 93+  0000              TXPAGE          EQU     #8000           ; PAGE 2 — TEXT WINDOW (SWITCHED)
+ 94+  0000
+ 95+  0000                              ; SEGMENT ALLOCATION TYPE (FOR ALL_SEG)
+ 96+  0000              SEG_USER        EQU     0               ; A=0: ALLOCATE USER SEGMENT
+ 97+  0000              SEG_SYS         EQU     1               ; A=1: ALLOCATE SYSTEM SEGMENT
+ 98+  0000
+ 99+  0000
+100+  0000              ; --- LANGUAGE MODES            ----------------------------------------
+101+  0000
+102+  0000
+103+  0000              LGNONE       EQU     0
+104+  0000              LANG_Z80        EQU     1
+105+  0000              LGBASIC      EQU     2
+106+  0000              LANG_C          EQU     3
+107+  0000              LGPYTHN     EQU     4
+108+  0000
+109+  0000
+110+  0000              ; --- MISC                      ----------------------------------------
+111+  0000
+112+  0000
+113+  0000
+114+  0000              INS_MODE        EQU     1               ; INSERT
+115+  0000              OVR_MODE        EQU     0               ; OVERWRITE
+116+  0000
+# file closed: CONST.Z8A
+ 33   0000
+ 34   0000
+ 35   0000              ; --- DOS PROGRAM               ----------------------------------------
+ 36   0000
+ 37   0000
+ 38   0000                              ORG     #100
+ 39   0100 C3 75 13                     JP      INIT
+ 40   0103
+ 41   0103
+ 42   0103              ; --- STRINGS                   ----------------------------------------
+ 43   0103
+ 44   0103
+ 45   0103 52 65 71 75  ENODOS2      DEFM    "Requires MSX-DOS 2 or Nextor.$"
+ 45   0107 69 72 65 73
+ 45   010B 20 4D 53 58
+ 45   010F 2D 44 4F 53
+ 45   0113 20 32 20 6F
+ 45   0117 72 20 4E 65
+ 45   011B 78 74 6F 72
+ 45   011F 2E 24
+ 46   0121 4E 6F 20 6D  ENOMAP       DEFM    "No mapper manager found.$"
+ 46   0125 61 70 70 65
+ 46   0129 72 20 6D 61
+ 46   012D 6E 61 67 65
+ 46   0131 72 20 66 6F
+ 46   0135 75 6E 64 2E
+ 46   0139 24
+ 47   013A
+ 48   013A
+ 49   013A              ; --- MODULE INCLUDES           ----------------------------------------
+ 50   013A
+ 51   013A
+ 52   013A                              INCLUDE BDOS.Z8A
+# file opened: BDOS.Z8A
+  1+  013A              ;                                       ****************************************
+  2+  013A              ;                                       * BDOS                                 *
+  3+  013A              ;                                       ****************************************
+  4+  013A
+  5+  013A
+  6+  013A
+  7+  013A              ; --- BDOS ENTRY  / VERSION             ----------------------------------------
+  8+  013A
+  9+  013A
+ 10+  013A              ; - BDOS -------------
+ 11+  013A              ; - CALL BDOS ENTRY
+ 12+  013A              ; - CY = 1 ERROR
+ 13+  013A              ; -
+ 14+  013A
+ 15+  013A F5           BDOS            PUSH    AF
+ 16+  013B AF                           XOR     A
+ 17+  013C 32 2E 14                     LD      (UNAPISET),A
+ 18+  013F F1                           POP     AF
+ 19+  0140 CD 05 00                     CALL    DOS
+ 20+  0143 A7                           AND     A
+ 21+  0144 C8                           RET     Z
+ 22+  0145 37                           SCF
+ 23+  0146 C9                           RET
+ 24+  0147
+ 25+  0147
+ 26+  0147
+ 27+  0147              ; - DOSVER -----------
+ 28+  0147              ; - GET DOS VERSION
+ 29+  0147              ; -
+ 30+  0147
+ 31+  0147 AF           DOSVER          XOR     A
+ 32+  0148 32 2D 14                     LD      (DOS2),A
+ 33+  014B 0E 6F                        LD      C,_DOSVER
+ 34+  014D CD 3A 01                     CALL    BDOS
+ 35+  0150 78                           LD      A,B
+ 36+  0151 FE 02                        CP      2
+ 37+  0153 D8                           RET     C
+ 38+  0154 3E FF                        LD      A,#FF
+ 39+  0156 32 2D 14                     LD      (DOS2),A
+ 40+  0159 C9                           RET
+ 41+  015A
+ 42+  015A
+ 43+  015A
+ 44+  015A
+ 45+  015A              ; --- FILE (OPEN / READ / WRITE)        ----------------------------------------
+ 46+  015A
+ 47+  015A
+ 48+  015A                              ; -
+ 49+  015A                              ; - DOS 1
+ 50+  015A                              ; -
+ 51+  015A
+ 52+  015A
+ 53+  015A              ; - BUILDFCB ---------
+ 54+  015A              ; - CLEAN FCB
+ 55+  015A              ; - AND COPY FILENAME
+ 56+  015A              ; - HL: FILENAME
+ 57+  015A
+ 58+  015A E5           BUILDFCB        PUSH    HL
+ 59+  015B 21 7D 14                     LD      HL,FCB
+ 60+  015E 11 7E 14                     LD      DE,FCB + 1
+ 61+  0161 01 24 00                     LD      BC,36
+ 62+  0164 36 00                        LD      (HL),0
+ 63+  0166 ED B0                        LDIR
+ 64+  0168 21 7E 14                     LD     HL,FCB + FFILNAME
+ 65+  016B 11 7F 14                     LD     DE,FCB + FFILNAME + 1
+ 66+  016E 01 0A 00                     LD     BC,10
+ 67+  0171 36 20                        LD     (HL),' '
+ 68+  0173 ED B0                        LDIR
+ 69+  0175 E1                           POP     HL
+ 70+  0176
+ 71+  0176 11 7E 14                     LD      DE,FCB + FFILNAME
+ 72+  0179
+ 73+  0179 7E           .NAME           LD      A,(HL)
+ 74+  017A 23                           INC     HL
+ 75+  017B A7                           AND     A
+ 76+  017C 28 14                        JR      Z,.END
+ 77+  017E FE 2E                        CP      '.'
+ 78+  0180 28 04                        JR      Z,.PEXT
+ 79+  0182 12                           LD      (DE),A
+ 80+  0183 13                           INC     DE
+ 81+  0184 18 F3                        JR      .NAME
+ 82+  0186
+ 83+  0186 11 86 14     .PEXT           LD      DE,FCB + FFILEXT
+ 84+  0189 7E           .EXT            LD      A,(HL)
+ 85+  018A 23                           INC     HL
+ 86+  018B A7                           AND     A
+ 87+  018C 28 04                        JR      Z,.END
+ 88+  018E 12                           LD      (DE),A
+ 89+  018F 13                           INC     DE
+ 90+  0190 18 F7                        JR      .EXT
+ 91+  0192
+ 92+  0192
+ 93+  0192 C9           .END            RET
+ 94+  0193
+ 95+  0193
+ 96+  0193              ; - FOPEN ------------
+ 97+  0193              ; - FILE FCB OPEN
+ 98+  0193              ; - OUTPUT:
+ 99+  0193              ; -     DEHL: FILE SIZE
+100+  0193              ; -
+101+  0193
+102+  0193 11 7D 14     FOPEN           LD      DE,FCB
+103+  0196 0E 0F                        LD      C,_FOPEN
+104+  0198 CD 3A 01                     CALL    BDOS
+105+  019B D8                           RET     C
+106+  019C DD 21 7D 14                  LD      IX,FCB
+107+  01A0 3E 01                        LD      A,1
+108+  01A2 DD 77 0E                     LD      (IX + 14),A
+109+  01A5 AF                           XOR     A
+110+  01A6 DD 77 0F                     LD      (IX + 15),A
+111+  01A9 DD 77 21                     LD      (IX + 33),A
+112+  01AC DD 77 22                     LD      (IX + 34),A
+113+  01AF DD 77 23                     LD      (IX + 35),A
+114+  01B2 DD 77 24                     LD      (IX + 36),A
+115+  01B5 2A 8D 14                     LD      HL,(FCB + FFILSIZ)
+116+  01B8 ED 5B 8F 14                  LD      DE,(FCB + FFILSIZ + 2)
+117+  01BC C9                           RET
+118+  01BD
+119+  01BD
+120+  01BD              ; - FMAKE ------------
+121+  01BD              ; - FILE MAKE
+122+  01BD              ; - CREATES FCB FILE
+123+  01BD              ; -
+124+  01BD
+125+  01BD
+126+  01BD 11 7D 14     FMAKE           LD      DE,FCB
+127+  01C0 0E 16                        LD      C,_FMAKE
+128+  01C2 CD 3A 01                     CALL    BDOS
+129+  01C5 D8                           RET     C
+130+  01C6 DD 21 7D 14                  LD      IX,FCB
+131+  01CA 3E 01                        LD      A,1
+132+  01CC DD 77 0E                     LD      (IX + 14),A
+133+  01CF AF                           XOR     A
+134+  01D0 DD 77 0F                     LD      (IX + 15),A
+135+  01D3 DD 77 21                     LD      (IX + 33),A
+136+  01D6 DD 77 22                     LD      (IX + 34),A
+137+  01D9 DD 77 23                     LD      (IX + 35),A
+138+  01DC DD 77 24                     LD      (IX + 36),A
+139+  01DF C9                           RET
+140+  01E0
+141+  01E0              ; - FSEEK ------------
+142+  01E0              ; - FILE SEEK FCB
+143+  01E0              ; - DEHL: OFFSET
+144+  01E0              ; -
+145+  01E0
+146+  01E0 DD 21 7D 14  FSEEK           LD      IX,FCB
+147+  01E4 DD 75 21                     LD      (IX + 33),L
+148+  01E7 DD 74 22                     LD      (IX + 34),H
+149+  01EA DD 73 23                     LD      (IX + 35),E
+150+  01ED DD 72 24                     LD      (IX + 36),D
+151+  01F0 C9                           RET
+152+  01F1
+153+  01F1
+154+  01F1              ; - RDBLK ------------
+155+  01F1              ; - READ FCB BLOCK BYTES
+156+  01F1              ; - TO DMA
+157+  01F1              ; - HL: BYTES TO READ
+158+  01F1              ; -
+159+  01F1
+160+  01F1
+161+  01F1 11 7D 14     RDBLK           LD      DE,FCB
+162+  01F4 0E 27                        LD      C,_RDBLK
+163+  01F6 C3 3A 01                     JP      BDOS
+164+  01F9
+165+  01F9
+166+  01F9              ; - WRBLK ------------
+167+  01F9              ; - WRITE FCB BLOCK BYTES
+168+  01F9              ; - FROM DMA
+169+  01F9              ; - HL: BYTES TO WRITE
+170+  01F9              ; -
+171+  01F9
+172+  01F9
+173+  01F9 11 7D 14     WRBLK           LD      DE,FCB
+174+  01FC 0E 26                        LD      C,_WRBLK
+175+  01FE C3 3A 01                     JP      BDOS
+176+  0201
+177+  0201
+178+  0201              ; - FCLOSE -----------
+179+  0201              ; - FCB CLOSE FILE
+180+  0201              ; -
+181+  0201
+182+  0201 11 7D 14     FCLOSE          LD      DE,FCB
+183+  0204 0E 10                        LD      C,_FCLOSE
+184+  0206 C3 3A 01                     JP      BDOS
+185+  0209
+186+  0209
+187+  0209
+188+  0209              ; - FDEL -------------
+189+  0209              ; - FCB DELETE FILE
+190+  0209              ; -
+191+  0209
+192+  0209 11 7D 14     FDEL            LD      DE,FCB
+193+  020C 0E 13                        LD      C,_FDEL
+194+  020E C3 3A 01                     JP      BDOS
+195+  0211
+196+  0211
+197+  0211              ; - SETDMA -----------
+198+  0211              ; - DE: DMA
+199+  0211              ; -
+200+  0211
+201+  0211 0E 1A        SETDMA          LD      C,_SETDTA
+202+  0213 C3 3A 01                     JP      BDOS
+203+  0216
+204+  0216
+205+  0216
+206+  0216              ; - GETREM -----------
+207+  0216              ; - GET REMAINING SIZE
+208+  0216              ; - OPENED FCB
+209+  0216              ; - OUTPUT:
+210+  0216              ; -     DE:HL REM. SIZE
+211+  0216              ; -
+212+  0216
+213+  0216 2A 8D 14     GETREM          LD      HL,(FCB + FFILSIZ)
+214+  0219 ED 5B 9E 14                  LD      DE,(FCB + FRNDREC)
+215+  021D A7                           AND     A
+216+  021E ED 52                        SBC     HL,DE
+217+  0220 EB                           EX      DE,HL
+218+  0221 2A 8F 14                     LD      HL,(FCB + FFILSIZ + 2)
+219+  0224 ED 4B A0 14                  LD      BC,(FCB + FRNDREC + 2)
+220+  0228 ED 42                        SBC     HL,BC
+221+  022A EB                           EX      DE,HL
+222+  022B C9                           RET
+223+  022C
+224+  022C
+225+  022C              ; - GETMAXSZ ------------
+226+  022C              ; - HL: SIZE TO READ
+227+  022C              ; - OUTPUT: MAX SIZE
+228+  022C              ; -
+229+  022C
+230+  022C E5           GETMAXSZ        PUSH    HL
+231+  022D CD 16 02                     CALL    GETREM
+232+  0230 7A           .GEN            LD      A,D
+233+  0231 B3                           OR      E
+234+  0232 EB                           EX      DE,HL
+235+  0233 E1                           POP     HL
+236+  0234 C0                           RET     NZ                      ; > 64K
+237+  0235
+238+  0235                              ; HL SIZE
+239+  0235                              ; DE LOW CURRENT
+240+  0235
+241+  0235 EB                           EX      DE,HL
+242+  0236
+243+  0236                              ; HL CURRENT (LOW)
+244+  0236                              ; DE SIZE
+245+  0236
+246+  0236 CD 1E 04                     CALL    CMPHLDE
+247+  0239 D8                           RET     C                       ; SIZE > CURRENT
+248+  023A                                                              ; RETURN CURRENT
+249+  023A EB                           EX      DE,HL                   ; ELSE RETURN SIZE
+250+  023B C9                           RET
+251+  023C
+252+  023C
+253+  023C
+254+  023C
+255+  023C
+256+  023C                              ; -
+257+  023C                              ; - DOS 2
+258+  023C                              ; -
+259+  023C
+260+  023C
+261+  023C              ; - DSEEK ------------
+262+  023C              ; - DOS 2 SEEK
+263+  023C              ; - B: FILE HANDLE
+264+  023C              ; - DEHL: OFFSET
+265+  023C              ; -
+266+  023C
+267+  023C AF           DSEEK           XOR     A
+268+  023D 0E 4A        .GEN            LD      C,_SEEK
+269+  023F C3 3A 01                     JP      BDOS
+270+  0242
+271+  0242
+272+  0242              ; - DOPEN ------------
+273+  0242              ; - DOS 2 OPEN FILE
+274+  0242              ; - HL: FILENAME (ASCIIZ)
+275+  0242              ; - OUTPUT:
+276+  0242              ; -     A: FILE HANDLE
+277+  0242              ; -     DEHL: FILE SIZE
+278+  0242              ; -
+279+  0242
+280+  0242 EB           DOPEN           EX      DE,HL
+281+  0243 AF                           XOR     A
+282+  0244 0E 43                        LD      C,_OPEN
+283+  0246 CD 3A 01                     CALL    BDOS
+284+  0249 D8                           RET     C
+285+  024A C5                           PUSH    BC
+286+  024B 21 00 00                     LD      HL,0
+287+  024E 11 00 00                     LD      DE,0
+288+  0251 3E 02                        LD      A,2             ; RELATIVE END OF FILE
+289+  0253 CD 3D 02                     CALL    DSEEK.GEN
+290+  0256 C1                           POP     BC
+291+  0257 C5                           PUSH    BC
+292+  0258 E5                           PUSH    HL
+293+  0259 D5                           PUSH    DE
+294+  025A 21 00 00                     LD      HL,0
+295+  025D 11 00 00                     LD      DE,0
+296+  0260 CD 3C 02                     CALL    DSEEK
+297+  0263 D1                           POP     DE
+298+  0264 E1                           POP     HL
+299+  0265 F1                           POP     AF
+300+  0266 A7                           AND     A
+301+  0267 C9                           RET
+302+  0268
+303+  0268
+304+  0268
+305+  0268              ; - DCLOSE  ----------
+306+  0268              ; - DOS2 CLOSE #F
+307+  0268              ; - B: #F
+308+  0268              ; -
+309+  0268
+310+  0268 0E 45        DCLOSE          LD      C,_CLOSE
+311+  026A C3 3A 01                     JP      BDOS
+312+  026D
+313+  026D
+314+  026D
+315+  026D              ; - DREAD ------------
+316+  026D              ; - DOS2 READ BYTES FROM #F
+317+  026D              ; - B: #F
+318+  026D              ; - HL: BYTES TO READ
+319+  026D              ; - DE: BUFFER ADDRESS
+320+  026D              ; -
+321+  026D
+322+  026D 0E 48        DREAD           LD      C,_READ
+323+  026F C3 3A 01                     JP      BDOS
+324+  0272
+325+  0272
+326+  0272              ; - DWRITE -----------
+327+  0272              ; - DOS2 WRITE BYTES TO #F
+328+  0272              ; - B: #F
+329+  0272              ; - HL: BYTES TO WRITE
+330+  0272              ; - DE: FROM BUFFER ADDRESS
+331+  0272              ; -
+332+  0272
+333+  0272 0E 49        DWRITE          LD      C,_WRITE
+334+  0274 C3 3A 01                     JP      BDOS
+335+  0277
+336+  0277
+337+  0277
+338+  0277              ; - DCREATE ----------
+339+  0277              ; - DOS2 CREATE FILE
+340+  0277              ; - HL: FILENAME ASCIIZ
+341+  0277              ; - OUTPUT:
+342+  0277              ; -     A: #F
+343+  0277              ; -
+344+  0277
+345+  0277 EB           DCREATE         EX      DE,HL
+346+  0278 AF                           XOR     A
+347+  0279 0E 44                        LD      C,_CREATE
+348+  027B CD 3A 01                     CALL    BDOS
+349+  027E 78                           LD      A,B
+350+  027F C9                           RET
+351+  0280
+352+  0280
+353+  0280              ; - DDEL -------------
+354+  0280              ; - DOS2 DELETE FILE
+355+  0280              ; - HL: FILENAME ASCIIZ
+356+  0280              ; -
+357+  0280
+358+  0280 EB           DDEL            EX      DE,HL
+359+  0281 0E 4D                        LD      C,_DELETE
+360+  0283 C3 3A 01                     JP      BDOS
+361+  0286
+362+  0286
+363+  0286              ; - DGETREM ----------
+364+  0286              ; - GET REMAINING SIZE
+365+  0286              ; - B: OPENED #F
+366+  0286              ; - OUTPUT:
+367+  0286              ; -     DE:HL REM. SIZE
+368+  0286              ; -
+369+  0286
+370+  0286 11 00 00     DGETREM         LD      DE,0
+371+  0289 21 00 00                     LD      HL,0
+372+  028C 3E 01                        LD      A,1
+373+  028E C5                           PUSH    BC
+374+  028F CD 3D 02                     CALL    DSEEK.GEN
+375+  0292 C1                           POP     BC
+376+  0293
+377+  0293 E5                           PUSH    HL
+378+  0294 D5                           PUSH    DE
+379+  0295 11 00 00                     LD      DE,0
+380+  0298 21 00 00                     LD      HL,0
+381+  029B C5                           PUSH    BC
+382+  029C 3E 02                        LD      A,2
+383+  029E CD 3D 02                     CALL    DSEEK.GEN
+384+  02A1 C1                           POP     BC
+385+  02A2 22 79 14                     LD      (FSIZETMP),HL
+386+  02A5 ED 53 7B 14                  LD      (FSIZETMP + 2),DE
+387+  02A9 D1                           POP     DE
+388+  02AA E1                           POP     HL
+389+  02AB
+390+  02AB D5                           PUSH    DE
+391+  02AC E5                           PUSH    HL
+392+  02AD CD 3C 02                     CALL    DSEEK
+393+  02B0 2A 79 14                     LD      HL,(FSIZETMP)
+394+  02B3 D1                           POP     DE
+395+  02B4 A7                           AND     A
+396+  02B5 ED 52                        SBC     HL,DE
+397+  02B7 EB                           EX      DE,HL
+398+  02B8 C1                           POP     BC
+399+  02B9 2A 7B 14                     LD      HL,(FSIZETMP + 2)
+400+  02BC ED 42                        SBC     HL,BC
+401+  02BE EB                           EX      DE,HL
+402+  02BF C9                           RET
+403+  02C0
+404+  02C0
+405+  02C0
+406+  02C0
+407+  02C0
+408+  02C0              ; - DGETMAX -----------
+409+  02C0              ; - B: #F
+410+  02C0              ; - HL: SIZE TO READ
+411+  02C0              ; - OUTPUT:
+412+  02C0              ; -     HL: MAX SIZE
+413+  02C0              ; -
+414+  02C0
+415+  02C0 E5           DGETMAX         PUSH    HL
+416+  02C1 CD 86 02                     CALL    DGETREM
+417+  02C4 C3 30 02                     JP      GETMAXSZ.GEN
+418+  02C7
+419+  02C7
+420+  02C7                              ; -
+421+  02C7                              ; - COMPATIBLE DOS 1 / DOS 2
+422+  02C7                              ; - "HIGH" LEVEL ROUTINES
+423+  02C7                              ; -
+424+  02C7
+425+  02C7              ; - DSKCREATE --------
+426+  02C7              ; - CREATE FILE
+427+  02C7              ; - HL: FILENAMEZ
+428+  02C7              ; - OUTPUT:
+429+  02C7              ; -     A: FILEHANDLE
+430+  02C7              ; -
+431+  02C7
+432+  02C7 3A 2D 14     DSKCREAT       LD      A,(DOS2)
+433+  02CA A7                           AND     A
+434+  02CB C2 77 02                     JP      NZ,DCREATE
+435+  02CE
+436+  02CE                              ; DOS 1
+437+  02CE
+438+  02CE CD 5A 01                     CALL    BUILDFCB
+439+  02D1 CD BD 01                     CALL    FMAKE
+440+  02D4 D8                           RET     C
+441+  02D5 3E 01                        LD      A,1 ; FAKE #F
+442+  02D7 C9                           RET
+443+  02D8
+444+  02D8
+445+  02D8
+446+  02D8              ; - DSKOPEN ----------
+447+  02D8              ; - OPEN FILE
+448+  02D8              ; - HL: FILENAME (ASCIIZ)
+449+  02D8              ; - OUTPUT:
+450+  02D8              ; -    A: FILEHANDLE
+451+  02D8              ; -    DEHL: FILE SIZE
+452+  02D8              ; -
+453+  02D8
+454+  02D8 3A 2D 14     DSKOPEN         LD      A,(DOS2)
+455+  02DB A7                           AND     A
+456+  02DC C2 42 02                     JP      NZ,DOPEN
+457+  02DF
+458+  02DF                              ; DOS 1
+459+  02DF
+460+  02DF CD 5A 01                     CALL    BUILDFCB
+461+  02E2 CD 93 01                     CALL    FOPEN
+462+  02E5 D8                           RET     C
+463+  02E6 3E 01                        LD      A,1 ; FAKE #F
+464+  02E8 C9                           RET
+465+  02E9
+466+  02E9
+467+  02E9
+468+  02E9              ; - DSKCLOSE ---------
+469+  02E9              ; - FCB/#F FILE CLOSE
+470+  02E9              ; - A: #F
+471+  02E9              ; -
+472+  02E9
+473+  02E9 47           DSKCLOSE        LD      B,A
+474+  02EA 3A 2D 14                     LD      A,(DOS2)
+475+  02ED A7                           AND     A
+476+  02EE C2 68 02                     JP      NZ,DCLOSE
+477+  02F1 C3 01 02                     JP      FCLOSE
+478+  02F4
+479+  02F4
+480+  02F4
+481+  02F4              ; - DSKREAD -----------
+482+  02F4              ; - A: #F
+483+  02F4              ; - HL: BYTES TO READ
+484+  02F4              ; - DE: BUFFER ADDRESS
+485+  02F4              ; - (FROM LAST POINTER)
+486+  02F4              ; - OUTPUT:
+487+  02F4              ; -     HL: BYTES READ
+488+  02F4              ; -
+489+  02F4
+490+  02F4 47           DSKREAD         LD      B,A
+491+  02F5 3A 2D 14                     LD      A,(DOS2)
+492+  02F8 A7                           AND     A
+493+  02F9 C2 6D 02                     JP      NZ,DREAD
+494+  02FC E5                           PUSH    HL
+495+  02FD CD 11 02                     CALL    SETDMA
+496+  0300 E1                           POP     HL
+497+  0301 CD 2C 02                     CALL    GETMAXSZ
+498+  0304 C3 F1 01                     JP      RDBLK
+499+  0307
+500+  0307
+501+  0307              ; - DSKWRITE -----------
+502+  0307              ; - A: #F
+503+  0307              ; - HL: BYTES TO WRITE
+504+  0307              ; - DE: FROM BUFFER ADRESS
+505+  0307              ; - (TO LAST POINTER)
+506+  0307              ; -
+507+  0307
+508+  0307 47           DSKWRITE        LD      B,A
+509+  0308 3A 2D 14                     LD      A,(DOS2)
+510+  030B A7                           AND     A
+511+  030C C2 72 02                     JP      NZ,DWRITE
+512+  030F E5                           PUSH    HL
+513+  0310 CD 11 02                     CALL    SETDMA
+514+  0313 E1                           POP     HL
+515+  0314 C3 F9 01                     JP      WRBLK
+516+  0317
+517+  0317
+518+  0317              ; - DSKSEEK ----------
+519+  0317              ; - A: #F
+520+  0317              ; - DEHL: POINTER
+521+  0317              ; -
+522+  0317
+523+  0317 47           DSKSEEK         LD      B,A
+524+  0318 3A 2D 14                     LD      A,(DOS2)
+525+  031B A7                           AND     A
+526+  031C C2 3C 02                     JP      NZ,DSEEK
+527+  031F C3 E0 01                     JP      FSEEK
+528+  0322
+529+  0322
+530+  0322
+531+  0322              ; - DSKDEL -----------
+532+  0322              ; - DELETE FILE
+533+  0322              ; - HL: FILENAMEZ
+534+  0322              ; -
+535+  0322
+536+  0322 3A 2D 14     DSKDEL          LD      A,(DOS2)
+537+  0325 A7                           AND     A
+538+  0326 C2 80 02                     JP      NZ,DDEL
+539+  0329
+540+  0329                              ; DOS 1
+541+  0329
+542+  0329 CD 5A 01                     CALL    BUILDFCB
+543+  032C C3 09 02                     JP      FDEL
+544+  032F
+545+  032F
+546+  032F              ; - DSKGETRE ---------
+547+  032F              ; - GET REMAINING SIZE
+548+  032F              ; - OF OPENED FILE
+549+  032F              ; - A: #F
+550+  032F              ; - OUTPUT:
+551+  032F              ; -     DEHL: REM. SIZE
+552+  032F              ; -
+553+  032F
+554+  032F 47           DSKGETRE        LD      B,A
+555+  0330 3A 2D 14                     LD      A,(DOS2)
+556+  0333 A7                           AND     A
+557+  0334 C2 86 02                     JP      NZ,DGETREM
+558+  0337 C3 16 02                     JP      GETREM
+559+  033A
+560+  033A
+561+  033A              ; - DSKGETMA -------
+562+  033A              ; - GET MAX SIZE
+563+  033A              ; - HL: SIZE TO READ
+564+  033A              ; - A: #F
+565+  033A              ; - OUTPUT: MAX SIZE
+566+  033A              ; -
+567+  033A
+568+  033A 47           DSKGETMA        LD      B,A
+569+  033B 3A 2D 14                     LD      A,(DOS2)
+570+  033E A7                           AND     A
+571+  033F C2 C0 02                     JP      NZ,DGETMAX
+572+  0342 C3 2C 02                     JP      GETMAXSZ
+573+  0345
+574+  0345
+575+  0345
+576+  0345
+577+  0345              ; --- PRINT / OUTPUT                    ----------------------------------------
+578+  0345
+579+  0345
+580+  0345              ; - STROUT -----------
+581+  0345              ; - DE: POINTER TO $-FINISHED STRING
+582+  0345              ; -
+583+  0345
+584+  0345 0E 09        STROUT          LD      C,_STROUT
+585+  0347 C3 05 00                     JP      DOS
+586+  034A
+587+  034A
+588+  034A              ; --- ERROR / EXIT                      ---------------------------------------
+589+  034A
+590+  034A
+591+  034A              ; - STREXIT ----------
+592+  034A              ; - EXIT WITH MESSAGE
+593+  034A              ; - DE: POINTER TO STRING
+594+  034A              ; -
+595+  034A
+596+  034A CD 45 03     STREXIT         CALL    STROUT
+597+  034D
+598+  034D
+599+  034D              ; - TERM -------------
+600+  034D              ; - TERMINATE PROGRAM
+601+  034D              ; -
+602+  034D
+603+  034D 3A 2D 14     TERM            LD      A,(DOS2)
+604+  0350 A7                           AND     A
+605+  0351 28 06                        JR      Z,.TERM0
+606+  0353 01 62 00                     LD      BC,_TERM
+607+  0356 CD 05 00                     CALL    DOS
+608+  0359 0E 00        .TERM0          LD      C,_TERM0
+609+  035B C3 05 00                     JP      DOS
+610+  035E
+611+  035E
+612+  035E
+613+  035E              ;                                       ****************************************
+614+  035E              ;                                       * BDOS RELATED                         *
+615+  035E              ;                                       ****************************************
+616+  035E
+617+  035E
+618+  035E              ; --- FILENAME / PATH                   ---------------------------------------
+619+  035E
+620+  035E
+621+  035E              ; - GETNDFN ---------
+622+  035E              ; - GET NOT DIR FILENAME
+623+  035E              ; - HL: FILENAMEZ PATH
+624+  035E              ; - DE: FILENAMEZ WITHOUT PATH
+625+  035E              ; -
+626+  035E
+627+  035E AF           GETNDFN         XOR     A
+628+  035F 12                           LD      (DE),A
+629+  0360 CD 8F 05                     CALL    STRTAIL
+630+  0363 78                           LD      A,B
+631+  0364 B1                           OR      C
+632+  0365 C8                           RET     Z
+633+  0366 D5                           PUSH    DE
+634+  0367 7E           .LOOP           LD      A,(HL)
+635+  0368 FE 5C                        CP      '\'
+636+  036A 28 0E                        JR      Z,.END
+637+  036C FE 3A                        CP      ':'
+638+  036E 28 0A                        JR      Z,.END
+639+  0370 FE 2F                        CP      '/'
+640+  0372 28 06                        JR      Z,.END
+641+  0374 2B                           DEC     HL
+642+  0375 0B                           DEC     BC
+643+  0376 78                           LD      A,B
+644+  0377 B1                           OR      C
+645+  0378 20 ED                        JR      NZ,.LOOP
+646+  037A 23           .END            INC     HL
+647+  037B D1                           POP     DE
+648+  037C 7E           .COPY           LD      A,(HL)
+649+  037D 12                           LD      (DE),A
+650+  037E 23                           INC     HL
+651+  037F 13                           INC     DE
+652+  0380 A7                           AND     A
+653+  0381 20 F9                        JR      NZ,.COPY
+654+  0383 C9                           RET
+655+  0384
+656+  0384
+657+  0384              ; - TODOSFN ----------
+658+  0384              ; - CONVERTS FILENAME
+659+  0384              ; - TO DOS (8.3) FILENAME
+660+  0384              ; - HL: FILENAME
+661+  0384              ; - DE: OUTPUT BUFFER (ASCIIZ)
+662+  0384              ; -
+663+  0384              ; -
+664+  0384
+665+  0384
+666+  0384 CD 8A 03     TODOSFN         CALL    .GEN
+667+  0387 AF                           XOR     A
+668+  0388 12                           LD      (DE),A
+669+  0389 C9                           RET
+670+  038A
+671+  038A
+672+  038A 06 08        .GEN            LD      B,8
+673+  038C
+674+  038C                              ; GET NAME
+675+  038C
+676+  038C 7E           .NAME           LD      A,(HL)
+677+  038D 23                           INC     HL
+678+  038E 12                           LD      (DE),A
+679+  038F 13                           INC     DE
+680+  0390 A7                           AND     A
+681+  0391 C8                           RET     Z
+682+  0392 FE 2E                        CP      '.'
+683+  0394 CA A3 03                     JP      Z,.EXT
+684+  0397 10 F3                        DJNZ    .NAME
+685+  0399
+686+  0399                              ; CHECK IF . IS PRESENT
+687+  0399
+688+  0399 7E           .PERIOD         LD      A,(HL)
+689+  039A 23                           INC     HL
+690+  039B A7                           AND     A
+691+  039C C8                           RET     Z
+692+  039D FE 2E                        CP      '.'
+693+  039F 20 F8                        JR      NZ,.PERIOD
+694+  03A1
+695+  03A1                              ; STORE PERIOD
+696+  03A1
+697+  03A1 12                           LD      (DE),A
+698+  03A2 13                           INC     DE
+699+  03A3
+700+  03A3                              ; GETS EXTENSION
+701+  03A3
+702+  03A3 06 03        .EXT            LD      B,3
+703+  03A5 7E           .EXTLOOP        LD      A,(HL)
+704+  03A6 23                           INC     HL
+705+  03A7 12                           LD      (DE),A
+706+  03A8 13                           INC     DE
+707+  03A9 A7                           AND     A
+708+  03AA C8                           RET     Z
+709+  03AB 10 F8                        DJNZ    .EXTLOOP
+710+  03AD C9                           RET
+711+  03AE
+712+  03AE
+713+  03AE
+714+  03AE
+715+  03AE              ; --- PARAMS                            ---------------------------------------
+716+  03AE
+717+  03AE
+718+  03AE
+719+  03AE              ; - EXTPARM ----------
+720+  03AE              ; - EXTRACT PARAMS
+721+  03AE              ; - CY = 1 NO PARAMS
+722+  03AE              ; - HL: BUFFER
+723+  03AE              ; - OUTPUT STRUCT:
+724+  03AE              ;       + 0 : PARAMS SIZE
+725+  03AE              ;       + 1 : PNT PARAM 0
+726+  03AE              ;       + 4 : PNT PARAM 1
+727+  03AE              ;       ...
+728+  03AE
+729+  03AE 3A 80 00     EXTPARM         LD      A,(#80)
+730+  03B1 A7                           AND     A
+731+  03B2 37                           SCF
+732+  03B3 C8                           RET     Z
+733+  03B4
+734+  03B4                              ; IX COUNTER
+735+  03B4
+736+  03B4 E5                           PUSH    HL
+737+  03B5 DD E1                        POP     IX
+738+  03B7 DD 23                        INC     IX
+739+  03B9 D9                           EXX
+740+  03BA
+741+  03BA                              ; MARK END
+742+  03BA
+743+  03BA
+744+  03BA 4F                           LD      C,A
+745+  03BB 06 00                        LD      B,0
+746+  03BD 21 81 00                     LD      HL,#81
+747+  03C0 09                           ADD     HL,BC
+748+  03C1 36 00                        LD      (HL),0
+749+  03C3
+750+  03C3                              ; COUNT PARAMS POINT PARAMS
+751+  03C3
+752+  03C3 21 81 00                     LD      HL,#81
+753+  03C6 0E 00                        LD      C,0
+754+  03C8 7E           .COUNT          LD      A,(HL)
+755+  03C9 A7                           AND     A
+756+  03CA 28 1D                        JR      Z,.ENDCOUNT
+757+  03CC FE 20                        CP      ' '
+758+  03CE 20 03                        JR      NZ,.ADDPAR
+759+  03D0 23                           INC     HL
+760+  03D1 18 F5                        JR      .COUNT
+761+  03D3
+762+  03D3 DD 75 00     .ADDPAR         LD      (IX + 0),L
+763+  03D6 DD 74 01                     LD      (IX + 1),H
+764+  03D9 DD 23                        INC     IX
+765+  03DB DD 23                        INC     IX
+766+  03DD 0C                           INC     C
+767+  03DE
+768+  03DE                              ; INC UNTIL NEXT PARAM (OR END)
+769+  03DE
+770+  03DE 7E           .NEXT           LD      A,(HL)
+771+  03DF FE 20                        CP      ' '
+772+  03E1 28 E5                        JR      Z,.COUNT
+773+  03E3 A7                           AND     A
+774+  03E4 28 03                        JR      Z,.ENDCOUNT
+775+  03E6 23                           INC     HL
+776+  03E7 18 F5                        JR      .NEXT
+777+  03E9
+778+  03E9 79           .ENDCOUNT       LD      A,C
+779+  03EA D9                           EXX
+780+  03EB 77                           LD      (HL),A
+781+  03EC A7                           AND     A
+782+  03ED C0                           RET     NZ
+783+  03EE 37                           SCF
+784+  03EF C9                           RET
+785+  03F0
+786+  03F0
+787+  03F0              ; - GETPARAM ---------
+788+  03F0              ; - GET PARAMETER FROM BUFFER
+789+  03F0              ; - A: NUMBER (0 1ST, 1 2ND..)
+790+  03F0              ; - HL: BUFFER
+791+  03F0              ; - DE: DEST
+792+  03F0              ; - OUTPUT:
+793+  03F0              ; - CY = 1 ERROR
+794+  03F0              ; -     DE: COPY OF PARAM (IF DE != 0)
+795+  03F0              ; -     HL: POINTER TO PARAM
+796+  03F0              ; -     C: SIZE
+797+  03F0              ; -
+798+  03F0
+799+  03F0 BE           GETPARAM        CP      (HL)
+800+  03F1 C8                           RET     Z
+801+  03F2 3F                           CCF
+802+  03F3 D8                           RET     C
+803+  03F4 23                           INC     HL
+804+  03F5 CD DB 05                     CALL    ADDHLPNT
+805+  03F8
+806+  03F8                              ; CHECK MOVE OR COUNT
+807+  03F8
+808+  03F8 7A                           LD      A,D
+809+  03F9 B3                           OR      E
+810+  03FA 0E 00                        LD      C,0
+811+  03FC 20 0D                        JR      NZ,.MOVE
+812+  03FE
+813+  03FE                              ; JUST COUNT
+814+  03FE
+815+  03FE E5                           PUSH    HL
+816+  03FF 7E           .COUNT          LD      A,(HL)
+817+  0400 23                           INC     HL
+818+  0401 A7                           AND     A
+819+  0402 28 18                        JR      Z,.ENDCNT
+820+  0404 FE 20                        CP      ' '
+821+  0406 28 14                        JR      Z,.ENDCNT
+822+  0408 0C                           INC     C
+823+  0409 18 F4                        JR      .COUNT
+824+  040B
+825+  040B                              ; MOVE DATA
+826+  040B
+827+  040B E5           .MOVE           PUSH    HL
+828+  040C 7E           .COPY           LD      A,(HL)
+829+  040D 23                           INC     HL
+830+  040E A7                           AND     A
+831+  040F 28 09                        JR      Z,.END
+832+  0411 FE 20                        CP      ' '
+833+  0413 28 05                        JR      Z,.END
+834+  0415 12                           LD      (DE),A
+835+  0416 13                           INC     DE
+836+  0417 0C                           INC     C
+837+  0418 18 F2                        JR      .COPY
+838+  041A
+839+  041A
+840+  041A                              ; ASCIIZ END
+841+  041A
+842+  041A AF           .END            XOR     A
+843+  041B 12                           LD      (DE),A
+844+  041C
+845+  041C E1           .ENDCNT         POP     HL
+846+  041D C9                           RET
+847+  041E
+848+  041E
+# file closed: BDOS.Z8A
+ 53   041E                              INCLUDE GENERIC.Z8A
+# file opened: GENERIC.Z8A
+  1+  041E              ;                                       ****************************************
+  2+  041E              ;                                       * GENERIC HELP ROUTINES                *
+  3+  041E              ;                                       ****************************************
+  4+  041E
+  5+  041E
+  6+  041E              ; --- BIOS RELATED                      ----------------------------------------
+  7+  041E
+  8+  041E
+  9+  041E              ; - CMPHLDE ----------
+ 10+  041E              ; - COMPARE HL WITH DE
+ 11+  041E              ; - (RST 20)
+ 12+  041E              ; -
+ 13+  041E
+ 14+  041E 7C           CMPHLDE         LD      A,H
+ 15+  041F 92                           SUB     D
+ 16+  0420 C0                           RET     NZ
+ 17+  0421 7D                           LD      A,L
+ 18+  0422 93                           SUB     E
+ 19+  0423 C9                           RET
+ 20+  0424
+ 21+  0424
+ 22+  0424              ; - CMPHLBC ----------
+ 23+  0424              ; - COMPARE HL WITH BC
+ 24+  0424              ; -
+ 25+  0424
+ 26+  0424 7C           CMPHLBC         LD      A,H
+ 27+  0425 90                           SUB     B
+ 28+  0426 C0                           RET     NZ
+ 29+  0427 7D                           LD      A,L
+ 30+  0428 91                           SUB     C
+ 31+  0429 C9                           RET
+ 32+  042A
+ 33+  042A              ; --- STRING                           ----------------------------------------
+ 34+  042A
+ 35+  042A
+ 36+  042A              ; COMBINED ROUTINE FOR CONVERSION OF DIFFERENT SIZED BINARY NUMBERS INTO
+ 37+  042A              ; DIRECTLY PRINTABLE ASCII(Z)-STRING
+ 38+  042A              ; INPUT VALUE IN REGISTERS, NUMBER SIZE AND -RELATED TO THAT- REGISTERS TO FILL
+ 39+  042A              ; IS SELECTED BY CALLING THE CORRECT ENTRY:
+ 40+  042A              ;
+ 41+  042A              ;  ENTRY  INPUTREGISTER(S)  DECIMAL VALUE 0 TO:
+ 42+  042A              ;   B2D8             A                    255  (3 DIGITS)
+ 43+  042A              ;   B2D16           HL                  65535   5   "
+ 44+  042A              ;   B2D24         E:HL               16777215   8   "
+ 45+  042A              ;   B2D32        DE:HL             4294967295  10   "
+ 46+  042A              ;   B2D48     BC:DE:HL        281474976710655  15   "
+ 47+  042A              ;   B2D64  IX:BC:DE:HL   18446744073709551615  20   "
+ 48+  042A              ;
+ 49+  042A              ; THE RESULTING STRING IS PLACED INTO A SMALL BUFFER ATTACHED TO THIS ROUTINE,
+ 50+  042A              ; THIS BUFFER NEEDS NO INITIALIZATION AND CAN BE MODIFIED AS DESIRED.
+ 51+  042A              ; THE NUMBER IS ALIGNED TO THE RIGHT, AND LEADING 0'S ARE REPLACED WITH SPACES.
+ 52+  042A              ; ON EXIT HL POINTS TO THE FIRST DIGIT, (B)C = NUMBER OF DECIMALS
+ 53+  042A              ; THIS WAY ANY RE-ALIGNMENT / POSTPROCESSING IS MADE EASY.
+ 54+  042A              ; CHANGES: AF,BC,DE,HL,IX
+ 55+  042A              ; P.S. SOME EXAMPLES BELOW
+ 56+  042A
+ 57+  042A              ; BY ALWIN HENSELER
+ 58+  042A
+ 59+  042A
+ 60+  042A 26 00        B2D8            LD      H,0
+ 61+  042C 6F                           LD      L,A
+ 62+  042D 1E 00        B2D16           LD      E,0
+ 63+  042F 16 00        B2D24           LD      D,0
+ 64+  0431 01 00 00     B2D32           LD      BC,0
+ 65+  0434 DD 21 00 00  B2D48           LD      IX,0            ; ZERO ALL NON-USED BITS
+ 66+  0438 22 10 17     B2D64           LD      (B2DINV),HL
+ 67+  043B ED 53 12 17                  LD      (B2DINV + 2),DE
+ 68+  043F ED 43 14 17                  LD      (B2DINV + 4),BC
+ 69+  0443 DD 22 16 17                  LD      (B2DINV + 6),IX ; PLACE FULL 64-BIT INPUT VALUE IN BUFFER
+ 70+  0447 21 18 17                     LD      HL,B2DBUF
+ 71+  044A 11 19 17                     LD      DE,B2DBUF + 1
+ 72+  044D 36 20                        LD      (HL)," "
+ 73+  044F              B2DFILC         EQU     $ - 1           ; ADDRESS OF FILL-CHARACTER
+ 74+  044F 01 12 00                     LD      BC,18
+ 75+  0452 ED B0                        LDIR                    ; FILL 1ST 19 BYTES OF BUFFER WITH SPACES
+ 76+  0454 ED 43 2B 17                  LD      (B2DEND-1),BC   ; SET BCD VALUE TO "0" & PLACE TERMINATING 0
+ 77+  0458 1E 01                        LD      E,1             ; NO. OF BYTES IN BCD VALUE
+ 78+  045A 21 18 17                     LD      HL,B2DINV + 8   ; (ADDRESS MSB INPUT)+1
+ 79+  045D 01 09 09                     LD      BC,#0909
+ 80+  0460 AF                           XOR     A
+ 81+  0461 05           B2DSKP0         DEC     B
+ 82+  0462 28 29                        JR      Z,B2DSIZ        ; ALL 0: CONTINUE WITH POSTPROCESSING
+ 83+  0464 2B                           DEC     HL
+ 84+  0465 B6                           OR      (HL)            ; FIND FIRST BYTE <>0
+ 85+  0466 28 F9                        JR      Z,B2DSKP0
+ 86+  0468 0D           B2DFND1         DEC     C
+ 87+  0469 17                           RLA
+ 88+  046A 30 FC                        JR      NC,B2DFND1      ; DETERMINE NO. OF MOST SIGNIFICANT 1-BIT
+ 89+  046C 1F                           RRA
+ 90+  046D 57                           LD      D,A             ; BYTE FROM BINARY INPUT VALUE
+ 91+  046E E5           B2DLUS2         PUSH    HL
+ 92+  046F C5                           PUSH    BC
+ 93+  0470 21 2B 17     B2DLUS1         LD      HL,B2DEND - 1   ; ADDRESS LSB OF BCD VALUE
+ 94+  0473 43                           LD      B,E             ; CURRENT LENGTH OF BCD VALUE IN BYTES
+ 95+  0474 CB 12                        RL      D               ; HIGHEST BIT FROM INPUT VALUE -> CARRY
+ 96+  0476 7E           B2DLUS0         LD      A,(HL)
+ 97+  0477 8F                           ADC     A,A
+ 98+  0478 27                           DAA
+ 99+  0479 77                           LD      (HL),A          ; DOUBLE 1 BCD BYTE FROM INTERMEDIATE RESULT
+100+  047A 2B                           DEC     HL
+101+  047B 10 F9                        DJNZ    B2DLUS0         ; AND GO ON TO DOUBLE ENTIRE BCD VALUE (+CARRY!)
+102+  047D 30 03                        JR      NC,B2DNXT
+103+  047F 1C                           INC     E               ; CARRY AT MSB -> BCD VALUE GREW 1 BYTE LARGER
+104+  0480 36 01                        LD      (HL),1          ; INITIALIZE NEW MSB OF BCD VALUE
+105+  0482 0D           B2DNXT          DEC     C
+106+  0483 20 EB                        JR      NZ,B2DLUS1      ; REPEAT FOR REMAINING BITS FROM 1 INPUT BYTE
+107+  0485 C1                           POP     BC              ; NO. OF REMAINING BYTES IN INPUT VALUE
+108+  0486 0E 08                        LD      C,8             ; RESET BIT-COUNTER
+109+  0488 E1                           POP     HL              ; POINTER TO BYTE FROM INPUT VALUE
+110+  0489 2B                           DEC     HL
+111+  048A 56                           LD      D,(HL)          ; GET NEXT GROUP OF 8 BITS
+112+  048B 10 E1                        DJNZ    B2DLUS2         ; AND REPEAT UNTIL LAST BYTE FROM INPUT VALUE
+113+  048D 21 2C 17     B2DSIZ          LD      HL,B2DEND       ; ADDRESS OF TERMINATING 0
+114+  0490 4B                           LD      C,E             ; SIZE OF BCD VALUE IN BYTES
+115+  0491 B7                           OR      A
+116+  0492 ED 42                        SBC     HL,BC           ; CALCULATE ADDRESS OF MSB BCD
+117+  0494 54                           LD      D,H
+118+  0495 5D                           LD      E,L
+119+  0496 ED 42                        SBC     HL,BC
+120+  0498 EB                           EX      DE,HL           ; HL=ADDRESS BCD VALUE, DE=START OF DECIMAL VALUE
+121+  0499 41                           LD      B,C             ; NO. OF BYTES BCD
+122+  049A CB 21                        SLA     C               ; NO. OF BYTES DECIMAL (POSSIBLY 1 TOO HIGH)
+123+  049C 3E 30                        LD      A,'0'
+124+  049E ED 6F                        RLD                     ; SHIFT BITS 4-7 OF (HL) INTO BIT 0-3 OF A
+125+  04A0 FE 30                        CP      '0'             ; (HL) WAS > #9?
+126+  04A2 20 06                        JR      NZ,B2DEXPH      ; IF YES, START WITH RECORDING HIGH DIGIT
+127+  04A4 0D                           DEC     C               ; CORRECT NUMBER OF DECIMALS
+128+  04A5 13                           INC     DE              ; CORRECT START ADDRESS
+129+  04A6 18 04                        JR      B2DEXPL         ; CONTINUE WITH CONVERTING LOW DIGIT
+130+  04A8 ED 6F        B2DEXP          RLD                     ; SHIFT HIGH DIGIT (HL) INTO LOW DIGIT OF A
+131+  04AA 12           B2DEXPH         LD      (DE),A          ; RECORD RESULTING ASCII-CODE
+132+  04AB 13                           INC     DE
+133+  04AC ED 6F        B2DEXPL         RLD
+134+  04AE 12                           LD      (DE),A
+135+  04AF 13                           INC     DE
+136+  04B0 23                           INC     HL              ; NEXT BCD-BYTE
+137+  04B1 10 F5                        DJNZ    B2DEXP          ; AND GO ON TO CONVERT #EAC BCD-BYTE INTO 2 ASCII
+138+  04B3 ED 42                        SBC     HL,BC           ; RETURN WITH HL POINTING TO 1ST DECIMAL
+139+  04B5 C9                           RET
+140+  04B6
+141+  04B6
+142+  04B6              ; - STR2INTZ ---------
+143+  04B6              ; - 32 BITS ASCII TO BINARY
+144+  04B6              ; - HL: ASCIIZ NUMBER (OR ASCII + #20)
+145+  04B6              ; - OUTPUT:
+146+  04B6              ; -     DE:HL BINARY VALUE
+147+  04B6              ; -
+148+  04B6
+149+  04B6 D9           STR2INTZ        EXX
+150+  04B7 11 00 00                     LD      DE,#0000
+151+  04BA 21 00 00                     LD      HL,#0000
+152+  04BD D9                           EXX
+153+  04BE
+154+  04BE 7E                           LD      A,(HL)
+155+  04BF A7                           AND     A
+156+  04C0 CA 0D 05                     JP      Z,.END
+157+  04C3 FE 20                        CP      ' '
+158+  04C5 CA 0D 05                     JP      Z,.END
+159+  04C8 D6 30                        SUB     '0'
+160+  04CA
+161+  04CA D9                           EXX
+162+  04CB 06 00                        LD      B,0
+163+  04CD 4F                           LD      C,A
+164+  04CE
+165+  04CE 09           .LOOP           ADD     HL,BC
+166+  04CF EB                           EX      DE,HL
+167+  04D0 01 00 00                     LD      BC,0
+168+  04D3 ED 4A                        ADC     HL,BC
+169+  04D5 EB                           EX      DE,HL
+170+  04D6 D9                           EXX
+171+  04D7 23                           INC     HL
+172+  04D8 7E                           LD      A,(HL)
+173+  04D9 A7                           AND     A
+174+  04DA 28 31                        JR      Z,.END
+175+  04DC FE 20                        CP      ' '
+176+  04DE 28 2D                        JR      Z,.END
+177+  04E0 D9                           EXX
+178+  04E1 D6 30                        SUB     '0'
+179+  04E3 4F                           LD      C,A
+180+  04E4
+181+  04E4 C5                           PUSH    BC
+182+  04E5
+183+  04E5                              ; X 10 = X2 + X8
+184+  04E5
+185+  04E5
+186+  04E5                              ; X 2
+187+  04E5
+188+  04E5 CB 25                        SLA     L
+189+  04E7 CB 14                        RL      H
+190+  04E9 CB 13                        RL      E
+191+  04EB CB 12                        RL      D
+192+  04ED
+193+  04ED D5                           PUSH    DE
+194+  04EE E5                           PUSH    HL
+195+  04EF
+196+  04EF                              ; X 4
+197+  04EF CB 15                        RL      L
+198+  04F1 CB 14                        RL      H
+199+  04F3 CB 13                        RL      E
+200+  04F5 CB 12                        RL      D
+201+  04F7
+202+  04F7                              ; X 8
+203+  04F7 CB 15                        RL      L
+204+  04F9 CB 14                        RL      H
+205+  04FB CB 13                        RL      E
+206+  04FD CB 12                        RL      D
+207+  04FF
+208+  04FF C1                           POP     BC
+209+  0500 09                           ADD     HL,BC
+210+  0501 01 00 00                     LD      BC,0
+211+  0504 EB                           EX      DE,HL
+212+  0505 ED 4A                        ADC     HL,BC
+213+  0507 C1                           POP     BC
+214+  0508 09                           ADD     HL,BC
+215+  0509 EB                           EX      DE,HL
+216+  050A
+217+  050A C1                           POP     BC
+218+  050B
+219+  050B 18 C1                        JR      .LOOP
+220+  050D
+221+  050D D9           .END            EXX
+222+  050E C9                           RET
+223+  050F
+224+  050F
+225+  050F              ; - STR2INT ------------
+226+  050F              ; - INPUT:
+227+  050F              ; - HL: POINTER TO STR NUMBER
+228+  050F              ; - OUTPUT:
+229+  050F              ; - HL: UNSIGNED INT NUMBER
+230+  050F              ; -
+231+  050F
+232+  050F E5           STR2INT         PUSH    HL
+233+  0510 DD E1                        POP     IX
+234+  0512 DD 7E 00                     LD      A,(IX + 0)
+235+  0515 D6 30                        SUB     '0'
+236+  0517 11 10 27                     LD      DE,10000
+237+  051A CD 9F 05                     CALL    MULT12                  ; RESULT IN HL
+238+  051D
+239+  051D E5                           PUSH    HL
+240+  051E DD 7E 01                     LD      A,(IX + 1)
+241+  0521 D6 30                        SUB     '0'
+242+  0523 11 E8 03                     LD      DE,1000
+243+  0526 CD 9F 05                     CALL    MULT12                  ; RESULT IN HL
+244+  0529 D1                           POP     DE
+245+  052A 19                           ADD     HL,DE
+246+  052B
+247+  052B E5                           PUSH    HL
+248+  052C DD 7E 02                     LD      A,(IX + 2)
+249+  052F D6 30                        SUB     '0'
+250+  0531 11 64 00                     LD      DE,100
+251+  0534 CD 9F 05                     CALL    MULT12                  ; RESULT IN HL
+252+  0537 D1                           POP     DE
+253+  0538 19                           ADD     HL,DE
+254+  0539
+255+  0539 E5                           PUSH    HL
+256+  053A DD 7E 03                     LD      A,(IX + 3)
+257+  053D D6 30                        SUB     '0'
+258+  053F 11 0A 00                     LD      DE,10
+259+  0542 CD 9F 05                     CALL    MULT12                  ; RESULT IN HL
+260+  0545 D1                           POP     DE
+261+  0546 19                           ADD     HL,DE
+262+  0547
+263+  0547 DD 7E 04                     LD      A,(IX + 4)
+264+  054A D6 30                        SUB     '0'
+265+  054C 5F                           LD      E,A
+266+  054D 16 00                        LD      D,0
+267+  054F 19                           ADD     HL,DE
+268+  0550 C9                           RET
+269+  0551
+270+  0551
+271+  0551              ; - BYTE2ASC ---------
+272+  0551              ; - CONVERTS A IN
+273+  0551              ; - DECIMAL STRING
+274+  0551              ; - A: STRING
+275+  0551              ; - IX: BUFFER
+276+  0551              ; - OUTPUT:
+277+  0551              ; -     IX POINTS TO END + 1
+278+  0551              ; -
+279+  0551
+280+  0551 FE 0A        BYTE2ASC        CP      10
+281+  0553 38 22                        JR      C,.C1D
+282+  0555 FE 64                        CP      100
+283+  0557 38 26                        JR      C,.C2D
+284+  0559 FE C8                        CP      200
+285+  055B 38 08                        JR      C,.C1XX
+286+  055D
+287+  055D                              ; >= 200 < 256
+288+  055D
+289+  055D DD 36 00 32  .C2XX           LD      (IX + 0),'2'
+290+  0561 D6 C8                        SUB     200
+291+  0563 18 06                        JR      .CXXX
+292+  0565
+293+  0565                              ; >= 100 < 200
+294+  0565
+295+  0565 DD 36 00 31  .C1XX           LD      (IX + 0),'1'
+296+  0569 D6 64                        SUB     100
+297+  056B DD 23        .CXXX           INC     IX
+298+  056D FE 0A                        CP      10
+299+  056F 30 0E                        JR      NC,.C2D
+300+  0571 DD 36 00 30                  LD      (IX + 0),'0'
+301+  0575 DD 23                        INC     IX
+302+  0577
+303+  0577                              ; 1 DIGIT
+304+  0577
+305+  0577 C6 30        .C1D            ADD     A,'0'
+306+  0579 DD 77 00                     LD      (IX + 0),A
+307+  057C DD 23                        INC     IX
+308+  057E C9                           RET
+309+  057F
+310+  057F                              ; 2 DIGITS
+311+  057F
+312+  057F 0E 30        .C2D            LD      C,'0'
+313+  0581 0C           .C2DCNT         INC     C
+314+  0582 D6 0A                        SUB     10
+315+  0584 FE 0A                        CP      10
+316+  0586 30 F9                        JR      NC,.C2DCNT
+317+  0588 DD 71 00                     LD      (IX + 0),C
+318+  058B DD 23                        INC     IX
+319+  058D 18 E8                        JR      .C1D
+320+  058F
+321+  058F
+322+  058F              ; - STRTAIL ----------
+323+  058F              ; - RETURN POINTER
+324+  058F              ; - IN THE LAST CHAR OF
+325+  058F              ; - ASCIIZ STRING
+326+  058F              ; - HL: ASCIIZ STRING
+327+  058F              ; - OUTPUT:
+328+  058F              ; -     HL: POINTER TO LAST CHAR
+329+  058F              ; -     BC: SIZE
+330+  058F              ; -
+331+  058F
+332+  058F 01 00 00     STRTAIL         LD      BC,#0000
+333+  0592                              ; CHECK 0
+334+  0592 7E                           LD      A,(HL)
+335+  0593 A7                           AND     A
+336+  0594 C8                           RET     Z
+337+  0595 7E           .LOOP           LD      A,(HL)
+338+  0596 A7                           AND     A
+339+  0597 28 04                        JR      Z,.END
+340+  0599 23                           INC     HL
+341+  059A 03                           INC     BC
+342+  059B 18 F8                        JR      .LOOP
+343+  059D 2B           .END            DEC     HL
+344+  059E C9                           RET
+345+  059F
+346+  059F
+347+  059F              ; --- MATH                              -----------------------------------------
+348+  059F
+349+  059F
+350+  059F              ; - MULT12 -------------
+351+  059F              ; - A * DE = HL
+352+  059F              ; -
+353+  059F
+354+  059F
+355+  059F 21 00 00     MULT12          LD      HL,0
+356+  05A2 87                           ADD     A,A
+357+  05A3 D2 A8 05                     JP      NC,.ILOOP
+358+  05A6 62                           LD      H,D
+359+  05A7 6B                           LD      L,E
+360+  05A8 06 07        .ILOOP          LD      B,7
+361+  05AA 29           .LOOP           ADD     HL,HL
+362+  05AB 87                           ADD     A,A
+363+  05AC D2 B0 05                     JP      NC,.NOADD
+364+  05AF 19                           ADD     HL,DE
+365+  05B0 10 F8        .NOADD          DJNZ    .LOOP
+366+  05B2 C9                           RET
+367+  05B3
+368+  05B3
+369+  05B3              ; --- TBL                               ----------------------------------------
+370+  05B3
+371+  05B3
+372+  05B3              ; - GETSTR  ----------
+373+  05B3              ; - GET STRING FROM TABLE
+374+  05B3              ; - B: INDEX
+375+  05B3              ; - DE: TBL
+376+  05B3              ; - OUTPUT:
+377+  05B3              ; -     DE: POINTER TO STR
+378+  05B3              ; -
+379+  05B3
+380+  05B3 1A           GETSTR          LD      A,(DE)
+381+  05B4 13                           INC     DE
+382+  05B5 A7                           AND     A
+383+  05B6 20 14                        JR      NZ,.LOOP
+384+  05B8
+385+  05B8                              ; UNKNOWN
+386+  05B8
+387+  05B8 DD 21 4E 17                  LD      IX,UNKNOWN.CODE
+388+  05BC 78                           LD      A,B
+389+  05BD CD 51 05                     CALL    BYTE2ASC
+390+  05C0 DD 36 00 29                  LD      (IX + 0), ')'
+391+  05C4 DD 36 01 24                  LD      (IX + 1), '$'
+392+  05C8 11 46 17                     LD      DE,UNKNOWN
+393+  05CB C9                           RET
+394+  05CC
+395+  05CC                              ; CHECK ERROR
+396+  05CC
+397+  05CC B8           .LOOP           CP      B
+398+  05CD C8                           RET     Z
+399+  05CE
+400+  05CE                              ; NEXT STRING
+401+  05CE
+402+  05CE 1A           .NEXT           LD      A,(DE)
+403+  05CF 13                           INC     DE
+404+  05D0 FE 24                        CP      '$'
+405+  05D2 20 FA                        JR      NZ,.NEXT
+406+  05D4 18 DD                        JR      GETSTR
+407+  05D6
+408+  05D6
+409+  05D6              ; --- HL                                ----------------------------------------
+410+  05D6
+411+  05D6
+412+  05D6              ; - ADDHLA -----------
+413+  05D6              ; - HL = HL + A
+414+  05D6              ; -
+415+  05D6
+416+  05D6 85           ADDHLA          ADD     A,L
+417+  05D7 6F                           LD      L,A
+418+  05D8 D0                           RET     NC
+419+  05D9 24                           INC     H
+420+  05DA C9                           RET
+421+  05DB
+422+  05DB
+423+  05DB              ; - ADDHLPNT ---------
+424+  05DB              ; - A * 2
+425+  05DB              ; - HL + = A
+426+  05DB              ; - HL = (HL)
+427+  05DB              ; - A = (HL)
+428+  05DB              ; -
+429+  05DB
+430+  05DB 87           ADDHLPNT        ADD     A,A
+431+  05DC CD D6 05                     CALL    ADDHLA
+432+  05DF
+433+  05DF
+434+  05DF              ; - PNTHL ------------
+435+  05DF              ; - HL = (HL)
+436+  05DF              ; - A = (HL)
+437+  05DF              ; -
+438+  05DF
+439+  05DF 7E           PNTHL           LD      A,(HL)
+440+  05E0 23                           INC     HL
+441+  05E1 66                           LD      H,(HL)
+442+  05E2 6F                           LD      L,A
+443+  05E3                              ;LD     A,(HL)
+444+  05E3 C9                           RET
+445+  05E4
+446+  05E4
+447+  05E4              ; - CALHL ---------------
+448+  05E4              ; - CALL HL
+449+  05E4              ; -
+450+  05E4
+451+  05E4 E9           CALHL           JP   (HL)
+452+  05E5
+453+  05E5
+454+  05E5
+455+  05E5              ; - CALFUN --------------
+456+  05E5              ; - HL: POINTER
+457+  05E5              ; - A * 2
+458+  05E5              ; - HL + = A
+459+  05E5              ; - HL = (HL)
+460+  05E5              ; - JP (HL)
+461+  05E5              ; -
+462+  05E5
+463+  05E5 CD DB 05     CALFUN          CALL ADDHLPNT
+464+  05E8 E9                           JP   (HL)
+465+  05E9
+466+  05E9
+467+  05E9              ; --- FUNCTION KEYS             -----------------------------------------
+468+  05E9
+469+  05E9
+470+  05E9              ; - CLFNKEY ------------
+471+  05E9              ; - CLEAR FUNCTION KEYS
+472+  05E9              ; -
+473+  05E9
+474+  05E9 21 7F F8     CLFNKEY         LD      HL,FNKSTR
+475+  05EC 11 2D 17                     LD      DE,FNKBUF
+476+  05EF 06 0A                        LD      B,#0A
+477+  05F1 C5           .LOOP           PUSH    BC
+478+  05F2 7E                           LD      A,(HL)
+479+  05F3 12                           LD      (DE),A
+480+  05F4 13                           INC     DE
+481+  05F5 36 00                        LD      (HL),0
+482+  05F7 01 10 00                     LD      BC,#10
+483+  05FA 09                           ADD     HL,BC
+484+  05FB C1                           POP     BC
+485+  05FC 10 F3                        DJNZ    .LOOP
+486+  05FE C9                           RET
+487+  05FF
+488+  05FF              ; - REFNKEY ------------
+489+  05FF              ; - RESTORE FUNCTION KEYS
+490+  05FF              ; -
+491+  05FF
+492+  05FF 21 7F F8     REFNKEY         LD      HL,FNKSTR
+493+  0602 11 2D 17                     LD      DE,FNKBUF
+494+  0605 06 0A                        LD      B,#0A
+495+  0607 C5           .LOOP           PUSH    BC
+496+  0608 1A                           LD      A,(DE)
+497+  0609 13                           INC     DE
+498+  060A 77                           LD      (HL),A
+499+  060B 01 10 00                     LD      BC,#10
+500+  060E 09                           ADD     HL,BC
+501+  060F C1                           POP     BC
+502+  0610 10 F5                        DJNZ    .LOOP
+503+  0612 C9                           RET
+504+  0613
+505+  0613
+# file closed: GENERIC.Z8A
+ 54   0613                              INCLUDE VDP.Z8A
+# file opened: VDP.Z8A
+  1+  0613              ;                                       ****************************************
+  2+  0613              ;                                       * VDP COMMAND ENGINE                   *
+  3+  0613              ;                                       ****************************************
+  4+  0613
+  5+  0613
+  6+  0613              ; --- VDPWAIT                   ----------------------------------------
+  7+  0613
+  8+  0613              ; - VDPWAIT ----------
+  9+  0613              ; - WAIT UNTIL VDP COMMAND ENGINE IDLE
+ 10+  0613              ; - POLLS S#2 BIT 0 (CE)
+ 11+  0613              ; -
+ 12+  0613
+ 13+  0613 F5           VDPWAIT         PUSH    AF
+ 14+  0614 3E 02                        LD      A, 2
+ 15+  0616 F3                           DI
+ 16+  0617 D3 99                        OUT     (VDPCT), A
+ 17+  0619 3E 8F                        LD      A, #8F          ; SELECT STATUS REG S#2 (R#15=2)
+ 18+  061B D3 99                        OUT     (VDPCT), A
+ 19+  061D DB 99        .WAIT           IN      A, (VDPST)
+ 20+  061F 1F                           RRA                     ; CE INTO CARRY
+ 21+  0620 38 FB                        JR      C, .WAIT
+ 22+  0622 AF                           XOR     A               ; RESTORE S#0 SELECTION
+ 23+  0623 F3                           DI
+ 24+  0624 D3 99                        OUT     (VDPCT), A
+ 25+  0626 3E 8F                        LD      A, #8F
+ 26+  0628 D3 99                        OUT     (VDPCT), A
+ 27+  062A FB                           EI
+ 28+  062B F1                           POP     AF
+ 29+  062C C9                           RET
+ 30+  062D
+ 31+  062D
+ 32+  062D              ; --- REGISTER WRITE            ----------------------------------------
+ 33+  062D
+ 34+  062D              ; - SETVR -----------
+ 35+  062D              ; - SET VDP REGISTER
+ 36+  062D              ; - A: REGISTER NUMBER
+ 37+  062D              ; - E: VALUE
+ 38+  062D              ; -
+ 39+  062D
+ 40+  062D F5           SETVR           PUSH    AF
+ 41+  062E F3                           DI
+ 42+  062F 7B                           LD      A, E
+ 43+  0630 D3 99                        OUT     (VDPCT), A      ; WRITE VALUE BYTE FIRST
+ 44+  0632 F1                           POP     AF
+ 45+  0633 F6 80                        OR      #80             ; REG NUMBER | #80 = REGISTER SELECT
+ 46+  0635 D3 99                        OUT     (VDPCT), A
+ 47+  0637 FB                           EI
+ 48+  0638 C9                           RET
+ 49+  0639
+ 50+  0639
+ 51+  0639              ; --- COMMAND EXECUTION         ----------------------------------------
+ 52+  0639
+ 53+  0639              ; - VDPCMD -----------
+ 54+  0639              ; - ISSUE VDP COMMAND BLOCK
+ 55+  0639              ; - HL: POINTER TO 15-BYTE PARAMETER BLOCK (R#32 TO R#46)
+ 56+  0639              ; -
+ 57+  0639
+ 58+  0639 CD 13 06     VDPCMD          CALL    VDPWAIT
+ 59+  063C F3                           DI
+ 60+  063D 3E 20                        LD      A, 32           ; START AT R#32
+ 61+  063F D3 99                        OUT     (VDPCT), A
+ 62+  0641 3E 91                        LD      A, #91          ; R#17 (INDIRECT REGISTER POINTER)
+ 63+  0643 D3 99                        OUT     (VDPCT), A
+ 64+  0645
+ 65+  0645 0E 98                        LD      C, VDPDR        ; VDP DATA PORT (R#17 AUTO-INCS R#32-46)
+ 66+  0647                              REPT    15
+ 67+  0647 ED A3       >                OUTI
+ 67+  0649 ED A3       >                OUTI
+ 67+  064B ED A3       >                OUTI
+ 67+  064D ED A3       >                OUTI
+ 67+  064F ED A3       >                OUTI
+ 67+  0651 ED A3       >                OUTI
+ 67+  0653 ED A3       >                OUTI
+ 67+  0655 ED A3       >                OUTI
+ 67+  0657 ED A3       >                OUTI
+ 67+  0659 ED A3       >                OUTI
+ 67+  065B ED A3       >                OUTI
+ 67+  065D ED A3       >                OUTI
+ 67+  065F ED A3       >                OUTI
+ 67+  0661 ED A3       >                OUTI
+ 67+  0663 ED A3       >                OUTI
+ 68+  0665                              ENDR
+ 69+  0665 FB                           EI
+ 70+  0666 C9                           RET
+ 71+  0667
+ 72+  0667
+ 73+  0667              ; --- WRAPPER PRIMITIVES        ----------------------------------------
+ 74+  0667
+ 75+  0667
+ 76+  0667              ; - HMMV -------------
+ 77+  0667              ; - FILL VRAM REGION WITH BYTE COLOR
+ 78+  0667              ; - HL: POINTER TO CMD BLOCK (ONLY R#36-R#46 USED)
+ 79+  0667              ; -
+ 80+  0667
+ 81+  0667 F5           HMMV            PUSH    AF
+ 82+  0668 E5                           PUSH    HL
+ 83+  0669 11 0E 00                     LD      DE, 14
+ 84+  066C 19                           ADD     HL, DE
+ 85+  066D 3E C0                        LD      A, VDP_HMMV
+ 86+  066F 77                           LD      (HL), A         ; R#46 = CMD
+ 87+  0670 E1                           POP     HL
+ 88+  0671 CD 39 06                     CALL    VDPCMD
+ 89+  0674 F1                           POP     AF
+ 90+  0675 C9                           RET
+ 91+  0676
+ 92+  0676
+ 93+  0676              ; - HMMM -------------
+ 94+  0676              ; - COPY VRAM → VRAM (BYTE MODE)
+ 95+  0676              ; - HL: POINTER TO CMD BLOCK
+ 96+  0676              ; -
+ 97+  0676
+ 98+  0676 F5           HMMM            PUSH    AF
+ 99+  0677 E5                           PUSH    HL
+100+  0678 11 0E 00                     LD      DE, 14
+101+  067B 19                           ADD     HL, DE
+102+  067C 3E D0                        LD      A, VDP_HMMM
+103+  067E 77                           LD      (HL), A
+104+  067F E1                           POP     HL
+105+  0680 CD 39 06                     CALL    VDPCMD
+106+  0683 F1                           POP     AF
+107+  0684 C9                           RET
+108+  0685
+109+  0685
+110+  0685              ; - HMMC -------------
+111+  0685              ; - CPU → VRAM (BYTE-TRANSFER)
+112+  0685              ; - HL: POINTER TO CMD BLOCK
+113+  0685              ; -
+114+  0685
+115+  0685 F5           HMMC            PUSH    AF
+116+  0686 E5                           PUSH    HL
+117+  0687 11 0E 00                     LD      DE, 14
+118+  068A 19                           ADD     HL, DE
+119+  068B 3E F0                        LD      A, VDP_HMMC
+120+  068D 77                           LD      (HL), A
+121+  068E E1                           POP     HL
+122+  068F CD 39 06                     CALL    VDPCMD
+123+  0692 F1                           POP     AF
+124+  0693 C9                           RET
+125+  0694
+126+  0694
+127+  0694
+128+  0694              ; - LMMM -------------
+129+  0694              ; - COPY VRAM → VRAM (DOT MODE)
+130+  0694              ; - HL: POINTER TO CMD BLOCK
+131+  0694              ; - A: LOGICAL OP (VDP_IMP, VDP_XOR, ETC)
+132+  0694              ; -
+133+  0694
+134+  0694 F5           LMMM            PUSH    AF
+135+  0695 E5                           PUSH    HL
+136+  0696 11 0E 00                     LD      DE, 14
+137+  0699 19                           ADD     HL, DE
+138+  069A 77                           LD      (HL), A         ; SET COMMAND + LOGOP
+139+  069B E1                           POP     HL
+140+  069C CD 39 06                     CALL    VDPCMD
+141+  069F F1                           POP     AF
+142+  06A0 C9                           RET
+143+  06A1
+# file closed: VDP.Z8A
+ 55   06A1                              INCLUDE FONT.Z8A
+# file opened: FONT.Z8A
+  1+  06A1              ;                                       ****************************************
+  2+  06A1              ;                                       * FONT                                 *
+  3+  06A1              ;                                       ****************************************
+  4+  06A1              ;
+  5+  06A1              ; BUNDLED 6×8 CHARSET (256 GLYPHS × 8 BYTES, 1BPP).
+  6+  06A1              ; EXPANDS INTO 4 VRAM FONT TABLES: NORMAL / BOLD / ITALIC / BOLD+ITALIC.
+  7+  06A1
+  8+  06A1
+  9+  06A1              ; --- ITALIC SHIFT TABLE        ----------------------------------------
+ 10+  06A1
+ 11+  06A1                              ; ROW SHIFT OFFSETS FOR ITALIC (POSITIVE = SHIFT PIXELS LEFT)
+ 12+  06A1                              ; APPLIED PER-ROW WHEN GENERATING ITALIC GLYPHS
+ 13+  06A1 01 01 01 01  ITALSHFT      DEFB    1, 1, 1, 1, 0, -1, -1, -1
+ 13+  06A5 00 FF FF FF
+ 14+  06A9
+ 15+  06A9
+ 16+  06A9              ; --- FONTINIT                  ----------------------------------------
+ 17+  06A9
+ 18+  06A9              ; - FONTINIT ---------
+ 19+  06A9              ; - EXPAND BUNDLED CHARSET TO 4 VRAM FONT TABLES
+ 20+  06A9              ; - CALLED ONCE AT INIT
+ 21+  06A9              ; -
+ 22+  06A9
+ 23+  06A9 21 64 07     FONTINIT        LD      HL, FONT_DATA
+ 24+  06AC 22 25 07                     LD      (CG_PTR), HL
+ 25+  06AF
+ 26+  06AF                              ; 2. LOOP 256 CHARS
+ 27+  06AF 01 00 00                     LD      BC, 0           ; B = 0 (256), C = 0 (CHAR COUNTER)
+ 28+  06B2 C5           .CHARLP         PUSH    BC
+ 29+  06B3
+ 30+  06B3                              ; READ 8 BYTES FROM BUNDLED DATA
+ 31+  06B3 2A 25 07                     LD      HL, (CG_PTR)
+ 32+  06B6 11 EE 16                     LD      DE, FONTBUF
+ 33+  06B9 06 08                        LD      B, 8
+ 34+  06BB 7E           .READLP         LD      A, (HL)
+ 35+  06BC 12                           LD      (DE), A
+ 36+  06BD 23                           INC     HL
+ 37+  06BE 13                           INC     DE
+ 38+  06BF 10 FA                        DJNZ    .READLP
+ 39+  06C1 22 25 07                     LD      (CG_PTR), HL
+ 40+  06C4
+ 41+  06C4                              ; EXPAND TO NORMAL (6PX -> 2BPP)
+ 42+  06C4 21 EE 16                     LD      HL, FONTBUF
+ 43+  06C7 11 FE 16                     LD      DE, FONTBUF + 16 ; WORK AREA FOR EXPANDED GLYPH
+ 44+  06CA 06 08                        LD      B, 8
+ 45+  06CC C5           .EXPLP          PUSH    BC
+ 46+  06CD 7E                           LD      A, (HL)         ; 1BPP ROW
+ 47+  06CE CD 27 07                     CALL    EXPNORM         ; EXPAND A -> DE
+ 48+  06D1 23                           INC     HL
+ 49+  06D2 13                           INC     DE
+ 50+  06D3 13                           INC     DE
+ 51+  06D4 C1                           POP     BC
+ 52+  06D5 10 F5                        DJNZ    .EXPLP
+ 53+  06D7
+ 54+  06D7                              ; UPLOAD TO VRAM (NORMAL TABLE)
+ 55+  06D7                              ; GLYPH N: SX = (N % 32) * 6, SY = TABLE_SY + (N / 32) * 8
+ 56+  06D7 C1                           POP     BC              ; C = CHAR N
+ 57+  06D8 C5                           PUSH    BC
+ 58+  06D9
+ 59+  06D9 79                           LD      A, C
+ 60+  06DA E6 1F                        AND     %00011111       ; N % 32
+ 61+  06DC 6F                           LD      L, A
+ 62+  06DD 26 00                        LD      H, 0
+ 63+  06DF 29                           ADD     HL, HL          ; * 2
+ 64+  06E0 54                           LD      D, H
+ 65+  06E1 5D                           LD      E, L
+ 66+  06E2 29                           ADD     HL, HL          ; * 4
+ 67+  06E3 19                           ADD     HL, DE          ; * 6
+ 68+  06E4 22 3B 17                     LD      (VDP_DX), HL    ; DX
+ 69+  06E7
+ 70+  06E7 79                           LD      A, C
+ 71+  06E8 CB 3F                        SRL     A
+ 72+  06EA CB 3F                        SRL     A
+ 73+  06EC CB 3F                        SRL     A
+ 74+  06EE CB 3F                        SRL     A
+ 75+  06F0 CB 3F                        SRL     A               ; N / 32
+ 76+  06F2 87                           ADD     A, A
+ 77+  06F3 87                           ADD     A, A
+ 78+  06F4 87                           ADD     A, A            ; (N / 32) * 8
+ 79+  06F5 6F                           LD      L, A
+ 80+  06F6 26 00                        LD      H, 0
+ 81+  06F8 11 E0 00                     LD      DE, FNORM_SY
+ 82+  06FB 19                           ADD     HL, DE
+ 83+  06FC 22 3D 17                     LD      (VDP_DY), HL    ; DY
+ 84+  06FF
+ 85+  06FF 21 06 00                     LD      HL, 6           ; NX
+ 86+  0702 22 3F 17                     LD      (VDP_NX), HL
+ 87+  0705 3E 08                        LD      A, 8            ; NY
+ 88+  0707 32 41 17                     LD      (VDP_NY), A
+ 89+  070A AF                           XOR     A
+ 90+  070B 32 44 17                     LD      (VDP_ARG), A
+ 91+  070E
+ 92+  070E 21 37 17                     LD      HL, VDPCMBLK
+ 93+  0711 CD 85 06                     CALL    HMMC
+ 94+  0714
+ 95+  0714                              ; WRITE DATA TO PORT #98
+ 96+  0714 21 FE 16                     LD      HL, FONTBUF + 16
+ 97+  0717 06 10                        LD      B, 16
+ 98+  0719 0E 98                        LD      C, VDPDR
+ 99+  071B ED B3                        OTIR
+100+  071D
+101+  071D C1                           POP     BC
+102+  071E 0C                           INC     C
+103+  071F 79                           LD      A, C
+104+  0720 A7                           AND     A
+105+  0721 C2 B2 06                     JP      NZ, .CHARLP
+106+  0724 C9                           RET
+107+  0725
+108+  0725 00 00        CG_PTR          DEFW    0
+109+  0727
+110+  0727
+111+  0727              ; --- GLYPH EXPAND HELPERS      ----------------------------------------
+112+  0727
+113+  0727              ; - EXPNORM ----------
+114+  0727              ; - EXPAND ONE 1BPP ROM ROW BYTE TO 2-BYTE VRAM ROW (NORMAL, SCREEN 6 2BPP)
+115+  0727              ; - A:  ROM ROW BYTE (BITS 7-2 = 6 PIXELS)
+116+  0727              ; - DE: DESTINATION VRAM ROW BUFFER (2 BYTES)
+117+  0727              ; -
+118+  0727
+119+  0727 C5           EXPNORM         PUSH    BC
+120+  0728 47                           LD      B, A            ; B = ROM ROW
+121+  0729 21 00 00                     LD      HL, 0           ; HL = EXPANDED ROW
+122+  072C
+123+  072C                              ; PIXEL 0 (BIT 7)
+124+  072C CB 78                        BIT     7, B
+125+  072E 28 04                        JR      Z, .P1
+126+  0730 CB FC                        SET     7, H
+127+  0732 CB F4                        SET     6, H
+128+  0734              .P1             ; PIXEL 1 (BIT 6)
+129+  0734 CB 70                        BIT     6, B
+130+  0736 28 04                        JR      Z, .P2
+131+  0738 CB EC                        SET     5, H
+132+  073A CB E4                        SET     4, H
+133+  073C              .P2             ; PIXEL 2 (BIT 5)
+134+  073C CB 68                        BIT     5, B
+135+  073E 28 04                        JR      Z, .P3
+136+  0740 CB DC                        SET     3, H
+137+  0742 CB D4                        SET     2, H
+138+  0744              .P3             ; PIXEL 3 (BIT 4)
+139+  0744 CB 60                        BIT     4, B
+140+  0746 28 04                        JR      Z, .P4
+141+  0748 CB CC                        SET     1, H
+142+  074A CB C4                        SET     0, H
+143+  074C              .P4             ; PIXEL 4 (BIT 3)
+144+  074C CB 58                        BIT     3, B
+145+  074E 28 04                        JR      Z, .P5
+146+  0750 CB FD                        SET     7, L
+147+  0752 CB F5                        SET     6, L
+148+  0754              .P5             ; PIXEL 5 (BIT 2)
+149+  0754 CB 50                        BIT     2, B
+150+  0756 28 04                        JR      Z, .DONE
+151+  0758 CB ED                        SET     5, L
+152+  075A CB E5                        SET     4, L
+153+  075C
+154+  075C 7C           .DONE           LD      A, H
+155+  075D 12                           LD      (DE), A
+156+  075E 13                           INC     DE
+157+  075F 7D                           LD      A, L
+158+  0760 12                           LD      (DE), A
+159+  0761 1B                           DEC     DE              ; RESTORE DE TO START OF 2-BYTE ROW
+160+  0762 C1                           POP     BC
+161+  0763 C9                           RET
+162+  0764
+163+  0764              ; --- ASSETS                    ----------------------------------------
+164+  0764
+165+  0764              FONT_DATA       INCBIN  "FONT.BIN"
+166+  0F64
+# file closed: FONT.Z8A
+ 56   0F64                              INCLUDE MAPPER.Z8A
+# file opened: MAPPER.Z8A
+  1+  0F64              ;                                       ****************************************
+  2+  0F64              ;                                       * MAPPER MANAGER                       *
+  3+  0F64              ;                                       ****************************************
+  4+  0F64              ;
+  5+  0F64              ; USES DOS2/NEXTOR MAPPER SUPPORT ROUTINES FOUND VIA EXTBIO.
+  6+  0F64              ; NEVER USE OUT (#0FE) DIRECTLY — ALWAYS GO THROUGH MPUTP2.
+  7+  0F64              ;
+  8+  0F64              ; INIT: CALL MAPINIT AT STARTUP. STORES ENTRY ADDRESSES IN VARS.
+  9+  0F64              ; AFTER INIT: CALL ALLSEG, FRESEG, RDSEG, WRSEG, PUTP1, GETP1, PUTP2, GETP2.
+ 10+  0F64
+ 11+  0F64
+ 12+  0F64              ; --- MAPINIT                   ----------------------------------------
+ 13+  0F64
+ 14+  0F64              ; - MAPINIT ----------
+ 15+  0F64              ; - LOCATE MAPPER MANAGER VIA EXTBIO
+ 16+  0F64              ; - FILL MAP_XXX JUMP TABLE ENTRIES IN VARS
+ 17+  0F64              ; - OUTPUT:
+ 18+  0F64              ; -     CY = 1  NO MAPPER MANAGER (NO EXTENDED BIOS OR DEVICE NOT PRESENT)
+ 19+  0F64              ; -
+ 20+  0F64
+ 21+  0F64              MAPINIT         ; CHECK HOKVLD BIT 0: EXTENDED BIOS PRESENT?
+ 22+  0F64 3A 20 FB                     LD      A, (HOKVLD)
+ 23+  0F67 1F                           RRA
+ 24+  0F68 D0                           RET     NC              ; BIT 0 = 0: NO EXTENDED BIOS
+ 25+  0F69
+ 26+  0F69                              ; CALL EXTBIO: D=4 (MAPPER DEVICE), E=2 (GET JUMP TABLE)
+ 27+  0F69 AF                           XOR     A               ; A=0
+ 28+  0F6A 16 04                        LD      D, MAP_DEV
+ 29+  0F6C 1E 02                        LD      E, MAPFNTBL
+ 30+  0F6E CD CA FF                     CALL    EXTBIO          ; HL = JUMP TABLE BASE
+ 31+  0F71                              ; IX, IY, ALTERNATE REGS CORRUPTED BY EXTBIO — DO NOT USE
+ 32+  0F71
+ 33+  0F71                              ; STORE ENTRY ADDRESSES FROM JUMP TABLE
+ 34+  0F71 E5                           PUSH    HL
+ 35+  0F72 11 00 00                     LD      DE, MJALLSEG
+ 36+  0F75 19                           ADD     HL, DE
+ 37+  0F76 22 30 14                     LD      (MALLSEG), HL
+ 38+  0F79
+ 39+  0F79 E1                           POP     HL
+ 40+  0F7A E5                           PUSH    HL
+ 41+  0F7B 11 03 00                     LD      DE, MJFRESEG
+ 42+  0F7E 19                           ADD     HL, DE
+ 43+  0F7F 22 32 14                     LD      (MFRESEG), HL
+ 44+  0F82
+ 45+  0F82 E1                           POP     HL
+ 46+  0F83 E5                           PUSH    HL
+ 47+  0F84 11 06 00                     LD      DE, MJRDSEG
+ 48+  0F87 19                           ADD     HL, DE
+ 49+  0F88 22 34 14                     LD      (MRDSEG), HL
+ 50+  0F8B
+ 51+  0F8B E1                           POP     HL
+ 52+  0F8C E5                           PUSH    HL
+ 53+  0F8D 11 09 00                     LD      DE, MJWRSEG
+ 54+  0F90 19                           ADD     HL, DE
+ 55+  0F91 22 36 14                     LD      (MWRSEG), HL
+ 56+  0F94
+ 57+  0F94 E1                           POP     HL
+ 58+  0F95 E5                           PUSH    HL
+ 59+  0F96 11 1E 00                     LD      DE, MJPUTP1
+ 60+  0F99 19                           ADD     HL, DE
+ 61+  0F9A 22 38 14                     LD      (MPUTP1), HL
+ 62+  0F9D
+ 63+  0F9D E1                           POP     HL
+ 64+  0F9E E5                           PUSH    HL
+ 65+  0F9F 11 21 00                     LD      DE, MJGETP1
+ 66+  0FA2 19                           ADD     HL, DE
+ 67+  0FA3 22 3A 14                     LD      (MGETP1), HL
+ 68+  0FA6
+ 69+  0FA6 E1                           POP     HL
+ 70+  0FA7 E5                           PUSH    HL
+ 71+  0FA8 11 24 00                     LD      DE, MJPUTP2
+ 72+  0FAB 19                           ADD     HL, DE
+ 73+  0FAC 22 3C 14                     LD      (MPUTP2), HL
+ 74+  0FAF
+ 75+  0FAF E1                           POP     HL
+ 76+  0FB0 11 27 00                     LD      DE, MJGETP2
+ 77+  0FB3 19                           ADD     HL, DE
+ 78+  0FB4 22 3E 14                     LD      (MGETP2), HL
+ 79+  0FB7
+ 80+  0FB7 3E FF                        LD      A, #FF
+ 81+  0FB9 32 2F 14                     LD      (MAPRDY), A    ; FLAG: MAPPER MANAGER FOUND
+ 82+  0FBC A7                           AND     A               ; CARRY CLEAR = SUCCESS
+ 83+  0FBD C9                           RET
+ 84+  0FBE
+ 85+  0FBE
+ 86+  0FBE              ; --- ALLSEG                    ----------------------------------------
+ 87+  0FBE
+ 88+  0FBE              ; - ALLSEG -----------
+ 89+  0FBE              ; - ALLOCATE ONE 16KB USER SEGMENT (PRIMARY MAPPER)
+ 90+  0FBE              ; - OUTPUT:
+ 91+  0FBE              ; -     A  = SEGMENT NUMBER (FC = 0)
+ 92+  0FBE              ; -     FC = 1  NO FREE SEGMENTS
+ 93+  0FBE              ; -
+ 94+  0FBE
+ 95+  0FBE AF           ALLSEG          XOR     A               ; A=0: USER SEGMENT, B=0: PRIMARY MAPPER
+ 96+  0FBF 47                           LD      B, A
+ 97+  0FC0 2A 30 14                     LD      HL, (MALLSEG)
+ 98+  0FC3 CD E4 05                     CALL    CALHL
+ 99+  0FC6 C9                           RET
+100+  0FC7
+101+  0FC7
+102+  0FC7              ; --- FRESEG                    ----------------------------------------
+103+  0FC7
+104+  0FC7              ; - FRESEG -----------
+105+  0FC7              ; - FREE A PREVIOUSLY ALLOCATED SEGMENT
+106+  0FC7              ; - A: SEGMENT NUMBER
+107+  0FC7              ; - OUTPUT:
+108+  0FC7              ; -     FC = 1  ERROR (INVALID OR ALREADY FREE)
+109+  0FC7              ; -
+110+  0FC7
+111+  0FC7 06 00        FRESEG          LD      B, 0            ; B=0: PRIMARY MAPPER
+112+  0FC9 2A 32 14                     LD      HL, (MFRESEG)
+113+  0FCC CD E4 05                     CALL    CALHL
+114+  0FCF C9                           RET
+115+  0FD0
+116+  0FD0
+117+  0FD0              ; --- RDSEG                     ----------------------------------------
+118+  0FD0
+119+  0FD0              ; - RDSEG ------------
+120+  0FD0              ; - READ ONE BYTE FROM SEGMENT WITHOUT DISTURBING PAGE 2
+121+  0FD0              ; - A:  SEGMENT NUMBER
+122+  0FD0              ; - HL: ADDRESS WITHIN SEGMENT (TOP 2 BITS IGNORED)
+123+  0FD0              ; - OUTPUT:
+124+  0FD0              ; -     A: BYTE READ
+125+  0FD0              ; - NOTE: RETURNS WITH INTERRUPTS DISABLED
+126+  0FD0              ; -
+127+  0FD0
+128+  0FD0 2A 34 14     RDSEG           LD      HL, (MRDSEG)
+129+  0FD3 CD E4 05                     CALL    CALHL
+130+  0FD6 FB                           EI
+131+  0FD7 C9                           RET
+132+  0FD8
+133+  0FD8
+134+  0FD8              ; --- WRSEG                     ----------------------------------------
+135+  0FD8
+136+  0FD8              ; - WRSEG ------------
+137+  0FD8              ; - WRITE ONE BYTE TO SEGMENT WITHOUT DISTURBING PAGE 2
+138+  0FD8              ; - A:  SEGMENT NUMBER
+139+  0FD8              ; - HL: ADDRESS WITHIN SEGMENT (TOP 2 BITS IGNORED)
+140+  0FD8              ; - E:  BYTE TO WRITE
+141+  0FD8              ; - NOTE: RETURNS WITH INTERRUPTS DISABLED
+142+  0FD8              ; -
+143+  0FD8
+144+  0FD8 2A 36 14     WRSEG           LD      HL, (MWRSEG)
+145+  0FDB CD E4 05                     CALL    CALHL
+146+  0FDE FB                           EI
+147+  0FDF C9                           RET
+148+  0FE0
+149+  0FE0
+150+  0FE0              ; --- PUTP1                     ----------------------------------------
+151+  0FE0
+152+  0FE0              ; - PUTP1 ------------
+153+  0FE0              ; - BANK SEGMENT INTO PAGE 1 (#4000-#7FFF) — LINE DIRECTORY WINDOW
+154+  0FE0              ; - A: SEGMENT NUMBER
+155+  0FE0              ; - ALL REGISTERS PRESERVED
+156+  0FE0              ; -
+157+  0FE0
+158+  0FE0 2A 38 14     PUTP1           LD      HL, (MPUTP1)
+159+  0FE3 CD E4 05                     CALL    CALHL
+160+  0FE6 C9                           RET
+161+  0FE7
+162+  0FE7
+163+  0FE7              ; --- GETP1                     ----------------------------------------
+164+  0FE7
+165+  0FE7              ; - GETP1 ------------
+166+  0FE7              ; - GET CURRENTLY BANKED SEGMENT AT PAGE 1
+167+  0FE7              ; - OUTPUT:
+168+  0FE7              ; -     A: SEGMENT NUMBER
+169+  0FE7              ; -
+170+  0FE7
+171+  0FE7 2A 3A 14     GETP1           LD      HL, (MGETP1)
+172+  0FEA CD E4 05                     CALL    CALHL
+173+  0FED C9                           RET
+174+  0FEE
+175+  0FEE
+176+  0FEE              ; --- PUTP2                     ----------------------------------------
+177+  0FEE
+178+  0FEE              ; - PUTP2 ------------
+179+  0FEE              ; - BANK SEGMENT INTO PAGE 2 (#8000-#BFFF) — TEXT WINDOW
+180+  0FEE              ; - A: SEGMENT NUMBER
+181+  0FEE              ; - ALL REGISTERS PRESERVED
+182+  0FEE              ; -
+183+  0FEE
+184+  0FEE 2A 3C 14     PUTP2           LD      HL, (MPUTP2)
+185+  0FF1 CD E4 05                     CALL    CALHL
+186+  0FF4 C9                           RET
+187+  0FF5
+188+  0FF5
+189+  0FF5              ; --- GETP2                     ----------------------------------------
+190+  0FF5
+191+  0FF5              ; - GETP2 ------------
+192+  0FF5              ; - GET CURRENTLY BANKED SEGMENT AT PAGE 2
+193+  0FF5              ; - OUTPUT:
+194+  0FF5              ; -     A: SEGMENT NUMBER
+195+  0FF5              ; -
+196+  0FF5
+197+  0FF5 2A 3E 14     GETP2           LD      HL, (MGETP2)
+198+  0FF8 CD E4 05                     CALL    CALHL
+199+  0FFB C9                           RET
+200+  0FFC
+# file closed: MAPPER.Z8A
+ 57   0FFC                              INCLUDE BUFFER.Z8A
+# file opened: BUFFER.Z8A
+  1+  0FFC              ;                                       ****************************************
+  2+  0FFC              ;                                       * TEXT BUFFER                          *
+  3+  0FFC              ;                                       ****************************************
+  4+  0FFC              ;
+  5+  0FFC              ; LINE DIRECTORY: FLAT ARRAY AT DIRPAGE (#4000), IN A DEDICATED MAPPER SEGMENT
+  6+  0FFC              ;   (DIRSEG). ALLOCATED AT STARTUP, BANKED INTO PAGE 1 VIA PUTP1, NEVER SWITCHED.
+  7+  0FFC              ;   DIRECT ACCESS: ENTRY N IS AT DIRPAGE + N*3.
+  8+  0FFC              ;   ENTRY LAYOUT: [1: SEG][2: WORD OFFSET WITHIN THAT TEXT SEGMENT]
+  9+  0FFC              ;   CAPACITY: MAXLINES = 5460 ENTRIES (16384 / 3 = 5461, ROUNDED DOWN)
+ 10+  0FFC              ;
+ 11+  0FFC              ; TEXT SEGMENTS: ACCESSED VIA PAGE 2 WINDOW (TXPAGE = #8000).
+ 12+  0FFC              ;   PUTP2 TO SWITCH SEGMENT IN; COPY DATA; PUTP2 TO SWITCH NEXT AS NEEDED.
+ 13+  0FFC              ;   MULTIPLE SEGMENTS ALLOCATED AS FILE GROWS (ALLSEG).
+ 14+  0FFC              ;
+ 15+  0FFC              ; LINE RECORD (IN TEXT SEGMENT):
+ 16+  0FFC              ;   [1 BYTE : TEXT_LEN]   (0-80)
+ 17+  0FFC              ;   [N BYTES: TEXT]       RAW CHARS
+ 18+  0FFC              ;   [N BYTES: ATTR]       ONE ATTR BYTE PER CHAR
+ 19+  0FFC              ;   MAX: 1 + 80 + 80 = 161 BYTES (LINEREC)
+ 20+  0FFC
+ 21+  0FFC
+ 22+  0FFC              ; --- BUFINIT                   ----------------------------------------
+ 23+  0FFC
+ 24+  0FFC              ; - BUFINIT ----------
+ 25+  0FFC              ; - INITIALIZE EMPTY BUFFER (ONE BLANK LINE)
+ 26+  0FFC              ; - CALL AFTER MAPINIT
+ 27+  0FFC              ; -
+ 28+  0FFC
+ 29+  0FFC CD BE 0F     BUFINIT         CALL    ALLSEG          ; ALLOCATE DIR SEGMENT
+ 30+  0FFF 32 40 14                     LD      (DIRSEG), A
+ 31+  1002 CD E0 0F                     CALL    PUTP1           ; MAP TO PAGE 1
+ 32+  1005
+ 33+  1005 CD BE 0F                     CALL    ALLSEG          ; ALLOCATE FIRST TEXT SEGMENT
+ 34+  1008 32 41 14                     LD      (TXSEG), A
+ 35+  100B 32 44 14                     LD      (CURSEG), A
+ 36+  100E CD EE 0F                     CALL    PUTP2           ; MAP TO PAGE 2
+ 37+  1011
+ 38+  1011                              ; WRITE EMPTY LINE RECORD AT TXPAGE+0: DEFB 0
+ 39+  1011 AF                           XOR     A
+ 40+  1012 32 00 80                     LD      (TXPAGE), A
+ 41+  1015
+ 42+  1015                              ; WRITE DIR ENTRY 0: SEG=TXSEG, OFF=0
+ 43+  1015 21 00 00                     LD      HL, 0
+ 44+  1018 3A 41 14                     LD      A, (TXSEG)
+ 45+  101B 11 00 00                     LD      DE, 0
+ 46+  101E CD 47 10                     CALL    DIRWRITE
+ 47+  1021
+ 48+  1021                              ; INITIALIZE VARS
+ 49+  1021 21 01 00                     LD      HL, 1
+ 50+  1024 22 49 14                     LD      (TOTLINES), HL
+ 51+  1027 21 00 00                     LD      HL, 0
+ 52+  102A 22 45 14                     LD      (TOPLINE), HL
+ 53+  102D 22 47 14                     LD      (DOCLINE), HL
+ 54+  1030 3E 00                        LD      A, 0
+ 55+  1032 32 42 14                     LD      (CURX), A
+ 56+  1035 32 43 14                     LD      (CURY), A
+ 57+  1038 C9                           RET
+ 58+  1039
+ 59+  1039
+ 60+  1039              ; --- DIRREAD                   ----------------------------------------
+ 61+  1039
+ 62+  1039              ; - DIRREAD ----------
+ 63+  1039              ; - READ LINE DIRECTORY ENTRY (DIRECT — PAGE 1 ALWAYS MAPPED)
+ 64+  1039              ; - HL: LINE NUMBER (0-BASED)
+ 65+  1039              ; - OUTPUT:
+ 66+  1039              ; -     A:  SEGMENT NUMBER
+ 67+  1039              ; -     DE: BYTE OFFSET WITHIN SEGMENT
+ 68+  1039              ; -
+ 69+  1039              ; - USES: HL (ENTRY ADDRESS), DE (OFFSET), A (SEG)
+ 70+  1039              ; -
+ 71+  1039
+ 72+  1039 E5           DIRREAD         PUSH    HL
+ 73+  103A 29                           ADD     HL, HL          ; HL * 2
+ 74+  103B D1                           POP     DE
+ 75+  103C 19                           ADD     HL, DE          ; HL * 3
+ 76+  103D 11 00 40                     LD      DE, DIRPAGE
+ 77+  1040 19                           ADD     HL, DE          ; HL = DIRPAGE + N*3
+ 78+  1041
+ 79+  1041 7E                           LD      A, (HL)         ; SEGMENT
+ 80+  1042 23                           INC     HL
+ 81+  1043 5E                           LD      E, (HL)
+ 82+  1044 23                           INC     HL
+ 83+  1045 56                           LD      D, (HL)         ; DE = OFFSET
+ 84+  1046 C9                           RET
+ 85+  1047
+ 86+  1047
+ 87+  1047              ; --- DIRWRITE                  ----------------------------------------
+ 88+  1047
+ 89+  1047              ; - DIRWRITE ---------
+ 90+  1047              ; - WRITE LINE DIRECTORY ENTRY (DIRECT — PAGE 1 ALWAYS MAPPED)
+ 91+  1047              ; - HL: LINE NUMBER
+ 92+  1047              ; - A:  SEGMENT
+ 93+  1047              ; - DE: BYTE OFFSET WITHIN SEGMENT
+ 94+  1047              ; -
+ 95+  1047
+ 96+  1047 F5           DIRWRITE        PUSH    AF
+ 97+  1048 D5                           PUSH    DE
+ 98+  1049 E5                           PUSH    HL
+ 99+  104A 29                           ADD     HL, HL          ; HL * 2
+100+  104B D1                           POP     DE
+101+  104C 19                           ADD     HL, DE          ; HL * 3
+102+  104D 11 00 40                     LD      DE, DIRPAGE
+103+  1050 19                           ADD     HL, DE          ; HL = DIRPAGE + N*3
+104+  1051 D1                           POP     DE              ; DE = OFFSET
+105+  1052 F1                           POP     AF              ; A = SEGMENT
+106+  1053
+107+  1053 77                           LD      (HL), A
+108+  1054 23                           INC     HL
+109+  1055 73                           LD      (HL), E
+110+  1056 23                           INC     HL
+111+  1057 72                           LD      (HL), D
+112+  1058 C9                           RET
+113+  1059
+114+  1059
+115+  1059              ; --- LINEREAD                  ----------------------------------------
+116+  1059
+117+  1059              ; - LINEREAD ---------
+118+  1059              ; - LOAD LINE RECORD FROM TEXT SEGMENT INTO WORKBUF
+119+  1059              ; - HL: LINE NUMBER (0-BASED)
+120+  1059              ; -
+121+  1059
+122+  1059 CD 39 10     LINEREAD        CALL    DIRREAD         ; A=SEG, DE=OFFSET
+123+  105C 47                           LD      B, A
+124+  105D 3A 41 14                     LD      A, (TXSEG)
+125+  1060 B8                           CP      B
+126+  1061 28 07                        JR      Z, .SAME
+127+  1063 78                           LD      A, B
+128+  1064 32 41 14                     LD      (TXSEG), A
+129+  1067 CD EE 0F                     CALL    PUTP2
+130+  106A 21 00 80     .SAME           LD      HL, TXPAGE
+131+  106D 19                           ADD     HL, DE          ; HL = SOURCE
+132+  106E 11 4D 15                     LD      DE, WORKBUF
+133+  1071 01 A1 00                     LD      BC, WORKSIZ
+134+  1074 ED B0                        LDIR
+135+  1076 C9                           RET
+136+  1077
+137+  1077
+138+  1077              ; --- LINEWRT                   ----------------------------------------
+139+  1077
+140+  1077              ; - LINEWRT ----------
+141+  1077              ; - WRITE WORKBUF BACK TO TEXT SEGMENT
+142+  1077              ; - HL: LINE NUMBER
+143+  1077              ; -
+144+  1077
+145+  1077              LINEWRT         ; TODO: IMPLEMENT REPACKING IF SIZE CHANGES
+146+  1077                              ; FOR NOW, ASSUME FIXED SIZE OR SUFFICIENT SPACE
+147+  1077 CD 39 10                     CALL    DIRREAD
+148+  107A 47                           LD      B, A
+149+  107B 3A 41 14                     LD      A, (TXSEG)
+150+  107E B8                           CP      B
+151+  107F 28 07                        JR      Z, .SAME
+152+  1081 78                           LD      A, B
+153+  1082 32 41 14                     LD      (TXSEG), A
+154+  1085 CD EE 0F                     CALL    PUTP2
+155+  1088 EB           .SAME           EX      DE, HL
+156+  1089 11 00 80                     LD      DE, TXPAGE
+157+  108C 19                           ADD     HL, DE          ; HL = DEST
+158+  108D EB                           EX      DE, HL
+159+  108E 21 4D 15                     LD      HL, WORKBUF
+160+  1091 01 A1 00                     LD      BC, WORKSIZ
+161+  1094 ED B0                        LDIR
+162+  1096 C9                           RET
+163+  1097
+164+  1097
+165+  1097              ; --- LINEINS                   ----------------------------------------
+166+  1097
+167+  1097              ; - LINEINS ----------
+168+  1097              ; - INSERT BLANK LINE AFTER LINE N
+169+  1097              ; - HL: LINE NUMBER
+170+  1097              ; -
+171+  1097
+172+  1097              LINEINS         ; TODO:
+173+  1097 C9                           RET
+174+  1098
+175+  1098
+176+  1098              ; --- LINEDEL                   ----------------------------------------
+177+  1098
+178+  1098              ; - LINEDEL ----------
+179+  1098              ; - DELETE LINE N
+180+  1098              ; - HL: LINE NUMBER
+181+  1098              ; -
+182+  1098
+183+  1098              LINEDEL         ; TODO:
+184+  1098 C9                           RET
+185+  1099
+# file closed: BUFFER.Z8A
+ 58   1099                              INCLUDE RENDER.Z8A
+# file opened: RENDER.Z8A
+  1+  1099              ;                                       ****************************************
+  2+  1099              ;                                       * RENDERER                             *
+  3+  1099              ;                                       ****************************************
+  4+  1099
+  5+  1099
+  6+  1099              ; --- REDRAW                    ----------------------------------------
+  7+  1099
+  8+  1099              ; - REDRAW -----------
+  9+  1099              ; - REDRAW ALL TEXT ROWS (TXRFIRST TO TXRLAST)
+ 10+  1099              ; -
+ 11+  1099
+ 12+  1099 06 01        REDRAW          LD      B, TXRFIRST
+ 13+  109B C5           .ROWLOOP        PUSH    BC
+ 14+  109C CD A7 10                     CALL    RENDEROW
+ 15+  109F C1                           POP     BC
+ 16+  10A0 04                           INC     B
+ 17+  10A1 78                           LD      A, B
+ 18+  10A2 FE 19                        CP      TXRLAST + 1
+ 19+  10A4 20 F5                        JR      NZ, .ROWLOOP
+ 20+  10A6 C9                           RET
+ 21+  10A7
+ 22+  10A7
+ 23+  10A7              ; --- RENDEROW                  ----------------------------------------
+ 24+  10A7
+ 25+  10A7              ; - RENDEROW ---------
+ 26+  10A7              ; - RENDER A SINGLE ROW (1-24) TO VRAM
+ 27+  10A7              ; - B: ROW NUMBER (SCREEN SPACE)
+ 28+  10A7              ; -
+ 29+  10A7
+ 30+  10A7 C5           RENDEROW        PUSH    BC
+ 31+  10A8
+ 32+  10A8                              ; 1. CALC DOC LINE: HL = TOPLINE + B - 1
+ 33+  10A8 2A 45 14                     LD      HL, (TOPLINE)
+ 34+  10AB 78                           LD      A, B
+ 35+  10AC D6 01                        SUB     TXRFIRST
+ 36+  10AE 5F                           LD      E, A
+ 37+  10AF 16 00                        LD      D, 0
+ 38+  10B1 19                           ADD     HL, DE
+ 39+  10B2
+ 40+  10B2                              ; CHECK IF HL < TOTLINES
+ 41+  10B2 ED 5B 49 14                  LD      DE, (TOTLINES)
+ 42+  10B6 CD 1E 04                     CALL    CMPHLDE
+ 43+  10B9 38 05                        JR      C, .VALID
+ 44+  10BB
+ 45+  10BB                              ; IF NOT VALID (BEYOND EOF), CLEAR ROW
+ 46+  10BB CD 3A 11                     CALL    CLRROW
+ 47+  10BE C1                           POP     BC
+ 48+  10BF C9                           RET
+ 49+  10C0
+ 50+  10C0 CD 59 10     .VALID          CALL    LINEREAD        ; LOAD RECORD INTO WORKBUF
+ 51+  10C3 C1                           POP     BC
+ 52+  10C4 C5                           PUSH    BC
+ 53+  10C5
+ 54+  10C5                              ; 2. CALC SCREEN DY (ROW * 8)
+ 55+  10C5 78                           LD      A, B
+ 56+  10C6 87                           ADD     A, A
+ 57+  10C7 87                           ADD     A, A
+ 58+  10C8 87                           ADD     A, A
+ 59+  10C9 6F                           LD      L, A
+ 60+  10CA 26 00                        LD      H, 0
+ 61+  10CC 22 3D 17                     LD      (VDP_DY), HL
+ 62+  10CF
+ 63+  10CF                              ; 3. RENDER COLS 0-79
+ 64+  10CF 0E 00                        LD      C, 0            ; COL COUNTER
+ 65+  10D1 C5           .COLLOOP        PUSH    BC
+ 66+  10D2
+ 67+  10D2                              ; 4. CALC SCREEN DX (GUTL_PX + COL * 6)
+ 68+  10D2 79                           LD      A, C
+ 69+  10D3 6F                           LD      L, A
+ 70+  10D4 26 00                        LD      H, 0
+ 71+  10D6 29                           ADD     HL, HL          ; * 2
+ 72+  10D7 54                           LD      D, H
+ 73+  10D8 5D                           LD      E, L
+ 74+  10D9 29                           ADD     HL, HL          ; * 4
+ 75+  10DA 19                           ADD     HL, DE          ; * 6
+ 76+  10DB 11 18 00                     LD      DE, GUTL_PX
+ 77+  10DE 19                           ADD     HL, DE
+ 78+  10DF 22 3B 17                     LD      (VDP_DX), HL
+ 79+  10E2
+ 80+  10E2                              ; 5. GET CHAR AND ATTR
+ 81+  10E2                              ; WORKBUF: [LEN][80 TEXT][80 ATTR]
+ 82+  10E2 21 4E 15                     LD      HL, WORKBUF + 1
+ 83+  10E5 06 00                        LD      B, 0
+ 84+  10E7 F1                           POP     AF              ; GET B,C BACK (B=ROW, C=COL)
+ 85+  10E8 F5                           PUSH    AF
+ 86+  10E9 4F                           LD      C, A            ; C=COL
+ 87+  10EA 09                           ADD     HL, BC
+ 88+  10EB 7E                           LD      A, (HL)         ; GET CHARCODE
+ 89+  10EC F5                           PUSH    AF
+ 90+  10ED
+ 91+  10ED 21 9E 15                     LD      HL, WORKBUF + 81
+ 92+  10F0 09                           ADD     HL, BC
+ 93+  10F1 7E                           LD      A, (HL)         ; GET ATTR
+ 94+  10F2 5F                           LD      E, A            ; E = ATTR
+ 95+  10F3 F1                           POP     AF
+ 96+  10F4
+ 97+  10F4                              ; 6. CALC FONT SX/SY
+ 98+  10F4                              ; SX = (CHAR % 32) * 6
+ 99+  10F4                              ; SY = TABLE_SY + (CHAR / 32) * 8
+100+  10F4 F5                           PUSH    AF
+101+  10F5 E6 1F                        AND     %00011111       ; CHAR % 32
+102+  10F7 6F                           LD      L, A
+103+  10F8 26 00                        LD      H, 0
+104+  10FA 29                           ADD     HL, HL          ; * 2
+105+  10FB 54                           LD      D, H
+106+  10FC 5D                           LD      E, L
+107+  10FD 29                           ADD     HL, HL          ; * 4
+108+  10FE 19                           ADD     HL, DE          ; * 6
+109+  10FF 22 37 17                     LD      (VDP_SX), HL
+110+  1102
+111+  1102 F1                           POP     AF
+112+  1103 CB 3F                        SRL     A
+113+  1105 CB 3F                        SRL     A
+114+  1107 CB 3F                        SRL     A
+115+  1109 CB 3F                        SRL     A
+116+  110B CB 3F                        SRL     A               ; CHAR / 32
+117+  110D 87                           ADD     A, A
+118+  110E 87                           ADD     A, A
+119+  110F 87                           ADD     A, A            ; (CHAR / 32) * 8
+120+  1110
+121+  1110                              ; ADD FONT TABLE OFFSET BASED ON ATTR (BOLD/ITALIC)
+122+  1110 6F                           LD      L, A
+123+  1111 26 00                        LD      H, 0
+124+  1113 11 E0 00                     LD      DE, FNORM_SY
+125+  1116 19                           ADD     HL, DE
+126+  1117 22 39 17                     LD      (VDP_SY), HL
+127+  111A
+128+  111A                              ; 7. ISSUE LMMM
+129+  111A 21 06 00                     LD      HL, 6           ; NX
+130+  111D 22 3F 17                     LD      (VDP_NX), HL
+131+  1120 3E 08                        LD      A, 8            ; NY
+132+  1122 32 41 17                     LD      (VDP_NY), A
+133+  1125 AF                           XOR     A
+134+  1126 32 44 17                     LD      (VDP_ARG), A
+135+  1129
+136+  1129 21 37 17                     LD      HL, VDPCMBLK
+137+  112C 3E 90                        LD      A, VDP_LMMM | VDP_IMP
+138+  112E CD 94 06                     CALL    LMMM
+139+  1131
+140+  1131 C1                           POP     BC
+141+  1132 0C                           INC     C
+142+  1133 79                           LD      A, C
+143+  1134 FE 50                        CP      80
+144+  1136 20 99                        JR      NZ, .COLLOOP
+145+  1138
+146+  1138 C1                           POP     BC
+147+  1139 C9                           RET
+148+  113A
+149+  113A
+150+  113A              ; --- CLRROW                    ----------------------------------------
+151+  113A
+152+  113A              ; - CLRROW -----------
+153+  113A              ; - CLEAR ROW B WITH BACKGROUND COLOR
+154+  113A              ; -
+155+  113A
+156+  113A 78           CLRROW          LD      A, B
+157+  113B 87                           ADD     A, A
+158+  113C 87                           ADD     A, A
+159+  113D 87                           ADD     A, A
+160+  113E 6F                           LD      L, A
+161+  113F 26 00                        LD      H, 0
+162+  1141 22 3D 17                     LD      (VDP_DY), HL
+163+  1144
+164+  1144 21 18 00                     LD      HL, GUTL_PX
+165+  1147 22 3B 17                     LD      (VDP_DX), HL
+166+  114A
+167+  114A 21 E0 01                     LD      HL, TXAREAPX
+168+  114D 22 3F 17                     LD      (VDP_NX), HL
+169+  1150
+170+  1150 3E 08                        LD      A, 8
+171+  1152 32 41 17                     LD      (VDP_NY), A
+172+  1155
+173+  1155 3E 00                        LD      A, COL_BG
+174+  1157 32 43 17                     LD      (VDP_CLR), A
+175+  115A
+176+  115A AF                           XOR     A
+177+  115B 32 44 17                     LD      (VDP_ARG), A
+178+  115E
+179+  115E 21 37 17                     LD      HL, VDPCMBLK
+180+  1161 CD 67 06                     CALL    HMMV
+181+  1164 C9                           RET
+182+  1165
+# file closed: RENDER.Z8A
+ 59   1165                              INCLUDE SCROLL.Z8A
+# file opened: SCROLL.Z8A
+  1+  1165              ;                                       ****************************************
+  2+  1165              ;                                       * SCROLL ENGINE                        *
+  3+  1165              ;                                       ****************************************
+  4+  1165
+  5+  1165
+  6+  1165              ; --- SCROLLDN                  ----------------------------------------
+  7+  1165
+  8+  1165              ; - SCROLLDN ---------
+  9+  1165              ; - SCROLL TEXT AREA UP (8PX) TO SHOW NEXT LINE
+ 10+  1165              ; -
+ 11+  1165
+ 12+  1165 DD 21 37 17  SCROLLDN        LD      IX, VDPCMBLK
+ 13+  1169
+ 14+  1169                              ; 1. MOVE 480X192 AREA (ROW 2..25 -> ROW 1..24)
+ 15+  1169 21 18 00                     LD      HL, TXORG_X     ; 24
+ 16+  116C 22 37 17                     LD      (VDP_SX), HL
+ 17+  116F 3E 10                        LD      A, TXORG_Y + 8  ; ROW 2 (START AT 16PX)
+ 18+  1171 6F                           LD      L, A
+ 19+  1172 26 00                        LD      H, 0
+ 20+  1174 22 39 17                     LD      (VDP_SY), HL
+ 21+  1177
+ 22+  1177 21 18 00                     LD      HL, TXORG_X     ; 24
+ 23+  117A 22 3B 17                     LD      (VDP_DX), HL
+ 24+  117D 3E 08                        LD      A, TXORG_Y      ; ROW 1 (TARGET AT 8PX)
+ 25+  117F 6F                           LD      L, A
+ 26+  1180 26 00                        LD      H, 0
+ 27+  1182 22 3D 17                     LD      (VDP_DY), HL
+ 28+  1185
+ 29+  1185 21 E0 01                     LD      HL, TXAREAPX    ; 480
+ 30+  1188 22 3F 17                     LD      (VDP_NX), HL
+ 31+  118B 3E C0                        LD      A, 192          ; 24 ROWS * 8PX = 192PX
+ 32+  118D 6F                           LD      L, A
+ 33+  118E 26 00                        LD      H, 0
+ 34+  1190 22 41 17                     LD      (VDP_NY), HL
+ 35+  1193
+ 36+  1193 AF                           XOR     A               ; ARG = 0
+ 37+  1194 32 44 17                     LD      (VDP_ARG), A
+ 38+  1197 CD 76 06                     CALL    HMMM
+ 39+  119A
+ 40+  119A                              ; 2. CLEAR BOTTOM ROW (ROW 24)
+ 41+  119A 21 18 00                     LD      HL, TXORG_X
+ 42+  119D 22 3B 17                     LD      (VDP_DX), HL
+ 43+  11A0 3E C0                        LD      A, TXORG_Y + 184 ; DY = 8 + 23 * 8 = 192
+ 44+  11A2 6F                           LD      L, A
+ 45+  11A3 26 00                        LD      H, 0
+ 46+  11A5 22 3D 17                     LD      (VDP_DY), HL
+ 47+  11A8 3E 08                        LD      A, 8            ; NY
+ 48+  11AA 6F                           LD      L, A
+ 49+  11AB 26 00                        LD      H, 0
+ 50+  11AD 22 41 17                     LD      (VDP_NY), HL
+ 51+  11B0 AF                           XOR     A               ; COLOR 0
+ 52+  11B1 32 43 17                     LD      (VDP_CLR), A
+ 53+  11B4 CD 67 06                     CALL    HMMV
+ 54+  11B7 C9                           RET
+ 55+  11B8
+# file closed: SCROLL.Z8A
+ 60   11B8                              INCLUDE EDIT.Z8A
+# file opened: EDIT.Z8A
+  1+  11B8              ;                                       ****************************************
+  2+  11B8              ;                                       * EDIT OPERATIONS                      *
+  3+  11B8              ;                                       ****************************************
+  4+  11B8              ;
+  5+  11B8              ; ALL EDITING OPERATIONS WORK ON WORKBUF (CURRENT LINE LOADED BY LINEREAD).
+  6+  11B8              ; AFTER #EAC EDIT: LINEWRT TO PERSIST, PUTLINE TO RE-RENDER, DRWGUT.
+  7+  11B8
+  8+  11B8
+  9+  11B8              ; --- EDINSCHR                 ----------------------------------------
+ 10+  11B8
+ 11+  11B8              ; - EDINSCHR --------
+ 12+  11B8              ; - INSERT CHARACTER AT CURSOR POSITION (INSERT MODE)
+ 13+  11B8              ; - A:  CHARACTER CODE
+ 14+  11B8              ; - E:  ATTRIBUTE
+ 15+  11B8              ; -
+ 16+  11B8
+ 17+  11B8              EDINSCHR       ; TODO:
+ 18+  11B8                              ; 1. IF WORKBUF[0] >= TEXTCOLS: BELL, RETURN (LINE FULL)
+ 19+  11B8                              ; 2. SHIFT TEXT+ATTR RIGHT FROM CURX..LEN
+ 20+  11B8                              ; 3. STORE A AT TEXT[CURX], E AT ATTR[CURX]
+ 21+  11B8                              ; 4. WORKBUF[0]++
+ 22+  11B8                              ; 5. LINEWRT DOCLINE
+ 23+  11B8                              ; 6. PUTLINE CURY (REDRAW LINE)
+ 24+  11B8                              ; 7. ADVANCE CURSOR RIGHT (EDMOVCHR)
+ 25+  11B8 C9                           RET
+ 26+  11B9
+ 27+  11B9
+ 28+  11B9              ; --- EDOVRCHR                  ----------------------------------------
+ 29+  11B9
+ 30+  11B9              ; - EDOVRCHR ---------
+ 31+  11B9              ; - OVERWRITE CHARACTER AT CURSOR (OVERWRITE MODE)
+ 32+  11B9              ; - A:  CHARACTER CODE
+ 33+  11B9              ; - E:  ATTRIBUTE
+ 34+  11B9              ; -
+ 35+  11B9
+ 36+  11B9              EDOVRCHR        ; TODO:
+ 37+  11B9                              ; 1. STORE A AT TEXT[CURX], E AT ATTR[CURX]
+ 38+  11B9                              ; 2. IF CURX >= WORKBUF[0]: WORKBUF[0] = CURX+1
+ 39+  11B9                              ; 3. LINEWRT, PUTCHAR, EDMOVCHR RIGHT
+ 40+  11B9 C9                           RET
+ 41+  11BA
+ 42+  11BA
+ 43+  11BA              ; --- EDDELBK                 ----------------------------------------
+ 44+  11BA
+ 45+  11BA              ; - EDDELBK --------
+ 46+  11BA              ; - DELETE CHARACTER BEFORE CURSOR (BACKSPACE)
+ 47+  11BA              ; -
+ 48+  11BA
+ 49+  11BA              EDDELBK       ; TODO:
+ 50+  11BA                              ; IF CURX = 0 AND CURY = 0 (TOP OF DOC): BELL, RETURN
+ 51+  11BA                              ; IF CURX = 0: JOIN WITH PREVIOUS LINE (EJOINPRV)
+ 52+  11BA                              ; ELSE: SHIFT TEXT+ATTR LEFT, WORKBUF[0]--, LINEWRT, PUTLINE
+ 53+  11BA C9                           RET
+ 54+  11BB
+ 55+  11BB
+ 56+  11BB              ; --- EDDELCHR                  ----------------------------------------
+ 57+  11BB
+ 58+  11BB              ; - EDDELCHR ---------
+ 59+  11BB              ; - DELETE CHARACTER AT CURSOR (DEL KEY)
+ 60+  11BB              ; -
+ 61+  11BB
+ 62+  11BB              EDDELCHR        ; TODO:
+ 63+  11BB                              ; IF CURX >= WORKBUF[0]: JOIN NEXT LINE (EJOINEXT)
+ 64+  11BB                              ; ELSE: SHIFT TEXT+ATTR LEFT, WORKBUF[0]--, LINEWRT, PUTLINE
+ 65+  11BB C9                           RET
+ 66+  11BC
+ 67+  11BC
+ 68+  11BC              ; --- EDNWLIN                 ----------------------------------------
+ 69+  11BC
+ 70+  11BC              ; - EDNWLIN --------
+ 71+  11BC              ; - INSERT LINE BREAK AT CURSOR (ENTER)
+ 72+  11BC              ; -
+ 73+  11BC
+ 74+  11BC              EDNWLIN       ; TODO:
+ 75+  11BC                              ; 1. SPLIT WORKBUF AT CURX:
+ 76+  11BC                              ;    - TAIL (TEXT[CURX..] + ATTR) → NEW WORKBUF, LINEINS DOCLINE+1
+ 77+  11BC                              ;    - HEAD (TEXT[0..CURX-1] + ATTR) → WORKBUF, LINEWRT DOCLINE
+ 78+  11BC                              ; 2. MOVE CURSOR TO COL 0, NEXT LINE (SCROLL IF NEEDED)
+ 79+  11BC                              ; 3. RDWROWS CURY..SCRROWS-1 (TAIL SHIFTED DOWN)
+ 80+  11BC C9                           RET
+ 81+  11BD
+ 82+  11BD
+ 83+  11BD              ; --- EDMOVCHR                  ----------------------------------------
+ 84+  11BD
+ 85+  11BD              ; - EDMOVCHR ---------
+ 86+  11BD              ; - MOVE CURSOR LEFT OR RIGHT ONE CHARACTER
+ 87+  11BD              ; - A:  CRIGHT OR CLEFT
+ 88+  11BD              ; -
+ 89+  11BD
+ 90+  11BD              EDMOVCHR        ; TODO:
+ 91+  11BD                              ; RIGHT: CURX++; IF > LEN: WRAP TO NEXT LINE
+ 92+  11BD                              ; LEFT:  CURX--; IF < 0:  WRAP TO PREV LINE END
+ 93+  11BD                              ; REDRAW CURSOR (DRWCUR)
+ 94+  11BD C9                           RET
+ 95+  11BE
+ 96+  11BE
+ 97+  11BE              ; --- EDMOVROW                  ----------------------------------------
+ 98+  11BE
+ 99+  11BE              ; - EDMOVROW ---------
+100+  11BE              ; - MOVE CURSOR UP OR DOWN ONE ROW
+101+  11BE              ; - A:  CUP OR CDOWN
+102+  11BE              ; -
+103+  11BE
+104+  11BE              EDMOVROW        ; TODO:
+105+  11BE                              ; DOWN: CURY++; IF >= SCRROWS: SCROLL UP 1 (SCRLUP)
+106+  11BE                              ; UP:   CURY--; IF < 0:        SCROLL DOWN 1 (SCRLDN)
+107+  11BE                              ; CLAMP CURX TO NEW LINE LENGTH
+108+  11BE                              ; REDRAW CURSOR
+109+  11BE C9                           RET
+110+  11BF
+111+  11BF
+112+  11BF              ; --- EDQUIT                    ----------------------------------------
+113+  11BF
+114+  11BF              ; - EDQUIT -----------
+115+  11BF              ; - CONFIRM AND EXIT EDITOR
+116+  11BF              ; -
+117+  11BF
+118+  11BF              EDQUIT          ; TODO:
+119+  11BF                              ; IF MODIFIED: PROMPT "SAVE CHANGES? (Y/N/C)"
+120+  11BF                              ;   Y → FILESAVE, THEN TERM
+121+  11BF                              ;   N → TERM
+122+  11BF                              ;   C → RETURN TO EDITING
+123+  11BF                              ; ELSE: TERM
+124+  11BF C9                           RET
+125+  11C0
+# file closed: EDIT.Z8A
+ 61   11C0                              INCLUDE INPUT.Z8A
+# file opened: INPUT.Z8A
+  1+  11C0              ;                                       ****************************************
+  2+  11C0              ;                                       * INPUT                                *
+  3+  11C0              ;                                       ****************************************
+  4+  11C0              ;
+  5+  11C0              ; KEYBOARD INPUT AND MAIN DISPATCH LOOP.
+  6+  11C0              ; USES CHGET (BLOCKING) FOR NORMAL INPUT.
+  7+  11C0              ; SPECIAL KEY SEQUENCES (FUNCTION KEYS, CURSOR, ETC.) DECODED HERE.
+  8+  11C0
+  9+  11C0
+ 10+  11C0              ; --- KEYREAD                   ----------------------------------------
+ 11+  11C0
+ 12+  11C0              ; - KEYREAD ----------
+ 13+  11C0              ; - BLOCKING KEY READ WITH SPECIAL KEY DECODE
+ 14+  11C0              ; - OUTPUT:
+ 15+  11C0              ; -     A:  KEY CODE (PRINTABLE) OR SPECIAL CODE (SEE HARD.Z8A)
+ 16+  11C0              ; -     HL: EXTENDED KEY CODE (0 IF SIMPLE KEY, OR FUNCTION KEY INDEX)
+ 17+  11C0              ; -
+ 18+  11C0
+ 19+  11C0 CD 9F 00     KEYREAD         CALL    CHGET
+ 20+  11C3                              ; TODO: DECODE EXTENDED SEQUENCES (F-KEYS RETURN 2-CHAR SEQUENCES)
+ 21+  11C3 C9                           RET
+ 22+  11C4
+ 23+  11C4
+ 24+  11C4              ; --- MAINLOOP                  ----------------------------------------
+ 25+  11C4
+ 26+  11C4              ; - MAINLOOP ---------
+ 27+  11C4              ; - MAIN EDITOR EVENT LOOP
+ 28+  11C4              ; -
+ 29+  11C4
+ 30+  11C4 CD C0 11     MAINLOOP        CALL    KEYREAD
+ 31+  11C7 FE 1B                        CP      ESC             ; EXIT ON ESC
+ 32+  11C9 CA 4D 03                     JP      Z, TERM
+ 33+  11CC
+ 34+  11CC                              ; TODO: DISPATCH ON A
+ 35+  11CC                              ; PRINTABLE (#20-#7E): EDINSCHR / EDOVRCHR
+ 36+  11CC                              ; CR:        EDNWLIN
+ 37+  11CC                              ; BS:        EDDELBK
+ 38+  11CC                              ; DEL:       EDDELCHR
+ 39+  11CC                              ; CRIGHT:    EDMOVCHR RIGHT
+ 40+  11CC                              ; CLEFT:     EDMOVCHR LEFT
+ 41+  11CC                              ; CUP:       EDMOVROW UP
+ 42+  11CC                              ; CDOWN:     EDMOVROW DOWN
+ 43+  11CC                              ; CTRL_S:    FILESAVE
+ 44+  11CC                              ; CTRL_O:    FILEOPEN (LOAD)
+ 45+  11CC                              ; CTRL_N:    FILENEW
+ 46+  11CC                              ; CTRL_Q:    EDQUIT
+ 47+  11CC
+ 48+  11CC C3 C4 11                     JP      MAINLOOP
+ 49+  11CF
+# file closed: INPUT.Z8A
+ 62   11CF                              INCLUDE UI.Z8A
+# file opened: UI.Z8A
+  1+  11CF              ;                                       ****************************************
+  2+  11CF              ;                                       * UI — STATUS BAR / GUTTERS / CURSOR  *
+  3+  11CF              ;                                       ****************************************
+  4+  11CF
+  5+  11CF
+  6+  11CF              ; --- DRWSTAT                ----------------------------------------
+  7+  11CF
+  8+  11CF              ; - DRWSTAT -------
+  9+  11CF              ; - DRAW / REFRESH STATUS BAR (ROW 25)
+ 10+  11CF              ; - FORMAT: " LANG | INS | LN:NNNNN/NNNNN  COL:NNN | FILENAME"
+ 11+  11CF              ; -
+ 12+  11CF
+ 13+  11CF              DRWSTAT      ; TODO:
+ 14+  11CF                              ; 1. HMMV: FILL ROW 25 WITH COL_UI (CLEAR BAR)
+ 15+  11CF                              ; 2. RENDER LANG TEXT (LGNONE/Z80/BASIC/C/PYTHON → STRING)
+ 16+  11CF                              ; 3. RENDER INS/OVR
+ 17+  11CF                              ; 4. RENDER LN:DOCLINE+1/TOTLINES
+ 18+  11CF                              ; 5. RENDER COL:CURX+1
+ 19+  11CF                              ; 6. RENDER FILENAME (TRUNCATED TO FIT)
+ 20+  11CF C9                           RET
+ 21+  11D0
+ 22+  11D0
+ 23+  11D0              ; --- DRWMENU               ----------------------------------------
+ 24+  11D0
+ 25+  11D0              ; - DRWMENU ------
+ 26+  11D0              ; - DRAW MENU BAR (ROW 0, ALWAYS VISIBLE)
+ 27+  11D0              ; - RENDERS STATIC TITLES; HIGHLIGHT DRAWN BY MENU MODULE (FUTURE)
+ 28+  11D0              ; -
+ 29+  11D0
+ 30+  11D0              DRWMENU     ; TODO:
+ 31+  11D0                              ; 1. HMMV: FILL ROW 0 WITH COL_UI
+ 32+  11D0                              ; 2. BLIT MENU TITLE STRINGS AT FIXED COLUMN POSITIONS
+ 33+  11D0 C9                           RET
+ 34+  11D1
+ 35+  11D1
+ 36+  11D1              ; --- DRWGUT                ----------------------------------------
+ 37+  11D1
+ 38+  11D1              ; - DRWGUT -------
+ 39+  11D1              ; - REDRAW LEFT GUTTER (LINE NUMBERS) FOR ALL VISIBLE ROWS
+ 40+  11D1              ; -
+ 41+  11D1
+ 42+  11D1              DRWGUT      ; TODO:
+ 43+  11D1                              ; FOR #EAC VIEWPORT ROW 0..SCRROWS-1:
+ 44+  11D1                              ;   DRWLNUM ROW, TOPLINE + ROW
+ 45+  11D1 C9                           RET
+ 46+  11D2
+ 47+  11D2
+ 48+  11D2              ; --- DRWLNUM               ----------------------------------------
+ 49+  11D2
+ 50+  11D2              ; - DRWLNUM ------
+ 51+  11D2              ; - DRAW LINE NUMBER IN LEFT GUTTER
+ 52+  11D2              ; - B:  VIEWPORT ROW
+ 53+  11D2              ; - HL: DOCUMENT LINE NUMBER (1-BASED FOR DISPLAY)
+ 54+  11D2              ; -
+ 55+  11D2
+ 56+  11D2              DRWLNUM     ; TODO:
+ 57+  11D2                              ; FORMAT HL AS 4-CHAR RIGHT-JUSTIFIED:
+ 58+  11D2                              ;   HL <= 9999:  DECIMAL "   1" .. "9999"
+ 59+  11D2                              ;   HL <= 99999: K-NOTATION " 10K" .. " 99K"
+ 60+  11D2                              ;   ELSE:        M-NOTATION "  1M"
+ 61+  11D2                              ; BLIT 4 CHARS AT DX=0, DY=TXORG_Y+B*CELLH VIA LMMM
+ 62+  11D2 C9                           RET
+ 63+  11D3
+ 64+  11D3
+ 65+  11D3              ; --- DRWSCRL             ----------------------------------------
+ 66+  11D3
+ 67+  11D3              ; - DRWSCRL ----
+ 68+  11D3              ; - DRAW SCROLLBAR THUMB IN RIGHT GUTTER
+ 69+  11D3              ; -
+ 70+  11D3
+ 71+  11D3              DRWSCRL   ; TODO:
+ 72+  11D3                              ; THUMB_H = MAX(4, (SCRROWS * 212) / TOTLINES)
+ 73+  11D3                              ; THUMB_Y = (TOPLINE * 212) / TOTLINES
+ 74+  11D3                              ; ERASE OLD THUMB: HMMV FULL GUTTER WITH COL_UI
+ 75+  11D3                              ; DRAW NEW THUMB: HMMV DX=512-GUTR_PX, DY=THUMB_Y, NX=GUTR_PX, NY=THUMB_H, CLR=COL_HI
+ 76+  11D3 C9                           RET
+ 77+  11D4
+ 78+  11D4
+ 79+  11D4              ; --- DRWCUR                ----------------------------------------
+ 80+  11D4
+ 81+  11D4              ; - DRWCUR -------
+ 82+  11D4              ; - TOGGLE CURSOR XOR OVERLAY AT CURRENT POSITION
+ 83+  11D4              ; - (SAME CALL DRAWS AND ERASES — XOR TOGGLE)
+ 84+  11D4              ; -
+ 85+  11D4
+ 86+  11D4              DRWCUR      ; TODO:
+ 87+  11D4                              ; DX = TXORG_X + CURX * CELLW
+ 88+  11D4                              ; DY = TXORG_Y + CURY * CELLH
+ 89+  11D4                              ; LMMV DX, DY, NX=CELLW, NY=CELLH, CLR=COL_HI, LOP=XOR
+ 90+  11D4 C9                           RET
+ 91+  11D5
+ 92+  11D5
+ 93+  11D5              ; --- TIMI HOOK (BLINK)         ----------------------------------------
+ 94+  11D5
+ 95+  11D5              ; - BLNKTICK ---------
+ 96+  11D5              ; - CALLED FROM TIMI INTERRUPT HOOK
+ 97+  11D5              ; - HANDLES CURSOR BLINK
+ 98+  11D5              ; -
+ 99+  11D5
+100+  11D5 F5           BLNKTICK        PUSH    AF
+101+  11D6 3A 4F 14                     LD      A, (BLNKCNT)
+102+  11D9 3C                           INC     A
+103+  11DA FE 1E                        CP      30              ; BLINK EVERY 30 TICKS (≈0.5S AT 60HZ)
+104+  11DC 38 0F                        JR      C, .END
+105+  11DE AF                           XOR     A
+106+  11DF 32 4F 14                     LD      (BLNKCNT), A
+107+  11E2 3A 4E 14                     LD      A, (BLNKPH)
+108+  11E5 EE 01                        XOR     1
+109+  11E7 32 4E 14                     LD      (BLNKPH), A
+110+  11EA CD D4 11                     CALL    DRWCUR      ; TOGGLE CURSOR
+111+  11ED 32 4F 14     .END            LD      (BLNKCNT), A
+112+  11F0 F1                           POP     AF
+113+  11F1 C9                           RET
+114+  11F2
+# file closed: UI.Z8A
+ 63   11F2                              INCLUDE FILEIO.Z8A
+# file opened: FILEIO.Z8A
+  1+  11F2              ;                                       ****************************************
+  2+  11F2              ;                                       * FILE I/O                             *
+  3+  11F2              ;                                       ****************************************
+  4+  11F2              ;
+  5+  11F2              ; USES HIGH-LEVEL DSK* WRAPPERS FROM BDOS.Z8A (DOS1/DOS2 TRANSPARENT).
+  6+  11F2
+  7+  11F2
+  8+  11F2              ; --- FILENEW                   ----------------------------------------
+  9+  11F2
+ 10+  11F2 CD FC 0F     FILENEW         CALL    BUFINIT
+ 11+  11F5 C9                           RET
+ 12+  11F6
+ 13+  11F6
+ 14+  11F6              ; --- FILELOAD                  ----------------------------------------
+ 15+  11F6
+ 16+  11F6              ; - FILELOAD ---------
+ 17+  11F6              ; - LOAD FILE FROM DISK INTO BUFFER
+ 18+  11F6              ; - HL: FILENAME (ASCIIZ)
+ 19+  11F6              ; -
+ 20+  11F6
+ 21+  11F6 E5           FILELOAD        PUSH    HL
+ 22+  11F7 CD F2 11                     CALL    FILENEW         ; RESET BUFFER AND ALLOCATE INITIAL SEGS
+ 23+  11FA E1                           POP     HL
+ 24+  11FB
+ 25+  11FB CD D8 02                     CALL    DSKOPEN         ; A=HANDLE, DEHL=SIZE
+ 26+  11FE D8                           RET     C
+ 27+  11FF 32 78 14                     LD      (FILEHAND), A
+ 28+  1202
+ 29+  1202 21 00 00                     LD      HL, 0
+ 30+  1205 22 49 14                     LD      (TOTLINES), HL
+ 31+  1208 22 E5 12                     LD      (LINEOFF), HL
+ 32+  120B AF                           XOR     A
+ 33+  120C 32 E7 12                     LD      (CURLLEN), A
+ 34+  120F
+ 35+  120F 3A 78 14     .READBLK        LD      A, (FILEHAND)
+ 36+  1212 21 00 01                     LD      HL, 256
+ 37+  1215 11 EE 15                     LD      DE, FILEBUF
+ 38+  1218 CD F4 02                     CALL    DSKREAD         ; HL = BYTES READ
+ 39+  121B 7C                           LD      A, H
+ 40+  121C B5                           OR      L
+ 41+  121D 28 3E                        JR      Z, .EOF
+ 42+  121F
+ 43+  121F 44                           LD      B, H
+ 44+  1220 4D                           LD      C, L            ; BC = BYTES TO PROCESS
+ 45+  1221 21 EE 15                     LD      HL, FILEBUF
+ 46+  1224 C5           .PROCLP         PUSH    BC
+ 47+  1225 E5                           PUSH    HL
+ 48+  1226
+ 49+  1226 7E                           LD      A, (HL)
+ 50+  1227 FE 0A                        CP      10              ; LF
+ 51+  1229 28 28                        JR      Z, .SKIP        ; IGNORE LF
+ 52+  122B FE 0D                        CP      13              ; CR
+ 53+  122D 28 21                        JR      Z, .ENDLINE
+ 54+  122F
+ 55+  122F                              ; APPEND TO CURRENT LINE IN TXPAGE
+ 56+  122F 47                           LD      B, A
+ 57+  1230 3A 41 14                     LD      A, (TXSEG)
+ 58+  1233 CD EE 0F                     CALL    PUTP2
+ 59+  1236
+ 60+  1236 3A E7 12                     LD      A, (CURLLEN)
+ 61+  1239 FE 50                        CP      80
+ 62+  123B 30 16                        JR      NC, .SKIP       ; TRUNCATE
+ 63+  123D
+ 64+  123D 21 01 80                     LD      HL, TXPAGE + 1  ; SKIP LEN BYTE
+ 65+  1240 ED 5B E5 12                  LD      DE, (LINEOFF)
+ 66+  1244 19                           ADD     HL, DE
+ 67+  1245 5F                           LD      E, A
+ 68+  1246 16 00                        LD      D, 0
+ 69+  1248 19                           ADD     HL, DE          ; HL = TXPAGE + LINEOFF + 1 + CURLLEN
+ 70+  1249 70                           LD      (HL), B
+ 71+  124A
+ 72+  124A 3C                           INC     A
+ 73+  124B 32 E7 12                     LD      (CURLLEN), A
+ 74+  124E 18 03                        JR      .SKIP
+ 75+  1250
+ 76+  1250 CD 7F 12     .ENDLINE        CALL    STORELINE
+ 77+  1253
+ 78+  1253 E1           .SKIP           POP     HL
+ 79+  1254 23                           INC     HL
+ 80+  1255 C1                           POP     BC
+ 81+  1256 0B                           DEC     BC
+ 82+  1257 78                           LD      A, B
+ 83+  1258 B1                           OR      C
+ 84+  1259 20 C9                        JR      NZ, .PROCLP
+ 85+  125B 18 B2                        JR      .READBLK
+ 86+  125D
+ 87+  125D 3A E7 12     .EOF            LD      A, (CURLLEN)
+ 88+  1260 A7                           AND     A
+ 89+  1261 C4 7F 12                     CALL    NZ, STORELINE   ; STORE LAST LINE IF NOT EMPTY
+ 90+  1264
+ 91+  1264 3A 78 14                     LD      A, (FILEHAND)
+ 92+  1267 CD E9 02                     CALL    DSKCLOSE
+ 93+  126A
+ 94+  126A 21 00 00                     LD      HL, 0
+ 95+  126D 22 45 14                     LD      (TOPLINE), HL
+ 96+  1270 22 47 14                     LD      (DOCLINE), HL
+ 97+  1273 3E 00                        LD      A, 0
+ 98+  1275 32 42 14                     LD      (CURX), A
+ 99+  1278 32 43 14                     LD      (CURY), A
+100+  127B
+101+  127B CD 99 10                     CALL    REDRAW
+102+  127E C9                           RET
+103+  127F
+104+  127F              ; - STORELINE --------
+105+  127F              ; - FINISH CURRENT LINE, ADD TO DIRECTORY, PREPARE NEXT
+106+  127F              ; -
+107+  127F
+108+  127F 3A 41 14     STORELINE       LD      A, (TXSEG)
+109+  1282 CD EE 0F                     CALL    PUTP2
+110+  1285
+111+  1285 21 00 80                     LD      HL, TXPAGE
+112+  1288 ED 5B E5 12                  LD      DE, (LINEOFF)
+113+  128C 19                           ADD     HL, DE          ; HL = START OF RECORD
+114+  128D
+115+  128D 3A E7 12                     LD      A, (CURLLEN)
+116+  1290 77                           LD      (HL), A         ; WRITE LEN
+117+  1291
+118+  1291                              ; CLEAR ATTRS (80 BYTES AFTER TEXT)
+119+  1291 E5                           PUSH    HL
+120+  1292 11 51 00                     LD      DE, 81          ; 1 (LEN) + 80 (TEXT)
+121+  1295 19                           ADD     HL, DE
+122+  1296 EB                           EX      DE, HL          ; DE = ATTR START
+123+  1297 E1                           POP     HL
+124+  1298 D5                           PUSH    DE
+125+  1299 21 00 00                     LD      HL, 0           ; FILL WITH 0 (ATTR_NONE)
+126+  129C                              ; WE NEED TO FILL 80 BYTES IN VRAM-MAPPED PAGE 2
+127+  129C D1                           POP     DE
+128+  129D D5                           PUSH    DE
+129+  129E E1                           POP     HL
+130+  129F 13                           INC     DE
+131+  12A0 36 00                        LD      (HL), 0
+132+  12A2 01 4F 00                     LD      BC, 79
+133+  12A5 ED B0                        LDIR
+134+  12A7
+135+  12A7                              ; ADD TO DIRECTORY
+136+  12A7 2A 49 14                     LD      HL, (TOTLINES)
+137+  12AA 3A 41 14                     LD      A, (TXSEG)
+138+  12AD ED 5B E5 12                  LD      DE, (LINEOFF)
+139+  12B1 CD 47 10                     CALL    DIRWRITE
+140+  12B4
+141+  12B4                              ; PREPARE NEXT LINE RECORD OFFSET
+142+  12B4 2A E5 12                     LD      HL, (LINEOFF)
+143+  12B7 11 A1 00                     LD      DE, WORKSIZ
+144+  12BA 19                           ADD     HL, DE
+145+  12BB 22 E5 12                     LD      (LINEOFF), HL
+146+  12BE
+147+  12BE                              ; CHECK IF SEGMENT FULL (16KB / 161 ~= 101 LINES)
+148+  12BE                              ; 16384 - 161 = 16223 (#3F5F)
+149+  12BE 7C                           LD      A, H
+150+  12BF FE 3F                        CP      #3F
+151+  12C1 38 14                        JR      C, .NOTFULL
+152+  12C3 7D                           LD      A, L
+153+  12C4 FE 5F                        CP      #5F
+154+  12C6 38 0F                        JR      C, .NOTFULL
+155+  12C8
+156+  12C8 CD BE 0F                     CALL    ALLSEG
+157+  12CB 32 41 14                     LD      (TXSEG), A
+158+  12CE CD EE 0F                     CALL    PUTP2
+159+  12D1 21 00 00                     LD      HL, 0
+160+  12D4 22 E5 12                     LD      (LINEOFF), HL
+161+  12D7
+162+  12D7 AF           .NOTFULL        XOR     A
+163+  12D8 32 E7 12                     LD      (CURLLEN), A
+164+  12DB
+165+  12DB 2A 49 14                     LD      HL, (TOTLINES)
+166+  12DE 23                           INC     HL
+167+  12DF 22 49 14                     LD      (TOTLINES), HL
+168+  12E2 C9                           RET
+169+  12E3
+170+  12E3
+171+  12E3              ; --- FILESAVE                  ----------------------------------------
+172+  12E3
+173+  12E3 C9           FILESAVE        RET
+174+  12E4
+175+  12E4
+176+  12E4              ; --- FSAVEAS                ----------------------------------------
+177+  12E4
+178+  12E4 C9           FSAVEAS      RET
+179+  12E5
+180+  12E5              ; --- TEMP VARS FOR LOADER      ----------------------------------------
+181+  12E5
+182+  12E5 00 00        LINEOFF         DEFW    0               ; START OF CURRENT LINE RECORD
+183+  12E7 00           CURLLEN         DEFB    0               ; CURRENT LINE LENGTH
+184+  12E8
+# file closed: FILEIO.Z8A
+ 64   12E8                              INCLUDE PARAMS.Z8A
+# file opened: PARAMS.Z8A
+  1+  12E8              ;                                       ****************************************
+  2+  12E8              ;                                       * PARAMS                               *
+  3+  12E8              ;                                       ****************************************
+  4+  12E8              ;
+  5+  12E8              ; PARSES DOS COMMAND-LINE PARAMETERS VIA EXTPARM (BDOS.Z8A).
+  6+  12E8              ; S6ED ACCEPTS ONE OPTIONAL PARAMETER: THE FILENAME TO OPEN.
+  7+  12E8              ; NO /X SWITCHES DEFINED YET — SCAFFOLD IS READY FOR FUTURE ADDITIONS.
+  8+  12E8              ;
+  9+  12E8              ; CALL PARAMS FROM INIT AFTER BUFINIT.
+ 10+  12E8              ; ON RETURN: CY=0  FILENAME FOUND → FILENAME IS POPULATED (ASCIIZ)
+ 11+  12E8              ;            CY=1  NO FILENAME GIVEN → OPEN EMPTY BUFFER
+ 12+  12E8
+ 13+  12E8
+ 14+  12E8              ; --- PARAMS                    ----------------------------------------
+ 15+  12E8
+ 16+  12E8              ; - PARAMS -----------
+ 17+  12E8              ; - PARSE COMMAND LINE, FIND FILENAME
+ 18+  12E8              ; - OUTPUT:
+ 19+  12E8              ; -     CY = 0  FILENAME COPIED TO FILENAME (VARS)
+ 20+  12E8              ; -     CY = 1  NO FILENAME PARAM FOUND
+ 21+  12E8              ; -
+ 22+  12E8
+ 23+  12E8 21 CD 14     PARAMS          LD      HL, PARBUF
+ 24+  12EB CD AE 03                     CALL    EXTPARM
+ 25+  12EE D8                           RET     C               ; NO PARAMS AT ALL → CY=1
+ 26+  12EF
+ 27+  12EF                              ; --- CHECK #EAC PARAM FOR A BARE FILENAME (NOT STARTING '/')
+ 28+  12EF
+ 29+  12EF CD F3 12                     CALL    CHKFILE
+ 30+  12F2 C9                           RET                     ; CY FROM CHKFILE PROPAGATES
+ 31+  12F3
+ 32+  12F3
+ 33+  12F3              ; --- CHKFILE                   ----------------------------------------
+ 34+  12F3
+ 35+  12F3              ; - CHKFILE ----------
+ 36+  12F3              ; - FIND FIRST PARAM NOT STARTING WITH '/'
+ 37+  12F3              ; - COPIES IT TO FILENAME (ASCIIZ)
+ 38+  12F3              ; - OUTPUT:
+ 39+  12F3              ; -     CY = 0  FILENAME SET
+ 40+  12F3              ; -     CY = 1  NOT FOUND
+ 41+  12F3              ; -
+ 42+  12F3
+ 43+  12F3 3A CD 14     CHKFILE         LD      A, (PARBUF)     ; TOTAL PARAM COUNT
+ 44+  12F6 47                           LD      B, A
+ 45+  12F7 0E 00                        LD      C, 0
+ 46+  12F9 C5           .LOOP           PUSH    BC
+ 47+  12FA 21 CD 14                     LD      HL, PARBUF
+ 48+  12FD 11 A5 14                     LD      DE, PARMTMP
+ 49+  1300 79                           LD      A, C
+ 50+  1301 CD F0 03                     CALL    GETPARAM        ; → COPIES PARAM C TO PARMTMP, HL=PARMTMP
+ 51+  1304 7E                           LD      A, (HL)
+ 52+  1305 FE 2F                        CP      '/'
+ 53+  1307 20 06                        JR      NZ, .FOUND      ; NOT A SWITCH → FILENAME
+ 54+  1309 C1                           POP     BC
+ 55+  130A 0C                           INC     C
+ 56+  130B 10 EC                        DJNZ    .LOOP
+ 57+  130D 37                           SCF                     ; NOT FOUND
+ 58+  130E C9                           RET
+ 59+  130F
+ 60+  130F C1           .FOUND          POP     BC
+ 61+  1310 21 A5 14                     LD      HL, PARMTMP
+ 62+  1313 11 50 14                     LD      DE, FILENAME
+ 63+  1316 7E           .COPY           LD      A, (HL)
+ 64+  1317 12                           LD      (DE), A
+ 65+  1318 A7                           AND     A
+ 66+  1319 28 04                        JR      Z, .DONE
+ 67+  131B 23                           INC     HL
+ 68+  131C 13                           INC     DE
+ 69+  131D 18 F7                        JR      .COPY
+ 70+  131F A7           .DONE           AND     A               ; CY=0
+ 71+  1320 C9                           RET
+ 72+  1321
+ 73+  1321
+ 74+  1321              ; --- CHKPARAM                  ----------------------------------------
+ 75+  1321
+ 76+  1321              ; - CHKPARAM ---------
+ 77+  1321              ; - CHECK PARAM STRING AND SET FLAG VAR IF FOUND
+ 78+  1321              ; - HL: PARAM DATA (DEFB SIZE / DEFM STRING)
+ 79+  1321              ; - DE: FLAG VARIABLE ADDRESS
+ 80+  1321              ; - A:  VALUE TO STORE IF FOUND
+ 81+  1321              ; - OUTPUT:
+ 82+  1321              ; -     CY = 0  PARAM FOUND AND FLAG SET
+ 83+  1321              ; -     CY = 1  NOT FOUND
+ 84+  1321              ; -
+ 85+  1321
+ 86+  1321 F5           CHKPARAM        PUSH    AF
+ 87+  1322 D5                           PUSH    DE
+ 88+  1323 7E                           LD      A, (HL)
+ 89+  1324 23                           INC     HL
+ 90+  1325 CD 2F 13                     CALL    FNDPARAM
+ 91+  1328 D1                           POP     DE
+ 92+  1329 C1                           POP     BC
+ 93+  132A D8                           RET     C
+ 94+  132B 78                           LD      A, B
+ 95+  132C 12                           LD      (DE), A
+ 96+  132D A7                           AND     A
+ 97+  132E C9                           RET
+ 98+  132F
+ 99+  132F
+100+  132F              ; --- FNDPARAM                  ----------------------------------------
+101+  132F
+102+  132F              ; - FNDPARAM ---------
+103+  132F              ; - CASE-INSENSITIVE SEARCH FOR PARAM STRING IN COMMAND LINE
+104+  132F              ; - A:  PARAM STRING SIZE
+105+  132F              ; - HL: POINTER TO PARAM STRING
+106+  132F              ; - OUTPUT:
+107+  132F              ; -     CY = 0  FOUND
+108+  132F              ; -     CY = 1  NOT FOUND
+109+  132F              ; -
+110+  132F
+111+  132F 32 A2 14     FNDPARAM        LD      (PSIZE), A
+112+  1332 22 A3 14                     LD      (PPNT), HL
+113+  1335 3A CD 14                     LD      A, (PARBUF)
+114+  1338 47                           LD      B, A
+115+  1339 0E 00                        LD      C, 0
+116+  133B C5           .LOOP           PUSH    BC
+117+  133C 21 CD 14                     LD      HL, PARBUF
+118+  133F 11 00 00                     LD      DE, 0
+119+  1342 79                           LD      A, C
+120+  1343 CD F0 03                     CALL    GETPARAM
+121+  1346 CD 54 13                     CALL    .CHK
+122+  1349 30 06                        JR      NC, .SUCCESS
+123+  134B C1                           POP     BC
+124+  134C 0C                           INC     C
+125+  134D 10 EC                        DJNZ    .LOOP
+126+  134F 37                           SCF
+127+  1350 C9                           RET
+128+  1351 C1           .SUCCESS        POP     BC
+129+  1352 A7                           AND     A
+130+  1353 C9                           RET
+131+  1354
+132+  1354 ED 5B A3 14  .CHK            LD      DE, (PPNT)
+133+  1358 3A A2 14                     LD      A, (PSIZE)
+134+  135B 47                           LD      B, A
+135+  135C 1A           .CHKLP          LD      A, (DE)
+136+  135D BE                           CP      (HL)
+137+  135E 28 0D                        JR      Z, .CHKOK
+138+  1360 FE 41                        CP      'A'
+139+  1362 38 0F                        JR      C, .CHKERR
+140+  1364 FE 5B                        CP      'Z' + 1
+141+  1366 30 0B                        JR      NC, .CHKERR
+142+  1368 F6 20                        OR      %00100000       ; TO LOWERCASE
+143+  136A BE                           CP      (HL)
+144+  136B 20 06                        JR      NZ, .CHKERR
+145+  136D 23           .CHKOK          INC     HL
+146+  136E 13                           INC     DE
+147+  136F 10 EB                        DJNZ    .CHKLP
+148+  1371 A7                           AND     A
+149+  1372 C9                           RET
+150+  1373 37           .CHKERR         SCF
+151+  1374 C9                           RET
+152+  1375
+# file closed: PARAMS.Z8A
+ 65   1375
+ 66   1375
+ 67   1375              ; --- INIT                      ----------------------------------------
+ 68   1375
+ 69   1375
+ 70   1375              ; - INIT -------------
+ 71   1375              ; - PROGRAM ENTRY POINT
+ 72   1375              ; -
+ 73   1375
+ 74   1375 31 00 F0     INIT            LD      SP, #F000       ; SAFE STACK TOP BELOW DOS2 KERNEL
+ 75   1378
+ 76   1378                              ; DETECT DOS VERSION
+ 77   1378 CD 47 01                     CALL    DOSVER
+ 78   137B DA AF 13                     JP      C, .NODOS2      ; CARRY = DOS1 ONLY
+ 79   137E
+ 80   137E                              ; LOCATE MAPPER MANAGER
+ 81   137E CD 64 0F                     CALL    MAPINIT
+ 82   1381 DA B8 13                     JP      C, .NOMAP
+ 83   1384
+ 84   1384                              ; INITIALIZE SCREEN
+ 85   1384 CD C1 13                     CALL    SCRINIT
+ 86   1387
+ 87   1387                              ; INITIALIZE FONT TABLES IN VRAM
+ 88   1387 CD A9 06                     CALL    FONTINIT
+ 89   138A
+ 90   138A                              ; INSTALL BLINK TIMI HOOK
+ 91   138A CD 20 14                     CALL    HKBLINK
+ 92   138D
+ 93   138D                              ; INITIALIZE EMPTY TEXT BUFFER
+ 94   138D CD FC 0F                     CALL    BUFINIT
+ 95   1390
+ 96   1390                              ; CHECK COMMAND-LINE PARAMS: OPTIONAL FILENAME TO LOAD
+ 97   1390 CD E8 12                     CALL    PARAMS
+ 98   1393 38 08                        JR      C, .NOARG       ; CY=1 → NO FILENAME GIVEN
+ 99   1395 21 50 14                     LD      HL, FILENAME
+100   1398 CD F6 11                     CALL    FILELOAD
+101   139B 18 0F                        JR      .READY
+102   139D
+103   139D              .NOARG          ; DRAW INITIAL SCREEN (EMPTY BUFFER)
+104   139D CD 99 10                     CALL    REDRAW
+105   13A0 CD D0 11                     CALL    DRWMENU
+106   13A3 CD D1 11                     CALL    DRWGUT
+107   13A6 CD D3 11                     CALL    DRWSCRL
+108   13A9 CD CF 11                     CALL    DRWSTAT
+109   13AC
+110   13AC              .READY          ; ENTER MAIN EDITOR LOOP
+111   13AC C3 C4 11                     JP      MAINLOOP
+112   13AF
+113   13AF 11 03 01     .NODOS2         LD      DE, ENODOS2
+114   13B2 CD 45 03                     CALL    STROUT
+115   13B5 C3 4D 03                     JP      TERM
+116   13B8
+117   13B8 11 21 01     .NOMAP          LD      DE, ENOMAP
+118   13BB CD 45 03                     CALL    STROUT
+119   13BE C3 4D 03                     JP      TERM
+120   13C1
+121   13C1
+122   13C1              ; --- SCRINIT                ----------------------------------------
+123   13C1
+124   13C1              ; - SCRINIT -------
+125   13C1              ; - SET SCREEN 6, PALETTE, CLEAR VRAM
+126   13C1              ; -
+127   13C1
+128   13C1 3E 06        SCRINIT         LD      A, 6
+129   13C3 CD 5F 00                     CALL    CHGMOD
+130   13C6
+131   13C6                              ; SET PALETTE
+132   13C6                              ; COL_BG (0): BLACK (0,0,0)
+133   13C6                              ; COL_FG (1): WHITE (7,7,7)
+134   13C6                              ; COL_UI (2): BLUE (2,2,5)
+135   13C6                              ; COL_HI (3): YELLOW (7,7,0)
+136   13C6 21 18 14                     LD      HL, PALDATA
+137   13C9 AF                           XOR     A
+138   13CA D3 9B                        OUT     (VDPPALC), A
+139   13CC 0E 9A                        LD      C, VDPPAL
+140   13CE                              REPT    8               ; 4 COLORS * 2 BYTES
+141   13CE ED A3       >                OUTI
+141   13D0 ED A3       >                OUTI
+141   13D2 ED A3       >                OUTI
+141   13D4 ED A3       >                OUTI
+141   13D6 ED A3       >                OUTI
+141   13D8 ED A3       >                OUTI
+141   13DA ED A3       >                OUTI
+141   13DC ED A3       >                OUTI
+142   13DE                              ENDR
+143   13DE
+144   13DE                              ; CLEAR VRAM (HMMV 512x212)
+145   13DE 21 37 17                     LD      HL, VDPCMBLK
+146   13E1 36 00                        LD      (HL), 0         ; SX
+147   13E3 23                           INC     HL
+148   13E4 36 00                        LD      (HL), 0
+149   13E6 23                           INC     HL
+150   13E7 36 00                        LD      (HL), 0         ; SY
+151   13E9 23                           INC     HL
+152   13EA 36 00                        LD      (HL), 0
+153   13EC 23                           INC     HL
+154   13ED 36 00                        LD      (HL), 0         ; DX
+155   13EF 23                           INC     HL
+156   13F0 36 00                        LD      (HL), 0
+157   13F2 23                           INC     HL
+158   13F3 36 00                        LD      (HL), 0         ; DY
+159   13F5 23                           INC     HL
+160   13F6 36 00                        LD      (HL), 0
+161   13F8 23                           INC     HL
+162   13F9 36 00                        LD      (HL), 0         ; NX = 512
+163   13FB 23                           INC     HL
+164   13FC 36 02                        LD      (HL), 2         ; 512 / 256 = 2
+165   13FE 23                           INC     HL
+166   13FF 36 D4                        LD      (HL), 212       ; NY
+167   1401 23                           INC     HL
+168   1402 36 00                        LD      (HL), COL_BG    ; CLR
+169   1404 23                           INC     HL
+170   1405 36 00                        LD      (HL), 0         ; ARG
+171   1407 23                           INC     HL
+172   1408 36 C0                        LD      (HL), VDP_HMMV  ; CMD
+173   140A
+174   140A 21 37 17                     LD      HL, VDPCMBLK
+175   140D CD 67 06                     CALL    HMMV
+176   1410
+177   1410                              ; DISABLE KEY CLICK
+178   1410 AF                           XOR     A
+179   1411 32 DB F3                     LD      (CLIKSW), A
+180   1414
+181   1414                              ; ERASE FUNCTION KEYS
+182   1414 CD CC 00                     CALL    ERAFNK
+183   1417 C9                           RET
+184   1418
+185   1418 00 00        PALDATA         DEFB    #00, #00        ; 0: BLACK
+186   141A 77 07                        DEFB    #77, #07        ; 1: WHITE
+187   141C 22 05                        DEFB    #22, #05        ; 2: BLUEISH UI
+188   141E 77 00                        DEFB    #77, #00        ; 3: YELLOW HI
+189   1420
+190   1420
+191   1420              ; --- HKBLINK                 ----------------------------------------
+192   1420
+193   1420              ; - HKBLINK --------
+194   1420              ; - INSTALL BLNKTICK INTO HTIMI HOOK
+195   1420              ; -
+196   1420
+197   1420 2A 9F FD     HKBLINK       LD      HL, (HTIMI)
+198   1423 22 0E 17                     LD      (PRVHTIMI), HL
+199   1426 21 D5 11                     LD      HL, BLNKTICK
+200   1429 22 9F FD                     LD      (HTIMI), HL
+201   142C C9                           RET
+202   142D
+203   142D
+204   142D              ; --- VARS                      ----------------------------------------
+205   142D
+206   142D
+207   142D                              OUTEND
+208   142D
+209   142D                              INCLUDE VARS.Z8A
+# file opened: VARS.Z8A
+  1+  142D              ;                                       ****************************************
+  2+  142D              ;                                       * VARS                                 *
+  3+  142D              ;                                       ****************************************
+  4+  142D
+  5+  142D              VARS
+  6+  142D
+  7+  142D
+  8+  142D              ; --- SYSTEM                    ----------------------------------------
+  9+  142D
+ 10+  142D
+ 11+  142D 00           DOS2            DEFB    0               ; FF = DOS2/NEXTOR PRESENT, 00 = DOS1
+ 12+  142E 00           UNAPISET        DEFB    0               ; BDOS.Z8A UNAPI FLAG (UNUSED IN S6ED)
+ 13+  142F 00           MAPRDY         DEFB    0               ; FF = MAPPER MANAGER FOUND
+ 14+  1430
+ 15+  1430
+ 16+  1430              ; --- MAPPER JUMP TABLE ENTRIES ----------------------------------------
+ 17+  1430
+ 18+  1430                              ; FILLED AT INIT BY MAPINIT (EXTBIO → HOKVLD CHECK)
+ 19+  1430 00 00        MALLSEG      DEFW    0               ; ALL_SEG ENTRY ADDRESS
+ 20+  1432 00 00        MFRESEG      DEFW    0               ; FRE_SEG ENTRY ADDRESS
+ 21+  1434 00 00        MRDSEG       DEFW    0               ; RD_SEG  ENTRY ADDRESS
+ 22+  1436 00 00        MWRSEG       DEFW    0               ; WR_SEG  ENTRY ADDRESS
+ 23+  1438 00 00        MPUTP1       DEFW    0               ; PUT_P1  ENTRY ADDRESS (PAGE 1: DIR)
+ 24+  143A 00 00        MGETP1       DEFW    0               ; GET_P1  ENTRY ADDRESS
+ 25+  143C 00 00        MPUTP2       DEFW    0               ; PUT_P2  ENTRY ADDRESS (PAGE 2: TEXT)
+ 26+  143E 00 00        MGETP2       DEFW    0               ; GET_P2  ENTRY ADDRESS
+ 27+  1440
+ 28+  1440
+ 29+  1440              ; --- SEGMENTS                  ----------------------------------------
+ 30+  1440
+ 31+  1440 00           DIRSEG          DEFB    0               ; SEGMENT NUMBER BANKED AT PAGE 1 (DIR)
+ 32+  1441 00           TXSEG           DEFB    0               ; SEGMENT NUMBER BANKED AT PAGE 2 (TEXT)
+ 33+  1442
+ 34+  1442
+ 35+  1442              ; --- CURSOR / VIEWPORT         ----------------------------------------
+ 36+  1442
+ 37+  1442
+ 38+  1442 00           CURX            DEFB    0               ; CURSOR COLUMN (0-79, DOC SPACE)
+ 39+  1443 00           CURY            DEFB    0              ; CURSOR ROW    (0-23, VIEWPORT)
+ 40+  1444 00           CURSEG          DEFB    0               ; SEGMENT CURRENTLY BANKED AT PAGE 2
+ 41+  1445
+ 42+  1445 00 00        TOPLINE         DEFW    0               ; FIRST VISIBLE DOCUMENT LINE (0-BASED)
+ 43+  1447 00 00        DOCLINE         DEFW    0               ; CURSOR DOCUMENT LINE (= TOPLINE + CURY)
+ 44+  1449 01 00        TOTLINES        DEFW    1               ; TOTAL LINES IN DOCUMENT
+ 45+  144B
+ 46+  144B
+ 47+  144B              ; --- EDITOR STATE              ----------------------------------------
+ 48+  144B
+ 49+  144B
+ 50+  144B 00           MODIFIED        DEFB    0               ; FF = BUFFER MODIFIED SINCE LAST SAVE
+ 51+  144C 01           INSMODE         DEFB    INS_MODE        ; INSERT (FF) OR OVERWRITE (00)
+ 52+  144D 00           LANGMODE        DEFB    LGNONE       ; CURRENT LANGUAGE/TOKENIZER MODE
+ 53+  144E 00           BLNKPH       DEFB    0               ; CURSOR BLINK PHASE (TOGGLED BY TIMI)
+ 54+  144F 00           BLNKCNT         DEFB    0               ; BLINK TICK COUNTER
+ 55+  1450
+ 56+  1450
+ 57+  1450              ; --- FILE                      ----------------------------------------
+ 58+  1450
+ 59+  1450
+ 60+  1450 00 00 00...  FILENAME        DEFS    40, 0           ; CURRENT FILENAME (ASCIIZ)
+ 61+  1478 00           FILEHAND        DEFB    0               ; OPEN FILE HANDLE
+ 62+  1479
+ 63+  1479 00 00 00 00  FSIZETMP        DEFS    4               ; TEMP FOR BDOS SIZE CALCULATIONS
+ 64+  147D 00 00 00...  FCB             DEFS    SIZEFCB         ; FCB FOR DOS1 I/O
+ 65+  14A2
+ 66+  14A2
+ 67+  14A2              ; --- PARAMS                    ----------------------------------------
+ 68+  14A2
+ 69+  14A2                              ; COMMAND-LINE PARAMETER PARSING (PARAMS.Z8A / BDOS EXTPARM)
+ 70+  14A2 00           PSIZE           DEFB    0               ; FNDPARAM: CURRENT PARAM STRING SIZE
+ 71+  14A3 00 00        PPNT            DEFW    0               ; FNDPARAM: POINTER TO PARAM STRING
+ 72+  14A5 00 00 00...  PARMTMP         DEFS    40              ; CHKFILE: TEMP COPY OF ONE PARAM
+ 73+  14CD 00 00 00...  PARBUF          DEFS    128             ; EXTPARM RAW OUTPUT BUFFER
+ 74+  154D
+ 75+  154D
+ 76+  154D              ; --- WORK BUFFER               ----------------------------------------
+ 77+  154D
+ 78+  154D                              ; FLAT 161-BYTE BUFFER: [1: TEXT_LEN] [80: TEXT] [80: ATTR]
+ 79+  154D                              ; LOADED FROM MAPPER SEGMENT FOR CURRENT LINE BEING EDITED
+ 80+  154D
+ 81+  154D 00 00 00...  WORKBUF         DEFS    WORKSIZ
+ 82+  15EE 00 00 00...  FILEBUF         DEFS    256             ; TEMPORARY BUFFER FOR DISK READS
+ 83+  16EE 00 00 00...  FONTBUF         DEFS    32              ; TEMPORARY BUFFER FOR FONT EXPANSION
+ 84+  170E
+ 85+  170E
+ 86+  170E              ; --- BLINK HANDLER             ----------------------------------------
+ 87+  170E
+ 88+  170E
+ 89+  170E 00 00        PRVHTIMI      DEFW    0               ; SAVED ORIGINAL HTIMI HOOK VECTOR
+ 90+  1710
+ 91+  1710
+ 92+  1710              ; --- GENERIC / UTIL            ----------------------------------------
+ 93+  1710
+ 94+  1710                              ; B2D CONVERSION BUFFERS (FROM GENERIC.Z8A)
+ 95+  1710 00 00 00...  B2DINV          DEFS    8
+ 96+  1718 00 00 00...  B2DBUF          DEFS    20
+ 97+  172C 00           B2DEND          DEFS    1
+ 98+  172D
+ 99+  172D                              ; FUNCTION KEYS SAVE BUFFER
+100+  172D 00 00 00...  FNKBUF          DEFS    10
+101+  1737
+102+  1737
+103+  1737              ; --- LINE DIRECTORY            ----------------------------------------
+104+  1737
+105+  1737                              ; LIVES AT DIRPAGE (#4000) IN A DEDICATED MAPPER SEGMENT.
+106+  1737                              ; ALLOCATED AT STARTUP BY BUFINIT, BANKED INTO PAGE 1 VIA
+107+  1737                              ; PUTP1 — NEVER SWITCHED. ACCESSED AS FLAT ARRAY DIRECTLY.
+108+  1737                              ; CAPACITY: MAXLINES ENTRIES × DIRSIZ BYTES = 16380 BYTES.
+109+  1737
+110+  1737
+111+  1737
+112+  1737              ; --- VDP COMMAND BLOCK          ----------------------------------------
+113+  1737
+114+  1737                              ; STANDARD 15-BYTE BLOCK FOR R#32 TO R#46
+115+  1737
+116+  1737 00 00 00...  VDPCMBLK      DEFS    15
+117+  1746              VDP_SX          EQU     VDPCMBLK + 0  ; WORD
+118+  1746              VDP_SY          EQU     VDPCMBLK + 2  ; WORD
+119+  1746              VDP_DX          EQU     VDPCMBLK + 4  ; WORD
+120+  1746              VDP_DY          EQU     VDPCMBLK + 6  ; WORD
+121+  1746              VDP_NX          EQU     VDPCMBLK + 8  ; WORD
+122+  1746              VDP_NY          EQU     VDPCMBLK + 10 ; WORD
+123+  1746              VDP_CLR         EQU     VDPCMBLK + 12 ; BYTE
+124+  1746              VDP_ARG         EQU     VDPCMBLK + 13 ; BYTE
+125+  1746              VDP_CMD         EQU     VDPCMBLK + 14 ; BYTE
+126+  1746
+127+  1746
+128+  1746 55 6E 6B 6E  UNKNOWN         DEFM    "Unknown("
+128+  174A 6F 77 6E 28
+129+  174E 00 00 00...  .CODE           DEFS    5               ; ROOM FOR "NNN)$"
+130+  1753
+131+  1753              ENDVARS
+132+  1753
+# file closed: VARS.Z8A
+210   1753
+# file closed: S6ED.Z8A

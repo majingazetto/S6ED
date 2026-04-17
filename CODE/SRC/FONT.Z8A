@@ -26,7 +26,7 @@ FONTINIT        LD      HL, FONT_DATA
                 ; 2. LOOP 256 CHARS
                 LD      BC, 0           ; B = 0 (256), C = 0 (CHAR COUNTER)
 .CHARLP         PUSH    BC
-                
+
                 ; READ 8 BYTES FROM BUNDLED DATA
                 LD      HL, (CG_PTR)
                 LD      DE, FONTBUF
@@ -55,7 +55,7 @@ FONTINIT        LD      HL, FONT_DATA
                 ; GLYPH N: SX = (N % 32) * 6, SY = TABLE_SY + (N / 32) * 8
                 POP     BC              ; C = CHAR N
                 PUSH    BC
-                
+
                 LD      A, C
                 AND     %00011111       ; N % 32
                 LD      L, A
@@ -66,7 +66,7 @@ FONTINIT        LD      HL, FONT_DATA
                 ADD     HL, HL          ; * 4
                 ADD     HL, DE          ; * 6
                 LD      (VDP_DX), HL    ; DX
-                
+
                 LD      A, C
                 SRL     A
                 SRL     A
@@ -88,10 +88,10 @@ FONTINIT        LD      HL, FONT_DATA
                 LD      (VDP_NY), A
                 XOR     A
                 LD      (VDP_ARG), A
-                
+
                 LD      HL, VDPCMBLK
                 CALL    HMMC
-                
+
                 ; WRITE DATA TO PORT #98
                 LD      HL, FONTBUF + 16
                 LD      B, 16
@@ -119,7 +119,7 @@ CG_PTR          DEFW    0
 EXPNORM         PUSH    BC
                 LD      B, A            ; B = ROM ROW
                 LD      HL, 0           ; HL = EXPANDED ROW
-                
+
                 ; PIXEL 0 (BIT 7)
                 BIT     7, B
                 JR      Z, .P1
@@ -150,7 +150,7 @@ EXPNORM         PUSH    BC
                 JR      Z, .DONE
                 SET     5, L
                 SET     4, L
-                
+
 .DONE           LD      A, H
                 LD      (DE), A
                 INC     DE
@@ -162,4 +162,5 @@ EXPNORM         PUSH    BC
 
 ; --- ASSETS                    ----------------------------------------
 
-FONT_DATA       INCBIN  "../RES/FONT.BIN"
+FONT_DATA       INCBIN  "FONT.BIN"
+
