@@ -2,11 +2,8 @@
 ;                                       * FONT                                 *
 ;                                       ****************************************
 ;
-; READS THE MSX ROM 6×8 CHARSET (256 GLYPHS × 8 BYTES, 1BPP, BITS 7-2 USED).
+; BUNDLED 6×8 CHARSET (256 GLYPHS × 8 BYTES, 1BPP).
 ; EXPANDS INTO 4 VRAM FONT TABLES: NORMAL / BOLD / ITALIC / BOLD+ITALIC.
-; CALLED ONCE AT STARTUP BEFORE ANY RENDERING.
-;
-; ROM CHARSET ACCESS: RDSLT FROM SLOT 0, ADDRESS IN CGPNT.
 
 
 ; --- ITALIC SHIFT TABLE        ----------------------------------------
@@ -19,22 +16,96 @@ ITALSHFT      DEFB    1, 1, 1, 1, 0, -1, -1, -1
 ; --- FONTINIT                  ----------------------------------------
 
 ; - FONTINIT ---------
-; - EXPAND ROM CHARSET TO 4 VRAM FONT TABLES
+; - EXPAND BUNDLED CHARSET TO 4 VRAM FONT TABLES
 ; - CALLED ONCE AT INIT
 ; -
 
-FONTINIT        ; TODO:
-                ; 1. READ CGPNT TO GET CHARSET SLOT AND BASE ADDRESS
-                ; 2. FOR #EAC OF 256 GLYPHS (N = 0..255):
-                ;    A. READ 8 BYTES FROM ROM VIA RDSLT
-                ;    B. EXPAND TO NORMAL:   BITS 7-2 → 6PX OF COLOR 0/1, PAD 2 RIGHT PX
-                ;    C. EXPAND TO BOLD:     NORMAL_ROW | (NORMAL_ROW >> 1)
-                ;    D. EXPAND TO ITALIC:   NORMAL_ROW SHIFTED PER ITALSHFT TABLE
-                ;    E. EXPAND TO B+I:      BOLD TRANSFORM THEN ITALIC SHIFT
-                ;    F. UPLOAD #EAC VARIANT TO ITS VRAM FONT TABLE VIA HMMC OR OTIR
-                ; 3. #EAC GLYPH = 16 BYTES IN VRAM (6PX × 8 ROWS = 2 B/ROW × 8 = 16)
-                ;    GLYPH N: SX = (N % 32) * 6, SY = TABLE_SY + (N / 32) * 8
+FONTINIT        LD      HL, FONT_DATA
+                LD      (CG_PTR), HL
+
+                ; 2. LOOP 256 CHARS
+                LD      BC, 0           ; B = 0 (256), C = 0 (CHAR COUNTER)
+.CHARLP         PUSH    BC
+                
+                ; READ 8 BYTES FROM BUNDLED DATA
+                LD      HL, (CG_PTR)
+                LD      DE, FONTBUF
+                LD      B, 8
+.READLP         LD      A, (HL)
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                DJNZ    .READLP
+                LD      (CG_PTR), HL
+
+                ; EXPAND TO NORMAL (6PX -> 2BPP)
+                LD      HL, FONTBUF
+                LD      DE, FONTBUF + 16 ; WORK AREA FOR EXPANDED GLYPH
+                LD      B, 8
+.EXPLP          PUSH    BC
+                LD      A, (HL)         ; 1BPP ROW
+                CALL    EXPNORM         ; EXPAND A -> DE
+                INC     HL
+                INC     DE
+                INC     DE
+                POP     BC
+                DJNZ    .EXPLP
+
+                ; UPLOAD TO VRAM (NORMAL TABLE)
+                ; GLYPH N: SX = (N % 32) * 6, SY = TABLE_SY + (N / 32) * 8
+                POP     BC              ; C = CHAR N
+                PUSH    BC
+                
+                LD      A, C
+                AND     %00011111       ; N % 32
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL          ; * 4
+                ADD     HL, DE          ; * 6
+                LD      (VDP_DX), HL    ; DX
+                
+                LD      A, C
+                SRL     A
+                SRL     A
+                SRL     A
+                SRL     A
+                SRL     A               ; N / 32
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; (N / 32) * 8
+                LD      L, A
+                LD      H, 0
+                LD      DE, FNORM_SY
+                ADD     HL, DE
+                LD      (VDP_DY), HL    ; DY
+
+                LD      HL, 6           ; NX
+                LD      (VDP_NX), HL
+                LD      A, 8            ; NY
+                LD      (VDP_NY), A
+                XOR     A
+                LD      (VDP_ARG), A
+                
+                LD      HL, VDPCMBLK
+                CALL    HMMC
+                
+                ; WRITE DATA TO PORT #98
+                LD      HL, FONTBUF + 16
+                LD      B, 16
+                LD      C, VDPDR
+                OTIR
+
+                POP     BC
+                INC     C
+                LD      A, C
+                AND     A
+                JP      NZ, .CHARLP
                 RET
+
+CG_PTR          DEFW    0
 
 
 ; --- GLYPH EXPAND HELPERS      ----------------------------------------
@@ -42,28 +113,53 @@ FONTINIT        ; TODO:
 ; - EXPNORM ----------
 ; - EXPAND ONE 1BPP ROM ROW BYTE TO 2-BYTE VRAM ROW (NORMAL, SCREEN 6 2BPP)
 ; - A:  ROM ROW BYTE (BITS 7-2 = 6 PIXELS)
-; - HL: DESTINATION VRAM ROW BUFFER (2 BYTES)
-; - NOTE: COLOR 1 = PIXEL ON, COLOR 0 = PIXEL OFF
+; - DE: DESTINATION VRAM ROW BUFFER (2 BYTES)
 ; -
 
-EXPNORM         ; TODO
+EXPNORM         PUSH    BC
+                LD      B, A            ; B = ROM ROW
+                LD      HL, 0           ; HL = EXPANDED ROW
+                
+                ; PIXEL 0 (BIT 7)
+                BIT     7, B
+                JR      Z, .P1
+                SET     7, H
+                SET     6, H
+.P1             ; PIXEL 1 (BIT 6)
+                BIT     6, B
+                JR      Z, .P2
+                SET     5, H
+                SET     4, H
+.P2             ; PIXEL 2 (BIT 5)
+                BIT     5, B
+                JR      Z, .P3
+                SET     3, H
+                SET     2, H
+.P3             ; PIXEL 3 (BIT 4)
+                BIT     4, B
+                JR      Z, .P4
+                SET     1, H
+                SET     0, H
+.P4             ; PIXEL 4 (BIT 3)
+                BIT     3, B
+                JR      Z, .P5
+                SET     7, L
+                SET     6, L
+.P5             ; PIXEL 5 (BIT 2)
+                BIT     2, B
+                JR      Z, .DONE
+                SET     5, L
+                SET     4, L
+                
+.DONE           LD      A, H
+                LD      (DE), A
+                INC     DE
+                LD      A, L
+                LD      (DE), A
+                DEC     DE              ; RESTORE DE TO START OF 2-BYTE ROW
+                POP     BC
                 RET
 
+; --- ASSETS                    ----------------------------------------
 
-; - EXPBOLD ----------
-; - BOLD: OR ROW WITH ROW >> 1 BEFORE EXPANDING
-; - A: ROM ROW BYTE
-; -
-
-EXPBOLD         ; TODO: A = A | (A >> 1), THEN EXPNORM
-                RET
-
-
-; - EXPITAL ----------
-; - ITALIC: SHIFT ROW HORIZONTALLY PER ITALSHFT TABLE
-; - A:   ROM ROW BYTE
-; - B:   ROW INDEX (0-7)
-; -
-
-EXPITAL         ; TODO: LOOK UP ITALSHFT[B], SHIFT A ACCORDINGLY, THEN EXPNORM
-                RET
+FONT_DATA       INCBIN  "../RES/FONT.BIN"

@@ -23,16 +23,35 @@ REDRAW          LD      B, TXRFIRST
 ; --- RENDEROW                  ----------------------------------------
 
 ; - RENDEROW ---------
-; - RENDER A SINGLE ROW (0-25) TO VRAM
+; - RENDER A SINGLE ROW (1-24) TO VRAM
 ; - B: ROW NUMBER (SCREEN SPACE)
 ; -
 
 RENDEROW        PUSH    BC
-                ; TODO: CALL GETLINE_PAGE2 (HL = PTR TO RECORD)
-                ; FOR NOW: ASSUME DATA ALREADY IN WORKBUF FOR TESTING
-                POP     BC
                 
-                ; 1. CALC SCREEN DY (ROW * 8)
+                ; 1. CALC DOC LINE: HL = TOPLINE + B - 1
+                LD      HL, (TOPLINE)
+                LD      A, B
+                SUB     TXRFIRST
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                
+                ; CHECK IF HL < TOTLINES
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JR      C, .VALID
+                
+                ; IF NOT VALID (BEYOND EOF), CLEAR ROW
+                CALL    CLRROW
+                POP     BC
+                RET
+
+.VALID          CALL    LINEREAD        ; LOAD RECORD INTO WORKBUF
+                POP     BC
+                PUSH    BC
+
+                ; 2. CALC SCREEN DY (ROW * 8)
                 LD      A, B
                 ADD     A, A
                 ADD     A, A
@@ -41,12 +60,11 @@ RENDEROW        PUSH    BC
                 LD      H, 0
                 LD      (VDP_DY), HL
 
-                ; 2. RENDER COLS 0-79
-                LD      IX, VDPCMBLK
+                ; 3. RENDER COLS 0-79
                 LD      C, 0            ; COL COUNTER
 .COLLOOP        PUSH    BC
                 
-                ; 3. CALC SCREEN DX (24 + COL * 6)
+                ; 4. CALC SCREEN DX (GUTL_PX + COL * 6)
                 LD      A, C
                 LD      L, A
                 LD      H, 0
@@ -59,11 +77,13 @@ RENDEROW        PUSH    BC
                 ADD     HL, DE
                 LD      (VDP_DX), HL
 
-                ; 4. GET CHAR AND ATTR
+                ; 5. GET CHAR AND ATTR
                 ; WORKBUF: [LEN][80 TEXT][80 ATTR]
                 LD      HL, WORKBUF + 1
                 LD      B, 0
-                LD      C, (IX-.COLLOOP_C) ; GET SAVED C
+                POP     AF              ; GET B,C BACK (B=ROW, C=COL)
+                PUSH    AF
+                LD      C, A            ; C=COL
                 ADD     HL, BC
                 LD      A, (HL)         ; GET CHARCODE
                 PUSH    AF
@@ -74,7 +94,7 @@ RENDEROW        PUSH    BC
                 LD      E, A            ; E = ATTR
                 POP     AF
                 
-                ; 5. CALC FONT SX/SY
+                ; 6. CALC FONT SX/SY
                 ; SX = (CHAR % 32) * 6
                 ; SY = TABLE_SY + (CHAR / 32) * 8
                 PUSH    AF
@@ -99,14 +119,13 @@ RENDEROW        PUSH    BC
                 ADD     A, A            ; (CHAR / 32) * 8
                 
                 ; ADD FONT TABLE OFFSET BASED ON ATTR (BOLD/ITALIC)
-                ; LD      HL, FNORM_SY  ; ... ETC
                 LD      L, A
                 LD      H, 0
                 LD      DE, FNORM_SY
                 ADD     HL, DE
                 LD      (VDP_SY), HL
 
-                ; 6. ISSUE LMMM
+                ; 7. ISSUE LMMM
                 LD      HL, 6           ; NX
                 LD      (VDP_NX), HL
                 LD      A, 8            ; NY
@@ -114,6 +133,7 @@ RENDEROW        PUSH    BC
                 XOR     A
                 LD      (VDP_ARG), A
                 
+                LD      HL, VDPCMBLK
                 LD      A, VDP_LMMM | VDP_IMP
                 CALL    LMMM
 
@@ -122,6 +142,40 @@ RENDEROW        PUSH    BC
                 LD      A, C
                 CP      80
                 JR      NZ, .COLLOOP
+                
+                POP     BC
                 RET
 
-.COLLOOP_C      EQU     2               ; STACK OFFSET TO RETRIEVE C
+
+; --- CLRROW                    ----------------------------------------
+
+; - CLRROW -----------
+; - CLEAR ROW B WITH BACKGROUND COLOR
+; -
+
+CLRROW          LD      A, B
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_DY), HL
+                
+                LD      HL, GUTL_PX
+                LD      (VDP_DX), HL
+                
+                LD      HL, TXAREAPX
+                LD      (VDP_NX), HL
+                
+                LD      A, 8
+                LD      (VDP_NY), A
+                
+                LD      A, COL_BG
+                LD      (VDP_CLR), A
+                
+                XOR     A
+                LD      (VDP_ARG), A
+                
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+                RET

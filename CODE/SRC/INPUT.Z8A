@@ -28,6 +28,9 @@ KEYREAD         CALL    CHGET
 ; -
 
 MAINLOOP        CALL    KEYREAD
+                CP      ESC             ; EXIT ON ESC
+                JP      Z, TERM
+                
                 ; TODO: DISPATCH ON A
                 ; PRINTABLE (#20-#7E): EDINSCHR / EDOVRCHR
                 ; CR:        EDNWLIN
@@ -41,5 +44,5 @@ MAINLOOP        CALL    KEYREAD
                 ; CTRL_O:    FILEOPEN (LOAD)
                 ; CTRL_N:    FILENEW
                 ; CTRL_Q:    EDQUIT
-                ; ESC:       MENU ACTIVATION (FUTURE)
+                
                 JP      MAINLOOP

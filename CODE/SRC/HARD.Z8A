@@ -102,7 +102,7 @@ MJCALLS       EQU     #0F
 MJPUTPH       EQU     #12
 MJGETPH       EQU     #15
 MJPUTP0       EQU     #18
-MJGETP0       EQU     %1
+MJGETP0       EQU     #1B
 MJPUTP1       EQU     #1E
 MJGETP1       EQU     #21
 MJPUTP2       EQU     #24
@@ -156,7 +156,7 @@ VDP_NOT         EQU     #04
 VDP_TIMP        EQU     #08             ; TRANSPARENT (COLOR 0 NOT WRITTEN)
 VDP_TAND        EQU     #09
 VDP_TOR         EQU     #0A
-VDP_TXOR        EQU     %0
+VDP_TXOR        EQU     #0B
 VDP_TNOT        EQU     #0C
 
 
@@ -172,7 +172,7 @@ _CONOUT         EQU     #02
 _DIRIO          EQU     #06
 _INNOE          EQU     #08
 _STROUT         EQU     #09
-_CONST          EQU     %0
+_CONST          EQU     #0B
 _BUFIN          EQU     #0A
 
 _FOPEN          EQU     #0F
@@ -229,7 +229,7 @@ BS              EQU     #08
 TAB             EQU     #09
 LF              EQU     #0A
 CR              EQU     #0D
-ESC             EQU     %1
+ESC             EQU     #1B
 DEL             EQU     #7F
 
                 ; MSX CURSOR KEYS (RETURNED BY CHGET)
@@ -250,7 +250,7 @@ CTRL_A          EQU     #01
 CTRL_C          EQU     #03
 CTRL_F          EQU     #06
 CTRL_G          EQU     #07
-CTRL_K          EQU     %0
+CTRL_K          EQU     #0B
 CTRL_L          EQU     #0C
 CTRL_N          EQU     #0E
 CTRL_O          EQU     #0F

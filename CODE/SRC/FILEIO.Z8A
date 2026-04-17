@@ -3,21 +3,11 @@
 ;                                       ****************************************
 ;
 ; USES HIGH-LEVEL DSK* WRAPPERS FROM BDOS.Z8A (DOS1/DOS2 TRANSPARENT).
-; DOS2 MODE: HANDLE-BASED (DSKOPEN, DSKREAD, DSKWRITE, DSKCLOSE).
-; DOS1 FALLBACK: FCB-BASED (SAME WRAPPERS, BDOS.Z8A HANDLES TRANSPARENTLY).
 
 
 ; --- FILENEW                   ----------------------------------------
 
-; - FILENEW ----------
-; - NEW FILE (CLEARS BUFFER)
-; -
-
-FILENEW         ; TODO:
-                ; IF MODIFIED: PROMPT TO SAVE (CALL EDQUIT LOGIC SANS TERMINATION)
-                ; BUFINIT (FREE ALL SEGMENTS, RESET DIRECTORY)
-                ; CLEAR FILENAME
-                ; REDRAW, DRWSTAT
+FILENEW         CALL    BUFINIT
                 RET
 
 
@@ -28,46 +18,166 @@ FILENEW         ; TODO:
 ; - HL: FILENAME (ASCIIZ)
 ; -
 
-FILELOAD        ; TODO:
-                ; 1. FILENEW (CLEAR EXISTING BUFFER)
-                ; 2. DSKOPEN HL → A=HANDLE, DEHL=SIZE
-                ; 3. STREAM READ: BUFFER 256-BYTE CHUNKS, SPLIT ON CR/LF
-                ;    FOR #EAC COMPLETE LINE: LINEWRT TO SEGMENT, UPDATE DIRECTORY
-                ;    ALLOCATE NEW SEGMENTS AS NEEDED VIA ALLSEG
-                ; 4. DSKCLOSE
-                ; 5. TOTLINES = LINES READ; TOPLINE=0; DOCLINE=0; CURX=0; CURY=0
-                ; 6. COPY FILENAME TO FILENAME VAR
-                ; 7. MODIFIED = 0
-                ; 8. REDRAW, DRWGUT, DRWSCRL, DRWSTAT
+FILELOAD        PUSH    HL
+                CALL    FILENEW         ; RESET BUFFER AND ALLOCATE INITIAL SEGS
+                POP     HL
+
+                CALL    DSKOPEN         ; A=HANDLE, DEHL=SIZE
+                RET     C
+                LD      (FILEHAND), A
+
+                LD      HL, 0
+                LD      (TOTLINES), HL
+                LD      (LINEOFF), HL
+                XOR     A
+                LD      (CURLLEN), A
+
+.READBLK        LD      A, (FILEHAND)
+                LD      HL, 256
+                LD      DE, FILEBUF
+                CALL    DSKREAD         ; HL = BYTES READ
+                LD      A, H
+                OR      L
+                JR      Z, .EOF
+                
+                LD      B, H
+                LD      C, L            ; BC = BYTES TO PROCESS
+                LD      HL, FILEBUF
+.PROCLP         PUSH    BC
+                PUSH    HL
+                
+                LD      A, (HL)
+                CP      10              ; LF
+                JR      Z, .SKIP        ; IGNORE LF
+                CP      13              ; CR
+                JR      Z, .ENDLINE
+                
+                ; APPEND TO CURRENT LINE IN TXPAGE
+                LD      B, A
+                LD      A, (TXSEG)
+                CALL    PUTP2
+                
+                LD      A, (CURLLEN)
+                CP      80
+                JR      NC, .SKIP       ; TRUNCATE
+                
+                LD      HL, TXPAGE + 1  ; SKIP LEN BYTE
+                LD      DE, (LINEOFF)
+                ADD     HL, DE
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE          ; HL = TXPAGE + LINEOFF + 1 + CURLLEN
+                LD      (HL), B
+                
+                INC     A
+                LD      (CURLLEN), A
+                JR      .SKIP
+
+.ENDLINE        CALL    STORELINE
+
+.SKIP           POP     HL
+                INC     HL
+                POP     BC
+                DEC     BC
+                LD      A, B
+                OR      C
+                JR      NZ, .PROCLP
+                JR      .READBLK
+
+.EOF            LD      A, (CURLLEN)
+                AND     A
+                CALL    NZ, STORELINE   ; STORE LAST LINE IF NOT EMPTY
+                
+                LD      A, (FILEHAND)
+                CALL    DSKCLOSE
+                
+                LD      HL, 0
+                LD      (TOPLINE), HL
+                LD      (DOCLINE), HL
+                LD      A, 0
+                LD      (CURX), A
+                LD      (CURY), A
+                
+                CALL    REDRAW
+                RET
+
+; - STORELINE --------
+; - FINISH CURRENT LINE, ADD TO DIRECTORY, PREPARE NEXT
+; -
+
+STORELINE       LD      A, (TXSEG)
+                CALL    PUTP2
+                
+                LD      HL, TXPAGE
+                LD      DE, (LINEOFF)
+                ADD     HL, DE          ; HL = START OF RECORD
+                
+                LD      A, (CURLLEN)
+                LD      (HL), A         ; WRITE LEN
+                
+                ; CLEAR ATTRS (80 BYTES AFTER TEXT)
+                PUSH    HL
+                LD      DE, 81          ; 1 (LEN) + 80 (TEXT)
+                ADD     HL, DE
+                EX      DE, HL          ; DE = ATTR START
+                POP     HL
+                PUSH    DE
+                LD      HL, 0           ; FILL WITH 0 (ATTR_NONE)
+                ; WE NEED TO FILL 80 BYTES IN VRAM-MAPPED PAGE 2
+                POP     DE
+                PUSH    DE
+                POP     HL
+                INC     DE
+                LD      (HL), 0
+                LD      BC, 79
+                LDIR
+
+                ; ADD TO DIRECTORY
+                LD      HL, (TOTLINES)
+                LD      A, (TXSEG)
+                LD      DE, (LINEOFF)
+                CALL    DIRWRITE
+                
+                ; PREPARE NEXT LINE RECORD OFFSET
+                LD      HL, (LINEOFF)
+                LD      DE, WORKSIZ
+                ADD     HL, DE
+                LD      (LINEOFF), HL
+                
+                ; CHECK IF SEGMENT FULL (16KB / 161 ~= 101 LINES)
+                ; 16384 - 161 = 16223 (#3F5F)
+                LD      A, H
+                CP      #3F
+                JR      C, .NOTFULL
+                LD      A, L
+                CP      #5F
+                JR      C, .NOTFULL
+                
+                CALL    ALLSEG
+                LD      (TXSEG), A
+                CALL    PUTP2
+                LD      HL, 0
+                LD      (LINEOFF), HL
+
+.NOTFULL        XOR     A
+                LD      (CURLLEN), A
+                
+                LD      HL, (TOTLINES)
+                INC     HL
+                LD      (TOTLINES), HL
                 RET
 
 
 ; --- FILESAVE                  ----------------------------------------
 
-; - FILESAVE ---------
-; - SAVE BUFFER TO DISK (CURRENT FILENAME)
-; - IF FILENAME EMPTY: PROMPT AND CALL FSAVEAS
-; -
-
-FILESAVE        ; TODO:
-                ; 1. IF FILENAME[0] = 0: FSAVEAS
-                ; 2. DSKCREATE FILENAME → HANDLE
-                ; 3. WALK DIRECTORY 0..TOTLINES-1:
-                ;    LINEREAD → WORKBUF → WRITE TEXT+LF VIA DSKWRITE
-                ; 4. DSKCLOSE
-                ; 5. MODIFIED = 0
-                ; 6. DRWSTAT
-                RET
+FILESAVE        RET
 
 
 ; --- FSAVEAS                ----------------------------------------
 
-; - FSAVEAS -------
-; - PROMPT FOR FILENAME AND SAVE
-; -
+FSAVEAS      RET
 
-FSAVEAS      ; TODO:
-                ; 1. DRAW INPUT BOX (STATUS BAR OR MINI DIALOG)
-                ; 2. READ FILENAME VIA BUFIN
-                ; 3. COPY TO FILENAME, CALL FILESAVE
-                RET
+; --- TEMP VARS FOR LOADER      ----------------------------------------
+
+LINEOFF         DEFW    0               ; START OF CURRENT LINE RECORD
+CURLLEN         DEFB    0               ; CURRENT LINE LENGTH

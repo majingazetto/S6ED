@@ -79,6 +79,8 @@ PARBUF          DEFS    128             ; EXTPARM RAW OUTPUT BUFFER
                 ; LOADED FROM MAPPER SEGMENT FOR CURRENT LINE BEING EDITED
 
 WORKBUF         DEFS    WORKSIZ
+FILEBUF         DEFS    256             ; TEMPORARY BUFFER FOR DISK READS
+FONTBUF         DEFS    32              ; TEMPORARY BUFFER FOR FONT EXPANSION
 
 
 ; --- BLINK HANDLER             ----------------------------------------

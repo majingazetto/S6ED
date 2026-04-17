@@ -52,7 +52,7 @@ SETVR           PUSH    AF
 
 ; - VDPCMD -----------
 ; - ISSUE VDP COMMAND BLOCK
-; - IX: POINTER TO 15-BYTE PARAMETER BLOCK (R#32 TO R#46)
+; - HL: POINTER TO 15-BYTE PARAMETER BLOCK (R#32 TO R#46)
 ; -
 
 VDPCMD          CALL    VDPWAIT
@@ -62,7 +62,7 @@ VDPCMD          CALL    VDPWAIT
                 LD      A, #91          ; R#17 (INDIRECT REGISTER POINTER)
                 OUT     (VDPCT), A
                 
-                LD      C, VDPPALC      ; VDP REGISTER DATA PORT
+                LD      C, VDPDR        ; VDP DATA PORT (R#17 AUTO-INCS R#32-46)
                 REPT    15
                 OUTI
                 ENDR
@@ -75,12 +75,16 @@ VDPCMD          CALL    VDPWAIT
 
 ; - HMMV -------------
 ; - FILL VRAM REGION WITH BYTE COLOR
-; - IX: POINTER TO CMD BLOCK (ONLY R#36-R#46 USED)
+; - HL: POINTER TO CMD BLOCK (ONLY R#36-R#46 USED)
 ; -
 
 HMMV            PUSH    AF
+                PUSH    HL
+                LD      DE, 14
+                ADD     HL, DE
                 LD      A, VDP_HMMV
-                LD      (IX+14), A      ; R#46 = CMD
+                LD      (HL), A         ; R#46 = CMD
+                POP     HL
                 CALL    VDPCMD
                 POP     AF
                 RET
@@ -88,23 +92,51 @@ HMMV            PUSH    AF
 
 ; - HMMM -------------
 ; - COPY VRAM → VRAM (BYTE MODE)
-; - IX: POINTER TO CMD BLOCK
+; - HL: POINTER TO CMD BLOCK
 ; -
 
 HMMM            PUSH    AF
+                PUSH    HL
+                LD      DE, 14
+                ADD     HL, DE
                 LD      A, VDP_HMMM
-                LD      (IX+14), A
+                LD      (HL), A
+                POP     HL
                 CALL    VDPCMD
                 POP     AF
                 RET
 
 
+; - HMMC -------------
+; - CPU → VRAM (BYTE-TRANSFER)
+; - HL: POINTER TO CMD BLOCK
+; -
+
+HMMC            PUSH    AF
+                PUSH    HL
+                LD      DE, 14
+                ADD     HL, DE
+                LD      A, VDP_HMMC
+                LD      (HL), A
+                POP     HL
+                CALL    VDPCMD
+                POP     AF
+                RET
+
+
+
 ; - LMMM -------------
 ; - COPY VRAM → VRAM (DOT MODE)
-; - IX: POINTER TO CMD BLOCK
+; - HL: POINTER TO CMD BLOCK
 ; - A: LOGICAL OP (VDP_IMP, VDP_XOR, ETC)
 ; -
 
-LMMM            LD      (IX+14), A      ; SET COMMAND + LOGOP
+LMMM            PUSH    AF
+                PUSH    HL
+                LD      DE, 14
+                ADD     HL, DE
+                LD      (HL), A         ; SET COMMAND + LOGOP
+                POP     HL
                 CALL    VDPCMD
+                POP     AF
                 RET

@@ -1,0 +1,5 @@
+Hello MSX World!
+This is a test of S6ED.
+MSX2 Screen 6 Text Editor
+80 columns x 24 rows.
+Enjoy homebrewing!

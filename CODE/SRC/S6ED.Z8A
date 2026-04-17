@@ -75,11 +75,11 @@ INIT            LD      SP, #F000       ; SAFE STACK TOP BELOW DOS2 KERNEL
 
                 ; DETECT DOS VERSION
                 CALL    DOSVER
-                JR      C, .NODOS2      ; CARRY = DOS1 ONLY
+                JP      C, .NODOS2      ; CARRY = DOS1 ONLY
 
                 ; LOCATE MAPPER MANAGER
                 CALL    MAPINIT
-                JR      C, .NOMAP
+                JP      C, .NOMAP
 
                 ; INITIALIZE SCREEN
                 CALL    SCRINIT
@@ -125,15 +125,67 @@ INIT            LD      SP, #F000       ; SAFE STACK TOP BELOW DOS2 KERNEL
 ; - SET SCREEN 6, PALETTE, CLEAR VRAM
 ; -
 
-SCRINIT      ; TODO:
-                ; 1. CALL CHGMOD WITH A=6 (SCREEN 6, GR5)
-                ;    OR SET VDP REGISTERS DIRECTLY FOR FINER CONTROL
-                ; 2. SET PALETTE: COL_BG, COL_FG, COL_UI, COL_HI
-                ;    VIA PORTS #9A/#9B OR BIOS PALETTE ROUTINE
-                ; 3. HMMV: CLEAR ENTIRE VRAM DISPLAY AREA (512×212, CLR=0)
-                ; 4. TURN OFF KEY CLICK: LD A,0 / LD (CLIKSW),A
-                ; 5. ERASE FUNCTION KEY DISPLAY: CALL ERAFNK
+SCRINIT         LD      A, 6
+                CALL    CHGMOD
+
+                ; SET PALETTE
+                ; COL_BG (0): BLACK (0,0,0)
+                ; COL_FG (1): WHITE (7,7,7)
+                ; COL_UI (2): BLUE (2,2,5)
+                ; COL_HI (3): YELLOW (7,7,0)
+                LD      HL, PALDATA
+                XOR     A
+                OUT     (VDPPALC), A
+                LD      C, VDPPAL
+                REPT    8               ; 4 COLORS * 2 BYTES
+                OUTI
+                ENDR
+
+                ; CLEAR VRAM (HMMV 512x212)
+                LD      HL, VDPCMBLK
+                LD      (HL), 0         ; SX
+                INC     HL
+                LD      (HL), 0
+                INC     HL
+                LD      (HL), 0         ; SY
+                INC     HL
+                LD      (HL), 0
+                INC     HL
+                LD      (HL), 0         ; DX
+                INC     HL
+                LD      (HL), 0
+                INC     HL
+                LD      (HL), 0         ; DY
+                INC     HL
+                LD      (HL), 0
+                INC     HL
+                LD      (HL), 0         ; NX = 512
+                INC     HL
+                LD      (HL), 2         ; 512 / 256 = 2
+                INC     HL
+                LD      (HL), 212       ; NY
+                INC     HL
+                LD      (HL), COL_BG    ; CLR
+                INC     HL
+                LD      (HL), 0         ; ARG
+                INC     HL
+                LD      (HL), VDP_HMMV  ; CMD
+                
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+
+                ; DISABLE KEY CLICK
+                XOR     A
+                LD      (CLIKSW), A
+                
+                ; ERASE FUNCTION KEYS
+                CALL    ERAFNK
                 RET
+
+PALDATA         DEFB    #00, #00        ; 0: BLACK
+                DEFB    #77, #07        ; 1: WHITE
+                DEFB    #22, #05        ; 2: BLUEISH UI
+                DEFB    #77, #00        ; 3: YELLOW HI
 
 
 ; --- HKBLINK                 ----------------------------------------
