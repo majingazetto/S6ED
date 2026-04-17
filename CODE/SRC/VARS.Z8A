@@ -1,0 +1,129 @@
+;                                       ****************************************
+;                                       * VARS                                 *
+;                                       ****************************************
+
+VARS
+
+
+; --- SYSTEM                    ----------------------------------------
+
+
+DOS2            DEFB    0               ; FF = DOS2/Nextor present, 00 = DOS1
+UNAPISET        DEFB    0               ; BDOS.Z8A UNAPI flag (unused in S6ED)
+MAPRDY         DEFB    0               ; FF = mapper manager found
+
+
+; --- MAPPER JUMP TABLE ENTRIES ----------------------------------------
+
+                ; Filled at init by MAPINIT (EXTBIO → HOKVLD check)
+MALLSEG      DEFW    0               ; ALL_SEG entry address
+MFRESEG      DEFW    0               ; FRE_SEG entry address
+MRDSEG       DEFW    0               ; RD_SEG  entry address
+MWRSEG       DEFW    0               ; WR_SEG  entry address
+MPUTP1       DEFW    0               ; PUT_P1  entry address (page 1: dir)
+MGETP1       DEFW    0               ; GET_P1  entry address
+MPUTP2       DEFW    0               ; PUT_P2  entry address (page 2: text)
+MGETP2       DEFW    0               ; GET_P2  entry address
+
+
+; --- SEGMENTS                  ----------------------------------------
+
+DIRSEG          DEFB    0               ; segment number banked at page 1 (dir)
+TXSEG           DEFB    0               ; segment number banked at page 2 (text)
+
+
+; --- CURSOR / VIEWPORT         ----------------------------------------
+
+
+CURX            DEFB    0               ; cursor column (0-79, doc space)
+CURY            DEFB    0              ; cursor row    (0-23, viewport)
+CURSEG          DEFB    0               ; segment currently banked at page 2
+
+TOPLINE         DEFW    0               ; first visible document line (0-based)
+DOCLINE         DEFW    0               ; cursor document line (= TOPLINE + CURY)
+TOTLINES        DEFW    1               ; total lines in document
+
+
+; --- EDITOR STATE              ----------------------------------------
+
+
+MODIFIED        DEFB    0               ; FF = buffer modified since last save
+INSMODE         DEFB    INS_MODE        ; insert (FF) or overwrite (00)
+LANGMODE        DEFB    LGNONE       ; current language/tokenizer mode
+BLNKPH       DEFB    0               ; cursor blink phase (toggled by TIMI)
+BLNKCNT         DEFB    0               ; blink tick counter
+
+
+; --- FILE                      ----------------------------------------
+
+
+FILENAME        DEFS    40, 0           ; current filename (ASCIIZ)
+FILEHAND        DEFB    0               ; open file handle
+
+FSIZETMP        DEFS    4               ; temp for BDOS size calculations
+FCB             DEFS    SIZEFCB         ; FCB for DOS1 I/O
+
+
+; --- PARAMS                    ----------------------------------------
+
+                ; Command-line parameter parsing (PARAMS.Z8A / BDOS EXTPARM)
+PSIZE           DEFB    0               ; FNDPARAM: current param string size
+PPNT            DEFW    0               ; FNDPARAM: pointer to param string
+PARMTMP         DEFS    40              ; CHKFILE: temp copy of one param
+PARBUF          DEFS    128             ; EXTPARM raw output buffer
+
+
+; --- WORK BUFFER               ----------------------------------------
+
+                ; Flat 161-byte buffer: [1: text_len] [80: text] [80: attr]
+                ; Loaded from mapper segment for current line being edited
+
+WORKBUF         DEFS    WORKSIZ
+
+
+; --- BLINK HANDLER             ----------------------------------------
+
+
+PRVHTIMI      DEFW    0               ; saved original HTIMI hook vector
+
+
+; --- GENERIC / UTIL            ----------------------------------------
+
+                ; B2D conversion buffers (from GENERIC.Z8A)
+B2DINV          DEFS    8
+B2DBUF          DEFS    20
+B2DEND          DEFS    1
+
+                ; Function keys save buffer
+FNKBUF          DEFS    10
+
+
+; --- LINE DIRECTORY            ----------------------------------------
+
+                ; Lives at DIRPAGE (#4000) in a dedicated mapper segment.
+                ; Allocated at startup by BUFINIT, banked into page 1 via
+                ; PUTP1 — never switched. Accessed as flat array directly.
+                ; Capacity: MAXLINES entries × DIRSIZ bytes = 16380 bytes.
+
+
+
+; --- VDP COMMAND BLOCK          ----------------------------------------
+
+                ; Standard 15-byte block for R#32 to R#46
+
+VDP_CMDBLK      DEFS    15
+VDP_SX          EQU     VDP_CMDBLK + 0  ; word
+VDP_SY          EQU     VDP_CMDBLK + 2  ; word
+VDP_DX          EQU     VDP_CMDBLK + 4  ; word
+VDP_DY          EQU     VDP_CMDBLK + 6  ; word
+VDP_NX          EQU     VDP_CMDBLK + 8  ; word
+VDP_NY          EQU     VDP_CMDBLK + 10 ; word
+VDP_CLR         EQU     VDP_CMDBLK + 12 ; byte
+VDP_ARG         EQU     VDP_CMDBLK + 13 ; byte
+VDP_CMD         EQU     VDP_CMDBLK + 14 ; byte
+
+
+UNKNOWN         DEFM    "Unknown("
+.CODE           DEFS    5               ; room for "NNN)$"
+
+ENDVARS

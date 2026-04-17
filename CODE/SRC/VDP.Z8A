@@ -1,0 +1,110 @@
+;                                       ****************************************
+;                                       * VDP COMMAND ENGINE                   *
+;                                       ****************************************
+
+
+; --- VDPWAIT                   ----------------------------------------
+
+; - VDPWAIT ----------
+; - WAIT UNTIL VDP COMMAND ENGINE IDLE
+; - POLLS S#2 BIT 0 (CE)
+; -
+
+VDPWAIT         PUSH    AF
+                LD      A, 2
+                DI
+                OUT     (VDPCT), A
+                LD      A, #8F          ; select status reg S#2 (R#15=2)
+                OUT     (VDPCT), A
+.WAIT           IN      A, (VDPST)
+                RRA                     ; CE into carry
+                JR      C, .WAIT
+                XOR     A               ; restore S#0 selection
+                DI
+                OUT     (VDPCT), A
+                LD      A, #8F
+                OUT     (VDPCT), A
+                EI
+                POP     AF
+                RET
+
+
+; --- REGISTER WRITE            ----------------------------------------
+
+; - SETVR -----------
+; - SET VDP REGISTER
+; - A: REGISTER NUMBER
+; - E: VALUE
+; -
+
+SETVR           PUSH    AF
+                DI
+                LD      A, E
+                OUT     (VDPCT), A      ; write value byte first
+                POP     AF
+                OR      #80             ; reg number | #80 = register select
+                OUT     (VDPCT), A
+                EI
+                RET
+
+
+; --- COMMAND EXECUTION         ----------------------------------------
+
+; - VDPCMD -----------
+; - ISSUE VDP COMMAND BLOCK
+; - IX: POINTER TO 15-BYTE PARAMETER BLOCK (R#32 TO R#46)
+; -
+
+VDPCMD          CALL    VDPWAIT
+                DI
+                LD      A, 32           ; start at R#32
+                OUT     (VDPCT), A
+                LD      A, #91          ; R#17 (indirect register pointer)
+                OUT     (VDPCT), A
+                
+                LD      C, VDPPALC      ; VDP register data port
+                REPT    15
+                OUTI
+                ENDR
+                EI
+                RET
+
+
+; --- WRAPPER PRIMITIVES        ----------------------------------------
+
+
+; - HMMV -------------
+; - FILL VRAM REGION WITH BYTE COLOR
+; - IX: POINTER TO CMD BLOCK (ONLY R#36-R#46 USED)
+; -
+
+HMMV            PUSH    AF
+                LD      A, VDP_HMMV
+                LD      (IX+14), A      ; R#46 = CMD
+                CALL    VDPCMD
+                POP     AF
+                RET
+
+
+; - HMMM -------------
+; - COPY VRAM → VRAM (BYTE MODE)
+; - IX: POINTER TO CMD BLOCK
+; -
+
+HMMM            PUSH    AF
+                LD      A, VDP_HMMM
+                LD      (IX+14), A
+                CALL    VDPCMD
+                POP     AF
+                RET
+
+
+; - LMMM -------------
+; - COPY VRAM → VRAM (DOT MODE)
+; - IX: POINTER TO CMD BLOCK
+; - A: LOGICAL OP (VDP_IMP, VDP_XOR, ETC)
+; -
+
+LMMM            LD      (IX+14), A      ; set command + logop
+                CALL    VDPCMD
+                RET

@@ -1,0 +1,54 @@
+;                                       ****************************************
+;                                       * SCROLL ENGINE                        *
+;                                       ****************************************
+
+
+; --- SCROLLDN                  ----------------------------------------
+
+; - SCROLLDN ---------
+; - SCROLL TEXT AREA UP (8PX) TO SHOW NEXT LINE
+; -
+
+SCROLLDN        LD      IX, VDP_CMDBLK
+                
+                ; 1. MOVE 480x192 AREA (ROW 2..25 -> ROW 1..24)
+                LD      HL, TXORG_X     ; 24
+                LD      (VDP_SX), HL
+                LD      A, TXORG_Y + 8  ; ROW 2 (START AT 16PX)
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_SY), HL
+                
+                LD      HL, TXORG_X     ; 24
+                LD      (VDP_DX), HL
+                LD      A, TXORG_Y      ; ROW 1 (TARGET AT 8PX)
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_DY), HL
+                
+                LD      HL, TXAREAPX    ; 480
+                LD      (VDP_NX), HL
+                LD      A, 192          ; 24 ROWS * 8PX = 192PX
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_NY), HL
+                
+                XOR     A               ; ARG = 0
+                LD      (VDP_ARG), A
+                CALL    HMMM
+                
+                ; 2. CLEAR BOTTOM ROW (ROW 24)
+                LD      HL, TXORG_X
+                LD      (VDP_DX), HL
+                LD      A, TXORG_Y + 184 ; DY = 8 + 23 * 8 = 192
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_DY), HL
+                LD      A, 8            ; NY
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_NY), HL
+                XOR     A               ; COLOR 0
+                LD      (VDP_CLR), A
+                CALL    HMMV
+                RET

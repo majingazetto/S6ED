@@ -1,0 +1,45 @@
+;                                       ****************************************
+;                                       * INPUT                                *
+;                                       ****************************************
+;
+; Keyboard input and main dispatch loop.
+; Uses CHGET (blocking) for normal input.
+; Special key sequences (function keys, cursor, etc.) decoded here.
+
+
+; --- KEYREAD                   ----------------------------------------
+
+; - KEYREAD ----------
+; - BLOCKING KEY READ WITH SPECIAL KEY DECODE
+; - OUTPUT:
+; -     A:  KEY CODE (printable) or special code (see HARD.Z8A)
+; -     HL: EXTENDED KEY CODE (0 if simple key, or function key index)
+; -
+
+KEYREAD         CALL    CHGET
+                ; TODO: decode extended sequences (F-keys return 2-char sequences)
+                RET
+
+
+; --- MAINLOOP                  ----------------------------------------
+
+; - MAINLOOP ---------
+; - MAIN EDITOR EVENT LOOP
+; -
+
+MAINLOOP        CALL    KEYREAD
+                ; TODO: dispatch on A
+                ; Printable (20H-7EH): EDINSCHR / EDOVRCHR
+                ; CR:        EDNWLIN
+                ; BS:        EDDELBK
+                ; DEL:       EDDELCHR
+                ; CRIGHT:    EDMOVCHR right
+                ; CLEFT:     EDMOVCHR left
+                ; CUP:       EDMOVROW up
+                ; CDOWN:     EDMOVROW down
+                ; CTRL_S:    FILESAVE
+                ; CTRL_O:    FILEOPEN (load)
+                ; CTRL_N:    FILENEW
+                ; CTRL_Q:    EDQUIT
+                ; ESC:       menu activation (future)
+                JP      MAINLOOP

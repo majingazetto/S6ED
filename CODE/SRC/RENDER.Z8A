@@ -1,0 +1,127 @@
+;                                       ****************************************
+;                                       * RENDERER                             *
+;                                       ****************************************
+
+
+; --- REDRAW                    ----------------------------------------
+
+; - REDRAW -----------
+; - REDRAW ALL TEXT ROWS (TXRFIRST to TXRLAST)
+; -
+
+REDRAW          LD      B, TXRFIRST
+.ROWLOOP        PUSH    BC
+                CALL    RENDEROW
+                POP     BC
+                INC     B
+                LD      A, B
+                CP      TXRLAST + 1
+                JR      NZ, .ROWLOOP
+                RET
+
+
+; --- RENDEROW                  ----------------------------------------
+
+; - RENDEROW ---------
+; - RENDER A SINGLE ROW (0-25) TO VRAM
+; - B: ROW NUMBER (SCREEN SPACE)
+; -
+
+RENDEROW        PUSH    BC
+                ; TODO: CALL GETLINE_PAGE2 (HL = PTR TO RECORD)
+                ; FOR NOW: ASSUME DATA ALREADY IN WORKBUF FOR TESTING
+                POP     BC
+                
+                ; 1. CALC SCREEN DY (ROW * 8)
+                LD      A, B
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_DY), HL
+
+                ; 2. RENDER COLS 0-79
+                LD      IX, VDP_CMDBLK
+                LD      C, 0            ; COL COUNTER
+.COLLOOP        PUSH    BC
+                
+                ; 3. CALC SCREEN DX (24 + COL * 6)
+                LD      A, C
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL          ; * 4
+                ADD     HL, DE          ; * 6
+                LD      DE, GUTL_PX
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+
+                ; 4. GET CHAR AND ATTR
+                ; WORKBUF: [LEN][80 TEXT][80 ATTR]
+                LD      HL, WORKBUF + 1
+                LD      B, 0
+                LD      C, (IX-.COLLOOP_C) ; GET SAVED C
+                ADD     HL, BC
+                LD      A, (HL)         ; GET CHARCODE
+                PUSH    AF
+                
+                LD      HL, WORKBUF + 81
+                ADD     HL, BC
+                LD      A, (HL)         ; GET ATTR
+                LD      E, A            ; E = ATTR
+                POP     AF
+                
+                ; 5. CALC FONT SX/SY
+                ; SX = (CHAR % 32) * 6
+                ; SY = TABLE_SY + (CHAR / 32) * 8
+                PUSH    AF
+                AND     %00011111       ; CHAR % 32
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL          ; * 4
+                ADD     HL, DE          ; * 6
+                LD      (VDP_SX), HL
+                
+                POP     AF
+                SRL     A
+                SRL     A
+                SRL     A
+                SRL     A
+                SRL     A               ; CHAR / 32
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; (CHAR / 32) * 8
+                
+                ; ADD FONT TABLE OFFSET BASED ON ATTR (BOLD/ITALIC)
+                ; LD      HL, FNORM_SY  ; ... etc
+                LD      L, A
+                LD      H, 0
+                LD      DE, FNORM_SY
+                ADD     HL, DE
+                LD      (VDP_SY), HL
+
+                ; 6. ISSUE LMMM
+                LD      HL, 6           ; NX
+                LD      (VDP_NX), HL
+                LD      A, 8            ; NY
+                LD      (VDP_NY), A
+                XOR     A
+                LD      (VDP_ARG), A
+                
+                LD      A, VDP_LMMM | VDP_IMP
+                CALL    LMMM
+
+                POP     BC
+                INC     C
+                LD      A, C
+                CP      80
+                JR      NZ, .COLLOOP
+                RET
+
+.COLLOOP_C      EQU     2               ; STACK OFFSET TO RETRIEVE C

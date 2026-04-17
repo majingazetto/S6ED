@@ -1,0 +1,157 @@
+; **********************************************
+; * S6ED                                       *
+; * MSX2 Screen 6 Text Editor                  *
+; * 80 cols x 24 rows, 6x8 font, DOS2/Nextor  *
+; * 2024 - 2025 Coded by Armando Perez         *
+; **********************************************
+
+                OUTPUT  S6ED.COM
+
+; --- MACROS                    ----------------------------------------
+
+
+                ; Infinite loop / breakpoint
+                MACRO   BRK
+                DI
+                JP      $
+                ENDM
+
+                ; ORG with padding (does not discard code)
+                MACRO PADORG addr
+                IF $ < addr
+                BLOCK addr-$
+                ENDIF
+                ORG addr
+                ENDM
+
+
+; --- CONST / INCLUDES          ----------------------------------------
+
+
+                INCLUDE HARD.Z8A
+                INCLUDE CONST.Z8A
+
+
+; --- DOS PROGRAM               ----------------------------------------
+
+
+                ORG     #100
+                JP      INIT
+
+
+; --- STRINGS                   ----------------------------------------
+
+
+ENODOS2      DEFM    "Requires MSX-DOS 2 or Nextor.$"
+ENOMAP       DEFM    "No mapper manager found.$"
+
+
+; --- MODULE INCLUDES           ----------------------------------------
+
+
+                INCLUDE BDOS.Z8A
+                INCLUDE GENERIC.Z8A
+                INCLUDE VDP.Z8A
+                INCLUDE FONT.Z8A
+                INCLUDE MAPPER.Z8A
+                INCLUDE BUFFER.Z8A
+                INCLUDE RENDER.Z8A
+                INCLUDE SCROLL.Z8A
+                INCLUDE EDIT.Z8A
+                INCLUDE INPUT.Z8A
+                INCLUDE UI.Z8A
+                INCLUDE FILEIO.Z8A
+                INCLUDE PARAMS.Z8A
+
+
+; --- INIT                      ----------------------------------------
+
+
+; - INIT -------------
+; - PROGRAM ENTRY POINT
+; -
+
+INIT            LD      SP, #F000       ; safe stack top below DOS2 kernel
+
+                ; Detect DOS version
+                CALL    DOSVER
+                JR      C, .NODOS2      ; carry = DOS1 only
+
+                ; Locate mapper manager
+                CALL    MAPINIT
+                JR      C, .NOMAP
+
+                ; Initialize screen
+                CALL    SCRINIT
+
+                ; Initialize font tables in VRAM
+                CALL    FONTINIT
+
+                ; Install blink TIMI hook
+                CALL    HKBLINK
+
+                ; Initialize empty text buffer
+                CALL    BUFINIT
+
+                ; Check command-line params: optional filename to load
+                CALL    PARAMS
+                JR      C, .NOARG       ; CY=1 → no filename given
+                LD      HL, FILENAME
+                CALL    FILELOAD
+                JR      .READY
+
+.NOARG          ; Draw initial screen (empty buffer)
+                CALL    REDRAW
+                CALL    DRWMENU
+                CALL    DRWGUT
+                CALL    DRWSCRL
+                CALL    DRWSTAT
+
+.READY          ; Enter main editor loop
+                JP      MAINLOOP
+
+.NODOS2         LD      DE, ENODOS2
+                CALL    STROUT
+                JP      TERM
+
+.NOMAP          LD      DE, ENOMAP
+                CALL    STROUT
+                JP      TERM
+
+
+; --- SCRINIT                ----------------------------------------
+
+; - SCRINIT -------
+; - SET SCREEN 6, PALETTE, CLEAR VRAM
+; -
+
+SCRINIT      ; TODO:
+                ; 1. CALL CHGMOD with A=6 (SCREEN 6, GR5)
+                ;    or set VDP registers directly for finer control
+                ; 2. Set palette: COL_BG, COL_FG, COL_UI, COL_HI
+                ;    via ports 9AH/9BH or BIOS PALETTE routine
+                ; 3. HMMV: clear entire VRAM display area (512×212, CLR=0)
+                ; 4. Turn off key click: LD A,0 / LD (CLIKSW),A
+                ; 5. Erase function key display: CALL ERAFNK
+                RET
+
+
+; --- HKBLINK                 ----------------------------------------
+
+; - HKBLINK --------
+; - INSTALL BLNKTICK INTO HTIMI HOOK
+; -
+
+HKBLINK       LD      HL, (HTIMI)
+                LD      (PRVHTIMI), HL
+                LD      HL, BLNKTICK
+                LD      (HTIMI), HL
+                RET
+
+
+; --- VARS                      ----------------------------------------
+
+
+                OUTEND
+
+                INCLUDE VARS.Z8A

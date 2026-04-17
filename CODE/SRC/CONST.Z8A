@@ -1,0 +1,115 @@
+;                                       ****************************************
+;                                       * CONSTANTS                            *
+;                                       ****************************************
+
+
+; --- VERSION                   ----------------------------------------
+
+
+VERSION
+.MAJOR          EQU     "0"
+.MINOR          EQU     "1"
+
+
+; --- SCREEN LAYOUT             ----------------------------------------
+
+
+                ; Character grid
+SCRCOLS         EQU     80              ; text area columns
+SCRROWS         EQU     24              ; text area rows (rows 1-24)
+CELLW           EQU     6               ; cell width in pixels
+CELLH           EQU     8               ; cell height in pixels
+
+                ; Pixel layout
+GUTL_PX         EQU     24              ; left gutter width (4 chars × 6px)
+GUTR_PX         EQU     8               ; right gutter width (scrollbar)
+TXAREAPX       EQU     480             ; text area width (80 × 6px)
+TXORG_X         EQU     GUTL_PX         ; text area X origin
+TXORG_Y         EQU     CELLH           ; text area Y origin (skip menu row 0)
+SCRTOTY      EQU     212             ; total screen height in pixels
+
+                ; Rows (in character units)
+MNUROW          EQU     0               ; menu bar row
+TXRFIRST    EQU     1               ; first text row
+TXRLAST     EQU     24              ; last text row
+STBROW          EQU     25              ; status bar row
+
+
+; --- VRAM MAP                  ----------------------------------------
+
+
+VR_DISP         EQU     #00000          ; display bitmap (128 B/line × 212 lines)
+VR_SAT          EQU     #06A00          ; sprite attribute table
+VR_SGT          EQU     #06C00          ; sprite generator table
+
+VR_FNORM        EQU     #07000          ; font: Normal        (256 × 16 bytes)
+VR_FBOLD        EQU     #08000          ; font: Bold
+VR_FITAL        EQU     #09000          ; font: Italic
+VR_FBI          EQU     #0A000          ; font: Bold+Italic
+
+                ; Font table geometry (all tables identical structure)
+                ;   32 glyphs per row → 8 rows (256 total)
+                ;   Glyph N: SX = (N % 32) * 6,  SY = table_SY + (N / 32) * 8
+                ;   table_SY = (VR_Fxxx - VR_DISP) / 128
+FNORM_SY        EQU     (VR_FNORM - VR_DISP) / 128     ; = 56
+FBOLD_SY        EQU     (VR_FBOLD - VR_DISP) / 128     ; = 64
+FITAL_SY        EQU     (VR_FITAL - VR_DISP) / 128     ; = 72
+FBI_SY          EQU     (VR_FBI   - VR_DISP) / 128     ; = 80
+
+
+; --- PALETTE                   ----------------------------------------
+
+
+                ; Color indices (SCREEN 6, 4 colors)
+COL_BG          EQU     0               ; background
+COL_FG          EQU     1               ; normal text / foreground
+COL_UI          EQU     2               ; UI chrome (gutters, menu, status)
+COL_HI          EQU     3               ; cursor / highlight / accent
+
+
+; --- CHARACTER ATTRIBUTES      ----------------------------------------
+
+
+                ; Attr byte bit definitions (per cell, stored alongside text)
+ATRBOLD       EQU     #01             ; bit 0
+ATRITAL       EQU     #02             ; bit 1
+ATRUNDR       EQU     #04             ; bit 2
+ATRINV        EQU     #08             ; bit 3  (inverse video)
+ATRFMSK   EQU     #03             ; bits 0-1 → font variant index
+
+
+; --- TEXT BUFFER / MAPPER      ----------------------------------------
+
+
+MAXLINES        EQU     5460            ; max document lines
+                                        ;   16384 / DIRSIZ = 5461; use 5460
+DIRSIZ          EQU     3               ; bytes per line directory entry
+                                        ;   [1: segment] [2: word offset]
+LINEREC         EQU     161             ; max line record: 1 + 80 + 80
+TEXTCOLS        EQU     80              ; max chars per line
+WORKSIZ         EQU     LINEREC         ; work buffer size (= max record)
+
+DIRPAGE         EQU     #4000           ; page 1 — line directory (fixed segment)
+TXPAGE          EQU     #8000           ; page 2 — text window (switched)
+
+                ; Segment allocation type (for ALL_SEG)
+SEG_USER        EQU     0               ; A=0: allocate user segment
+SEG_SYS         EQU     1               ; A=1: allocate system segment
+
+
+; --- LANGUAGE MODES            ----------------------------------------
+
+
+LGNONE       EQU     0
+LANG_Z80        EQU     1
+LGBASIC      EQU     2
+LANG_C          EQU     3
+LGPYTHN     EQU     4
+
+
+; --- MISC                      ----------------------------------------
+
+
+
+INS_MODE        EQU     1               ; insert
+OVR_MODE        EQU     0               ; overwrite

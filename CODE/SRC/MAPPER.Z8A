@@ -1,0 +1,199 @@
+;                                       ****************************************
+;                                       * MAPPER MANAGER                       *
+;                                       ****************************************
+;
+; Uses DOS2/Nextor mapper support routines found via EXTBIO.
+; NEVER use OUT (0FEH) directly — always go through MPUTP2.
+;
+; Init: call MAPINIT at startup. Stores entry addresses in VARS.
+; After init: call ALLSEG, FRESEG, RDSEG, WRSEG, PUTP1, GETP1, PUTP2, GETP2.
+
+
+; --- MAPINIT                   ----------------------------------------
+
+; - MAPINIT ----------
+; - LOCATE MAPPER MANAGER VIA EXTBIO
+; - FILL MAP_xxx JUMP TABLE ENTRIES IN VARS
+; - OUTPUT:
+; -     CY = 1  NO MAPPER MANAGER (no extended BIOS or device not present)
+; -
+
+MAPINIT         ; Check HOKVLD bit 0: extended BIOS present?
+                LD      A, (HOKVLD)
+                RRA
+                RET     NC              ; bit 0 = 0: no extended BIOS
+
+                ; Call EXTBIO: D=4 (mapper device), E=2 (get jump table)
+                XOR     A               ; A=0
+                LD      D, MAP_DEV
+                LD      E, MAPFNTBL
+                CALL    EXTBIO          ; HL = jump table base
+                ; IX, IY, alternate regs corrupted by EXTBIO — do not use
+
+                ; Store entry addresses from jump table
+                PUSH    HL
+                LD      DE, MJALLSEG
+                ADD     HL, DE
+                LD      (MALLSEG), HL
+
+                POP     HL
+                PUSH    HL
+                LD      DE, MJFRESEG
+                ADD     HL, DE
+                LD      (MFRESEG), HL
+
+                POP     HL
+                PUSH    HL
+                LD      DE, MJRDSEG
+                ADD     HL, DE
+                LD      (MRDSEG), HL
+
+                POP     HL
+                PUSH    HL
+                LD      DE, MJWRSEG
+                ADD     HL, DE
+                LD      (MWRSEG), HL
+
+                POP     HL
+                PUSH    HL
+                LD      DE, MJPUTP1
+                ADD     HL, DE
+                LD      (MPUTP1), HL
+
+                POP     HL
+                PUSH    HL
+                LD      DE, MJGETP1
+                ADD     HL, DE
+                LD      (MGETP1), HL
+
+                POP     HL
+                PUSH    HL
+                LD      DE, MJPUTP2
+                ADD     HL, DE
+                LD      (MPUTP2), HL
+
+                POP     HL
+                LD      DE, MJGETP2
+                ADD     HL, DE
+                LD      (MGETP2), HL
+
+                LD      A, #FF
+                LD      (MAPRDY), A    ; flag: mapper manager found
+                AND     A               ; carry clear = success
+                RET
+
+
+; --- ALLSEG                    ----------------------------------------
+
+; - ALLSEG -----------
+; - ALLOCATE ONE 16KB USER SEGMENT (PRIMARY MAPPER)
+; - OUTPUT:
+; -     A  = SEGMENT NUMBER (Fc = 0)
+; -     Fc = 1  NO FREE SEGMENTS
+; -
+
+ALLSEG          XOR     A               ; A=0: user segment, B=0: primary mapper
+                LD      B, A
+                LD      HL, (MALLSEG)
+                CALL    CALHL
+                RET
+
+
+; --- FRESEG                    ----------------------------------------
+
+; - FRESEG -----------
+; - FREE A PREVIOUSLY ALLOCATED SEGMENT
+; - A: SEGMENT NUMBER
+; - OUTPUT:
+; -     Fc = 1  ERROR (invalid or already free)
+; -
+
+FRESEG          LD      B, 0            ; B=0: primary mapper
+                LD      HL, (MFRESEG)
+                CALL    CALHL
+                RET
+
+
+; --- RDSEG                     ----------------------------------------
+
+; - RDSEG ------------
+; - READ ONE BYTE FROM SEGMENT WITHOUT DISTURBING PAGE 2
+; - A:  SEGMENT NUMBER
+; - HL: ADDRESS WITHIN SEGMENT (TOP 2 BITS IGNORED)
+; - OUTPUT:
+; -     A: BYTE READ
+; - NOTE: RETURNS WITH INTERRUPTS DISABLED
+; -
+
+RDSEG           LD      HL, (MRDSEG)
+                CALL    CALHL
+                EI
+                RET
+
+
+; --- WRSEG                     ----------------------------------------
+
+; - WRSEG ------------
+; - WRITE ONE BYTE TO SEGMENT WITHOUT DISTURBING PAGE 2
+; - A:  SEGMENT NUMBER
+; - HL: ADDRESS WITHIN SEGMENT (TOP 2 BITS IGNORED)
+; - E:  BYTE TO WRITE
+; - NOTE: RETURNS WITH INTERRUPTS DISABLED
+; -
+
+WRSEG           LD      HL, (MWRSEG)
+                CALL    CALHL
+                EI
+                RET
+
+
+; --- PUTP1                     ----------------------------------------
+
+; - PUTP1 ------------
+; - BANK SEGMENT INTO PAGE 1 (4000H-7FFFH) — LINE DIRECTORY WINDOW
+; - A: SEGMENT NUMBER
+; - ALL REGISTERS PRESERVED
+; -
+
+PUTP1           LD      HL, (MPUTP1)
+                CALL    CALHL
+                RET
+
+
+; --- GETP1                     ----------------------------------------
+
+; - GETP1 ------------
+; - GET CURRENTLY BANKED SEGMENT AT PAGE 1
+; - OUTPUT:
+; -     A: SEGMENT NUMBER
+; -
+
+GETP1           LD      HL, (MGETP1)
+                CALL    CALHL
+                RET
+
+
+; --- PUTP2                     ----------------------------------------
+
+; - PUTP2 ------------
+; - BANK SEGMENT INTO PAGE 2 (8000H-BFFFH) — TEXT WINDOW
+; - A: SEGMENT NUMBER
+; - ALL REGISTERS PRESERVED
+; -
+
+PUTP2           LD      HL, (MPUTP2)
+                CALL    CALHL
+                RET
+
+
+; --- GETP2                     ----------------------------------------
+
+; - GETP2 ------------
+; - GET CURRENTLY BANKED SEGMENT AT PAGE 2
+; - OUTPUT:
+; -     A: SEGMENT NUMBER
+; -
+
+GETP2           LD      HL, (MGETP2)
+                CALL    CALHL
+                RET

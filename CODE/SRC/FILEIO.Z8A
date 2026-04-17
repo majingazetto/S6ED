@@ -1,0 +1,73 @@
+;                                       ****************************************
+;                                       * FILE I/O                             *
+;                                       ****************************************
+;
+; Uses high-level DSK* wrappers from BDOS.Z8A (DOS1/DOS2 transparent).
+; DOS2 mode: handle-based (DSKOPEN, DSKREAD, DSKWRITE, DSKCLOSE).
+; DOS1 fallback: FCB-based (same wrappers, BDOS.Z8A handles transparently).
+
+
+; --- FILENEW                   ----------------------------------------
+
+; - FILENEW ----------
+; - NEW FILE (CLEARS BUFFER)
+; -
+
+FILENEW         ; TODO:
+                ; If MODIFIED: prompt to save (call EDQUIT logic sans termination)
+                ; BUFINIT (free all segments, reset directory)
+                ; Clear FILENAME
+                ; REDRAW, DRWSTAT
+                RET
+
+
+; --- FILELOAD                  ----------------------------------------
+
+; - FILELOAD ---------
+; - LOAD FILE FROM DISK INTO BUFFER
+; - HL: FILENAME (ASCIIZ)
+; -
+
+FILELOAD        ; TODO:
+                ; 1. FILENEW (clear existing buffer)
+                ; 2. DSKOPEN HL → A=handle, DEHL=size
+                ; 3. Stream read: buffer 256-byte chunks, split on CR/LF
+                ;    For each complete line: LINEWRT to segment, update directory
+                ;    Allocate new segments as needed via ALLSEG
+                ; 4. DSKCLOSE
+                ; 5. TOTLINES = lines read; TOPLINE=0; DOCLINE=0; CURX=0; CURY=0
+                ; 6. Copy filename to FILENAME var
+                ; 7. MODIFIED = 0
+                ; 8. REDRAW, DRWGUT, DRWSCRL, DRWSTAT
+                RET
+
+
+; --- FILESAVE                  ----------------------------------------
+
+; - FILESAVE ---------
+; - SAVE BUFFER TO DISK (CURRENT FILENAME)
+; - IF FILENAME EMPTY: PROMPT AND CALL FSAVEAS
+; -
+
+FILESAVE        ; TODO:
+                ; 1. If FILENAME[0] = 0: FSAVEAS
+                ; 2. DSKCREATE FILENAME → handle
+                ; 3. Walk directory 0..TOTLINES-1:
+                ;    LINEREAD → WORKBUF → write text+LF via DSKWRITE
+                ; 4. DSKCLOSE
+                ; 5. MODIFIED = 0
+                ; 6. DRWSTAT
+                RET
+
+
+; --- FSAVEAS                ----------------------------------------
+
+; - FSAVEAS -------
+; - PROMPT FOR FILENAME AND SAVE
+; -
+
+FSAVEAS      ; TODO:
+                ; 1. Draw input box (status bar or mini dialog)
+                ; 2. Read filename via BUFIN
+                ; 3. Copy to FILENAME, call FILESAVE
+                RET

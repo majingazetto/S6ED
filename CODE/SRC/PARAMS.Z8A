@@ -1,0 +1,151 @@
+;                                       ****************************************
+;                                       * PARAMS                               *
+;                                       ****************************************
+;
+; Parses DOS command-line parameters via EXTPARM (BDOS.Z8A).
+; S6ED accepts one optional parameter: the filename to open.
+; No /X switches defined yet — scaffold is ready for future additions.
+;
+; Call PARAMS from INIT after BUFINIT.
+; On return: CY=0  filename found → FILENAME is populated (ASCIIZ)
+;            CY=1  no filename given → open empty buffer
+
+
+; --- PARAMS                    ----------------------------------------
+
+; - PARAMS -----------
+; - PARSE COMMAND LINE, FIND FILENAME
+; - OUTPUT:
+; -     CY = 0  FILENAME copied to FILENAME (VARS)
+; -     CY = 1  NO FILENAME PARAM FOUND
+; -
+
+PARAMS          LD      HL, PARBUF
+                CALL    EXTPARM
+                RET     C               ; no params at all → CY=1
+
+                ; --- check each param for a bare filename (not starting '/')
+
+                CALL    CHKFILE
+                RET                     ; CY from CHKFILE propagates
+
+
+; --- CHKFILE                   ----------------------------------------
+
+; - CHKFILE ----------
+; - FIND FIRST PARAM NOT STARTING WITH '/'
+; - COPIES IT TO FILENAME (ASCIIZ)
+; - OUTPUT:
+; -     CY = 0  FILENAME set
+; -     CY = 1  NOT FOUND
+; -
+
+CHKFILE         LD      A, (PARBUF)     ; total param count
+                LD      B, A
+                LD      C, 0
+.LOOP           PUSH    BC
+                LD      HL, PARBUF
+                LD      DE, PARMTMP
+                LD      A, C
+                CALL    GETPARAM        ; → copies param C to PARMTMP, HL=PARMTMP
+                LD      A, (HL)
+                CP      '/'
+                JR      NZ, .FOUND      ; not a switch → filename
+                POP     BC
+                INC     C
+                DJNZ    .LOOP
+                SCF                     ; not found
+                RET
+
+.FOUND          POP     BC
+                LD      HL, PARMTMP
+                LD      DE, FILENAME
+.COPY           LD      A, (HL)
+                LD      (DE), A
+                AND     A
+                JR      Z, .DONE
+                INC     HL
+                INC     DE
+                JR      .COPY
+.DONE           AND     A               ; CY=0
+                RET
+
+
+; --- CHKPARAM                  ----------------------------------------
+
+; - CHKPARAM ---------
+; - CHECK PARAM STRING AND SET FLAG VAR IF FOUND
+; - HL: PARAM DATA (DEFB size / DEFM string)
+; - DE: FLAG VARIABLE ADDRESS
+; - A:  VALUE TO STORE IF FOUND
+; - OUTPUT:
+; -     CY = 0  PARAM FOUND AND FLAG SET
+; -     CY = 1  NOT FOUND
+; -
+
+CHKPARAM        PUSH    AF
+                PUSH    DE
+                LD      A, (HL)
+                INC     HL
+                CALL    FNDPARAM
+                POP     DE
+                POP     BC
+                RET     C
+                LD      A, B
+                LD      (DE), A
+                AND     A
+                RET
+
+
+; --- FNDPARAM                  ----------------------------------------
+
+; - FNDPARAM ---------
+; - CASE-INSENSITIVE SEARCH FOR PARAM STRING IN COMMAND LINE
+; - A:  PARAM STRING SIZE
+; - HL: POINTER TO PARAM STRING
+; - OUTPUT:
+; -     CY = 0  FOUND
+; -     CY = 1  NOT FOUND
+; -
+
+FNDPARAM        LD      (PSIZE), A
+                LD      (PPNT), HL
+                LD      A, (PARBUF)
+                LD      B, A
+                LD      C, 0
+.LOOP           PUSH    BC
+                LD      HL, PARBUF
+                LD      DE, 0
+                LD      A, C
+                CALL    GETPARAM
+                CALL    .CHK
+                JR      NC, .SUCCESS
+                POP     BC
+                INC     C
+                DJNZ    .LOOP
+                SCF
+                RET
+.SUCCESS        POP     BC
+                AND     A
+                RET
+
+.CHK            LD      DE, (PPNT)
+                LD      A, (PSIZE)
+                LD      B, A
+.CHKLP          LD      A, (DE)
+                CP      (HL)
+                JR      Z, .CHKOK
+                CP      'A'
+                JR      C, .CHKERR
+                CP      'Z' + 1
+                JR      NC, .CHKERR
+                OR      %00100000       ; to lowercase
+                CP      (HL)
+                JR      NZ, .CHKERR
+.CHKOK          INC     HL
+                INC     DE
+                DJNZ    .CHKLP
+                AND     A
+                RET
+.CHKERR         SCF
+                RET

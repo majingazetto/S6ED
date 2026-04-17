@@ -1,0 +1,262 @@
+;                                       ****************************************
+;                                       * HARD CONSTANTS                        *
+;                                       ****************************************
+
+
+; --- SYSTEM                            ----------------------------------------
+
+
+SYSTEM          EQU     #2D
+
+
+; --- BIOS                              ----------------------------------------
+
+
+ENASCR_B        EQU     #44
+DISSCR_B        EQU     #41
+WRTVDP_B        EQU     #47
+WRTVRM          EQU     #4D
+FILVRM_B        EQU     #56
+LDIRVM_B        EQU     #5C
+LDIRMV_B        EQU     #59
+CHGMOD          EQU     #5F
+SNSMAT          EQU     #141
+ENASLT          EQU     #24
+RSLREG          EQU     #138
+RDSLT           EQU     #0C
+WRSLT           EQU     #14
+CHPUT           EQU     #A2
+CALSLT          EQU     #1C
+DCOMPR_B        EQU     #20
+KILBUF          EQU     #156
+CHSNS           EQU     #9C
+CHGET           EQU     #9F
+EXTBIOS         EQU     #15F
+SUBROM          EQU     #15C
+CLS             EQU     #00C3
+EXTROM          EQU     #015F
+RDVDP           EQU     #013E
+ERAFNK          EQU     #CC
+DSPFNK          EQU     #CF
+BREAKX          EQU     #B7
+
+
+; --- SYSTEM VARS               ----------------------------------------
+
+
+HTIMI           EQU     #FD9F
+HKEYI           EQU     #FD9A
+CLIKSW          EQU     #F3DB
+SCRMOD          EQU     #FCAF
+RG0SAV          EQU     #F3DF
+RG1SAV          EQU     RG0SAV + 1
+RG3SAV          EQU     RG0SAV + 3
+RG4SAV          EQU     RG0SAV + 4
+RG6SAV          EQU     RG0SAV + 6
+RG7SAV          EQU     RG0SAV + 7
+EXPTBL          EQU     #FCC1
+SLTTBL          EQU     #FCC5
+EXTVDP          EQU     #FFE7
+EXBRSA          EQU     #FAF8
+RAMAD0          EQU     #F341
+RAMAD1          EQU     #F342
+RAMAD2          EQU     #F343
+RAMAD3          EQU     #F344
+CNSDFG          EQU     #F3DE
+FNKSTR          EQU     #F87F
+REPCNT          EQU     #F3F7
+JIFFY           EQU     #FC9E
+STATFL          EQU     #F3E7
+
+RG10SA          EQU     #FFE9
+RG18SA          EQU     #FFF1
+RG19SA          EQU     #FFF2
+RG23SA          EQU     #FFF6
+RG25SA          EQU     #FFFA
+RG26SA          EQU     #FFFB
+RG27SA          EQU     #FFFC
+
+CGPNT           EQU     #0004           ; ROM charset slot+address pointer
+                                        ; read via RDSLT from slot 0
+
+
+; --- EXTBIO / MAPPER           ----------------------------------------
+
+
+EXTBIO          EQU     #FFCA
+HOKVLD          EQU     #FB20           ; bit 0 = extended BIOS present
+ARG             EQU     #F847
+
+                ; mapper device / function
+MAP_DEV         EQU     4               ; D=4: memory mapper device
+MAPFNTBL      EQU     2              ; E=2: get jump table (→ HL)
+MAPFNVAR      EQU     1              ; E=1: get variable table (→ HL)
+
+                ; mapper jump table offsets (from base returned by EXTBIO)
+MJALLSEG      EQU     #00
+MJFRESEG      EQU     #03
+MJRDSEG       EQU     #06
+MJWRSEG       EQU     #09
+MJCALSEG      EQU     #0C
+MJCALLS       EQU     #0F
+MJPUTPH       EQU     #12
+MJGETPH       EQU     #15
+MJPUTP0       EQU     #18
+MJGETP0       EQU     #1B
+MJPUTP1       EQU     #1E
+MJGETP1       EQU     #21
+MJPUTP2       EQU     #24
+MJGETP2       EQU     #27
+MJPUTP3       EQU     #2A            ; NOP
+MJGETP3       EQU     #2D
+
+
+; --- VDP PORTS                 ----------------------------------------
+
+
+VDPDR           EQU     #98             ; VDP data port (read/write)
+VDPCT           EQU     #99             ; VDP control port (register/status)
+VDPST           EQU     #99             ; VDP status port (read)
+VDPPAL          EQU     #9A             ; palette data
+VDPPALC         EQU     #9B             ; palette register
+
+
+; --- VDP COMMAND REGISTER VALUES   -----------------------------------
+
+
+                ; CMR (R#46) command codes
+VDP_HMMC        EQU     #F0             ; CPU → VRAM (byte-transfer)
+VDP_YMMM        EQU     #E0             ; VRAM → VRAM (Y only, same X)
+VDP_HMMM        EQU     #D0             ; VRAM → VRAM (byte-transfer)
+VDP_HMMV        EQU     #C0             ; Fill bytes
+VDP_LMMC        EQU     #B0             ; CPU → VRAM (dot-transfer)
+VDP_LMCM        EQU     #A0             ; VRAM → CPU (dot-transfer)
+VDP_LMMM        EQU     #90             ; VRAM → VRAM (dot-transfer)
+VDP_LMMV        EQU     #80             ; Fill dots
+VDP_LINE        EQU     #70             ; Draw line
+VDP_SRCH        EQU     #60             ; Search for color
+VDP_PSET        EQU     #50             ; Plot dot
+VDPOINT       EQU     #40             ; Get dot color
+VDP_STOP        EQU     #20             ; Stop command
+VDP_NOP         EQU     #00
+
+                ; ARG (R#45) DIY bits
+VDP_DIY         EQU     #04             ; set: direction Y = up (default down)
+VDP_DIX         EQU     #02             ; set: direction X = left (default right)
+VDP_EQ          EQU     #01             ; SRCH: stop if equal (default not-equal)
+VDP_MXS         EQU     #20             ; source in page 1
+VDP_MXD         EQU     #10             ; dest in page 1
+
+                ; Logical operations (CMR bits 3-0, used with LMMM/LMMV/LMMC)
+VDP_IMP         EQU     #00             ; SRC → DST
+VDP_AND         EQU     #01
+VDP_OR          EQU     #02
+VDP_XOR         EQU     #03
+VDP_NOT         EQU     #04
+VDP_TIMP        EQU     #08             ; transparent (color 0 not written)
+VDP_TAND        EQU     #09
+VDP_TOR         EQU     #0A
+VDP_TXOR        EQU     #0B
+VDP_TNOT        EQU     #0C
+
+
+; --- BDOS                      ----------------------------------------
+
+
+DOS             EQU     #05
+
+_PARAMS         EQU     #80
+
+_CONIN          EQU     #01
+_CONOUT         EQU     #02
+_DIRIO          EQU     #06
+_INNOE          EQU     #08
+_STROUT         EQU     #09
+_CONST          EQU     #0B
+_BUFIN          EQU     #0A
+
+_FOPEN          EQU     #0F
+_FCLOSE         EQU     #10
+_FMAKE          EQU     #16
+_FDEL           EQU     #13
+_SETDTA         EQU     #1A
+_WRBLK          EQU     #26
+_RDBLK          EQU     #27
+_TERM0          EQU     #00
+
+                ; DOS2 calls
+_OPEN           EQU     #43
+_CREATE         EQU     #44
+_CLOSE          EQU     #45
+_READ           EQU     #48
+_WRITE          EQU     #49
+_SEEK           EQU     #4A
+_DELETE         EQU     #4D
+_DEFAB          EQU     #63
+_DEFER          EQU     #64
+_DOSVER         EQU     #6F
+_FFIRST         EQU     #40
+_TERM           EQU     #62
+
+
+; --- DOS FCB OFFSETS           ----------------------------------------
+
+
+FDRIVE          EQU     0
+FFILNAME        EQU     1
+FFILEXT         EQU     9
+FCURBLK         EQU     12
+FRECSIZ         EQU     14
+FFILSIZ         EQU     16
+FDATE           EQU     20
+FTIME           EQU     22
+FDEVID          EQU     24
+FDIRLOC         EQU     25
+FTOPCLUS        EQU     26
+FLSTCLUS        EQU     28
+FRELLOC         EQU     30
+FCURREC         EQU     32
+FRNDREC         EQU     33
+SIZEFCB         EQU     37
+
+
+; --- ASCII                     ----------------------------------------
+
+
+NUL             EQU     0
+BEL             EQU     #07
+BS              EQU     #08
+TAB             EQU     #09
+LF              EQU     #0A
+CR              EQU     #0D
+ESC             EQU     #1B
+DEL             EQU     #7F
+
+                ; MSX cursor keys (returned by CHGET)
+CRIGHT          EQU     #1C
+CLEFT           EQU     #1D
+CUP             EQU     #1E
+CDOWN           EQU     #1F
+
+                ; MSX function key codes
+F1KEY           EQU     #F1
+F2KEY           EQU     #F2
+F3KEY           EQU     #F3
+F4KEY           EQU     #F4
+F5KEY           EQU     #F5
+
+                ; Control keys
+CTRL_A          EQU     #01
+CTRL_C          EQU     #03
+CTRL_F          EQU     #06
+CTRL_G          EQU     #07
+CTRL_K          EQU     #0B
+CTRL_L          EQU     #0C
+CTRL_N          EQU     #0E
+CTRL_O          EQU     #0F
+CTRL_Q          EQU     #11
+CTRL_R          EQU     #12
+CTRL_S          EQU     #13
+CTRL_V          EQU     #16
+CTRL_X          EQU     #18
+CTRL_Z          EQU     #1A

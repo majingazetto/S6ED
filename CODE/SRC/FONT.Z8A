@@ -1,0 +1,69 @@
+;                                       ****************************************
+;                                       * FONT                                 *
+;                                       ****************************************
+;
+; Reads the MSX ROM 6×8 charset (256 glyphs × 8 bytes, 1bpp, bits 7-2 used).
+; Expands into 4 VRAM font tables: Normal / Bold / Italic / Bold+Italic.
+; Called once at startup before any rendering.
+;
+; ROM charset access: RDSLT from slot 0, address in CGPNT.
+
+
+; --- ITALIC SHIFT TABLE        ----------------------------------------
+
+                ; Row shift offsets for italic (positive = shift pixels LEFT)
+                ; Applied per-row when generating italic glyphs
+ITALSHFT      DEFB    1, 1, 1, 1, 0, -1, -1, -1
+
+
+; --- FONTINIT                  ----------------------------------------
+
+; - FONTINIT ---------
+; - EXPAND ROM CHARSET TO 4 VRAM FONT TABLES
+; - CALLED ONCE AT INIT
+; -
+
+FONTINIT        ; TODO:
+                ; 1. Read CGPNT to get charset slot and base address
+                ; 2. For each of 256 glyphs (N = 0..255):
+                ;    a. Read 8 bytes from ROM via RDSLT
+                ;    b. Expand to Normal:   bits 7-2 → 6px of color 0/1, pad 2 right px
+                ;    c. Expand to Bold:     normal_row | (normal_row >> 1)
+                ;    d. Expand to Italic:   normal_row shifted per ITALSHFT table
+                ;    e. Expand to B+I:      bold transform then italic shift
+                ;    f. Upload each variant to its VRAM font table via HMMC or OTIR
+                ; 3. Each glyph = 16 bytes in VRAM (6px × 8 rows = 2 B/row × 8 = 16)
+                ;    Glyph N: SX = (N % 32) * 6, SY = table_SY + (N / 32) * 8
+                RET
+
+
+; --- GLYPH EXPAND HELPERS      ----------------------------------------
+
+; - EXPNORM ----------
+; - EXPAND ONE 1BPP ROM ROW BYTE TO 2-BYTE VRAM ROW (NORMAL, SCREEN 6 2BPP)
+; - A:  ROM ROW BYTE (bits 7-2 = 6 pixels)
+; - HL: DESTINATION VRAM ROW BUFFER (2 bytes)
+; - NOTE: COLOR 1 = pixel on, COLOR 0 = pixel off
+; -
+
+EXPNORM         ; TODO
+                RET
+
+
+; - EXPBOLD ----------
+; - BOLD: OR ROW WITH ROW >> 1 BEFORE EXPANDING
+; - A: ROM ROW BYTE
+; -
+
+EXPBOLD         ; TODO: A = A | (A >> 1), then EXPNORM
+                RET
+
+
+; - EXPITAL ----------
+; - ITALIC: SHIFT ROW HORIZONTALLY PER ITALSHFT TABLE
+; - A:   ROM ROW BYTE
+; - B:   ROW INDEX (0-7)
+; -
+
+EXPITAL         ; TODO: look up ITALSHFT[B], shift A accordingly, then EXPNORM
+                RET

@@ -1,0 +1,124 @@
+;                                       ****************************************
+;                                       * EDIT OPERATIONS                      *
+;                                       ****************************************
+;
+; All editing operations work on WORKBUF (current line loaded by LINEREAD).
+; After each edit: LINEWRT to persist, PUTLINE to re-render, DRWGUT.
+
+
+; --- EDINSCHR                 ----------------------------------------
+
+; - EDINSCHR --------
+; - INSERT CHARACTER AT CURSOR POSITION (INSERT MODE)
+; - A:  CHARACTER CODE
+; - E:  ATTRIBUTE
+; -
+
+EDINSCHR       ; TODO:
+                ; 1. If WORKBUF[0] >= TEXTCOLS: bell, return (line full)
+                ; 2. Shift text+attr right from CURX..len
+                ; 3. Store A at text[CURX], E at attr[CURX]
+                ; 4. WORKBUF[0]++
+                ; 5. LINEWRT DOCLINE
+                ; 6. PUTLINE CURY (redraw line)
+                ; 7. Advance cursor right (EDMOVCHR)
+                RET
+
+
+; --- EDOVRCHR                  ----------------------------------------
+
+; - EDOVRCHR ---------
+; - OVERWRITE CHARACTER AT CURSOR (OVERWRITE MODE)
+; - A:  CHARACTER CODE
+; - E:  ATTRIBUTE
+; -
+
+EDOVRCHR        ; TODO:
+                ; 1. Store A at text[CURX], E at attr[CURX]
+                ; 2. If CURX >= WORKBUF[0]: WORKBUF[0] = CURX+1
+                ; 3. LINEWRT, PUTCHAR, EDMOVCHR right
+                RET
+
+
+; --- EDDELBK                 ----------------------------------------
+
+; - EDDELBK --------
+; - DELETE CHARACTER BEFORE CURSOR (BACKSPACE)
+; -
+
+EDDELBK       ; TODO:
+                ; If CURX = 0 and CURY = 0 (top of doc): bell, return
+                ; If CURX = 0: join with previous line (EJOINPRV)
+                ; Else: shift text+attr left, WORKBUF[0]--, LINEWRT, PUTLINE
+                RET
+
+
+; --- EDDELCHR                  ----------------------------------------
+
+; - EDDELCHR ---------
+; - DELETE CHARACTER AT CURSOR (DEL KEY)
+; -
+
+EDDELCHR        ; TODO:
+                ; If CURX >= WORKBUF[0]: join next line (EJOINEXT)
+                ; Else: shift text+attr left, WORKBUF[0]--, LINEWRT, PUTLINE
+                RET
+
+
+; --- EDNWLIN                 ----------------------------------------
+
+; - EDNWLIN --------
+; - INSERT LINE BREAK AT CURSOR (ENTER)
+; -
+
+EDNWLIN       ; TODO:
+                ; 1. Split WORKBUF at CURX:
+                ;    - Tail (text[CURX..] + attr) → new WORKBUF, LINEINS DOCLINE+1
+                ;    - Head (text[0..CURX-1] + attr) → WORKBUF, LINEWRT DOCLINE
+                ; 2. Move cursor to col 0, next line (scroll if needed)
+                ; 3. RDWROWS CURY..SCRROWS-1 (tail shifted down)
+                RET
+
+
+; --- EDMOVCHR                  ----------------------------------------
+
+; - EDMOVCHR ---------
+; - MOVE CURSOR LEFT OR RIGHT ONE CHARACTER
+; - A:  CRIGHT OR CLEFT
+; -
+
+EDMOVCHR        ; TODO:
+                ; Right: CURX++; if > len: wrap to next line
+                ; Left:  CURX--; if < 0:  wrap to prev line end
+                ; Redraw cursor (DRWCUR)
+                RET
+
+
+; --- EDMOVROW                  ----------------------------------------
+
+; - EDMOVROW ---------
+; - MOVE CURSOR UP OR DOWN ONE ROW
+; - A:  CUP OR CDOWN
+; -
+
+EDMOVROW        ; TODO:
+                ; Down: CURY++; if >= SCRROWS: scroll up 1 (SCRLUP)
+                ; Up:   CURY--; if < 0:        scroll down 1 (SCRLDN)
+                ; Clamp CURX to new line length
+                ; Redraw cursor
+                RET
+
+
+; --- EDQUIT                    ----------------------------------------
+
+; - EDQUIT -----------
+; - CONFIRM AND EXIT EDITOR
+; -
+
+EDQUIT          ; TODO:
+                ; If MODIFIED: prompt "Save changes? (Y/N/C)"
+                ;   Y → FILESAVE, then TERM
+                ;   N → TERM
+                ;   C → return to editing
+                ; Else: TERM
+                RET

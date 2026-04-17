@@ -1,0 +1,113 @@
+;                                       ****************************************
+;                                       * UI — STATUS BAR / GUTTERS / CURSOR  *
+;                                       ****************************************
+
+
+; --- DRWSTAT                ----------------------------------------
+
+; - DRWSTAT -------
+; - DRAW / REFRESH STATUS BAR (ROW 25)
+; - FORMAT: " LANG | INS | Ln:NNNNN/NNNNN  Col:NNN | FILENAME"
+; -
+
+DRWSTAT      ; TODO:
+                ; 1. HMMV: fill row 25 with COL_UI (clear bar)
+                ; 2. Render LANG text (LGNONE/Z80/BASIC/C/PYTHON → string)
+                ; 3. Render INS/OVR
+                ; 4. Render Ln:DOCLINE+1/TOTLINES
+                ; 5. Render Col:CURX+1
+                ; 6. Render FILENAME (truncated to fit)
+                RET
+
+
+; --- DRWMENU               ----------------------------------------
+
+; - DRWMENU ------
+; - DRAW MENU BAR (ROW 0, ALWAYS VISIBLE)
+; - RENDERS STATIC TITLES; HIGHLIGHT DRAWN BY MENU MODULE (FUTURE)
+; -
+
+DRWMENU     ; TODO:
+                ; 1. HMMV: fill row 0 with COL_UI
+                ; 2. Blit menu title strings at fixed column positions
+                RET
+
+
+; --- DRWGUT                ----------------------------------------
+
+; - DRWGUT -------
+; - REDRAW LEFT GUTTER (LINE NUMBERS) FOR ALL VISIBLE ROWS
+; -
+
+DRWGUT      ; TODO:
+                ; For each viewport row 0..SCRROWS-1:
+                ;   DRWLNUM row, TOPLINE + row
+                RET
+
+
+; --- DRWLNUM               ----------------------------------------
+
+; - DRWLNUM ------
+; - DRAW LINE NUMBER IN LEFT GUTTER
+; - B:  VIEWPORT ROW
+; - HL: DOCUMENT LINE NUMBER (1-BASED FOR DISPLAY)
+; -
+
+DRWLNUM     ; TODO:
+                ; Format HL as 4-char right-justified:
+                ;   HL <= 9999:  decimal "   1" .. "9999"
+                ;   HL <= 99999: k-notation " 10k" .. " 99k"
+                ;   else:        m-notation "  1m"
+                ; Blit 4 chars at DX=0, DY=TXORG_Y+B*CELLH via LMMM
+                RET
+
+
+; --- DRWSCRL             ----------------------------------------
+
+; - DRWSCRL ----
+; - DRAW SCROLLBAR THUMB IN RIGHT GUTTER
+; -
+
+DRWSCRL   ; TODO:
+                ; thumb_h = max(4, (SCRROWS * 212) / TOTLINES)
+                ; thumb_y = (TOPLINE * 212) / TOTLINES
+                ; Erase old thumb: HMMV full gutter with COL_UI
+                ; Draw new thumb: HMMV DX=512-GUTR_PX, DY=thumb_y, NX=GUTR_PX, NY=thumb_h, CLR=COL_HI
+                RET
+
+
+; --- DRWCUR                ----------------------------------------
+
+; - DRWCUR -------
+; - TOGGLE CURSOR XOR OVERLAY AT CURRENT POSITION
+; - (SAME CALL DRAWS AND ERASES — XOR TOGGLE)
+; -
+
+DRWCUR      ; TODO:
+                ; DX = TXORG_X + CURX * CELLW
+                ; DY = TXORG_Y + CURY * CELLH
+                ; LMMV DX, DY, NX=CELLW, NY=CELLH, CLR=COL_HI, LOP=XOR
+                RET
+
+
+; --- TIMI HOOK (BLINK)         ----------------------------------------
+
+; - BLNKTICK ---------
+; - CALLED FROM TIMI INTERRUPT HOOK
+; - HANDLES CURSOR BLINK
+; -
+
+BLNKTICK        PUSH    AF
+                LD      A, (BLNKCNT)
+                INC     A
+                CP      30              ; blink every 30 ticks (≈0.5s at 60Hz)
+                JR      C, .END
+                XOR     A
+                LD      (BLNKCNT), A
+                LD      A, (BLNKPH)
+                XOR     1
+                LD      (BLNKPH), A
+                CALL    DRWCUR      ; toggle cursor
+.END            LD      (BLNKCNT), A
+                POP     AF
+                RET
