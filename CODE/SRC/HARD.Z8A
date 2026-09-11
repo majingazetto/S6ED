@@ -148,12 +148,12 @@ VDPOINT       EQU     #40             ; GET DOT COLOR
 VDP_STOP        EQU     #20             ; STOP COMMAND
 VDP_NOP         EQU     #00
 
-                ; ARG (R#45) DIY BITS
-VDP_DIY         EQU     #04             ; SET: DIRECTION Y = UP (DEFAULT DOWN)
-VDP_DIX         EQU     #02             ; SET: DIRECTION X = LEFT (DEFAULT RIGHT)
+                ; ARG (R#45) DIRECTION AND MEMORY BITS
+VDP_MXD         EQU     #20             ; DEST IN EXPANSION RAM / PAGE 1
+VDP_MXS         EQU     #10             ; SOURCE IN EXPANSION RAM / PAGE 1
+VDP_DIY         EQU     #08             ; SET: DIRECTION Y = UP (DEFAULT DOWN)
+VDP_DIX         EQU     #04             ; SET: DIRECTION X = LEFT (DEFAULT RIGHT)
 VDP_EQ          EQU     #01             ; SRCH: STOP IF EQUAL (DEFAULT NOT-EQUAL)
-VDP_MXS         EQU     #20             ; SOURCE IN PAGE 1
-VDP_MXD         EQU     #10             ; DEST IN PAGE 1
 
                 ; LOGICAL OPERATIONS (CMR BITS 3-0, USED WITH LMMM/LMMV/LMMC)
 VDP_IMP         EQU     #00             ; SRC → DST
@@ -266,5 +266,7 @@ CTRL_Q          EQU     #11
 CTRL_R          EQU     #12
 CTRL_S          EQU     #13
 CTRL_V          EQU     #16
+CTRL_W          EQU     #17
 CTRL_X          EQU     #18
 CTRL_Z          EQU     #1A
+

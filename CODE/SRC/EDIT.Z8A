@@ -27,8 +27,201 @@ EDINSCHR        PUSH    AF
                 LD      A, (CURX)
                 CP      TEXTCOLS        ; 80
                 RET     NC              ; CURX >= 80, CANNOT INSERT
+
+                ; CHECK RIGHT MARGIN (CURX >= 79)
+                CP      TEXTCOLS - 1
+                JR      NZ, .NOTMARG
+
+                ; CURX == 79:
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JP      Z, EDWRPLIN     ; WORD-WRAP AT MARGIN
+
+                ; WRAP_DEV: CLAMP IF ALREADY HAS CHAR AT COL 79
+                LD      A, (WORKBUF + 80)
+                CP      ' '
+                RET     NZ              ; CLAMP: COL 79 HAS TEXT
+                JP      .DOINS          ; COL 79 IS SPACE, PUT CHAR THERE
+
+.NOTMARG        ; CURX < 79:
+                ; CHECK IF COL 79 CONTAINS A NON-SPACE CHARACTER
+                LD      A, (WORKBUF + 80)
+                CP      ' '
+                JP      Z, .DOINS       ; COL 79 IS EMPTY/SPACE, SHIFT IS SAFE
+
+                ; COL 79 HAS TEXT! CHECK WRAP MODE:
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JR      Z, .MIDWRAP     ; IN TEXT MODE: WRAP OVERFLOWING TAIL
+
+                ; WRAP_DEV: REFUSE INSERTION TO PREVENT LOSING CODE ON THE RIGHT!
+                RET
+
+.MIDWRAP        ; FIND LAST SPACE ON THE LINE TO WRAP THE LAST WORD
+                LD      B, 78
+.MSCAN          LD      E, B
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE          ; HL = WORKBUF + 1 + B
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .MFOUND
+                DEC     B
+                LD      A, B
+                INC     A               ; IF B WRAPPED PAST 0 (#FF), INC A = 0
+                JR      NZ, .MSCAN
+
+                ; NO SPACE FOUND ON LINE: SPLIT AT COL 79 (LAST CHAR ONLY)
+                LD      B, 79
+
+.MFOUND         ; B = COL OF SPACE (OR 79 IF NO SPACE)
+                ; IS CURSOR AT OR AFTER THE SPACE?
+                LD      A, (CURX)
+                CP      B
+                JR      C, .TAILMOV     ; CURX < B: CURSOR IS BEFORE THE LAST WORD
+
+                ; CURSOR IS INSIDE OR AFTER THE LAST WORD:
+                ; DELEGATE TO EDWRPLIN (CURSOR FOLLOWS TO NEXT LINE)
+                JP      EDWRPLIN
+
+.TAILMOV        ; MOVE WORD AT (B+1)..79 TO WORKBUF2
+                LD      HL, (TOTLINES)
+                LD      DE, MAXLINES
+                CALL    CMPHLDE
+                RET     NC              ; DIRECTORY FULL, CANNOT WRAP
+
+                PUSH    BC              ; SAVE B=COL OF SPACE, C=CHAR TO INSERT
+                LD      HL, WORKBUF2
+                CALL    RECBLNK
+                POP     BC              ; RESTORE B, C
+
+                ; START OF TAIL: D = B + 1
+                LD      A, B
+                INC     A
+                LD      D, A            ; D = TAIL START COL (1..79)
                 
-                ; SHIFT RIGHT FROM COL 79 DOWN TO CURX + 1
+                ; TAIL LENGTH: 80 - D
+                LD      A, TEXTCOLS
+                SUB     D
+                LD      (WORKBUF2), A
+                LD      E, A            ; E = TAIL LENGTH
+                
+                ; COPY TEXT HALF TO WORKBUF2 + 1
+                PUSH    BC              ; SAVE C (CHAR TO INSERT)
+                PUSH    DE              ; SAVE E (TAIL LENGTH)
+                LD      E, D
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE          ; HL = WORKBUF + 1 + D
+                LD      DE, WORKBUF2 + 1
+                POP     AF              ; A = TAIL LENGTH
+                PUSH    AF
+                LD      C, A
+                LD      B, 0
+                LDIR
+                POP     AF              ; A = TAIL LENGTH
+                POP     BC              ; RESTORE C (CHAR TO INSERT)
+
+                ; COPY ATTR HALF TO WORKBUF2 + 1 + TEXTCOLS
+                PUSH    BC              ; SAVE C (CHAR TO INSERT)
+                LD      A, (WORKBUF2)   ; TAIL LENGTH
+                LD      C, A
+                LD      A, TEXTCOLS
+                SUB     C               ; A = D (SPLIT POINT)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+                LD      DE, WORKBUF2 + 1 + TEXTCOLS
+                LD      B, 0
+                LDIR
+                POP     BC              ; RESTORE C (CHAR TO INSERT)
+
+                ; TRUNCATE CURRENT WORKBUF:
+                ; BLANK FROM COL (TEXTCOLS - TAIL_LEN) TO 79
+                PUSH    BC              ; SAVE C (CHAR TO INSERT)
+                LD      A, (WORKBUF2)   ; TAIL_LEN
+                LD      B, A            ; B = BYTES TO BLANK
+                LD      A, TEXTCOLS
+                SUB     B               ; A = D (SPLIT POINT)
+                LD      (WORKBUF), A    ; NEW LENGTH OF CURRENT LINE
+                LD      E, A
+                LD      D, 0
+                
+                ; BLANK TEXT WITH SPACES
+                PUSH    BC
+                PUSH    DE
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+.TLBLNK         LD      (HL), ' '
+                INC     HL
+                DJNZ    .TLBLNK
+                POP     DE
+                POP     BC
+
+                ; ZERO ATTRS
+                PUSH    BC
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+.TLZATT         LD      (HL), 0
+                INC     HL
+                DJNZ    .TLZATT
+                POP     BC
+                POP     BC              ; RESTORE C (CHAR TO INSERT)
+
+                ; CLAIM NEW RECORD FOR WORKBUF2
+                PUSH    BC              ; SAVE C (CHAR TO INSERT)
+                CALL    NEWREC          ; A = SEG, DE = OFFSET
+                PUSH    AF
+                PUSH    DE
+                LD      HL, TXPAGE
+                ADD     HL, DE
+                EX      DE, HL
+                LD      HL, WORKBUF2
+                LD      BC, WORKSIZ
+                LDIR
+
+                ; INSERT SLOT AT DOCLINE + 1
+                LD      HL, (DOCLINE)
+                INC     HL
+                PUSH    HL
+                CALL    LINEINS
+                POP     HL
+                POP     DE
+                POP     AF
+                CALL    DIRWRITE
+
+                ; BUMP TOTLINES
+                LD      HL, (TOTLINES)
+                INC     HL
+                LD      (TOTLINES), HL
+
+                ; FAST SHIFT ROWS BELOW CURY
+                LD      A, (CURY)
+                CP      SCRROWS - 1     ; 23
+                JR      Z, .TLBOT
+                
+                ; SCREEN ROW OF NEW LINE: CURY + 2
+                INC     A
+                INC     A
+                LD      B, A            ; B = SCREEN ROW (2..24)
+                PUSH    BC
+                CALL    SHIFTDN
+                POP     BC
+                ; RENDER NEW LINE AT ROW B
+                CALL    RENDEROW
+                JR      .TLINSC
+
+.TLBOT          ; AT BOTTOM:
+                LD      HL, (TOPLINE)
+                INC     HL
+                LD      (TOPLINE), HL
+                CALL    SCROLLDN
+
+.TLINSC         ; RESTORE CHAR C AND INSERT IT ON CURRENT LINE!
+                POP     BC              ; RESTORE C (CHAR TO INSERT)
+
+.DOINS          ; SHIFT RIGHT FROM COL 79 DOWN TO CURX + 1
                 LD      B, 79
 .SHIFTRP        LD      A, B
                 LD      HL, CURX
@@ -54,11 +247,16 @@ EDINSCHR        PUSH    AF
                 LD      (HL), C
                 
                 ; UPDATE LINE LENGTH IF NEEDED
-                LD      A, (WORKBUF)
+                LD      A, (CURX)
+                INC     A
+                LD      HL, WORKBUF
+                CP      (HL)
+                JR      NC, .SETLEN
+                LD      A, (HL)
                 CP      TEXTCOLS
                 JR      NC, .LENOK
                 INC     A
-                LD      (WORKBUF), A
+.SETLEN         LD      (WORKBUF), A
 .LENOK          ; WRITE LINE TO MAPPER
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
@@ -80,7 +278,169 @@ EDINSCHR        PUSH    AF
                 RET
 
 
+; --- EDWRPLIN                  ----------------------------------------
+
+
+; - EDWRPLIN ---------------------------
+; - SMART WORD-WRAP AT RIGHT MARGIN
+; - IN:  C = CHAR TO INSERT
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+EDWRPLIN        ; REFUSE IF THE LINE DIRECTORY IS FULL
+                LD      HL, (TOTLINES)
+                LD      DE, MAXLINES
+                CALL    CMPHLDE
+                RET     NC
+
+                ; IF TYPED CHAR IS A SPACE, JUST INSERT A NEWLINE
+                LD      A, C
+                CP      ' '
+                JR      NZ, .NOWRAPS
+                CALL    EDNWLIN
+                RET
+
+.NOWRAPS        ; SCAN BACKWARDS FROM COL 78 DOWN TO COL 0 FOR LAST SPACE
+                LD      B, 78
+.WSCAN          LD      E, B
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE          ; HL = WORKBUF + 1 + B
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .FOUNDSP
+                DEC     B
+                LD      A, B
+                INC     A               ; IF B WRAPPED PAST 0 (#FF), INC A = 0
+                JR      NZ, .WSCAN
+
+                ; NO SPACE FOUND IN WHOLE LINE: HARD BREAK AT COL 79
+                LD      A, 79
+                LD      (CURX), A
+                JR      .DOSPLIT
+
+.FOUNDSP        ; SPACE FOUND AT COL B: WORD STARTS AT COL B + 1
+                INC     B
+                LD      A, B
+                LD      (CURX), A       ; SPLIT POINT = START OF WORD
+
+.DOSPLIT        ; 1. SPLIT WORKBUF AT CURX
+                ;    HEAD (0..CURX-1) STAYS IN WORKBUF
+                ;    TAIL (CURX..END) GOES TO WORKBUF2
+                CALL    SPLITL
+
+                ; 2. WRITE TRUNCATED HEAD TO CURRENT LINE
+                LD      HL, (DOCLINE)
+                CALL    LINEWRT
+
+                ; 3. APPEND CHAR C TO WORKBUF2 (THE MOVED WORD)
+                LD      A, (WORKBUF2)   ; OLD TAIL LENGTH
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF2 + 1
+                ADD     HL, DE          ; HL -> END OF WORD IN WORKBUF2
+                LD      (HL), C         ; APPEND CHAR C
+                INC     A
+                LD      (WORKBUF2), A   ; NEW TAIL LENGTH
+                LD      B, A            ; B = NEW CURX
+
+                ; 4. CLAIM NEW MAPPER RECORD AND COPY WORKBUF2
+                CALL    NEWREC          ; A=SEG, DE=OFFSET, PAGE 2 BANKED
+                PUSH    AF
+                PUSH    DE
+                LD      HL, TXPAGE
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DESTINATION
+                LD      HL, WORKBUF2
+                LD      BC, WORKSIZ
+                LDIR
+
+                ; 5. INSERT SLOT IN LINE DIRECTORY AND FILL
+                LD      HL, (DOCLINE)
+                INC     HL
+                PUSH    HL
+                CALL    LINEINS
+                POP     HL
+                POP     DE              ; DE = OFFSET
+                POP     AF              ; A  = SEGMENT
+                CALL    DIRWRITE
+
+                ; 6. INCREMENT DOCUMENT LINE COUNT
+                LD      HL, (TOTLINES)
+                INC     HL
+                LD      (TOTLINES), HL
+
+                ; 7. ADVANCE DOCLINE
+                LD      HL, (DOCLINE)
+                INC     HL
+                LD      (DOCLINE), HL
+
+                ; 8. POSITION CURSOR AFTER MOVED WORD + TYPED CHAR
+                LD      A, (WORKBUF2)
+                CP      TEXTCOLS
+                JR      C, .SETX
+                LD      A, TEXTCOLS - 1
+.SETX           LD      (CURX), A
+
+                LD      A, #FF
+                LD      (MODIFIED), A
+
+                ; 9. FAST UPDATE DISPLAY
+                LD      A, (CURY)
+                CP      SCRROWS - 1     ; 23
+                JR      Z, .WRPBOT
+
+                ; NOT AT BOTTOM: CURY INCREMENTS
+                INC     A
+                LD      (CURY), A
+                INC     A
+                LD      B, A            ; B = SCREEN ROW OF NEW LINE (2..24)
+                PUSH    BC
+                CALL    SHIFTDN
+                POP     BC
+
+                ; RENDER SHORTENED HEAD (ROW B - 1)
+                DEC     B
+                CALL    RENDEROW
+
+                ; RENDER NEW LINE (ROW B)
+                INC     B
+                CALL    RENDEROW
+                CALL    DRWGUT
+                RET
+
+.WRPBOT         ; AT BOTTOM OF SCREEN: SCROLL VIEWPORT DOWN
+                LD      HL, (TOPLINE)
+                INC     HL
+                LD      (TOPLINE), HL
+                CALL    SCROLLDN
+
+                ; RENDER SHORTENED HEAD (ROW 23)
+                LD      B, 23
+                CALL    RENDEROW
+                CALL    DRWGUT
+                RET
+
+
+; --- EDTGLWRP                  ----------------------------------------
+
+
+; - EDTGLWRP ---------------------------
+; - TOGGLE WRAP MODE (WRAP_DEV <-> WRAP_TXT)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+EDTGLWRP        LD      A, (WRAPMODE)
+                XOR     1
+                LD      (WRAPMODE), A
+                RET
+
+
 ; --- EDOVRCHR                  ----------------------------------------
+
 
 
 ; - EDOVRCHR ---------------------------
@@ -255,18 +615,50 @@ EDNWLIN         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 INC     HL
                 LD      (TOTLINES), HL
 
-                ; 6. CURSOR TO COLUMN 0 OF THE NEW LINE
+                ; 6. ADVANCE TO NEW LINE
                 XOR     A
                 LD      (CURX), A
-                LD      A, CDOWN
-                CALL    EDMOVROW
 
-                LD      A, #FF
-                LD      (MODIFIED), A
+                LD      HL, (DOCLINE)
+                INC     HL
+                LD      (DOCLINE), HL
 
-                ; EVERY ROW FROM THE SPLIT DOWNWARDS MOVED
-                CALL    REDRAW
+                LD      A, (CURY)
+                CP      SCRROWS - 1     ; 23
+                JR      Z, .NWATBOT
+
+                ; NOT AT BOTTOM: CURY INCREMENTS
+                INC     A
+                LD      (CURY), A
+                INC     A
+                LD      B, A            ; B = SCREEN ROW OF NEW LINE (2..24)
+                PUSH    BC
+                CALL    SHIFTDN
+                POP     BC
+
+                ; RENDER SHORTENED HEAD (ROW B - 1)
+                DEC     B
+                CALL    RENDEROW
+
+                ; RENDER NEW LINE (ROW B)
+                INC     B
+                CALL    RENDEROW
                 CALL    DRWGUT
+                JR      .NWDONE
+
+.NWATBOT        ; AT BOTTOM OF SCREEN: SCROLL VIEWPORT DOWN
+                LD      HL, (TOPLINE)
+                INC     HL
+                LD      (TOPLINE), HL
+                CALL    SCROLLDN
+
+                ; RENDER SHORTENED HEAD (ROW 23)
+                LD      B, 23
+                CALL    RENDEROW
+                CALL    DRWGUT
+
+.NWDONE         LD      A, #FF
+                LD      (MODIFIED), A
                 RET
 
 
@@ -405,7 +797,7 @@ EDMOVROW        CP      CDOWN
 .SCRLUP         LD      HL, (TOPLINE)
                 DEC     HL
                 LD      (TOPLINE), HL
-                CALL    REDRAW
+                CALL    SCROLLUP
                 RET
                 
 .DOWN           ; CDOWN:
@@ -425,8 +817,9 @@ EDMOVROW        CP      CDOWN
 .SCRLDN         LD      HL, (TOPLINE)
                 INC     HL
                 LD      (TOPLINE), HL
-                CALL    REDRAW
+                CALL    SCROLLDN
                 RET
+
 
 
 ; --- EDQUIT                    ----------------------------------------

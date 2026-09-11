@@ -128,3 +128,11 @@ LGPYTHN     EQU     4
 
 INS_MODE        EQU     1               ; INSERT
 OVR_MODE        EQU     0               ; OVERWRITE
+
+
+; --- WRAP MODES                ----------------------------------------
+
+
+WRAP_DEV        EQU     0               ; DEVELOPER MODE: CLAMP AT COL 79 (NO AUTO-WRAP)
+WRAP_TXT        EQU     1               ; TEXT MODE: SMART WORD-WRAP
+
