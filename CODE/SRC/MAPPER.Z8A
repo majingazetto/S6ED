@@ -207,3 +207,96 @@ PUTP2           LD      HL, (MPUTP2)
 GETP2           LD      HL, (MGETP2)
                 CALL    CALHL
                 RET
+
+
+; --- TRACKED ALLOCATION        ----------------------------------------
+;
+; ALL_SEG REPORTS EXHAUSTION IN THE CARRY FLAG AND LEAVES A UNDEFINED. PASSING
+; THAT UNDEFINED VALUE TO PUT_P1 / PUT_P2 BANKS A SEGMENT THAT DOES NOT EXIST
+; AND SILENTLY DESTROYS THE BUFFER -- ON A STOCK 128KB MSX2 THAT IS NOT A
+; CORNER CASE, IT IS THE NORMAL OUTCOME. EVERY ALLOCATION IN THE EDITOR GOES
+; THROUGH SEGGET, WHICH CHECKS THE FLAG AND RECORDS THE SEGMENT SO IT CAN BE
+; RETURNED LATER.
+
+
+; - SEGGET -----------------------------
+; - ALLOCATE ONE SEGMENT AND RECORD IT IN SEGTBL
+; - IN:  NONE
+; - OUT: A  = SEGMENT NUMBER
+; -      CY = 1  NO MAPPER MEMORY LEFT (A UNDEFINED)
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+SEGGET          CALL    ALLSEG
+                RET     C               ; NO FREE SEGMENTS
+
+                LD      E, A            ; E = SEGMENT NUMBER
+                LD      A, (SEGCNT)
+                CP      MAXSEGS
+                JR      NC, .FULL
+
+                LD      C, A            ; C = INDEX
+                LD      B, 0
+                LD      HL, SEGTBL
+                ADD     HL, BC
+                LD      (HL), E
+                INC     A
+                LD      (SEGCNT), A
+
+                LD      A, E
+                AND     A               ; CY = 0
+                RET
+
+                ; TABLE FULL: HAND THE SEGMENT BACK RATHER THAN LEAK IT
+.FULL           LD      A, E
+                CALL    FRESEG
+                SCF
+                RET
+
+
+; - SEGFREE ----------------------------
+; - RETURN EVERY TRACKED SEGMENT TO THE MAPPER MANAGER
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+SEGFREE         LD      A, (SEGCNT)
+                AND     A
+                RET     Z
+                LD      B, A
+                LD      C, 0
+.LOOP           PUSH    BC
+                LD      B, 0
+                LD      HL, SEGTBL
+                ADD     HL, BC
+                LD      A, (HL)
+                CALL    FRESEG
+                POP     BC
+                INC     C
+                DJNZ    .LOOP
+                XOR     A
+                LD      (SEGCNT), A
+                RET
+
+
+; - SEGTRIM ----------------------------
+; - FREE EVERY TEXT SEGMENT GROWN BEYOND THE FIRST
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; - KEEPS SEGTBL ENTRY 0 (DIRECTORY) AND ENTRY 1 (FIRST TEXT SEGMENT)
+; -
+
+SEGTRIM         LD      A, (SEGCNT)
+                CP      3
+                RET     C               ; NOTHING GREW PAST THE FIRST TWO
+                DEC     A
+                LD      (SEGCNT), A
+                LD      C, A
+                LD      B, 0
+                LD      HL, SEGTBL
+                ADD     HL, BC
+                LD      A, (HL)
+                CALL    FRESEG
+                JR      SEGTRIM

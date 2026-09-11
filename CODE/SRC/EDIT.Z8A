@@ -223,7 +223,8 @@ EDNWLIN         XOR     A
                 JR      C, .JUSTMOV     ; IF DOCLINE + 1 < TOTLINES, JUST MOVE DOWN
                 
                 ; AT END OF DOCUMENT: APPEND NEW LINE RECORD
-                CALL    ALLSEG
+                CALL    SEGGET
+                JP      C, ERRMEM
                 LD      (TXSEG), A
                 CALL    PUTP2
                 XOR     A
