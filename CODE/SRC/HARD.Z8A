@@ -77,8 +77,13 @@ RG25SA          EQU     #FFFA
 RG26SA          EQU     #FFFB
 RG27SA          EQU     #FFFC
 
-CGPNT           EQU     #0004           ; ROM CHARSET SLOT+ADDRESS POINTER
-                                        ; READ VIA RDSLT FROM SLOT 0
+CGTABL          EQU     #0004           ; WORD IN THE BIOS ROM HOLDING THE
+                                        ; ADDRESS OF THE 6X8 CHARSET.
+                                        ; PAGE 0 IS RAM UNDER DOS, SO IT MUST
+                                        ; BE READ WITH RDSLT USING THE SLOT ID
+                                        ; IN EXPTBL. VERIFIED AGAINST
+                                        ; TH/msxsyssrc/base410/bios.mac:
+                                        ;   DEFW D1BBF ; address character pattern
 
 
 ; --- EXTBIO / MAPPER           ----------------------------------------

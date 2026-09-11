@@ -29,7 +29,10 @@ BIOSCALL        PUSH    AF
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: NONE
+; - ONLY ASSEMBLED IN A  make DEBUG=1  BUILD (SEE THE DBG MACRO)
 ; -
+
+                IFDEF   DEBUG
 
 DBGMSG          EX      (SP), HL
                 PUSH    AF
@@ -44,6 +47,8 @@ DBGMSG          EX      (SP), HL
 .DONE           POP     AF
                 EX      (SP), HL
                 RET
+
+                ENDIF
 
 
 ; - CMPHLDE ----------
