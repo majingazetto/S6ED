@@ -31,6 +31,7 @@ FILELOAD        PUSH    HL
                 LD      (LINEOFF), HL
                 XOR     A
                 LD      (CURLLEN), A
+                LD      (WASCR), A
 
 .READBLK        LD      A, (FILEHAND)
                 LD      HL, 256
@@ -47,10 +48,16 @@ FILELOAD        PUSH    HL
                 PUSH    HL
                 
                 LD      A, (HL)
-                CP      10              ; LF
-                JR      Z, .SKIP        ; IGNORE LF
                 CP      13              ; CR
-                JR      Z, .ENDLINE
+                JR      Z, .ISCR
+                CP      10              ; LF
+                JR      Z, .ISLF
+                
+                ; REGULAR CHARACTER: CLEAR WASCR
+                PUSH    AF
+                XOR     A
+                LD      (WASCR), A
+                POP     AF
                 
                 ; APPEND TO CURRENT LINE IN TXPAGE
                 LD      B, A
@@ -73,7 +80,19 @@ FILELOAD        PUSH    HL
                 LD      (CURLLEN), A
                 JR      .SKIP
 
-.ENDLINE        CALL    STORELINE
+.ISCR           LD      A, 1
+                LD      (WASCR), A
+                CALL    STORELINE
+                JR      .SKIP
+
+.ISLF           LD      A, (WASCR)
+                AND     A
+                JR      NZ, .SKIPLF     ; IF CRLF, SKIP THE LF
+                CALL    STORELINE
+                JR      .SKIP
+.SKIPLF         XOR     A
+                LD      (WASCR), A
+                JR      .SKIP
 
 .SKIP           POP     HL
                 INC     HL
@@ -86,19 +105,23 @@ FILELOAD        PUSH    HL
 
 .EOF            LD      A, (CURLLEN)
                 AND     A
-                CALL    NZ, STORELINE   ; STORE LAST LINE IF NOT EMPTY
-                
-                LD      A, (FILEHAND)
+                JR      Z, .CHKTOT
+                CALL    STORELINE       ; STORE FINAL PENDING LINE
+                JR      .CLSFIL
+.CHKTOT         LD      HL, (TOTLINES)
+                LD      A, H
+                OR      L
+                JR      NZ, .CLSFIL
+                CALL    STORELINE       ; ENSURE AT LEAST 1 LINE IF FILE WAS EMPTY
+.CLSFIL         LD      A, (FILEHAND)
                 CALL    DSKCLOSE
                 
                 LD      HL, 0
                 LD      (TOPLINE), HL
                 LD      (DOCLINE), HL
-                LD      A, 0
+                XOR     A
                 LD      (CURX), A
                 LD      (CURY), A
-                
-                CALL    REDRAW
                 RET
 
 ; - STORELINE --------
@@ -115,22 +138,32 @@ STORELINE       LD      A, (TXSEG)
                 LD      A, (CURLLEN)
                 LD      (HL), A         ; WRITE LEN
                 
-                ; CLEAR ATTRS (80 BYTES AFTER TEXT)
+                ; PAD UNUSED CHARS (CURLLEN..79) WITH SPACE (#20)
+                PUSH    HL
+                INC     HL              ; HL = TXPAGE + LINEOFF + 1
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE          ; HL = TXPAGE + LINEOFF + 1 + CURLLEN
+                LD      A, TEXTCOLS     ; 80
+                SUB     E
+                JR      Z, .PADEND
+                LD      B, A
+.PADLP          LD      (HL), ' '
+                INC     HL
+                DJNZ    .PADLP
+.PADEND         POP     HL
+
+                ; CLEAR ATTRS (80 BYTES AT TXPAGE + LINEOFF + 81)
                 PUSH    HL
                 LD      DE, 81          ; 1 (LEN) + 80 (TEXT)
-                ADD     HL, DE
-                EX      DE, HL          ; DE = ATTR START
-                POP     HL
-                PUSH    DE
-                LD      HL, 0           ; FILL WITH 0 (ATTR_NONE)
-                ; WE NEED TO FILL 80 BYTES IN VRAM-MAPPED PAGE 2
-                POP     DE
-                PUSH    DE
-                POP     HL
-                INC     DE
+                ADD     HL, DE          ; HL = ATTR START
                 LD      (HL), 0
+                LD      D, H
+                LD      E, L
+                INC     DE
                 LD      BC, 79
                 LDIR
+                POP     HL
 
                 ; ADD TO DIRECTORY
                 LD      HL, (TOTLINES)
@@ -146,11 +179,8 @@ STORELINE       LD      A, (TXSEG)
                 
                 ; CHECK IF SEGMENT FULL (16KB / 161 ~= 101 LINES)
                 ; 16384 - 161 = 16223 (#3F5F)
-                LD      A, H
-                CP      #3F
-                JR      C, .NOTFULL
-                LD      A, L
-                CP      #5F
+                LD      DE, #3F5F
+                CALL    CMPHLDE
                 JR      C, .NOTFULL
                 
                 CALL    ALLSEG
@@ -170,12 +200,69 @@ STORELINE       LD      A, (TXSEG)
 
 ; --- FILESAVE                  ----------------------------------------
 
-FILESAVE        RET
+
+; - FILESAVE ---------------------------
+; - SAVE BUFFER LINES TO DISK FILE
+; - IN:  NONE (USES FILENAME)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+FILESAVE        LD      HL, FILENAME
+                LD      A, (HL)
+                OR      A
+                RET     Z               ; NO FILENAME TO SAVE
+                
+                CALL    DSKCREAT
+                RET     C               ; ERROR CREATING FILE
+                LD      (SAVHAND), A
+                
+                LD      BC, 0           ; BC = DOCLINE (0..TOTLINES-1)
+.LINELP         PUSH    BC
+                LD      H, B
+                LD      L, C
+                CALL    LINEREAD        ; LOAD INTO WORKBUF
+                
+                ; WRITE LINE CHARACTERS: WORKBUF[0] BYTES
+                LD      A, (WORKBUF)
+                OR      A
+                JR      Z, .WREOL
+                
+                LD      L, A
+                LD      H, 0
+                LD      DE, WORKBUF + 1
+                LD      A, (SAVHAND)
+                CALL    DSKWRITE
+                
+.WREOL          ; WRITE CR, LF
+                LD      HL, 2
+                LD      DE, CRLFSTR
+                LD      A, (SAVHAND)
+                CALL    DSKWRITE
+                
+                POP     BC
+                INC     BC
+                LD      H, B
+                LD      L, C
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JR      C, .LINELP
+                
+                LD      A, (SAVHAND)
+                CALL    DSKCLOSE
+                
+                XOR     A
+                LD      (MODIFIED), A
+                RET
+
+CRLFSTR         DEFB    CR, LF
+SAVHAND         DEFB    0
 
 
 ; --- FSAVEAS                ----------------------------------------
 
 FSAVEAS      RET
+
 
 ; --- TEMP VARS FOR LOADER      ----------------------------------------
 

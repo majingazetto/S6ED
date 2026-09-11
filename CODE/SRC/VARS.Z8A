@@ -10,7 +10,12 @@ VARS
 
 DOS2            DEFB    0               ; FF = DOS2/NEXTOR PRESENT, 00 = DOS1
 UNAPISET        DEFB    0               ; BDOS.Z8A UNAPI FLAG (UNUSED IN S6ED)
-MAPRDY         DEFB    0               ; FF = MAPPER MANAGER FOUND
+MAPRDY          DEFB    0               ; FF = MAPPER MANAGER FOUND
+SCRRDY          DEFB    0               ; FF = SCREEN 6 INITIALIZED
+SAVESP          DEFW    0               ; ORIGINAL STACK POINTER
+DEFSEG1         DEFB    0               ; ORIGINAL PAGE 1 MAPPER SEGMENT
+DEFSEG2         DEFB    0               ; ORIGINAL PAGE 2 MAPPER SEGMENT
+
 
 
 ; --- MAPPER JUMP TABLE ENTRIES ----------------------------------------
@@ -59,6 +64,7 @@ BLNKCNT         DEFB    0               ; BLINK TICK COUNTER
 
 FILENAME        DEFS    40, 0           ; CURRENT FILENAME (ASCIIZ)
 FILEHAND        DEFB    0               ; OPEN FILE HANDLE
+WASCR           DEFB    0               ; 1 = LAST CHAR PROCESSED WAS CR
 
 FSIZETMP        DEFS    4               ; TEMP FOR BDOS SIZE CALCULATIONS
 FCB             DEFS    SIZEFCB         ; FCB FOR DOS1 I/O

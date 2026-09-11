@@ -6,6 +6,46 @@
 ; --- BIOS RELATED                      ----------------------------------------
 
 
+; - BIOSCALL ---------------------------
+; - CALL MAIN BIOS ROUTINE VIA CALSLT
+; - IN:  IX = BIOS ROUTINE ADDRESS
+; -      REGISTERS AS EXPECTED BY BIOS ROUTINE
+; - OUT: REGISTERS AS RETURNED BY BIOS ROUTINE
+; - CLOBBERS: IY
+; -
+
+BIOSCALL        PUSH    AF
+                LD      A, (EXPTBL)
+                LD      IYH, A
+                POP     AF
+                CALL    CALSLT
+                EI
+                RET
+
+
+; - DBGMSG -----------------------------
+; - OUTPUT INLINE STRING TO OPENMSX DEBUGDEVICE (PORTS #2E/#2F)
+; - USAGE: CALL DBGMSG; DEFM "TEXT", 10, 0
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+DBGMSG          EX      (SP), HL
+                PUSH    AF
+                LD      A, #63
+                OUT     (#2E), A
+.LOOP           LD      A, (HL)
+                INC     HL
+                AND     A
+                JR      Z, .DONE
+                OUT     (#2F), A
+                JR      .LOOP
+.DONE           POP     AF
+                EX      (SP), HL
+                RET
+
+
 ; - CMPHLDE ----------
 ; - COMPARE HL WITH DE
 ; - (RST 20)
