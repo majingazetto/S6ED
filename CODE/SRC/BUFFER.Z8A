@@ -47,8 +47,8 @@ BUFINIT         CALL    SEGGET          ; LINE DIRECTORY
 
 BUFRESET        CALL    SEGTRIM
                 LD      A, (TXSEG0)
-                LD      (TXSEG), A
-                CALL    PUTP2           ; MAP TO PAGE 2
+                LD      (APPSEG), A     ; APPEND CURSOR BACK TO THE FIRST SEGMENT
+                CALL    APPBANK         ; MAP TO PAGE 2
 
                 LD      HL, TXPAGE
                 CALL    RECBLNK         ; EMPTY RECORD AT OFFSET 0
@@ -60,6 +60,9 @@ BUFRESET        CALL    SEGTRIM
                 CALL    DIRWRITE
 
                 ; INITIALIZE VARS
+                LD      HL, LINEREC     ; RECORD 0 IS TAKEN, NEXT ONE STARTS HERE
+                LD      (LINEOFF), HL
+
                 LD      HL, 1
                 LD      (TOTLINES), HL
                 LD      HL, 0
@@ -101,6 +104,24 @@ RECBLNK         PUSH    HL
                 RET
 
 
+; --- DIRADR                    ----------------------------------------
+
+; - DIRADR -----------
+; - ADDRESS OF A LINE DIRECTORY ENTRY
+; - IN:  HL = LINE NUMBER (0-BASED)
+; - OUT: HL = DIRPAGE + LINE * DIRSIZ
+; - CLOBBERS: AF, DE
+; -
+
+DIRADR          PUSH    HL
+                ADD     HL, HL          ; * 2
+                POP     DE
+                ADD     HL, DE          ; * 3
+                LD      DE, DIRPAGE
+                ADD     HL, DE
+                RET
+
+
 ; --- DIRREAD                   ----------------------------------------
 
 ; - DIRREAD ----------
@@ -113,13 +134,7 @@ RECBLNK         PUSH    HL
 ; - USES: HL (ENTRY ADDRESS), DE (OFFSET), A (SEG)
 ; -
 
-DIRREAD         PUSH    HL
-                ADD     HL, HL          ; HL * 2
-                POP     DE
-                ADD     HL, DE          ; HL * 3
-                LD      DE, DIRPAGE
-                ADD     HL, DE          ; HL = DIRPAGE + N*3
-
+DIRREAD         CALL    DIRADR
                 LD      A, (HL)         ; SEGMENT
                 INC     HL
                 LD      E, (HL)
@@ -139,12 +154,7 @@ DIRREAD         PUSH    HL
 
 DIRWRITE        PUSH    AF
                 PUSH    DE
-                PUSH    HL
-                ADD     HL, HL          ; HL * 2
-                POP     DE
-                ADD     HL, DE          ; HL * 3
-                LD      DE, DIRPAGE
-                ADD     HL, DE          ; HL = DIRPAGE + N*3
+                CALL    DIRADR
                 POP     DE              ; DE = OFFSET
                 POP     AF              ; A = SEGMENT
 
@@ -206,23 +216,131 @@ LINEWRT         ; TODO: IMPLEMENT REPACKING IF SIZE CHANGES
                 RET
 
 
+; --- APPEND CURSOR             ----------------------------------------
+;
+; NEW RECORDS ARE APPENDED AT (APPSEG, LINEOFF), WHICH ONLY EVER MOVES FORWARD.
+; SPACE BELONGING TO A DELETED LINE IS NOT RECLAIMED UNTIL THE FILE IS RELOADED
+; -- A COMPACTOR IS FUTURE WORK. A 16KB SEGMENT HOLDS LINEPSEG (101) RECORDS.
+
+
+; - APPBANK ----------
+; - BANK THE APPEND SEGMENT INTO PAGE 2
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, HL
+; -
+
+APPBANK         LD      A, (APPSEG)
+                LD      (TXSEG), A      ; PAGE 2 NOW HOLDS THE APPEND SEGMENT
+                JP      PUTP2
+
+
+; - NEWREC -----------
+; - RESERVE SPACE FOR ONE NEW LINE RECORD
+; - IN:  NONE
+; - OUT: A  = SEGMENT NUMBER
+; -      DE = OFFSET OF THE RESERVED RECORD
+; -      PAGE 2 IS LEFT BANKED ON THAT SEGMENT
+; - CLOBBERS: AF, BC, DE, HL
+; - ABORTS THROUGH ERRMEM IF THE MAPPER HAS NO SEGMENT LEFT.
+; -
+
+NEWREC          LD      HL, (LINEOFF)
+                LD      DE, SEGLAST + 1
+                CALL    CMPHLDE
+                JR      C, .HAVE        ; A WHOLE RECORD STILL FITS
+
+                CALL    SEGGET          ; SEGMENT FULL, CLAIM ANOTHER
+                JP      C, ERRMEM
+                LD      (APPSEG), A
+                LD      HL, 0
+                LD      (LINEOFF), HL
+
+.HAVE           CALL    APPBANK
+                LD      HL, (LINEOFF)
+                PUSH    HL
+                LD      DE, LINEREC
+                ADD     HL, DE
+                LD      (LINEOFF), HL   ; ADVANCE PAST THE RESERVED RECORD
+                POP     DE              ; DE = OFFSET
+                LD      A, (APPSEG)
+                RET
+
+
 ; --- LINEINS                   ----------------------------------------
 
 ; - LINEINS ----------
-; - INSERT BLANK LINE AFTER LINE N
-; - HL: LINE NUMBER
+; - OPEN A SLOT IN THE LINE DIRECTORY AT LINE N
+; - IN:  HL = LINE NUMBER TO OPEN (0-BASED)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; - SHIFTS ENTRIES N..TOTLINES-1 ONE SLOT UP. TOTLINES IS LEFT ALONE -- THE
+; - CALLER FILLS THE SLOT WITH DIRWRITE AND BUMPS THE COUNT.
 ; -
 
-LINEINS         ; TODO:
+LINEINS         LD      DE, (TOTLINES)
+                EX      DE, HL          ; HL = TOTLINES, DE = N
+                OR      A
+                SBC     HL, DE          ; HL = ENTRIES TO SHIFT
+                LD      A, H
+                OR      L
+                RET     Z               ; INSERTING PAST THE LAST LINE
+
+                PUSH    HL
+                ADD     HL, HL
+                POP     DE
+                ADD     HL, DE          ; HL = COUNT * DIRSIZ
+                LD      B, H
+                LD      C, L            ; BC = BYTES TO MOVE
+
+                LD      HL, (TOTLINES)
+                CALL    DIRADR
+                DEC     HL              ; HL = LAST BYTE OF THE LAST ENTRY
+                PUSH    HL
+                LD      DE, DIRSIZ
+                ADD     HL, DE
+                EX      DE, HL          ; DE = LAST BYTE OF THE NEW LAST ENTRY
+                POP     HL
+                LDDR                    ; SHIFT BACKWARDS, SLOT N IS NOW FREE
                 RET
 
 
 ; --- LINEDEL                   ----------------------------------------
 
 ; - LINEDEL ----------
-; - DELETE LINE N
-; - HL: LINE NUMBER
+; - CLOSE THE DIRECTORY SLOT OF LINE N
+; - IN:  HL = LINE NUMBER (0-BASED)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; - SHIFTS ENTRIES N+1..TOTLINES-1 DOWN ONE SLOT. TOTLINES IS LEFT ALONE.
+; - THE RECORD ITSELF IS NOT RECLAIMED -- SEE THE APPEND CURSOR NOTE ABOVE.
 ; -
 
-LINEDEL         ; TODO:
+LINEDEL         PUSH    HL              ; SAVE N
+                LD      DE, (TOTLINES)
+                EX      DE, HL          ; HL = TOTLINES, DE = N
+                OR      A
+                SBC     HL, DE
+                DEC     HL              ; HL = ENTRIES AFTER N
+                LD      A, H
+                OR      L
+                JR      Z, .NOMOVE      ; N IS THE LAST LINE, NOTHING FOLLOWS
+
+                PUSH    HL
+                ADD     HL, HL
+                POP     DE
+                ADD     HL, DE          ; HL = COUNT * DIRSIZ
+                LD      B, H
+                LD      C, L            ; BC = BYTES TO MOVE
+
+                POP     HL              ; HL = N
+                PUSH    HL
+                CALL    DIRADR          ; HL = SLOT N
+                PUSH    HL
+                LD      DE, DIRSIZ
+                ADD     HL, DE          ; HL = SLOT N+1, THE SOURCE
+                POP     DE              ; DE = SLOT N, THE DESTINATION
+                LDIR
+
+.NOMOVE         POP     HL
                 RET
