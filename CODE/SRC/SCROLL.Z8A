@@ -5,13 +5,15 @@
 
 ; --- SCROLLDN                  ----------------------------------------
 
-; - SCROLLDN ---------
-; - SCROLL TEXT AREA UP (8PX) TO SHOW NEXT LINE
+
+; - SCROLLDN ---------------------------
+; - SCROLL TEXT AREA UP (SHOW NEXT LINE)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
 ; -
 
-SCROLLDN        LD      IX, VDPCMBLK
-                
-                ; 1. MOVE 480X192 AREA (ROW 2..25 -> ROW 1..24)
+SCROLLDN        ; MOVE 480X184 PX AREA (ROWS 2..24 -> ROWS 1..23)
                 LD      HL, TXORG_X     ; 24
                 LD      (VDP_SX), HL
                 LD      A, TXORG_Y + 8  ; ROW 2 (START AT 16PX)
@@ -28,27 +30,104 @@ SCROLLDN        LD      IX, VDPCMBLK
                 
                 LD      HL, TXAREAPX    ; 480
                 LD      (VDP_NX), HL
-                LD      A, 192          ; 24 ROWS * 8PX = 192PX
-                LD      L, A
-                LD      H, 0
+                LD      HL, 184         ; 23 ROWS * 8PX = 184PX
                 LD      (VDP_NY), HL
                 
-                XOR     A               ; ARG = 0
+                XOR     A               ; ARG = 0 (TOP-TO-BOTTOM)
                 LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
                 CALL    HMMM
+
+                ; RENDER NEW BOTTOM ROW 24
+                LD      B, TXRLAST      ; ROW 24
+                CALL    RENDEROW
+
+                ; REFRESH GUTTER LINE NUMBERS
+                CALL    DRWGUT
+                RET
+
+
+; --- SCROLLUP                  ----------------------------------------
+
+
+; - SCROLLUP ---------------------------
+; - SCROLL TEXT AREA DOWN (PREV LINE)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SCROLLUP        ; MOVE 480X184 PX AREA (ROWS 1..23 -> ROWS 2..24)
+                ; AS DY > SY, USE DIY=1 (ARG=#08) WITH BOTTOM SCANLINE ANCHORS
+                LD      HL, TXORG_X     ; 24
+                LD      (VDP_SX), HL
+                LD      HL, TXORG_Y + 184 - 1 ; 8 + 183 = 191 (BOTTOM OF ROWS 1..23)
+                LD      (VDP_SY), HL
                 
-                ; 2. CLEAR BOTTOM ROW (ROW 24)
-                LD      HL, TXORG_X
+                LD      HL, TXORG_X     ; 24
                 LD      (VDP_DX), HL
-                LD      A, TXORG_Y + 184 ; DY = 8 + 23 * 8 = 192
-                LD      L, A
-                LD      H, 0
+                LD      HL, TXORG_Y + 8 + 184 - 1 ; 16 + 183 = 199 (BOTTOM OF ROWS 2..24)
                 LD      (VDP_DY), HL
-                LD      A, 8            ; NY
+                
+                LD      HL, TXAREAPX    ; 480
+                LD      (VDP_NX), HL
+                LD      HL, 184         ; 23 ROWS * 8PX = 184PX
+                LD      (VDP_NY), HL
+                
+                LD      A, VDP_DIY      ; #08 (BOTTOM-TO-TOP)
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMM
+
+                ; RENDER NEW TOP ROW 1
+                LD      B, TXRFIRST     ; ROW 1
+                CALL    RENDEROW
+
+                ; REFRESH GUTTER LINE NUMBERS
+                CALL    DRWGUT
+                RET
+
+
+; --- SHIFTDN                   ----------------------------------------
+
+
+; - SHIFTDN ----------------------------
+; - SHIFT SCREEN ROWS BELOW ROW B DOWN ONE ROW
+; - IN:  B = SCREEN ROW OF NEW LINE (1..23)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SHIFTDN         ; ROWS B..23 MOVE TO (B+1)..24 (DOWNWARD)
+                ; NUMBER OF ROWS TO MOVE = 24 - B
+                LD      A, 24
+                SUB     B
+                RET     Z               ; NO ROWS BELOW TO SHIFT
+                RET     C
+
+                ; NY = (23 - B) * 8 PIXELS
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; * 8
                 LD      L, A
                 LD      H, 0
                 LD      (VDP_NY), HL
-                XOR     A               ; COLOR 0
-                LD      (VDP_CLR), A
-                CALL    HMMV
+
+                LD      HL, TXORG_X     ; 24
+                LD      (VDP_SX), HL
+                LD      (VDP_DX), HL
+
+                LD      HL, 191         ; BOTTOM OF ROWS 1..23
+                LD      (VDP_SY), HL
+                LD      HL, 199         ; BOTTOM OF ROWS 2..24
+                LD      (VDP_DY), HL
+
+                LD      HL, TXAREAPX    ; 480
+                LD      (VDP_NX), HL
+
+                LD      A, VDP_DIY      ; #08 (BOTTOM-TO-TOP)
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMM
                 RET
+

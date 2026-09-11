@@ -95,11 +95,17 @@ MAINLOOP        ; POLL KEYBOARD VIA BIOS CHSNS (#009C)
                 CALL    EDDELCHR
                 JR      .DRAWCUR
 
-.NOTDEL         ; PRINTABLE ASCII CHAR CHECK (#20..#7E)
+.NOTDEL         CP      CTRL_W
+                JR      NZ, .NOTW
+                CALL    EDTGLWRP
+                JR      .DRAWCUR
+
+.NOTW           ; PRINTABLE ASCII CHAR CHECK (#20..#7E)
                 CP      #20
                 JR      C, .DRAWCUR     ; IGNORE UNHANDLED CONTROL CODES
                 CP      #7F
                 JR      NC, .DRAWCUR    ; IGNORE #7F AND ABOVE
+
 
                 ; INSERT OR OVERWRITE MODE
                 PUSH    AF

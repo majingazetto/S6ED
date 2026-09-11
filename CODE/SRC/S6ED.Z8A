@@ -101,6 +101,9 @@ INIT            DBG     "1: INIT START"
 
                 LD      A, INS_MODE
                 LD      (INSMODE), A
+                LD      A, WRAP_DEV
+                LD      (WRAPMODE), A
+
 
                 LD      (SAVESP), SP    ; PRESERVE ORIGINAL DOS STACK
 

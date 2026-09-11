@@ -131,7 +131,9 @@ DRWGUT          ; LEFT GUTTER (LINE NUMBERS BACKGROUND)
                 CALL    HMMV
 
                 CALL    DRWLNUM
+                CALL    DRWSCRL
                 RET
+
 
 
 ; --- DRWLNUM               ----------------------------------------
