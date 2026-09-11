@@ -35,6 +35,15 @@ MGETP2       DEFW    0               ; GET_P2  ENTRY ADDRESS
 
 DIRSEG          DEFB    0               ; SEGMENT NUMBER BANKED AT PAGE 1 (DIR)
 TXSEG           DEFB    0               ; SEGMENT NUMBER BANKED AT PAGE 2 (TEXT)
+TXSEG0          DEFB    0               ; FIRST TEXT SEGMENT (RECORD 0 LIVES HERE)
+
+                ; EVERY SEGMENT CLAIMED THROUGH SEGGET IS RECORDED HERE SO THE
+                ; EDITOR CAN HAND THEM ALL BACK ON EXIT. ENTRY 0 IS ALWAYS THE
+                ; LINE DIRECTORY, ENTRY 1 THE FIRST TEXT SEGMENT; ENTRIES 2 AND
+                ; UP ARE TEXT SEGMENTS GROWN ON DEMAND AND DROPPED BY SEGTRIM.
+
+SEGTBL          DEFS    MAXSEGS
+SEGCNT          DEFB    0               ; ENTRIES USED IN SEGTBL
 
 
 ; --- CURSOR / VIEWPORT         ----------------------------------------
@@ -42,7 +51,6 @@ TXSEG           DEFB    0               ; SEGMENT NUMBER BANKED AT PAGE 2 (TEXT)
 
 CURX            DEFB    0               ; CURSOR COLUMN (0-79, DOC SPACE)
 CURY            DEFB    0              ; CURSOR ROW    (0-23, VIEWPORT)
-CURSEG          DEFB    0               ; SEGMENT CURRENTLY BANKED AT PAGE 2
 
 TOPLINE         DEFW    0               ; FIRST VISIBLE DOCUMENT LINE (0-BASED)
 DOCLINE         DEFW    0               ; CURSOR DOCUMENT LINE (= TOPLINE + CURY)

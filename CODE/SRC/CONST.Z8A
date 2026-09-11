@@ -104,6 +104,13 @@ TXPAGE          EQU     #8000           ; PAGE 2 — TEXT WINDOW (SWITCHED)
 SEG_USER        EQU     0               ; A=0: ALLOCATE USER SEGMENT
 SEG_SYS         EQU     1               ; A=1: ALLOCATE SYSTEM SEGMENT
 
+MAXSEGS         EQU     32              ; SEGMENTS THE EDITOR WILL TRACK
+                                        ;   1 DIRECTORY + 31 TEXT = 496KB
+LINEPSEG        EQU     16384 / LINEREC ; 101 LINE RECORDS PER SEGMENT
+SEGLAST         EQU     (LINEPSEG - 1) * LINEREC
+                                        ; OFFSET OF THE LAST RECORD THAT STILL
+                                        ; FITS WHOLE INSIDE A 16KB SEGMENT
+
 
 ; --- LANGUAGE MODES            ----------------------------------------
 

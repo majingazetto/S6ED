@@ -608,6 +608,7 @@ TERM            ; RESTORE MAPPER SEGMENTS IF INITIALIZED
                 CALL    PUTP1
                 LD      A, (DEFSEG2)
                 CALL    PUTP2
+                CALL    SEGFREE         ; HAND BACK EVERY SEGMENT WE CLAIMED
 
 .NOMAPRES       ; RESTORE SCREEN IF INITIALIZED
                 LD      A, (SCRRDY)

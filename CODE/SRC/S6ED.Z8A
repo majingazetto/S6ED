@@ -55,6 +55,7 @@
 
 ENODOS2      DEFM    "Requires MSX-DOS 2 or Nextor.$"
 ENOMAP       DEFM    "No mapper manager found.$"
+ENOMEM       DEFM    "Out of mapper memory.$"
 
 
 ; --- MODULE INCLUDES           ----------------------------------------
@@ -83,6 +84,24 @@ ENOMAP       DEFM    "No mapper manager found.$"
 ; -
 
 INIT            DBG     "1: INIT START"
+
+                ; CLEAR THE VARIABLE BLOCK.
+                ; VARS.Z8A IS INCLUDED AFTER OUTEND, SO NONE OF ITS DEFB / DEFW
+                ; INITIALISERS REACH THE .COM FILE -- THEY ONLY RESERVE
+                ; ADDRESSES. AT RUNTIME THE WHOLE BLOCK HOLDS WHATEVER THE
+                ; PREVIOUS PROGRAM LEFT IN THE TPA, SO EVERY VARIABLE READ
+                ; BEFORE IT IS WRITTEN (SEGCNT, INSMODE, MODIFIED, MAPRDY,
+                ; FILENAME) STARTS OUT AS GARBAGE. ZERO IT, THEN SET THE FEW
+                ; NON-ZERO DEFAULTS BY HAND.
+                LD      HL, VARS
+                LD      DE, VARS + 1
+                LD      BC, ENDVARS - VARS - 1
+                LD      (HL), 0
+                LDIR
+
+                LD      A, INS_MODE
+                LD      (INSMODE), A
+
                 LD      (SAVESP), SP    ; PRESERVE ORIGINAL DOS STACK
 
                 ; DETECT DOS VERSION
@@ -149,6 +168,34 @@ INIT            DBG     "1: INIT START"
                 JP      TERM
 
 .NOMAP          LD      DE, ENOMAP
+                CALL    STROUT
+                JP      TERM
+
+
+; --- ERRMEM                    ----------------------------------------
+
+
+; - ERRMEM -----------------------------
+; - ABORT: THE MAPPER MANAGER HAS NO FREE SEGMENTS LEFT
+; - IN:  NONE
+; - OUT: DOES NOT RETURN
+; - CLOBBERS: ALL
+; -
+; - REACHED FROM ANY SEGGET THAT FAILS. DROPS BACK TO TEXT MODE FIRST --
+; - OTHERWISE THE MESSAGE WOULD BE WRITTEN INTO THE SCREEN 6 BITMAP AND NEVER
+; - SEEN. TERM THEN RETURNS THE SEGMENTS AND THE ORIGINAL STACK TO DOS.
+; -
+
+ERRMEM          LD      A, (SCRRDY)
+                AND     A
+                JR      Z, .SAY
+                XOR     A               ; SCREEN 0
+                LD      IX, CHGMOD
+                CALL    BIOSCALL
+                XOR     A
+                LD      (SCRRDY), A     ; TELL TERM THE SCREEN IS ALREADY BACK
+
+.SAY            LD      DE, ENOMEM
                 CALL    STROUT
                 JP      TERM
 

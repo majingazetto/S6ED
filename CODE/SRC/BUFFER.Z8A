@@ -26,32 +26,36 @@
 ; - CALL AFTER MAPINIT
 ; -
 
-BUFINIT         CALL    ALLSEG          ; ALLOCATE DIR SEGMENT
+BUFINIT         CALL    SEGGET          ; LINE DIRECTORY
+                JP      C, ERRMEM
                 LD      (DIRSEG), A
-                CALL    PUTP1           ; MAP TO PAGE 1
+                CALL    PUTP1           ; MAP TO PAGE 1, NEVER SWITCHED AGAIN
 
-                CALL    ALLSEG          ; ALLOCATE FIRST TEXT SEGMENT
+                CALL    SEGGET          ; FIRST TEXT SEGMENT
+                JP      C, ERRMEM
+                LD      (TXSEG0), A
+                ; FALL THROUGH INTO BUFRESET
+
+
+; --- BUFRESET                  ----------------------------------------
+
+; - BUFRESET ---------
+; - EMPTY THE BUFFER BACK TO ONE BLANK LINE
+; - REUSES THE SEGMENTS ALREADY HELD AND RETURNS ANY GROWN BEYOND THE FIRST,
+; - SO LOADING A SECOND FILE DOES NOT LEAK MAPPER MEMORY.
+; -
+
+BUFRESET        CALL    SEGTRIM
+                LD      A, (TXSEG0)
                 LD      (TXSEG), A
-                LD      (CURSEG), A
                 CALL    PUTP2           ; MAP TO PAGE 2
 
-                ; WRITE EMPTY LINE RECORD AT TXPAGE+0: LEN=0, 80 SPACES, 80 ATTRS
-                XOR     A
-                LD      (TXPAGE), A
-                LD      HL, TXPAGE + 1
-                LD      (HL), ' '
-                LD      DE, TXPAGE + 2
-                LD      BC, 79
-                LDIR
-                LD      HL, TXPAGE + 81
-                LD      (HL), 0
-                LD      DE, TXPAGE + 82
-                LD      BC, 79
-                LDIR
+                LD      HL, TXPAGE
+                CALL    RECBLNK         ; EMPTY RECORD AT OFFSET 0
 
-                ; WRITE DIR ENTRY 0: SEG=TXSEG, OFF=0
+                ; WRITE DIR ENTRY 0: SEG=TXSEG0, OFF=0
                 LD      HL, 0
-                LD      A, (TXSEG)
+                LD      A, (TXSEG0)
                 LD      DE, 0
                 CALL    DIRWRITE
 
@@ -61,9 +65,39 @@ BUFINIT         CALL    ALLSEG          ; ALLOCATE DIR SEGMENT
                 LD      HL, 0
                 LD      (TOPLINE), HL
                 LD      (DOCLINE), HL
-                LD      A, 0
+                XOR     A
                 LD      (CURX), A
                 LD      (CURY), A
+                RET
+
+
+; --- RECBLNK                   ----------------------------------------
+
+; - RECBLNK ----------
+; - WRITE AN EMPTY LINE RECORD
+; - IN:  HL = RECORD ADDRESS INSIDE THE PAGE 2 WINDOW
+; - OUT: HL = UNCHANGED
+; - CLOBBERS: AF, BC, DE
+; - LAYOUT: [1 LEN=0] [80 SPACES] [80 ATTRS=0]
+; -
+
+RECBLNK         PUSH    HL
+                LD      (HL), 0         ; LEN = 0
+                INC     HL
+                LD      (HL), ' '
+                LD      D, H
+                LD      E, L
+                INC     DE
+                LD      BC, TEXTCOLS - 1
+                LDIR                    ; SPACES ACROSS THE TEXT HALF
+                EX      DE, HL          ; LDIR LEAVES DE ONE PAST THE TEXT HALF
+                LD      (HL), 0         ; HL NOW AT THE ATTR HALF
+                LD      D, H
+                LD      E, L
+                INC     DE
+                LD      BC, TEXTCOLS - 1
+                LDIR                    ; ZERO ACROSS THE ATTR HALF
+                POP     HL
                 RET
 
 

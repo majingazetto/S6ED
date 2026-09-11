@@ -7,8 +7,7 @@
 
 ; --- FILENEW                   ----------------------------------------
 
-FILENEW         CALL    BUFINIT
-                RET
+FILENEW         JP      BUFRESET
 
 
 ; --- FILELOAD                  ----------------------------------------
@@ -177,13 +176,13 @@ STORELINE       LD      A, (TXSEG)
                 ADD     HL, DE
                 LD      (LINEOFF), HL
                 
-                ; CHECK IF SEGMENT FULL (16KB / 161 ~= 101 LINES)
-                ; 16384 - 161 = 16223 (#3F5F)
-                LD      DE, #3F5F
+                ; CHECK IF THE SEGMENT IS FULL (101 RECORDS OF 161 BYTES)
+                LD      DE, SEGLAST + 1
                 CALL    CMPHLDE
                 JR      C, .NOTFULL
-                
-                CALL    ALLSEG
+
+                CALL    SEGGET
+                JP      C, ERRMEM
                 LD      (TXSEG), A
                 CALL    PUTP2
                 LD      HL, 0
