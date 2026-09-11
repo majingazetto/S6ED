@@ -1,0 +1,14 @@
+# --- BUILD OUTPUT ---
+CODE/S6ED.COM
+CODE/S6ED.DSK
+CODE/S6ED.lst
+CODE/S6ED.sym
+CODE/*.COM
+
+# --- DEBUG / SCRATCH ---
+CODE/debug*.txt
+CODE/basic_screen6.txt
+CODE/screen*.png
+
+# --- OS ---
+.DS_Store
