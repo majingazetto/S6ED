@@ -22,7 +22,11 @@ SCREEN_W, SCREEN_H = 512, 212
 GRID_X, GRID_Y = 0, 12         # glyph grid origin
 LABEL_X = 264                  # row labels sit right of the grid
 
-BG, INK, CHROME, WARN = 0, 1, 2, 3
+# Index 0 is left unused on purpose: a raw .SRx carries no palette, so a viewer
+# falls back to the MSX default where entry 0 is TRANSPARENT and the sheet would
+# come up invisible. Entries 1 / 2 / 3 default to black / green / light green,
+# which stays legible with or without the companion .PL6.
+BG, INK, CHROME, WARN = 1, 3, 2, 0
 
 
 def load_rom_charset(bios: Path, offset: int) -> bytes:
@@ -59,8 +63,19 @@ class Canvas:
 
 
 def bold(rows):
-    """What FONTINIT will do for the bold variant: thicken one pixel right."""
-    return [(r | (r >> 1)) & 0xFC for r in rows]
+    """Thicken one pixel right, but never close a one pixel counter.
+
+    The obvious `row | (row >> 1)` fills any background pixel whose left
+    neighbour is ink -- including the single pixel holes inside A M N W m n u v w
+    and 34 other glyphs of the ROM charset, which turn into blobs. Masking out
+    pixels that have ink on BOTH sides keeps every counter open, and the rule is
+    structural rather than tuned to one typeface, so it survives a font change.
+    """
+    out = []
+    for r in rows:
+        hole = (~r) & (r >> 1) & (r << 1) & 0xFC
+        out.append(((r | (r >> 1)) & ~hole) & 0xFC)
+    return out
 
 
 def italic(rows):
@@ -75,10 +90,21 @@ def italic(rows):
             for i, r in enumerate(rows)]
 
 
-def build(font: bytes) -> Canvas:
+def build(font: bytes, guides: bool) -> Canvas:
     c = Canvas(SCREEN_W, SCREEN_H)
+    c.rect(0, 0, SCREEN_W, SCREEN_H, BG)
 
-    c.text(font, "S6ED 6x8 FONT SHEET - DRAW IN WHITE ONLY", 2, 2, CHROME)
+    if not guides:
+        # The working sheet: nothing but the glyphs, in grid order. Every
+        # annotation lives in DOC/FONT_BRIEF.md instead, so nothing on the
+        # canvas can be mistaken for content.
+        for code in range(256):
+            c.glyph(font, code,
+                    (code & 31) * CELL_W,
+                    (code >> 5) * CELL_H)
+        return c
+
+    c.text(font, "S6ED 6x8 FONT SHEET - REFERENCE, DO NOT DRAW ON THIS ONE", 2, 2, CHROME)
 
     # Guides first, so glyph ink always paints over them. Kept light: a solid
     # rule on the last column of each cell to separate slots, and a dotted mark
@@ -138,6 +164,23 @@ def to_sc6(c: Canvas) -> bytes:
     return bytes(out)
 
 
+# 0 the reserved-column marker, 1 background, 2 guides, 3 ink. 3 bits a channel.
+# The clean sheet uses only 1 and 3, so it stays legible under the MSX default
+# palette where entry 0 is transparent; the reference sheet spends entry 0 on the
+# column 5 dots and is always shipped with its .PL6.
+PALETTE = [(255, 255, 0), (0, 0, 0), (36, 100, 220), (255, 255, 255)]
+
+
+def to_pl6(palette) -> bytes:
+    """MSX palette file: 16 entries of [R * 16 + B, G], 3 bits per channel."""
+    out = bytearray()
+    for i in range(16):
+        r, g, b = palette[i] if i < len(palette) else (0, 0, 0)
+        out.append(((r >> 5) << 4) | (b >> 5))
+        out.append(g >> 5)
+    return bytes(out)
+
+
 def to_png(c: Canvas, palette) -> bytes:
     import zlib
     raw = bytearray()
@@ -164,20 +207,22 @@ def main():
     ap.add_argument("--cgtable", default="0x1BBF",
                     help="charset offset inside the BIOS (default 0x1BBF)")
     ap.add_argument("--out", default="FONTSHEET", help="output basename")
+    ap.add_argument("--guides", action="store_true",
+                    help="annotated reference sheet instead of the clean one")
     a = ap.parse_args()
 
     font = load_rom_charset(Path(a.bios), int(a.cgtable, 0))
     if len(font) != 2048:
         sys.exit("charset offset is past the end of the ROM")
 
-    c = build(font)
     base = Path(a.out)
+    c = build(font, guides=a.guides)
     base.with_suffix(".SR6").write_bytes(to_sc6(c))
+    base.with_suffix(".PL6").write_bytes(to_pl6(PALETTE))
     # Screen 6 palette as the editor sets it: black, white, blue, yellow.
-    base.with_suffix(".PNG").write_bytes(
-        to_png(c, [(0, 0, 0), (255, 255, 255), (36, 100, 220), (255, 255, 0)]))
-    print("%s.SR6  %d bytes" % (base, base.with_suffix('.SR6').stat().st_size))
-    print("%s.PNG  %d bytes" % (base, base.with_suffix('.PNG').stat().st_size))
+    base.with_suffix(".PNG").write_bytes(to_png(c, PALETTE))
+    for ext in (".SR6", ".PL6", ".PNG"):
+        print("%s%s  %d bytes" % (base, ext, base.with_suffix(ext).stat().st_size))
 
 
 if __name__ == "__main__":
