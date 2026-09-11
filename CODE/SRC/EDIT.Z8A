@@ -213,44 +213,136 @@ EDDELCHR        LD      HL, (DOCLINE)
 ; - CLOBBERS: ALL
 ; -
 
-EDNWLIN         XOR     A
-                LD      (CURX), A       ; CURX = 0
-                
+EDNWLIN         ; REFUSE IF THE LINE DIRECTORY IS FULL
+                LD      HL, (TOTLINES)
+                LD      DE, MAXLINES
+                CALL    CMPHLDE
+                RET     NC
+
+                ; 1. LOAD THE LINE THAT IS ABOUT TO BE SPLIT
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+
+                ; 2. TAIL -> WORKBUF2, HEAD TRUNCATED IN PLACE
+                CALL    SPLITL
+
+                ; 3. WRITE THE SHORTENED HEAD BACK
+                LD      HL, (DOCLINE)
+                CALL    LINEWRT
+
+                ; 4. PUT THE TAIL IN A FRESH RECORD
+                CALL    NEWREC          ; A = SEG, DE = OFFSET, PAGE 2 BANKED
+                PUSH    AF
+                PUSH    DE
+                LD      HL, TXPAGE
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DESTINATION
+                LD      HL, WORKBUF2
+                LD      BC, WORKSIZ
+                LDIR
+
+                ; 5. OPEN A DIRECTORY SLOT AFTER THE CURRENT LINE AND FILL IT
                 LD      HL, (DOCLINE)
                 INC     HL
-                LD      DE, (TOTLINES)
-                CALL    CMPHLDE
-                JR      C, .JUSTMOV     ; IF DOCLINE + 1 < TOTLINES, JUST MOVE DOWN
-                
-                ; AT END OF DOCUMENT: APPEND NEW LINE RECORD
-                CALL    SEGGET
-                JP      C, ERRMEM
-                LD      (TXSEG), A
-                CALL    PUTP2
-                XOR     A
-                LD      (TXPAGE), A     ; LEN = 0
-                LD      HL, TXPAGE + 1
-                LD      (HL), ' '
-                LD      DE, TXPAGE + 2
-                LD      BC, 79
-                LDIR
-                LD      HL, TXPAGE + 81
-                LD      (HL), 0
-                LD      DE, TXPAGE + 82
-                LD      BC, 79
-                LDIR
-                
-                LD      HL, (TOTLINES)
-                LD      A, (TXSEG)
-                LD      DE, 0
+                PUSH    HL
+                CALL    LINEINS
+                POP     HL
+                POP     DE              ; DE = OFFSET
+                POP     AF              ; A  = SEGMENT
                 CALL    DIRWRITE
-                
+
                 LD      HL, (TOTLINES)
                 INC     HL
                 LD      (TOTLINES), HL
-                
-.JUSTMOV        LD      A, CDOWN
+
+                ; 6. CURSOR TO COLUMN 0 OF THE NEW LINE
+                XOR     A
+                LD      (CURX), A
+                LD      A, CDOWN
                 CALL    EDMOVROW
+
+                LD      A, #FF
+                LD      (MODIFIED), A
+
+                ; EVERY ROW FROM THE SPLIT DOWNWARDS MOVED
+                CALL    REDRAW
+                CALL    DRWGUT
+                RET
+
+
+; --- SPLITL                    ----------------------------------------
+
+
+; - SPLITL -----------------------------
+; - SPLIT WORKBUF AT THE CURSOR COLUMN
+; - IN:  NONE (USES WORKBUF AND CURX)
+; - OUT: WORKBUF2 = THE TAIL AS A COMPLETE LINE RECORD
+; -      WORKBUF  = TRUNCATED TO CURX CHARACTERS
+; - CLOBBERS: ALL
+; -
+
+SPLITL          LD      HL, WORKBUF2
+                CALL    RECBLNK         ; BLANK RECORD: LEN 0, SPACES, ATTRS 0
+
+                ; TAIL LENGTH = MAX(LEN - CURX, 0)
+                LD      A, (WORKBUF)
+                LD      HL, CURX
+                SUB     (HL)
+                JR      NC, .LENOK
+                XOR     A               ; CURSOR SITS PAST THE END OF THE TEXT
+.LENOK          LD      (WORKBUF2), A
+                LD      B, A
+                AND     A
+                JR      Z, .TRUNC       ; NOTHING TO CARRY OVER
+
+                LD      C, B
+                LD      B, 0            ; BC = BYTES TO MOVE
+
+                ; TEXT HALF
+                LD      A, (CURX)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      DE, WORKBUF2 + 1
+                PUSH    BC
+                LDIR
+                POP     BC
+
+                ; ATTRIBUTE HALF
+                LD      A, (CURX)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+                LD      DE, WORKBUF2 + 1 + TEXTCOLS
+                LDIR
+
+.TRUNC          ; HEAD KEEPS CURX CHARACTERS; BLANK WHAT IS LEFT OF IT
+                LD      A, (CURX)
+                LD      (WORKBUF), A
+                LD      E, A
+                LD      D, 0
+                LD      A, TEXTCOLS
+                SUB     E
+                RET     Z               ; CURSOR WAS AT COLUMN 80
+                LD      B, A
+
+                PUSH    BC
+                PUSH    DE
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+.BLNKLP         LD      (HL), ' '
+                INC     HL
+                DJNZ    .BLNKLP
+                POP     DE
+                POP     BC
+
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+.ZATTLP         LD      (HL), 0
+                INC     HL
+                DJNZ    .ZATTLP
                 RET
 
 
