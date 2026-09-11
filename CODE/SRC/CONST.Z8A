@@ -66,6 +66,12 @@ COL_FG          EQU     1               ; NORMAL TEXT / FOREGROUND
 COL_UI          EQU     2               ; UI CHROME (GUTTERS, MENU, STATUS)
 COL_HI          EQU     3               ; CURSOR / HIGHLIGHT / ACCENT
 
+                ; BYTE PATTERNS (SCREEN 6, 4 PIXELS PER BYTE FOR HMMV)
+CLR_BG          EQU     #00             ; 4 PIXELS OF COLOR 0 (%00000000)
+CLR_FG          EQU     #55             ; 4 PIXELS OF COLOR 1 (%01010101)
+CLR_UI          EQU     #AA             ; 4 PIXELS OF COLOR 2 (%10101010)
+CLR_HI          EQU     #FF             ; 4 PIXELS OF COLOR 3 (%11111111)
+
 
 ; --- CHARACTER ATTRIBUTES      ----------------------------------------
 

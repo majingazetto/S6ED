@@ -54,6 +54,7 @@ RG3SAV          EQU     RG0SAV + 3
 RG4SAV          EQU     RG0SAV + 4
 RG6SAV          EQU     RG0SAV + 6
 RG7SAV          EQU     RG0SAV + 7
+RG8SAV          EQU     #FFE7
 EXPTBL          EQU     #FCC1
 SLTTBL          EQU     #FCC5
 EXTVDP          EQU     #FFE7
@@ -119,6 +120,8 @@ VDPCT           EQU     #99             ; VDP CONTROL PORT (REGISTER/STATUS)
 VDPST           EQU     #99             ; VDP STATUS PORT (READ)
 VDPPAL          EQU     #9A             ; PALETTE DATA
 VDPPALC         EQU     #9B             ; PALETTE REGISTER
+VDPIND          EQU     #9B             ; VDP INDIRECT REGISTER PORT (PORT 3)
+
 
 
 ; --- VDP COMMAND REGISTER VALUES   -----------------------------------

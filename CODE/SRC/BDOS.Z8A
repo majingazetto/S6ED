@@ -600,12 +600,42 @@ STREXIT         CALL    STROUT
 ; - TERMINATE PROGRAM
 ; - 
 
-TERM            LD      A,(DOS2) 
+TERM            ; RESTORE MAPPER SEGMENTS IF INITIALIZED
+                LD      A, (MAPRDY)
                 AND     A
-                JR      Z,.TERM0
-                LD      BC,_TERM 
-                CALL    DOS
-.TERM0          LD      C,_TERM0
+                JR      Z, .NOMAPRES
+                LD      A, (DEFSEG1)
+                CALL    PUTP1
+                LD      A, (DEFSEG2)
+                CALL    PUTP2
+
+.NOMAPRES       ; RESTORE SCREEN IF INITIALIZED
+                LD      A, (SCRRDY)
+                AND     A
+                JR      Z, .NOSCRRES
+                XOR     A
+                LD      IX, CHGMOD
+                CALL    BIOSCALL
+                LD      IX, DSPFNK
+                CALL    BIOSCALL
+                LD      A, 1
+                LD      (CLIKSW), A
+
+.NOSCRRES       ; RESTORE ORIGINAL STACK POINTER
+                LD      HL, (SAVESP)
+                LD      A, H
+                OR      L
+                JR      Z, .NOSTKRES
+                LD      SP, HL
+
+.NOSTKRES       LD      A, (DOS2) 
+                AND     A
+                JR      Z, .TERM0
+                LD      B, 0
+                LD      C, _TERM 
+                JP      DOS
+
+.TERM0          LD      C, _TERM0
                 JP      DOS
 
                 

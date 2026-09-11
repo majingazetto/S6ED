@@ -24,6 +24,12 @@
                 ORG ADDR
                 ENDM
 
+                ; DEBUG LOG TO OPENMSX DEBUGDEVICE
+                MACRO   DBG MSG
+                CALL    DBGMSG
+                DEFM    MSG, 10, 0
+                ENDM
+
 
 ; --- CONST / INCLUDES          ----------------------------------------
 
@@ -71,43 +77,66 @@ ENOMAP       DEFM    "No mapper manager found.$"
 ; - PROGRAM ENTRY POINT
 ; -
 
-INIT            LD      SP, #F000       ; SAFE STACK TOP BELOW DOS2 KERNEL
+INIT            DBG     "1: INIT START"
+                LD      (SAVESP), SP    ; PRESERVE ORIGINAL DOS STACK
 
                 ; DETECT DOS VERSION
+                DBG     "2: DOSVER"
                 CALL    DOSVER
                 JP      C, .NODOS2      ; CARRY = DOS1 ONLY
 
                 ; LOCATE MAPPER MANAGER
+                DBG     "3: MAPINIT"
                 CALL    MAPINIT
                 JP      C, .NOMAP
 
+                ; SAVE ORIGINAL MAPPER SEGMENTS
+                DBG     "4: GETP1/GETP2"
+                CALL    GETP1
+                LD      (DEFSEG1), A
+                CALL    GETP2
+                LD      (DEFSEG2), A
+
                 ; INITIALIZE SCREEN
+                DBG     "5: SCRINIT"
                 CALL    SCRINIT
 
                 ; INITIALIZE FONT TABLES IN VRAM
+                DBG     "6: FONTINIT"
                 CALL    FONTINIT
 
-                ; INSTALL BLINK TIMI HOOK
-                CALL    HKBLINK
-
                 ; INITIALIZE EMPTY TEXT BUFFER
+                DBG     "7: BUFINIT"
                 CALL    BUFINIT
 
                 ; CHECK COMMAND-LINE PARAMS: OPTIONAL FILENAME TO LOAD
+                DBG     "8: PARAMS"
                 CALL    PARAMS
                 JR      C, .NOARG       ; CY=1 → NO FILENAME GIVEN
+                DBG     "9: FILELOAD"
                 LD      HL, FILENAME
                 CALL    FILELOAD
+                CALL    REDRAW          ; RENDER LOADED DOCUMENT
                 JR      .READY
 
 .NOARG          ; DRAW INITIAL SCREEN (EMPTY BUFFER)
+                DBG     "9b: REDRAW NOARG"
                 CALL    REDRAW
+
+.READY          ; DRAW CHROME AND INITIAL CURSOR
+                DBG     "10: CHROME"
                 CALL    DRWMENU
                 CALL    DRWGUT
                 CALL    DRWSCRL
                 CALL    DRWSTAT
+                CALL    DRWCUR
+                LD      A, 1
+                LD      (BLNKPH), A
+                LD      A, (JIFFY)
+                LD      (BLNKCNT), A
 
-.READY          ; ENTER MAIN EDITOR LOOP
+                ; ENTER MAIN EDITOR LOOP
+                DBG     "11: ENTER MAINLOOP"
                 JP      MAINLOOP
 
 .NODOS2         LD      DE, ENODOS2
@@ -121,84 +150,105 @@ INIT            LD      SP, #F000       ; SAFE STACK TOP BELOW DOS2 KERNEL
 
 ; --- SCRINIT                ----------------------------------------
 
-; - SCRINIT -------
+
+; - SCRINIT ----------------------------
 ; - SET SCREEN 6, PALETTE, CLEAR VRAM
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
 ; -
 
 SCRINIT         LD      A, 6
-                CALL    CHGMOD
+                LD      IX, CHGMOD
+                CALL    BIOSCALL
+                LD      A, #FF
+                LD      (SCRRDY), A
 
-                ; SET PALETTE
-                ; COL_BG (0): BLACK (0,0,0)
-                ; COL_FG (1): WHITE (7,7,7)
-                ; COL_UI (2): BLUE (2,2,5)
-                ; COL_HI (3): YELLOW (7,7,0)
-                LD      HL, PALDATA
+                ; SET BORDER TO SOLID BLACK (R#7 = 0) VIA RG7SAV
+                LD      A, (RG7SAV)
+                AND     #F0             ; BORDER COLOR 0 (BLACK)
+                LD      B, A
+                LD      C, 7
+                LD      IX, WRTVDP_B
+                CALL    BIOSCALL
+
+                ; SET MODE REG 2 (R#8): DISABLE SPRITES (SPD=1), TP=1, VR=1 VIA RG8SAV
+                LD      A, (RG8SAV)
+                OR      #2A             ; SPD=1, VR=1, TP=1
+                LD      B, A
+                LD      C, 8
+                LD      IX, WRTVDP_B
+                CALL    BIOSCALL
+
+                ; SET PALETTE (R#16 = 0, THEN 8 BYTES TO PORT #9A)
                 XOR     A
-                OUT     (VDPPALC), A
-                LD      C, VDPPAL
-                REPT    8               ; 4 COLORS * 2 BYTES
-                OUTI
-                ENDR
+                OUT     (VDPCT), A      ; PALETTE 0
+                LD      A, #90          ; REG 16 | #80
+                OUT     (VDPCT), A
+                LD      HL, PALDATA
+                LD      B, 8            ; 4 COLORS * 2 BYTES
+                LD      C, VDPPAL       ; PORT #9A
+                OTIR
+                EI
 
                 ; CLEAR VRAM (HMMV 512x212)
-                LD      HL, VDPCMBLK
-                LD      (HL), 0         ; SX
-                INC     HL
-                LD      (HL), 0
-                INC     HL
-                LD      (HL), 0         ; SY
-                INC     HL
-                LD      (HL), 0
-                INC     HL
-                LD      (HL), 0         ; DX
-                INC     HL
-                LD      (HL), 0
-                INC     HL
-                LD      (HL), 0         ; DY
-                INC     HL
-                LD      (HL), 0
-                INC     HL
-                LD      (HL), 0         ; NX = 512
-                INC     HL
-                LD      (HL), 2         ; 512 / 256 = 2
-                INC     HL
-                LD      (HL), 212       ; NY
-                INC     HL
-                LD      (HL), COL_BG    ; CLR
-                INC     HL
-                LD      (HL), 0         ; ARG
-                INC     HL
-                LD      (HL), VDP_HMMV  ; CMD
-                
+                LD      HL, 0
+                LD      (VDP_SX), HL
+                LD      (VDP_SY), HL
+                LD      (VDP_DX), HL
+                LD      (VDP_DY), HL
+                LD      HL, 512
+                LD      (VDP_NX), HL
+                LD      HL, 212
+                LD      (VDP_NY), HL
+                LD      A, CLR_BG
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
                 LD      HL, VDPCMBLK
                 CALL    HMMV
+                CALL    VDPWAIT
 
                 ; DISABLE KEY CLICK
                 XOR     A
                 LD      (CLIKSW), A
                 
                 ; ERASE FUNCTION KEYS
-                CALL    ERAFNK
+                LD      IX, ERAFNK
+                CALL    BIOSCALL
+
+                ; FLUSH KEYBOARD BUFFER
+                LD      IX, KILBUF
+                CALL    BIOSCALL
                 RET
 
 PALDATA         DEFB    #00, #00        ; 0: BLACK
-                DEFB    #77, #07        ; 1: WHITE
-                DEFB    #22, #05        ; 2: BLUEISH UI
-                DEFB    #77, #00        ; 3: YELLOW HI
+                DEFB    #77, #07        ; 1: WHITE FG
+                DEFB    #17, #02        ; 2: BLUE UI (R=1, B=7, G=2)
+                DEFB    #70, #07        ; 3: YELLOW HI (R=7, B=0, G=7)
 
 
-; --- HKBLINK                 ----------------------------------------
+; --- HOOKS                     ----------------------------------------
 
-; - HKBLINK --------
-; - INSTALL BLNKTICK INTO HTIMI HOOK
+
+; - HKBLINK ----------------------------
+; - CURSOR BLINK HOOK STUB
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: NONE
 ; -
 
-HKBLINK       LD      HL, (HTIMI)
-                LD      (PRVHTIMI), HL
-                LD      HL, BLNKTICK
-                LD      (HTIMI), HL
-                RET
+HKBLINK         RET
+
+
+; - UNBLINK ----------------------------
+; - UNHOOK CURSOR BLINK STUB
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+UNBLINK         RET
 
 
 ; --- VARS                      ----------------------------------------

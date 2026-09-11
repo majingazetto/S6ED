@@ -54,10 +54,10 @@ build: $(OUTPUT)
 
 dsk: $(DSKFILE)
 
-$(DSKFILE): $(OUTPUT) TEST.TXT
+$(DSKFILE): $(OUTPUT) TEST.TXT AUTOEXEC.BAT
 	@cp $(DSKBASE) $(DSKFILE)
-	@$(DSKTOOL) D $(DSKFILE) $(OUTPUT) TEST.TXT
-	@$(DSKTOOL) A $(DSKFILE) $(OUTPUT) TEST.TXT
+	@$(DSKTOOL) D $(DSKFILE) $(OUTPUT) TEST.TXT AUTOEXEC.BAT
+	@$(DSKTOOL) A $(DSKFILE) $(OUTPUT) TEST.TXT AUTOEXEC.BAT
 
 # -	 Build Target ------------------------------------------------------------
 

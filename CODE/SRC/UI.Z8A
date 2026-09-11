@@ -10,104 +10,454 @@
 ; - FORMAT: " LANG | INS | LN:NNNNN/NNNNN  COL:NNN | FILENAME"
 ; -
 
-DRWSTAT      ; TODO:
-                ; 1. HMMV: FILL ROW 25 WITH COL_UI (CLEAR BAR)
-                ; 2. RENDER LANG TEXT (LGNONE/Z80/BASIC/C/PYTHON → STRING)
-                ; 3. RENDER INS/OVR
-                ; 4. RENDER LN:DOCLINE+1/TOTLINES
-                ; 5. RENDER COL:CURX+1
-                ; 6. RENDER FILENAME (TRUNCATED TO FIT)
+; --- DRWSTAT                ----------------------------------------
+
+
+; --- DRWSTAT                ----------------------------------------
+
+
+; - DRWSTAT ----------------------------
+; - DRAW / REFRESH STATUS BAR (ROW 25)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DRWSTAT         LD      HL, 0
+                LD      (VDP_SX), HL
+                LD      (VDP_SY), HL
+                LD      (VDP_DX), HL
+                LD      HL, 200         ; DY = ROW 25 * 8
+                LD      (VDP_DY), HL
+                LD      HL, 512         ; NX
+                LD      (VDP_NX), HL
+                LD      HL, 12          ; NY
+                LD      (VDP_NY), HL
+                LD      A, CLR_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+
+                ; PRINT STATUS TEXT
+                LD      HL, STATEXT
+                LD      DE, 6           ; DX = 6
+                LD      BC, 202         ; DY = 202
+                CALL    BLTSTR
                 RET
+
+STATEXT         DEFM    "Ln 1, Col 1 | TEST.TXT", 0
 
 
 ; --- DRWMENU               ----------------------------------------
 
-; - DRWMENU ------
+
+; - DRWMENU ----------------------------
 ; - DRAW MENU BAR (ROW 0, ALWAYS VISIBLE)
-; - RENDERS STATIC TITLES; HIGHLIGHT DRAWN BY MENU MODULE (FUTURE)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
 ; -
 
-DRWMENU     ; TODO:
-                ; 1. HMMV: FILL ROW 0 WITH COL_UI
-                ; 2. BLIT MENU TITLE STRINGS AT FIXED COLUMN POSITIONS
+DRWMENU         LD      HL, 0
+                LD      (VDP_SX), HL
+                LD      (VDP_SY), HL
+                LD      (VDP_DX), HL
+                LD      (VDP_DY), HL    ; DY = 0
+                LD      HL, 512
+                LD      (VDP_NX), HL
+                LD      HL, 8           ; NY = 8
+                LD      (VDP_NY), HL
+                LD      A, CLR_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+
+                ; PRINT MENU TEXT
+                LD      HL, MNUTEXT
+                LD      DE, 6           ; DX = 6
+                LD      BC, 0           ; DY = 0
+                CALL    BLTSTR
                 RET
+
+MNUTEXT         DEFM    "S6ED v0.1 | [F1] Help  [F2] Save  [ESC] Quit", 0
 
 
 ; --- DRWGUT                ----------------------------------------
 
-; - DRWGUT -------
-; - REDRAW LEFT GUTTER (LINE NUMBERS) FOR ALL VISIBLE ROWS
+
+; - DRWGUT -----------------------------
+; - REDRAW LEFT AND RIGHT GUTTERS
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
 ; -
 
-DRWGUT      ; TODO:
-                ; FOR #EAC VIEWPORT ROW 0..SCRROWS-1:
-                ;   DRWLNUM ROW, TOPLINE + ROW
+DRWGUT          ; LEFT GUTTER (LINE NUMBERS BACKGROUND)
+                LD      HL, 0
+                LD      (VDP_SX), HL
+                LD      (VDP_SY), HL
+                LD      (VDP_DX), HL    ; DX = 0
+                LD      HL, 8
+                LD      (VDP_DY), HL    ; DY = 8 (SKIP MENU ROW)
+                LD      HL, GUTL_PX     ; NX = 24
+                LD      (VDP_NX), HL
+                LD      HL, 192         ; NY = 24 ROWS * 8 = 192
+                LD      (VDP_NY), HL
+                LD      A, CLR_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+
+                ; RIGHT GUTTER (SCROLLBAR TRACK)
+                LD      HL, 512 - GUTR_PX ; DX = 504
+                LD      (VDP_DX), HL
+                LD      HL, 8
+                LD      (VDP_DY), HL    ; DY = 8
+                LD      HL, GUTR_PX     ; NX = 8
+                LD      (VDP_NX), HL
+                LD      HL, 192         ; NY = 192
+                LD      (VDP_NY), HL
+                LD      A, CLR_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+
+                CALL    DRWLNUM
                 RET
 
 
 ; --- DRWLNUM               ----------------------------------------
 
-; - DRWLNUM ------
-; - DRAW LINE NUMBER IN LEFT GUTTER
-; - B:  VIEWPORT ROW
-; - HL: DOCUMENT LINE NUMBER (1-BASED FOR DISPLAY)
+
+; - DRWLNUM ----------------------------
+; - DRAW LINE NUMBERS IN LEFT GUTTER
+; - IN:  NONE (USES TOPLINE, TOTLINES)
+; - OUT: NONE
+; - CLOBBERS: ALL
 ; -
 
-DRWLNUM     ; TODO:
-                ; FORMAT HL AS 4-CHAR RIGHT-JUSTIFIED:
-                ;   HL <= 9999:  DECIMAL "   1" .. "9999"
-                ;   HL <= 99999: K-NOTATION " 10K" .. " 99K"
-                ;   ELSE:        M-NOTATION "  1M"
-                ; BLIT 4 CHARS AT DX=0, DY=TXORG_Y+B*CELLH VIA LMMM
+DRWLNUM         LD      B, TXRFIRST     ; ROW 1
+.LNUMLP         PUSH    BC
+                ; CALC LINE = TOPLINE + B - 1
+                LD      HL, (TOPLINE)
+                LD      A, B
+                SUB     TXRFIRST
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE          ; HL = DOCLINE (0-BASED)
+
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JR      NC, .NEXTROW    ; BEYOND EOF: DO NOT DRAW
+
+                ; 1-BASED LINE NUMBER: HL = HL + 1
+                INC     HL
+                LD      DE, NUMBUF
+                CALL    NUM2STR4        ; FILLS NUMBUF WITH 4 CHARACTERS
+
+                ; BLIT DIGITS AT DX = 0, 6, 12, 18, DY = B * 8
+                POP     BC
+                PUSH    BC
+                LD      A, B
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; B * 8
+                LD      E, A
+                LD      D, 0            ; DE = DY
+
+                LD      A, (NUMBUF + 0)
+                CP      ' '
+                JR      NZ, .F4DIG
+
+                ; 3 DIGITS OR LESS: DRAW AT DX = 0, 6, 12 LEAVING 18..23 AS BLUE MARGIN
+                LD      A, (NUMBUF + 1)
+                CP      ' '
+                JR      Z, .D2
+                LD      HL, 0
+                CALL    BLTCHTR
+.D2             LD      A, (NUMBUF + 2)
+                CP      ' '
+                JR      Z, .D3
+                LD      HL, 6
+                CALL    BLTCHTR
+.D3             LD      A, (NUMBUF + 3)
+                LD      HL, 12
+                CALL    BLTCHTR
+                JR      .NEXTROW
+
+.F4DIG          LD      HL, 0
+                CALL    BLTCHTR
+                LD      A, (NUMBUF + 1)
+                LD      HL, 6
+                CALL    BLTCHTR
+                LD      A, (NUMBUF + 2)
+                LD      HL, 12
+                CALL    BLTCHTR
+                LD      A, (NUMBUF + 3)
+                LD      HL, 18
+                CALL    BLTCHTR
+
+.NEXTROW        POP     BC
+                INC     B
+                LD      A, B
+                CP      TXRLAST + 1
+                JR      NZ, .LNUMLP
                 RET
+
+NUMBUF          DEFS    4
+
+
+; - NUM2STR4 ---------------------------
+; - CONVERT HL (0..9999) TO 4-CHAR RIGHT-ALIGNED STRING AT DE
+; - IN:  HL = NUMBER
+; -      DE = 4-BYTE BUFFER
+; - OUT: BUFFER AT DE FILLED
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+NUM2STR4        LD      BC, 1000
+                CALL    .DIVDIG
+                LD      BC, 100
+                CALL    .DIVDIG
+                LD      BC, 10
+                CALL    .DIVDIG
+                LD      A, L
+                ADD     A, '0'
+                LD      (DE), A
+                ; REPLACE LEADING '0' WITH ' ' (UP TO 3 DIGITS)
+                DEC     DE
+                DEC     DE
+                DEC     DE              ; DE -> DIGIT 0
+                LD      A, (DE)
+                CP      '0'
+                RET     NZ
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
+                LD      A, (DE)
+                CP      '0'
+                RET     NZ
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
+                LD      A, (DE)
+                CP      '0'
+                RET     NZ
+                LD      A, ' '
+                LD      (DE), A
+                RET
+
+.DIVDIG         LD      A, '0' - 1
+.SUBP           INC     A
+                OR      A
+                SBC     HL, BC
+                JR      NC, .SUBP
+                ADD     HL, BC
+                LD      (DE), A
+                INC     DE
+                RET
+
+
+; - BLTCHTR ----------------------------
+; - BLIT CHARACTER WITH TIMP TRANSPARENCY
+; - IN:  A  = ASCII CHAR
+; -      HL = DX
+; -      DE = DY
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+BLTCHTR         PUSH    AF
+                PUSH    BC
+                PUSH    DE
+                PUSH    HL
+
+                LD      (VDP_DX), HL
+                EX      DE, HL
+                LD      (VDP_DY), HL
+
+                ; CALC FONT SX/SY
+                LD      B, A            ; B = CHAR
+                AND     %00011111       ; CHAR & 31
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                ADD     HL, HL          ; * 4
+                ADD     HL, HL          ; * 8
+                LD      (VDP_SX), HL
+
+                LD      A, B
+                SRL     A
+                SRL     A
+                SRL     A
+                SRL     A
+                SRL     A               ; CHAR >> 5 (0..7)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; * 8
+                LD      L, A
+                LD      H, 0
+                LD      DE, FNORM_SY    ; 224
+                ADD     HL, DE
+                LD      (VDP_SY), HL
+
+                LD      HL, 6           ; NX = 6
+                LD      (VDP_NX), HL
+                LD      HL, 8           ; NY = 8
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMM | VDP_TIMP
+                CALL    LMMM
+
+                POP     HL
+                POP     DE
+                POP     BC
+                POP     AF
+                RET
+
+
+; - BLTSTR -----------------------------
+; - BLIT ASCIIZ STRING WITH TIMP
+; - IN:  HL = POINTER TO ASCIIZ STRING
+; -      DE = DX
+; -      BC = DY
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+BLTSTR          LD      A, (HL)
+                OR      A
+                RET     Z
+                PUSH    HL
+                PUSH    DE
+                PUSH    BC
+                EX      DE, HL          ; HL = DX
+                LD      D, B
+                LD      E, C            ; DE = DY
+                CALL    BLTCHTR
+                POP     BC
+                POP     DE
+                POP     HL
+                INC     HL
+                LD      A, 6
+                ADD     A, E
+                LD      E, A
+                JR      NC, BLTSTR
+                INC     D
+                JR      BLTSTR
 
 
 ; --- DRWSCRL             ----------------------------------------
 
-; - DRWSCRL ----
-; - DRAW SCROLLBAR THUMB IN RIGHT GUTTER
+
+; - DRWSCRL ----------------------------
+; - DRAW SCROLLBAR THUMB
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
 ; -
 
-DRWSCRL   ; TODO:
-                ; THUMB_H = MAX(4, (SCRROWS * 212) / TOTLINES)
-                ; THUMB_Y = (TOPLINE * 212) / TOTLINES
-                ; ERASE OLD THUMB: HMMV FULL GUTTER WITH COL_UI
-                ; DRAW NEW THUMB: HMMV DX=512-GUTR_PX, DY=THUMB_Y, NX=GUTR_PX, NY=THUMB_H, CLR=COL_HI
+DRWSCRL         LD      HL, 512 - GUTR_PX ; DX = 504
+                LD      (VDP_DX), HL
+                LD      HL, 8           ; DY = 8
+                LD      (VDP_DY), HL
+                LD      HL, GUTR_PX     ; NX = 8
+                LD      (VDP_NX), HL
+                LD      HL, 24          ; THUMB HEIGHT = 24
+                LD      (VDP_NY), HL
+                LD      A, CLR_HI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
                 RET
 
 
 ; --- DRWCUR                ----------------------------------------
 
-; - DRWCUR -------
-; - TOGGLE CURSOR XOR OVERLAY AT CURRENT POSITION
-; - (SAME CALL DRAWS AND ERASES — XOR TOGGLE)
+
+; - DRWCUR -----------------------------
+; - TOGGLE CURSOR XOR OVERLAY AT (CURX, CURY)
+; - IN:  NONE (USES CURX, CURY)
+; - OUT: NONE
+; - CLOBBERS: NONE
 ; -
 
-DRWCUR      ; TODO:
-                ; DX = TXORG_X + CURX * CELLW
-                ; DY = TXORG_Y + CURY * CELLH
-                ; LMMV DX, DY, NX=CELLW, NY=CELLH, CLR=COL_HI, LOP=XOR
+DRWCUR          PUSH    AF
+                PUSH    BC
+                PUSH    DE
+                PUSH    HL
+
+                ; DX = GUTL_PX + CURX * 6
+                LD      A, (CURX)
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL          ; * 4
+                ADD     HL, DE          ; * 6
+                LD      DE, GUTL_PX
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+
+                ; DY = (CURY + 1) * 8
+                LD      A, (CURY)
+                INC     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_DY), HL
+
+                LD      HL, 0
+                LD      (VDP_SX), HL
+                LD      (VDP_SY), HL
+
+                LD      HL, CELLW       ; NX = 6
+                LD      (VDP_NX), HL
+                LD      HL, CELLH       ; NY = 8
+                LD      (VDP_NY), HL
+
+                LD      A, COL_HI       ; CLR = 3
+                LD      (VDP_CLR), A
+
+                XOR     A
+                LD      (VDP_ARG), A
+
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_XOR
+                CALL    LMMV
+
+                POP     HL
+                POP     DE
+                POP     BC
+                POP     AF
                 RET
 
 
 ; --- TIMI HOOK (BLINK)         ----------------------------------------
 
-; - BLNKTICK ---------
-; - CALLED FROM TIMI INTERRUPT HOOK
-; - HANDLES CURSOR BLINK
+
+; - BLNKTICK ---------------------------
+; - BLINK TIMER HOOK STUB
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: NONE
 ; -
 
-BLNKTICK        PUSH    AF
-                LD      A, (BLNKCNT)
-                INC     A
-                CP      30              ; BLINK EVERY 30 TICKS (≈0.5S AT 60HZ)
-                JR      C, .END
-                XOR     A
-                LD      (BLNKCNT), A
-                LD      A, (BLNKPH)
-                XOR     1
-                LD      (BLNKPH), A
-                CALL    DRWCUR      ; TOGGLE CURSOR
-.END            LD      (BLNKCNT), A
-                POP     AF
-                RET
+BLNKTICK        RET
+

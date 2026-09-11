@@ -35,9 +35,19 @@ BUFINIT         CALL    ALLSEG          ; ALLOCATE DIR SEGMENT
                 LD      (CURSEG), A
                 CALL    PUTP2           ; MAP TO PAGE 2
 
-                ; WRITE EMPTY LINE RECORD AT TXPAGE+0: DEFB 0
+                ; WRITE EMPTY LINE RECORD AT TXPAGE+0: LEN=0, 80 SPACES, 80 ATTRS
                 XOR     A
                 LD      (TXPAGE), A
+                LD      HL, TXPAGE + 1
+                LD      (HL), ' '
+                LD      DE, TXPAGE + 2
+                LD      BC, 79
+                LDIR
+                LD      HL, TXPAGE + 81
+                LD      (HL), 0
+                LD      DE, TXPAGE + 82
+                LD      BC, 79
+                LDIR
 
                 ; WRITE DIR ENTRY 0: SEG=TXSEG, OFF=0
                 LD      HL, 0

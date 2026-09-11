@@ -3,46 +3,120 @@
 ;                                       ****************************************
 ;
 ; KEYBOARD INPUT AND MAIN DISPATCH LOOP.
-; USES CHGET (BLOCKING) FOR NORMAL INPUT.
-; SPECIAL KEY SEQUENCES (FUNCTION KEYS, CURSOR, ETC.) DECODED HERE.
-
-
-; --- KEYREAD                   ----------------------------------------
-
-; - KEYREAD ----------
-; - BLOCKING KEY READ WITH SPECIAL KEY DECODE
-; - OUTPUT:
-; -     A:  KEY CODE (PRINTABLE) OR SPECIAL CODE (SEE HARD.Z8A)
-; -     HL: EXTENDED KEY CODE (0 IF SIMPLE KEY, OR FUNCTION KEY INDEX)
-; -
-
-KEYREAD         CALL    CHGET
-                ; TODO: DECODE EXTENDED SEQUENCES (F-KEYS RETURN 2-CHAR SEQUENCES)
-                RET
+; USES BDOS _DIRIO (#06) FOR NON-BLOCKING CONSOLE INPUT.
+; CURSOR BLINKING TIMED VIA SYSTEM JIFFY (#FC9E).
 
 
 ; --- MAINLOOP                  ----------------------------------------
 
-; - MAINLOOP ---------
+
+; - MAINLOOP ---------------------------
 ; - MAIN EDITOR EVENT LOOP
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
 ; -
 
-MAINLOOP        CALL    KEYREAD
-                CP      ESC             ; EXIT ON ESC
+MAINLOOP        ; POLL KEYBOARD VIA BIOS CHSNS (#009C)
+                LD      IX, CHSNS
+                CALL    BIOSCALL
+                JR      NZ, .KEYHIT
+
+                ; NO KEY: UPDATE CURSOR BLINK USING JIFFY
+                LD      A, (JIFFY)
+                LD      HL, BLNKCNT
+                SUB     (HL)
+                CP      20              ; ~1/3 SECOND (20 TICKS AT 50/60HZ)
+                JR      C, MAINLOOP
+
+                ; TOGGLE CURSOR BLINK PHASE
+                LD      A, (JIFFY)
+                LD      (BLNKCNT), A
+                CALL    DRWCUR          ; TOGGLES XOR OVERLAY
+                LD      A, (BLNKPH)
+                XOR     1
+                LD      (BLNKPH), A
+                JR      MAINLOOP
+
+.KEYHIT         ; IF CURSOR IS VISIBLE, ERASE BEFORE EDITING/MOVING
+                LD      A, (BLNKPH)
+                AND     A
+                JR      Z, .NOERASE
+                CALL    DRWCUR
+                XOR     A
+                LD      (BLNKPH), A
+.NOERASE        ; READ KEY FROM KEYBOARD BUFFER VIA BIOS CHGET (#009F)
+                LD      IX, CHGET
+                CALL    BIOSCALL
+
+                ; DISPATCH SPECIAL AND CONTROL KEYS
+                CP      ESC
                 JP      Z, TERM
-                
-                ; TODO: DISPATCH ON A
-                ; PRINTABLE (#20-#7E): EDINSCHR / EDOVRCHR
-                ; CR:        EDNWLIN
-                ; BS:        EDDELBK
-                ; DEL:       EDDELCHR
-                ; CRIGHT:    EDMOVCHR RIGHT
-                ; CLEFT:     EDMOVCHR LEFT
-                ; CUP:       EDMOVROW UP
-                ; CDOWN:     EDMOVROW DOWN
-                ; CTRL_S:    FILESAVE
-                ; CTRL_O:    FILEOPEN (LOAD)
-                ; CTRL_N:    FILENEW
-                ; CTRL_Q:    EDQUIT
-                
+                CP      CTRL_Q
+                JP      Z, TERM
+
+                CP      CTRL_S
+                JR      NZ, .NOTSAVE
+                CALL    FILESAVE
+                JR      .DRAWCUR
+
+.NOTSAVE        CP      CRIGHT
+                JR      NZ, .NOTR
+                CALL    EDMOVCHR
+                JR      .DRAWCUR
+
+.NOTR           CP      CLEFT
+                JR      NZ, .NOTL
+                CALL    EDMOVCHR
+                JR      .DRAWCUR
+
+.NOTL           CP      CDOWN
+                JR      NZ, .NOTDN
+                CALL    EDMOVROW
+                JR      .DRAWCUR
+
+.NOTDN          CP      CUP
+                JR      NZ, .NOTUP
+                CALL    EDMOVROW
+                JR      .DRAWCUR
+
+.NOTUP          CP      CR
+                JR      NZ, .NOTCR
+                CALL    EDNWLIN
+                JR      .DRAWCUR
+
+.NOTCR          CP      BS
+                JR      NZ, .NOTBS
+                CALL    EDDELBK
+                JR      .DRAWCUR
+
+.NOTBS          CP      DEL
+                JR      NZ, .NOTDEL
+                CALL    EDDELCHR
+                JR      .DRAWCUR
+
+.NOTDEL         ; PRINTABLE ASCII CHAR CHECK (#20..#7E)
+                CP      #20
+                JR      C, .DRAWCUR     ; IGNORE UNHANDLED CONTROL CODES
+                CP      #7F
+                JR      NC, .DRAWCUR    ; IGNORE #7F AND ABOVE
+
+                ; INSERT OR OVERWRITE MODE
+                PUSH    AF
+                LD      A, (INSMODE)
+                CP      INS_MODE
+                JR      NZ, .DOWRITE
+                POP     AF
+                CALL    EDINSCHR
+                JR      .DRAWCUR
+
+.DOWRITE        POP     AF
+                CALL    EDOVRCHR
+
+.DRAWCUR        ; REDRAW CURSOR AT CURRENT POSITION & RESET BLINK
+                CALL    DRWCUR
+                LD      A, 1
+                LD      (BLNKPH), A
+                LD      A, (JIFFY)
+                LD      (BLNKCNT), A
                 JP      MAINLOOP

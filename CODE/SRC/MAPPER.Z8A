@@ -18,19 +18,29 @@
 ; -     CY = 1  NO MAPPER MANAGER (NO EXTENDED BIOS OR DEVICE NOT PRESENT)
 ; -
 
-MAPINIT         ; CHECK HOKVLD BIT 0: EXTENDED BIOS PRESENT?
+MAPINIT         DBG     "MAPINIT: ENTER"
                 LD      A, (HOKVLD)
+                DBG     "MAPINIT: HOKVLD READ"
                 RRA
-                RET     NC              ; BIT 0 = 0: NO EXTENDED BIOS
+                JR      C, .HOKOK
+                DBG     "MAPINIT: NO HOKVLD"
+                SCF
+                RET                     ; CY = 1: NO EXTENDED BIOS
 
-                ; CALL EXTBIO: D=4 (MAPPER DEVICE), E=2 (GET JUMP TABLE)
+.HOKOK          DBG     "MAPINIT: HOKOK"
                 XOR     A               ; A=0
                 LD      D, MAP_DEV
                 LD      E, MAPFNTBL
+                DBG     "MAPINIT: BEFORE EXTBIO"
                 CALL    EXTBIO          ; HL = JUMP TABLE BASE
-                ; IX, IY, ALTERNATE REGS CORRUPTED BY EXTBIO — DO NOT USE
+                DBG     "MAPINIT: AFTER EXTBIO"
+                OR      A
+                JR      NZ, .MAPOK
+                DBG     "MAPINIT: EXTBIO A=0"
+                SCF
+                RET                     ; CY = 1: NO MAPPER MANAGER
 
-                ; STORE ENTRY ADDRESSES FROM JUMP TABLE
+.MAPOK          DBG     "MAPINIT: MAPOK"
                 PUSH    HL
                 LD      DE, MJALLSEG
                 ADD     HL, DE

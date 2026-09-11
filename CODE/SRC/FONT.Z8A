@@ -2,165 +2,115 @@
 ;                                       * FONT                                 *
 ;                                       ****************************************
 ;
-; BUNDLED 6×8 CHARSET (256 GLYPHS × 8 BYTES, 1BPP).
-; EXPANDS INTO 4 VRAM FONT TABLES: NORMAL / BOLD / ITALIC / BOLD+ITALIC.
-
-
-; --- ITALIC SHIFT TABLE        ----------------------------------------
-
-                ; ROW SHIFT OFFSETS FOR ITALIC (POSITIVE = SHIFT PIXELS LEFT)
-                ; APPLIED PER-ROW WHEN GENERATING ITALIC GLYPHS
-ITALSHFT      DEFB    1, 1, 1, 1, 0, -1, -1, -1
+; BUNDLED 6X8 CHARSET (256 GLYPHS X 8 BYTES, 1BPP).
+; EXPANDS INTO VRAM FONT TABLE AT VR_FNORM (FNORM_SY = 224).
+; GLYPH N: SX = (N & 31) * 8, SY = FNORM_SY + (N >> 5) * 8.
 
 
 ; --- FONTINIT                  ----------------------------------------
 
-; - FONTINIT ---------
-; - EXPAND BUNDLED CHARSET TO 4 VRAM FONT TABLES
-; - CALLED ONCE AT INIT
+
+; - FONTINIT ---------------------------
+; - EXPAND BUNDLED CHARSET TO VRAM
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
 ; -
 
-FONTINIT        LD      HL, FONT_DATA
-                LD      (CG_PTR), HL
-
-                ; 2. LOOP 256 CHARS
-                LD      BC, 0           ; B = 0 (256), C = 0 (CHAR COUNTER)
-.CHARLP         PUSH    BC
-
-                ; READ 8 BYTES FROM BUNDLED DATA
-                LD      HL, (CG_PTR)
-                LD      DE, FONTBUF
-                LD      B, 8
-.READLP         LD      A, (HL)
-                LD      (DE), A
-                INC     HL
-                INC     DE
-                DJNZ    .READLP
-                LD      (CG_PTR), HL
-
-                ; EXPAND TO NORMAL (6PX -> 2BPP)
-                LD      HL, FONTBUF
-                LD      DE, FONTBUF + 16 ; WORK AREA FOR EXPANDED GLYPH
-                LD      B, 8
-.EXPLP          PUSH    BC
-                LD      A, (HL)         ; 1BPP ROW
-                CALL    EXPNORM         ; EXPAND A -> DE
-                INC     HL
-                INC     DE
-                INC     DE
-                POP     BC
-                DJNZ    .EXPLP
-
-                ; UPLOAD TO VRAM (NORMAL TABLE)
-                ; GLYPH N: SX = (N % 32) * 6, SY = TABLE_SY + (N / 32) * 8
-                POP     BC              ; C = CHAR N
-                PUSH    BC
-
+FONTINIT        LD      DE, FONT_DATA   ; SOURCE 1BPP BYTES
+                LD      C, 0            ; CHAR 0..255
+.CHARLP         LD      B, 0            ; LINE 0..7
+.LINELP         PUSH    BC
+                PUSH    DE
                 LD      A, C
-                AND     %00011111       ; N % 32
-                LD      L, A
-                LD      H, 0
-                ADD     HL, HL          ; * 2
-                LD      D, H
-                LD      E, L
-                ADD     HL, HL          ; * 4
-                ADD     HL, DE          ; * 6
-                LD      (VDP_DX), HL    ; DX
-
-                LD      A, C
-                SRL     A
-                SRL     A
-                SRL     A
-                SRL     A
-                SRL     A               ; N / 32
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A            ; (N / 32) * 8
-                LD      L, A
-                LD      H, 0
-                LD      DE, FNORM_SY
-                ADD     HL, DE
-                LD      (VDP_DY), HL    ; DY
-
-                LD      HL, 6           ; NX
-                LD      (VDP_NX), HL
-                LD      A, 8            ; NY
-                LD      (VDP_NY), A
-                XOR     A
-                LD      (VDP_ARG), A
-
-                LD      HL, VDPCMBLK
-                CALL    HMMC
-
-                ; WRITE DATA TO PORT #98
-                LD      HL, FONTBUF + 16
-                LD      B, 16
-                LD      C, VDPDR
-                OTIR
-
+                CALL    CALCVRAM        ; HL = VRAM ADDRESS
+                CALL    SETWRT          ; SET VRAM POINTER
+                POP     DE
+                LD      A, (DE)         ; 1BPP ROW BYTE
+                INC     DE
+                PUSH    DE
+                CALL    EXPNORM         ; D = BYTE 0, E = BYTE 1
+                LD      A, D
+                OUT     (VDPDR), A
+                LD      A, E
+                OUT     (VDPDR), A
+                POP     DE
                 POP     BC
+                INC     B
+                LD      A, B
+                CP      8
+                JR      NZ, .LINELP
+                
                 INC     C
-                LD      A, C
-                AND     A
-                JP      NZ, .CHARLP
+                JR      NZ, .CHARLP
                 RET
 
-CG_PTR          DEFW    0
+
+; - CALCVRAM ---------------------------
+; - CALC VRAM ADDRESS FOR CHAR C, LINE B
+; - IN:  A = CHAR (0..255), B = LINE (0..7)
+; - OUT: HL = VRAM BYTE ADDRESS (#7000..#8FFF)
+; - CLOBBERS: AF
+; -
+
+CALCVRAM        PUSH    BC
+                AND     %11100000
+                RRCA
+                RRCA                    ; (C >> 5) * 8
+                ADD     A, B            ; + LINE = Y_OFF (0..63)
+                LD      H, A
+                SRL     H               ; H = Y_OFF >> 1
+                RRA                     ; BIT 0 OF Y_OFF INTO CARRY
+                LD      A, 0
+                RRA                     ; A = (Y_OFF & 1) << 7 (#00 OR #80)
+                POP     BC
+                LD      L, A
+                LD      A, C
+                AND     %00011111       ; C & 31
+                ADD     A, A            ; * 2
+                OR      L               ; COMBINE WITH LOW BYTE
+                LD      L, A
+                LD      A, H
+                ADD     A, #70          ; VR_FNORM >> 8 = #70
+                LD      H, A
+                RET
 
 
 ; --- GLYPH EXPAND HELPERS      ----------------------------------------
 
-; - EXPNORM ----------
-; - EXPAND ONE 1BPP ROM ROW BYTE TO 2-BYTE VRAM ROW (NORMAL, SCREEN 6 2BPP)
-; - A:  ROM ROW BYTE (BITS 7-2 = 6 PIXELS)
-; - DE: DESTINATION VRAM ROW BUFFER (2 BYTES)
+
+; - EXPNORM ----------------------------
+; - EXPAND 1BPP ROW BYTE TO 2-BYTE 2BPP (COLOR 1)
+; - IN:  A = 1BPP ROM BYTE (BITS 7-2 = 6 PIXELS)
+; - OUT: D = BYTE 0 (PIXELS 0-3), E = BYTE 1 (PIXELS 4-5)
+; - CLOBBERS: AF, B, DE
 ; -
 
-EXPNORM         PUSH    BC
-                LD      B, A            ; B = ROM ROW
-                LD      HL, 0           ; HL = EXPANDED ROW
-
-                ; PIXEL 0 (BIT 7)
+EXPNORM         LD      B, A
+                LD      DE, 0
                 BIT     7, B
                 JR      Z, .P1
-                SET     7, H
-                SET     6, H
-.P1             ; PIXEL 1 (BIT 6)
-                BIT     6, B
+                SET     6, D
+.P1             BIT     6, B
                 JR      Z, .P2
-                SET     5, H
-                SET     4, H
-.P2             ; PIXEL 2 (BIT 5)
-                BIT     5, B
+                SET     4, D
+.P2             BIT     5, B
                 JR      Z, .P3
-                SET     3, H
-                SET     2, H
-.P3             ; PIXEL 3 (BIT 4)
-                BIT     4, B
+                SET     2, D
+.P3             BIT     4, B
                 JR      Z, .P4
-                SET     1, H
-                SET     0, H
-.P4             ; PIXEL 4 (BIT 3)
-                BIT     3, B
+                SET     0, D
+.P4             BIT     3, B
                 JR      Z, .P5
-                SET     7, L
-                SET     6, L
-.P5             ; PIXEL 5 (BIT 2)
-                BIT     2, B
+                SET     6, E
+.P5             BIT     2, B
                 JR      Z, .DONE
-                SET     5, L
-                SET     4, L
+                SET     4, E
+.DONE           RET
 
-.DONE           LD      A, H
-                LD      (DE), A
-                INC     DE
-                LD      A, L
-                LD      (DE), A
-                DEC     DE              ; RESTORE DE TO START OF 2-BYTE ROW
-                POP     BC
-                RET
 
 ; --- ASSETS                    ----------------------------------------
 
 FONT_DATA       INCBIN  "FONT.BIN"
+
 

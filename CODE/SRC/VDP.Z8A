@@ -48,11 +48,32 @@ SETVR           PUSH    AF
                 RET
 
 
+; - SETWRT -----------------------------
+; - SET VDP VRAM WRITE ADDRESS POINTER
+; - IN:  HL = VRAM ADDRESS (0..65535)
+; - OUT: NONE
+; - CLOBBERS: A
+; -
+
+SETWRT          DI
+                LD      A, L
+                OUT     (VDPCT), A
+                LD      A, H
+                AND     #3F
+                OR      #40
+                OUT     (VDPCT), A
+                EI
+                RET
+
+
 ; --- COMMAND EXECUTION         ----------------------------------------
 
-; - VDPCMD -----------
+
+; - VDPCMD -----------------------------
 ; - ISSUE VDP COMMAND BLOCK
-; - HL: POINTER TO 15-BYTE PARAMETER BLOCK (R#32 TO R#46)
+; - IN:  HL = POINTER TO 15-BYTE PARAM BLOCK
+; - OUT: NONE
+; - CLOBBERS: NONE
 ; -
 
 VDPCMD          CALL    VDPWAIT
@@ -62,7 +83,7 @@ VDPCMD          CALL    VDPWAIT
                 LD      A, #91          ; R#17 (INDIRECT REGISTER POINTER)
                 OUT     (VDPCT), A
                 
-                LD      C, VDPDR        ; VDP DATA PORT (R#17 AUTO-INCS R#32-46)
+                LD      C, VDPIND       ; PORT #9B (R#17 AUTO-INCS R#32-46)
                 REPT    15
                 OUTI
                 ENDR
@@ -140,3 +161,23 @@ LMMM            PUSH    AF
                 CALL    VDPCMD
                 POP     AF
                 RET
+
+
+; - LMMV -------------------------------
+; - FILL VRAM REGION (DOT MODE, LOGOP)
+; - IN:  HL = POINTER TO CMD BLOCK
+; -      A  = COMMAND + LOGOP (E.G. VDP_LMMV | VDP_XOR)
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+LMMV            PUSH    AF
+                PUSH    HL
+                LD      DE, 14
+                ADD     HL, DE
+                LD      (HL), A         ; R#46 = VDP_LMMV | LOGOP
+                POP     HL
+                CALL    VDPCMD
+                POP     AF
+                RET
+

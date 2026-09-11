@@ -61,8 +61,8 @@ RENDEROW        PUSH    BC
                 LD      (VDP_DY), HL
 
                 ; 3. RENDER COLS 0-79
-                LD      C, 0            ; COL COUNTER
-.COLLOOP        PUSH    BC
+                LD      C, 0            ; COL COUNTER (0..79)
+.COLLOOP        PUSH    BC              ; PRESERVE B=ROW, C=COL
                 
                 ; 4. CALC SCREEN DX (GUTL_PX + COL * 6)
                 LD      A, C
@@ -77,48 +77,34 @@ RENDEROW        PUSH    BC
                 ADD     HL, DE
                 LD      (VDP_DX), HL
 
-                ; 5. GET CHAR AND ATTR
-                ; WORKBUF: [LEN][80 TEXT][80 ATTR]
+                ; 5. GET CHAR AND ATTR FROM WORKBUF
+                LD      E, C
+                LD      D, 0
                 LD      HL, WORKBUF + 1
-                LD      B, 0
-                POP     AF              ; GET B,C BACK (B=ROW, C=COL)
-                PUSH    AF
-                LD      C, A            ; C=COL
-                ADD     HL, BC
-                LD      A, (HL)         ; GET CHARCODE
-                PUSH    AF
-                
-                LD      HL, WORKBUF + 81
-                ADD     HL, BC
-                LD      A, (HL)         ; GET ATTR
-                LD      E, A            ; E = ATTR
-                POP     AF
-                
+                ADD     HL, DE
+                LD      A, (HL)         ; A = CHARCODE
+
                 ; 6. CALC FONT SX/SY
-                ; SX = (CHAR % 32) * 6
-                ; SY = TABLE_SY + (CHAR / 32) * 8
+                ; SX = (CHAR & 31) * 8
                 PUSH    AF
-                AND     %00011111       ; CHAR % 32
+                AND     %00011111       ; CHAR & 31
                 LD      L, A
                 LD      H, 0
                 ADD     HL, HL          ; * 2
-                LD      D, H
-                LD      E, L
                 ADD     HL, HL          ; * 4
-                ADD     HL, DE          ; * 6
+                ADD     HL, HL          ; * 8
                 LD      (VDP_SX), HL
-                
+
+                ; SY = FNORM_SY + (CHAR >> 5) * 8
                 POP     AF
                 SRL     A
                 SRL     A
                 SRL     A
                 SRL     A
-                SRL     A               ; CHAR / 32
+                SRL     A               ; CHAR >> 5 (0..7)
                 ADD     A, A
                 ADD     A, A
-                ADD     A, A            ; (CHAR / 32) * 8
-                
-                ; ADD FONT TABLE OFFSET BASED ON ATTR (BOLD/ITALIC)
+                ADD     A, A            ; * 8
                 LD      L, A
                 LD      H, 0
                 LD      DE, FNORM_SY
@@ -126,10 +112,10 @@ RENDEROW        PUSH    BC
                 LD      (VDP_SY), HL
 
                 ; 7. ISSUE LMMM
-                LD      HL, 6           ; NX
+                LD      HL, 6           ; NX = 6 DOTS
                 LD      (VDP_NX), HL
-                LD      A, 8            ; NY
-                LD      (VDP_NY), A
+                LD      HL, 8           ; NY = 8 DOTS (16-BIT)
+                LD      (VDP_NY), HL
                 XOR     A
                 LD      (VDP_ARG), A
                 
@@ -137,10 +123,10 @@ RENDEROW        PUSH    BC
                 LD      A, VDP_LMMM | VDP_IMP
                 CALL    LMMM
 
-                POP     BC
+                POP     BC              ; RESTORE B=ROW, C=COL
                 INC     C
                 LD      A, C
-                CP      80
+                CP      TEXTCOLS        ; 80
                 JR      NZ, .COLLOOP
                 
                 POP     BC
@@ -149,8 +135,12 @@ RENDEROW        PUSH    BC
 
 ; --- CLRROW                    ----------------------------------------
 
-; - CLRROW -----------
+
+; - CLRROW -----------------------------
 ; - CLEAR ROW B WITH BACKGROUND COLOR
+; - IN:  B = SCREEN ROW (1..24)
+; - OUT: NONE
+; - CLOBBERS: AF, DE, HL
 ; -
 
 CLRROW          LD      A, B
@@ -161,16 +151,20 @@ CLRROW          LD      A, B
                 LD      H, 0
                 LD      (VDP_DY), HL
                 
+                LD      HL, 0
+                LD      (VDP_SX), HL
+                LD      (VDP_SY), HL
+                
                 LD      HL, GUTL_PX
                 LD      (VDP_DX), HL
                 
                 LD      HL, TXAREAPX
                 LD      (VDP_NX), HL
                 
-                LD      A, 8
-                LD      (VDP_NY), A
+                LD      HL, 8           ; NY = 8 (16-BIT)
+                LD      (VDP_NY), HL
                 
-                LD      A, COL_BG
+                LD      A, CLR_BG
                 LD      (VDP_CLR), A
                 
                 XOR     A
@@ -179,3 +173,4 @@ CLRROW          LD      A, B
                 LD      HL, VDPCMBLK
                 CALL    HMMV
                 RET
+
