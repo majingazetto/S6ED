@@ -86,7 +86,17 @@ PARBUF          DEFS    128             ; EXTPARM RAW OUTPUT BUFFER
 
 WORKBUF         DEFS    WORKSIZ
 FILEBUF         DEFS    256             ; TEMPORARY BUFFER FOR DISK READS
-FONTBUF         DEFS    32              ; TEMPORARY BUFFER FOR FONT EXPANSION
+
+
+; --- FONT SOURCE               ----------------------------------------
+
+                ; 1BPP CHARSET STAGED IN RAM BY FONTROM (FONT.Z8A) BEFORE
+                ; FONTINIT EXPANDS IT TO 2BPP IN VRAM. NOT ASSEMBLED WHEN
+                ; _FONTBIN_ SELECTS THE BUNDLED ASSET INSTEAD.
+
+                IFNDEF  _FONTBIN_
+FONTRAM         DEFS    FONTSIZ
+                ENDIF
 
 
 ; --- BLINK HANDLER             ----------------------------------------

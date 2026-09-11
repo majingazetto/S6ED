@@ -24,10 +24,15 @@
                 ORG ADDR
                 ENDM
 
-                ; DEBUG LOG TO OPENMSX DEBUGDEVICE
+                ; DEBUG LOG TO OPENMSX DEBUGDEVICE (PORTS #2E / #2F)
+                ; BUILD WITH  make DEBUG=1  AND CAPTURE WITH:
+                ;   m2d2 S6ED.DSK -ext debugdevice
+                ; ASSEMBLES TO NOTHING IN A NORMAL BUILD.
                 MACRO   DBG MSG
+                IFDEF   DEBUG
                 CALL    DBGMSG
                 DEFM    MSG, 10, 0
+                ENDIF
                 ENDM
 
 

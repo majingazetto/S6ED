@@ -47,6 +47,8 @@ VR_FBOLD        EQU     #08000          ; FONT: BOLD
 VR_FITAL        EQU     #09000          ; FONT: ITALIC
 VR_FBI          EQU     #0A000          ; FONT: BOLD+ITALIC
 
+FONTSIZ         EQU     2048            ; 256 GLYPHS X 8 BYTES, 1BPP
+
                 ; FONT TABLE GEOMETRY (ALL TABLES IDENTICAL STRUCTURE)
                 ;   32 GLYPHS PER ROW → 8 ROWS (256 TOTAL)
                 ;   GLYPH N: SX = (N % 32) * 6,  SY = TABLE_SY + (N / 32) * 8

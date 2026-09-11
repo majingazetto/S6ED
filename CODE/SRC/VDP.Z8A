@@ -54,8 +54,20 @@ SETVR           PUSH    AF
 ; - OUT: NONE
 ; - CLOBBERS: A
 ; -
+; - R#14 CARRIES VRAM ADDRESS BITS A16-A14 AND MUST BE WRITTEN FIRST: THE
+; - ADDRESS PORT ONLY LATCHES THE LOW 14 BITS. WITHOUT IT EVERY WRITE ABOVE
+; - #3FFF LANDS AT (R#14 * #4000) + (ADDRESS AND #3FFF) -- I.E. WHEREVER THE
+; - PREVIOUS OWNER OF THE VDP HAPPENED TO LEAVE R#14.
+; -
 
 SETWRT          DI
+                LD      A, H
+                RLCA
+                RLCA
+                AND     %00000011       ; A15-A14 -> R#14 BITS 1-0
+                OUT     (VDPCT), A
+                LD      A, #8E          ; REG 14 | #80
+                OUT     (VDPCT), A
                 LD      A, L
                 OUT     (VDPCT), A
                 LD      A, H

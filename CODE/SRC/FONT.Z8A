@@ -2,22 +2,93 @@
 ;                                       * FONT                                 *
 ;                                       ****************************************
 ;
-; BUNDLED 6X8 CHARSET (256 GLYPHS X 8 BYTES, 1BPP).
+; 6X8 CHARSET (256 GLYPHS X 8 BYTES, 1BPP, INK IN BITS 7-2).
 ; EXPANDS INTO VRAM FONT TABLE AT VR_FNORM (FNORM_SY = 224).
 ; GLYPH N: SX = (N & 31) * 8, SY = FNORM_SY + (N >> 5) * 8.
+;
+; SOURCE: THE MSX ROM CHARSET, PULLED OUT OF THE MAIN BIOS AT STARTUP. IT IS
+; THE NATIVE 6PX TEXT FACE -- NO GLYPH TOUCHES COLUMN 5, SO CHARACTERS KEEP A
+; ONE PIXEL GAP AND THE BOLD TRANSFORM HAS ROOM TO GROW INTO.
+;
+; DEFINE _FONTBIN_ TO USE THE BUNDLED RES/FONT.BIN ASSET INSTEAD. THAT ASSET
+; MUST FOLLOW THE SAME RULE: INK ONLY IN COLUMNS 0-4, COLUMN 5 ALWAYS EMPTY.
+
+
+; --- FONTROM                   ----------------------------------------
+
+
+; - FONTROM ----------------------------
+; - COPY THE MSX ROM 6X8 CHARSET INTO FONTRAM
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+; - THE CHARSET ADDRESS LIVES AT CGTABL (#0004) IN THE MAIN BIOS ROM. UNDER
+; - MSX-DOS PAGE 0 IS RAM, SO BOTH THE POINTER AND THE GLYPH DATA HAVE TO BE
+; - FETCHED THROUGH RDSLT. 2050 READS, ONCE, AT STARTUP.
+; -
+
+FONTROM         DI
+
+                ; READ THE CHARSET POINTER OUT OF THE BIOS SLOT
+                LD      HL, CGTABL
+                CALL    RDBIOS
+                LD      E, A
+                LD      HL, CGTABL + 1
+                CALL    RDBIOS
+                LD      D, A            ; DE = CHARSET ADDRESS
+
+                ; COPY THE GLYPH DATA INTO RAM
+                EX      DE, HL          ; HL = SOURCE IN BIOS ROM
+                LD      DE, FONTRAM
+                LD      BC, FONTSIZ
+.COPYLP         CALL    RDBIOS
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                DEC     BC
+                LD      A, B
+                OR      C
+                JR      NZ, .COPYLP
+                EI
+                RET
+
+
+; - RDBIOS -----------------------------
+; - READ ONE BYTE FROM THE MAIN BIOS SLOT
+; - IN:  HL = ADDRESS
+; - OUT: A  = BYTE READ
+; - CLOBBERS: AF
+; - NOTE: CALLER MUST HAVE INTERRUPTS DISABLED
+; -
+
+RDBIOS          PUSH    BC
+                PUSH    DE
+                PUSH    HL
+                LD      A, (EXPTBL)     ; MAIN BIOS SLOT ID
+                CALL    RDSLT
+                POP     HL
+                POP     DE
+                POP     BC
+                RET
 
 
 ; --- FONTINIT                  ----------------------------------------
 
 
 ; - FONTINIT ---------------------------
-; - EXPAND BUNDLED CHARSET TO VRAM
+; - EXPAND THE CHARSET TO VRAM
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-FONTINIT        LD      DE, FONT_DATA   ; SOURCE 1BPP BYTES
+FONTINIT
+                IFNDEF  _FONTBIN_
+                CALL    FONTROM         ; PULL THE CHARSET OUT OF THE BIOS
+                ENDIF
+
+                LD      DE, FONTSRC     ; SOURCE 1BPP BYTES
                 LD      C, 0            ; CHAR 0..255
 .CHARLP         LD      B, 0            ; LINE 0..7
 .LINELP         PUSH    BC
@@ -111,6 +182,10 @@ EXPNORM         LD      B, A
 
 ; --- ASSETS                    ----------------------------------------
 
-FONT_DATA       INCBIN  "FONT.BIN"
+                IFDEF   _FONTBIN_
+FONTSRC         INCBIN  "FONT.BIN"
+                ELSE
+FONTSRC         EQU     FONTRAM         ; FILLED AT STARTUP BY FONTROM
+                ENDIF
 
 
