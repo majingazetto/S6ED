@@ -101,12 +101,24 @@ def check(font, lo=0x20, hi=0x7F):
     return errors, warnings, notes
 
 
+def to_sc6(px) -> bytes:
+    """Pack to Graphic 5: 2 bits per pixel, 4 pixels per byte, 128 bytes a line."""
+    out = bytearray()
+    for y in range(SCREEN_H):
+        row = px[y]
+        for x in range(0, SCREEN_W, 4):
+            out.append((row[x] << 6) | (row[x + 1] << 4) |
+                       (row[x + 2] << 2) | row[x + 3])
+    return bytes(out)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("sheet", help="edited sheet, .SR6 or .PNG")
     ap.add_argument("--ink", type=int, default=INK_DEFAULT,
                     help="palette index the glyphs are drawn in (default 3)")
     ap.add_argument("--out", help="write the extracted FONT.BIN here")
+    ap.add_argument("--sr6", help="optional: write raw Screen 6 VRAM dump (.SR6) here")
     ap.add_argument("--origin", default="0,0",
                     help="grid origin in the sheet (the reference sheet is 0,12)")
     ap.add_argument("--strict", action="store_true",
@@ -130,6 +142,10 @@ def main():
     if a.out and not errors:
         Path(a.out).write_bytes(font)
         print("wrote %s (%d bytes)" % (a.out, len(font)))
+
+    if a.sr6 and not errors:
+        Path(a.sr6).write_bytes(to_sc6(px))
+        print("wrote %s (%d bytes)" % (a.sr6, SCREEN_W * SCREEN_H // 4))
 
     sys.exit(1 if errors or (a.strict and warnings) else 0)
 
