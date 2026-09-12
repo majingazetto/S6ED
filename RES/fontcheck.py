@@ -5,6 +5,10 @@ Reads a sheet back from .SR6 or .PNG, extracts the 256 glyphs from the grid the
 editor addresses, reports anything the renderer or the derived weights cannot
 cope with, and optionally writes FONT.BIN.
 
+--variant picks one block out of the four weight sheet and applies that block's
+rules: only NORMAL has to keep column 5 empty, because there the column is the
+gap between characters. BOLD, ITALIC and BOLD+ITALIC own their column 5.
+
 Exit status is non-zero when an error is found, so it can gate a build.
 """
 
@@ -16,9 +20,18 @@ from pathlib import Path
 
 CELL_W, CELL_H = 8, 8
 DRAW_W = 5                     # columns 0-4 belong to the artist
-BOLD_COL = 5                   # column 5 is headroom for BOLD and ITALIC
+BOLD_COL = 5                   # column 5: the gap, and NORMAL must leave it
 SCREEN_W, SCREEN_H = 512, 212
 INK_DEFAULT = 3
+
+# Block origins on the four weight FONTSHEET, and whether the block may draw in
+# column 5. mkfontsheet.py carries the same table -- keep the two in step.
+VARIANTS = {
+    "normal":     ((0, 20),         False),
+    "bold":       ((256, 20),       True),
+    "italic":     ((0, 96),         True),
+    "bolditalic": ((256, 96),       True),
+}
 
 
 def read_sr6(path):
@@ -86,18 +99,24 @@ def extract(px, ink, origin=(0, 0)):
     return bytes(font)
 
 
-def check(font, lo=0x20, hi=0x7F):
+def check(font, allow_col5=False, lo=0x20, hi=0x7F):
     errors, warnings, notes = [], [], []
+    col5 = 0
     for n in range(lo, hi):
         g = font[n * 8:n * 8 + 8]
         ch = chr(n)
         if any(b & 0x04 for b in g):
-            errors.append("%s (#%02X) draws in column 5, which BOLD and ITALIC "
-                          "need and which keeps characters apart" % (ch, n))
+            if allow_col5:
+                col5 += 1
+            else:
+                errors.append("%s (#%02X) draws in column 5, which is the gap "
+                              "that keeps characters apart" % (ch, n))
         if any(b & 0x03 for b in g):
             warnings.append("%s (#%02X) draws in columns 6-7, never blitted" % (ch, n))
         if not any(g) and n != 0x20:
             notes.append("%s (#%02X) is blank" % (ch, n))
+    if col5:
+        notes.append("%d glyphs use column 5, which this block is allowed to" % col5)
     return errors, warnings, notes
 
 
@@ -119,25 +138,34 @@ def main():
                     help="palette index the glyphs are drawn in (default 3)")
     ap.add_argument("--out", help="write the extracted FONT.BIN here")
     ap.add_argument("--sr6", help="optional: write raw Screen 6 VRAM dump (.SR6) here")
-    ap.add_argument("--origin", default="0,0",
-                    help="grid origin in the sheet (the reference sheet is 0,12)")
+    ap.add_argument("--variant", choices=sorted(VARIANTS),
+                    help="block to read out of the four weight sheet; sets the "
+                         "origin and the column 5 rule")
+    ap.add_argument("--origin",
+                    help="grid origin in the sheet, overrides --variant "
+                         "(default 0,0; the reference sheet is 0,12)")
     ap.add_argument("--strict", action="store_true",
                     help="treat warnings as errors too")
     a = ap.parse_args()
 
     p = Path(a.sheet)
     px = read_png(p) if p.suffix.lower() == ".png" else read_sr6(p)
-    ox, oy = (int(v) for v in a.origin.split(","))
-    font = extract(px, a.ink, (ox, oy))
-    errors, warnings, notes = check(font)
+
+    origin, allow_col5 = VARIANTS.get(a.variant, ((0, 0), False))
+    if a.origin:
+        origin = tuple(int(v) for v in a.origin.split(","))
+    font = extract(px, a.ink, origin)
+    errors, warnings, notes = check(font, allow_col5)
 
     glyphs = sum(1 for n in range(256) if any(font[n * 8:n * 8 + 8]))
-    print("%s: %d non-blank glyphs, ink index %d" % (p.name, glyphs, a.ink))
+    print("%s [%s @ %d,%d]: %d non-blank glyphs, ink index %d"
+          % (p.name, a.variant or "single grid", origin[0], origin[1],
+             glyphs, a.ink))
     for tag, items in (("ERROR", errors), ("WARN", warnings), ("note", notes)):
         for m in items:
             print("  %-5s %s" % (tag, m))
     if not errors and not warnings:
-        print("  all printable glyphs respect the column 0-4 rule")
+        print("  all printable glyphs respect this block's column rules")
 
     if a.out and not errors:
         Path(a.out).write_bytes(font)
