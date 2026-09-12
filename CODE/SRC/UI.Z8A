@@ -307,7 +307,7 @@ BLTCHTR         PUSH    AF
                 ADD     A, A            ; * 8
                 LD      L, A
                 LD      H, 0
-                LD      DE, FNORM_SY    ; 224
+                LD      DE, FNORM_SY    ; 256
                 ADD     HL, DE
                 LD      (VDP_SY), HL
 

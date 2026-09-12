@@ -246,7 +246,12 @@ SCRINIT         LD      A, 6
                 OTIR
                 EI
 
-                ; CLEAR VRAM (HMMV 512x212)
+                ; CLEAR VRAM (HMMV 512x256 = #00000-#07FFF)
+                ; 256 LINES, NOT 212: LINES 212-255 ARE #06A00-#07FFF, WHICH AN
+                ; R#23 HARDWARE SCROLL WOULD PUT ON SCREEN. THEY COME UP HOLDING
+                ; WHATEVER DOS LEFT THERE. THE FONT TABLES START AT LINE 256
+                ; (VR_FNORM = #08000) AND ARE UPLOADED AFTERWARDS BY FONTINIT,
+                ; SO THIS FILL NEVER REACHES THEM.
                 LD      HL, 0
                 LD      (VDP_SX), HL
                 LD      (VDP_SY), HL
@@ -254,7 +259,7 @@ SCRINIT         LD      A, 6
                 LD      (VDP_DY), HL
                 LD      HL, 512
                 LD      (VDP_NX), HL
-                LD      HL, 212
+                LD      HL, 256
                 LD      (VDP_NY), HL
                 LD      A, CLR_BG
                 LD      (VDP_CLR), A
