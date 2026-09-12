@@ -131,6 +131,10 @@ DRWGUT          ; LEFT GUTTER (LINE NUMBERS BACKGROUND)
                 CALL    HMMV
 
                 CALL    DRWLNUM
+
+                ; THE FILL ABOVE WIPED THE THUMB, SO THE CACHE IS STALE
+                XOR     A
+                LD      (THMBY), A
                 CALL    DRWSCRL
                 RET
 
@@ -148,6 +152,62 @@ DRWGUT          ; LEFT GUTTER (LINE NUMBERS BACKGROUND)
 
 DRWLNUM         LD      B, TXRFIRST     ; ROW 1
 .LNUMLP         PUSH    BC
+                CALL    DRWLNRW
+                POP     BC
+                INC     B
+                LD      A, B
+                CP      TXRLAST + 1
+                JR      NZ, .LNUMLP
+                RET
+
+
+; - DRWLN1 -----------------------------
+; - CLEAR ONE GUTTER CELL AND DRAW ITS LINE NUMBER
+; - IN:  B = SCREEN ROW (1..24)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+; - THE SCROLL PATH NEEDS THIS ONE AND ONLY THIS ONE: THE SCROLL HMMM CARRIES
+; - THE OTHER 23 NUMBERS WITH IT. THE CELL HAS TO BE CLEARED FIRST BECAUSE
+; - BLTCHTR BLITS TRANSPARENTLY AND WOULD OTHERWISE OVERPRINT THE OLD DIGITS.
+; - BEYOND EOF THE CLEARED CELL IS THE CORRECT RESULT, SO DRWLNRW DRAWS
+; - NOTHING AND THE CELL STAYS BLANK.
+; -
+
+DRWLN1          PUSH    BC
+                LD      A, B
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; DY = ROW * 8
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_DY), HL
+                LD      HL, 0
+                LD      (VDP_SX), HL
+                LD      (VDP_SY), HL
+                LD      (VDP_DX), HL    ; DX = 0
+                LD      HL, GUTL_PX     ; NX = 24
+                LD      (VDP_NX), HL
+                LD      HL, CELLH       ; NY = 8
+                LD      (VDP_NY), HL
+                LD      A, CLR_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+                POP     BC
+                JP      DRWLNRW         ; TAIL CALL
+
+
+; - DRWLNRW ----------------------------
+; - DRAW THE LINE NUMBER FOR ONE SCREEN ROW, WITHOUT CLEARING
+; - IN:  B = SCREEN ROW (1..24)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DRWLNRW         PUSH    BC
                 ; CALC LINE = TOPLINE + B - 1
                 LD      HL, (TOPLINE)
                 LD      A, B
@@ -158,7 +218,7 @@ DRWLNUM         LD      B, TXRFIRST     ; ROW 1
 
                 LD      DE, (TOTLINES)
                 CALL    CMPHLDE
-                JR      NC, .NEXTROW    ; BEYOND EOF: DO NOT DRAW
+                JR      NC, .DONE       ; BEYOND EOF: DO NOT DRAW
 
                 ; 1-BASED LINE NUMBER: HL = HL + 1
                 INC     HL
@@ -193,7 +253,7 @@ DRWLNUM         LD      B, TXRFIRST     ; ROW 1
 .D3             LD      A, (NUMBUF + 3)
                 LD      HL, 12
                 CALL    BLTCHTR
-                JR      .NEXTROW
+                JR      .DONE
 
 .F4DIG          LD      HL, 0
                 CALL    BLTCHTR
@@ -207,12 +267,9 @@ DRWLNUM         LD      B, TXRFIRST     ; ROW 1
                 LD      HL, 18
                 CALL    BLTCHTR
 
-.NEXTROW        POP     BC
-                INC     B
-                LD      A, B
-                CP      TXRLAST + 1
-                JR      NZ, .LNUMLP
+.DONE           POP     BC
                 RET
+
 
 NUMBUF          DEFS    4
 
@@ -363,28 +420,111 @@ BLTSTR          LD      A, (HL)
 ; --- DRWSCRL             ----------------------------------------
 
 
-; - DRWSCRL ----------------------------
-; - DRAW SCROLLBAR THUMB
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: ALL
+; - SCRLPOS ----------------------------
+; - THUMB TOP Y FOR THE CURRENT VIEWPORT
+; - IN:  NONE (USES TOPLINE, TOTLINES)
+; - OUT: A = TOP Y IN PIXELS (THMTOP .. THMTOP + THMTRAV)
+; - CLOBBERS: AF, BC, DE, HL
+; -
+; - Y = THMTOP + TOPLINE * THMTRAV / (TOTLINES - SCRROWS). THE DIVISOR IS
+; - NORMALISED DOWN TO ONE BYTE FIRST, SHIFTING BOTH TERMS RIGHT TOGETHER:
+; - THAT KEEPS THMTRAV * R INSIDE 16 BITS FOR MULT12 AND KEEPS DIV16 INSIDE
+; - ITS SAFE RANGE. MEASURED COST OF THE SHIFT: AT MOST 2 PX OF THE 168 PX
+; - TRAVEL, A QUARTER OF A CHARACTER.
 ; -
 
-DRWSCRL         LD      HL, 512 - GUTR_PX ; DX = 504
-                LD      (VDP_DX), HL
-                LD      HL, 8           ; DY = 8
+SCRLPOS         LD      HL, (TOTLINES)
+                LD      DE, SCRROWS
+                OR      A
+                SBC     HL, DE
+                JR      Z, .TOP         ; DOCUMENT FITS EXACTLY
+                JR      C, .TOP         ; DOCUMENT IS SHORTER THAN THE VIEWPORT
+
+                EX      DE, HL          ; DE = DIVISOR
+                LD      HL, (TOPLINE)
+                CALL    CMPHLDE         ; CY IF TOPLINE < DIVISOR
+                JR      C, .NORM
+                LD      A, THMTOP + THMTRAV
+                RET                     ; AT OR PAST THE LAST PAGE: BOTTOM STOP
+
+.NORM           LD      A, D            ; NORMALISE WHILE THE DIVISOR > 255
+                OR      A
+                JR      Z, .SCALE
+                SRL     D
+                RR      E
+                SRL     H
+                RR      L
+                JR      .NORM
+
+.SCALE          PUSH    DE              ; KEEP THE DIVISOR
+                EX      DE, HL          ; DE = NUMERATOR
+                LD      A, THMTRAV
+                CALL    MULT12          ; HL = THMTRAV * NUMERATOR
+                POP     DE
+                CALL    DIV16           ; BC = QUOTIENT (0..THMTRAV)
+                LD      A, C
+                ADD     A, THMTOP
+                RET
+
+.TOP            LD      A, THMTOP
+                RET
+
+
+; - BARFILL ----------------------------
+; - FILL ONE THUMB-SIZED CELL OF THE SCROLLBAR TRACK
+; - IN:  A = TOP Y IN PIXELS
+; -      C = FILL BYTE (CLR_UI ERASES, CLR_HI PAINTS)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+BARFILL         LD      L, A
+                LD      H, 0
                 LD      (VDP_DY), HL
+                LD      HL, 0
+                LD      (VDP_SX), HL
+                LD      (VDP_SY), HL
+                LD      HL, 512 - GUTR_PX ; DX = 504
+                LD      (VDP_DX), HL
                 LD      HL, GUTR_PX     ; NX = 8
                 LD      (VDP_NX), HL
-                LD      HL, 24          ; THUMB HEIGHT = 24
+                LD      HL, THMH        ; NY = 24
                 LD      (VDP_NY), HL
-                LD      A, CLR_HI
+                LD      A, C
                 LD      (VDP_CLR), A
                 XOR     A
                 LD      (VDP_ARG), A
                 LD      HL, VDPCMBLK
-                CALL    HMMV
-                RET
+                JP      HMMV            ; TAIL CALL
+
+
+; - DRWSCRL ----------------------------
+; - REFRESH THE SCROLLBAR THUMB IF IT HAS MOVED
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+; - COSTS NOTHING WHEN THE THUMB HAS NOT MOVED, WHICH IS THE COMMON CASE ON A
+; - ONE LINE SCROLL OF A LONG DOCUMENT. DRWGUT ZEROES THMBY BEFORE CALLING,
+; - BECAUSE ITS OWN GUTTER FILL ERASES THE THUMB.
+; -
+
+DRWSCRL         CALL    SCRLPOS         ; A = WANTED TOP Y
+                LD      HL, THMBY
+                CP      (HL)
+                RET     Z               ; UNCHANGED: NOTHING TO REPAINT
+
+                PUSH    AF              ; KEEP THE NEW POSITION
+                LD      A, (HL)
+                OR      A
+                JR      Z, .PAINT       ; NOTHING ON SCREEN YET
+                LD      C, CLR_UI       ; ERASE THE OLD THUMB
+                CALL    BARFILL
+
+.PAINT          POP     AF
+                LD      (THMBY), A
+                LD      C, CLR_HI
+                JP      BARFILL         ; TAIL CALL
 
 
 ; --- DRWCUR                ----------------------------------------

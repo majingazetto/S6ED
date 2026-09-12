@@ -34,6 +34,18 @@ TXRFIRST    EQU     1               ; FIRST TEXT ROW
 TXRLAST     EQU     24              ; LAST TEXT ROW
 STBROW          EQU     25              ; STATUS BAR ROW
 
+                ; SCROLL RECTANGLE. THE VERTICAL SCROLL HMMM COVERS THE LINE
+                ; NUMBER GUTTER AS WELL AS THE TEXT, SO THE NUMBERS TRAVEL IN
+                ; HARDWARE AND ONLY THE ONE NEW ROW HAS TO BE DRAWN. THE
+                ; SCROLLBAR AT X 504-511 STAYS OUTSIDE IT.
+SCRLWPX         EQU     GUTL_PX + TXAREAPX      ; 504
+
+                ; SCROLLBAR THUMB GEOMETRY
+THMTOP          EQU     TXORG_Y                 ; 8: TOP OF THE TRACK
+THMTRK          EQU     SCRROWS * CELLH         ; 192: TRACK HEIGHT
+THMH            EQU     24                      ; THUMB HEIGHT
+THMTRAV         EQU     THMTRK - THMH           ; 168: TRAVEL RANGE
+
 
 ; --- VRAM MAP                  ----------------------------------------
 
