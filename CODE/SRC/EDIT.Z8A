@@ -221,7 +221,7 @@ EDPSHWR         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 LD      HL, (TOPLINE)
                 INC     HL
                 LD      (TOPLINE), HL
-                CALL    SCROLLDN        ; RENDERS ROW 24 AND THE GUTTER
+                CALL    SCROLLDN        ; RENDERS ROW 24 AND ITS LINE NUMBER
 
                 LD      B, TXRLAST - 1  ; ROW 23 NOW HOLDS THE SHORTENED HEAD
                 CALL    RENDEROW

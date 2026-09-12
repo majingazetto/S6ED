@@ -53,6 +53,12 @@ SEGCNT          DEFB    0               ; ENTRIES USED IN SEGTBL
 CURX            DEFB    0               ; CURSOR COLUMN (0-79, DOC SPACE)
 CURY            DEFB    0              ; CURSOR ROW    (0-23, VIEWPORT)
 
+                ; TOP Y OF THE SCROLLBAR THUMB AS IT IS CURRENTLY PAINTED.
+                ; 0 MEANS NOTHING IS PAINTED -- SCRLPOS NEVER RETURNS 0, AND
+                ; INIT ZEROES EVERY VARIABLE, SO THE SENTINEL COSTS NO SETUP.
+
+THMBY           DEFB    0               ; DRWSCRL: THUMB POSITION CACHE
+
 TOPLINE         DEFW    0               ; FIRST VISIBLE DOCUMENT LINE (0-BASED)
 DOCLINE         DEFW    0               ; CURSOR DOCUMENT LINE (= TOPLINE + CURY)
 TOTLINES        DEFW    1               ; TOTAL LINES IN DOCUMENT

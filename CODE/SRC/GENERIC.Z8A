@@ -411,6 +411,37 @@ MULT12          LD      HL,0
                 RET
 
 
+; - DIV16 ------------------------------
+; - UNSIGNED 16-BIT DIVISION
+; - IN:  HL = DIVIDEND
+; -      DE = DIVISOR (SEE THE LIMIT BELOW)
+; - OUT: BC = QUOTIENT
+; -      HL = REMAINDER
+; - CLOBBERS: AF, BC, DE, HL
+; -
+; - RESTORING DIVISION, 16 ITERATIONS. THE PARTIAL REMAINDER IS SHIFTED WITH
+; - ADC HL,HL, WHICH DROPS BIT 15, SO A DIVISOR ABOVE #8000 CAN LOSE THE TOP
+; - BIT OF THE REMAINDER AND RETURN GARBAGE. SCRLPOS, THE ONLY CALLER TODAY,
+; - NORMALISES ITS DIVISOR DOWN TO A SINGLE BYTE FIRST.
+; -
+
+DIV16           LD      B, H
+                LD      C, L            ; BC = DIVIDEND
+                LD      HL, 0           ; HL = REMAINDER
+                LD      A, 16           ; 16 BITS TO PROCESS
+.LOOP           SLA     C
+                RL      B               ; DIVIDEND LEFT, MSB INTO CARRY
+                ADC     HL, HL          ; REMAINDER LEFT, TAKING THAT BIT
+                SBC     HL, DE
+                JR      NC, .SETBIT
+                ADD     HL, DE          ; UNDERFLOWED: RESTORE THE REMAINDER
+                JR      .NEXT
+.SETBIT         INC     C               ; QUOTIENT BIT = 1 (BIT 0 IS CLEAR)
+.NEXT           DEC     A
+                JR      NZ, .LOOP
+                RET
+
+
 ; --- TBL                               ----------------------------------------
 
 
