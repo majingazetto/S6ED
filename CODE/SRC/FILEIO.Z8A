@@ -82,16 +82,22 @@ FILELOAD        PUSH    HL
 .ISCR           LD      A, 1
                 LD      (WASCR), A
                 CALL    STORELINE
+                JR      C, .OOM
                 JR      .SKIP
 
 .ISLF           LD      A, (WASCR)
                 AND     A
                 JR      NZ, .SKIPLF     ; IF CRLF, SKIP THE LF
                 CALL    STORELINE
+                JR      C, .OOM
                 JR      .SKIP
 .SKIPLF         XOR     A
                 LD      (WASCR), A
                 JR      .SKIP
+
+.OOM            POP     HL              ; BALANCE PUSH HL IN .PROCLP
+                POP     BC              ; BALANCE PUSH BC IN .PROCLP
+                JR      .CLSFIL
 
 .SKIP           POP     HL
                 INC     HL
@@ -170,6 +176,10 @@ STORELINE       LD      A, (TXSEG)
                 LD      DE, (LINEOFF)
                 CALL    DIRWRITE
                 
+                LD      HL, (TOTLINES)
+                INC     HL
+                LD      (TOTLINES), HL
+
                 ; PREPARE NEXT LINE RECORD OFFSET
                 LD      HL, (LINEOFF)
                 LD      DE, WORKSIZ
@@ -182,7 +192,7 @@ STORELINE       LD      A, (TXSEG)
                 JR      C, .NOTFULL
 
                 CALL    SEGGET
-                JP      C, ERRMEM
+                RET     C               ; CY = 1: OUT OF MEMORY FOR NEXT SEGMENT
                 LD      (TXSEG), A
                 CALL    PUTP2
                 LD      HL, 0
@@ -190,10 +200,7 @@ STORELINE       LD      A, (TXSEG)
 
 .NOTFULL        XOR     A
                 LD      (CURLLEN), A
-                
-                LD      HL, (TOTLINES)
-                INC     HL
-                LD      (TOTLINES), HL
+                AND     A               ; CY = 0: SUCCESS
                 RET
 
 

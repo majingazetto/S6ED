@@ -281,16 +281,16 @@ SEGFREE         LD      A, (SEGCNT)
 
 
 ; - SEGTRIM ----------------------------
-; - FREE EVERY TEXT SEGMENT GROWN BEYOND THE FIRST
+; - FREE EVERY TEXT SEGMENT GROWN DYNAMICALLY
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL
-; - KEEPS SEGTBL ENTRY 0 (DIRECTORY) AND ENTRY 1 (FIRST TEXT SEGMENT)
+; - FREES ALL SEGMENTS IN SEGTBL (INITIAL SEGMENTS ARE IN TPA)
 ; -
 
 SEGTRIM         LD      A, (SEGCNT)
-                CP      3
-                RET     C               ; NOTHING GREW PAST THE FIRST TWO
+                AND     A
+                RET     Z               ; NOTHING IN SEGTBL
                 DEC     A
                 LD      (SEGCNT), A
                 LD      C, A

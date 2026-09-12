@@ -26,14 +26,11 @@
 ; - CALL AFTER MAPINIT
 ; -
 
-BUFINIT         CALL    SEGGET          ; LINE DIRECTORY
-                JP      C, ERRMEM
-                LD      (DIRSEG), A
-                CALL    PUTP1           ; MAP TO PAGE 1, NEVER SWITCHED AGAIN
+BUFINIT         LD      A, (DEFSEG1)
+                LD      (DIRSEG), A     ; USE TPA PAGE 1 SEGMENT (ALREADY MAPPED)
 
-                CALL    SEGGET          ; FIRST TEXT SEGMENT
-                JP      C, ERRMEM
-                LD      (TXSEG0), A
+                LD      A, (DEFSEG2)
+                LD      (TXSEG0), A     ; USE TPA PAGE 2 SEGMENT FOR FIRST 101 LINES
                 ; FALL THROUGH INTO BUFRESET
 
 

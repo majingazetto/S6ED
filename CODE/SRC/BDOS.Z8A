@@ -340,13 +340,16 @@ DWRITE          LD      C,_WRITE
 ; - HL: FILENAME ASCIIZ
 ; - OUTPUT: 
 ; -     A: #F
+; -     CY: 0 = SUCCESS, 1 = ERROR
 ; - 
 
 DCREATE         EX      DE,HL
-                XOR     A
+                XOR     A               ; A = 0: OPEN MODE READ/WRITE
+                LD      B, 0            ; B = 0: NORMAL FILE, OVERWRITE EXISTING (B7=0)
                 LD      C,_CREATE
                 CALL    BDOS
-                LD      A,B
+                RET     C               ; IF ERROR, RETURN CY=1
+                LD      A,B             ; A = FILE HANDLE
                 RET     
 
 
