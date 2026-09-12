@@ -12,3 +12,7 @@ CODE/screen*.png
 
 # --- OS ---
 .DS_Store
+
+# --- PYTHON ---
+__pycache__/
+*.pyc

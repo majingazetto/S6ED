@@ -40,7 +40,8 @@ ifeq ($(DEBUG),1)
 DEFINES			+= -DDEBUG
 endif
 
-# FONTBIN=1 uses the bundled RES/FONT.BIN instead of the MSX ROM charset.
+# FONTBIN=1 uses the bundled RES/FONT.BIN instead of the MSX ROM charset (default: 1).
+FONTBIN			?= 1
 ifeq ($(FONTBIN),1)
 DEFINES			+= -D_FONTBIN_
 endif
@@ -68,6 +69,9 @@ $(DSKFILE): $(OUTPUT) TEST.TXT AUTOEXEC.BAT
 	@$(DSKTOOL) A $(DSKFILE) $(OUTPUT) TEST.TXT AUTOEXEC.BAT
 
 # -	 Build Target ------------------------------------------------------------
+
+$(RES_DIR)/FONT.BIN: $(RES_DIR)/FONT.PNG $(RES_DIR)/fontcheck.py
+	python3 $(RES_DIR)/fontcheck.py $< --out $@
 
 $(OUTPUT): $(ALL_SOURCES_GEN) $(RES_DIR)/FONT.BIN
 	@$(ASM) --lst=$(LSTFILE) --sym=$(SYMFILE) $(INCLUDES) $(DEFINES) $(MAIN)
