@@ -3,7 +3,7 @@
 ;                                       ****************************************
 ;
 ; 6X8 CHARSET (256 GLYPHS X 8 BYTES, 1BPP, INK IN BITS 7-2).
-; EXPANDS INTO VRAM FONT TABLE AT VR_FNORM (FNORM_SY = 224).
+; EXPANDS INTO THE VRAM FONT TABLE AT VR_FNORM (FNORM_SY = 256).
 ; GLYPH N: SX = (N & 31) * 8, SY = FNORM_SY + (N >> 5) * 8.
 ;
 ; SOURCE: THE MSX ROM CHARSET, PULLED OUT OF THE MAIN BIOS AT STARTUP. IT IS
@@ -81,10 +81,19 @@ RDBIOS          PUSH    BC
 
 
 ; - FONTINIT ---------------------------
-; - EXPAND THE CHARSET TO VRAM
+; - EXPAND THE 1BPP CHARSET INTO THE NORMAL FONT TABLE IN VRAM
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
+; -
+; - THE TABLE IS WALKED BY VRAM LINE, NOT BY GLYPH. ONE VRAM LINE HOLDS THE
+; - SAME SCANLINE OF 32 CONSECUTIVE GLYPHS (32 X 2 BYTES = 64 SEQUENTIAL
+; - BYTES), SO THE WHOLE TABLE COSTS 64 SETWRT INSTEAD OF ONE PER GLYPH LINE.
+; - SOURCE STRIDE INSIDE A LINE IS 8: GLYPH N ROW L LIVES AT FONTSRC + N*8 + L.
+; -
+; - THE SCREEN IS BLANKED FOR THE UPLOAD. VRAM TIMING IN GRAPHIC 5 DEMANDS A
+; - WIDE GAP BETWEEN ACCESSES WHILE THE DISPLAY IS ACTIVE, AND THIS LOOP IS
+; - TIGHTER THAN THAT.
 ; -
 
 FONTINIT
@@ -92,62 +101,50 @@ FONTINIT
                 CALL    FONTROM         ; PULL THE CHARSET OUT OF THE BIOS
                 ENDIF
 
-                LD      DE, FONTSRC     ; SOURCE 1BPP BYTES
-                LD      C, 0            ; CHAR 0..255
-.CHARLP         LD      B, 0            ; LINE 0..7
+                LD      IX, DISSCR_B
+                CALL    BIOSCALL
+
+                LD      HL, VR_FNORM    ; RUNNING VRAM LINE ADDRESS
+                LD      DE, FONTSRC     ; BASE OF THE CURRENT GLYPH ROW
+                LD      C, 8            ; 8 GLYPH ROWS OF 32 GLYPHS
+
+.ROWLP          PUSH    DE              ; KEEP THE GLYPH ROW BASE
+                LD      B, 8            ; 8 SCANLINES PER GLYPH ROW
+
 .LINELP         PUSH    BC
-                PUSH    DE
-                LD      A, C
-                CALL    CALCVRAM        ; HL = VRAM ADDRESS
-                CALL    SETWRT          ; SET VRAM POINTER
-                POP     DE
-                LD      A, (DE)         ; 1BPP ROW BYTE
-                INC     DE
-                PUSH    DE
-                CALL    EXPNORM         ; D = BYTE 0, E = BYTE 1
-                LD      A, D
-                OUT     (VDPDR), A
-                LD      A, E
-                OUT     (VDPDR), A
-                POP     DE
-                POP     BC
-                INC     B
-                LD      A, B
-                CP      8
-                JR      NZ, .LINELP
-                
-                INC     C
-                JR      NZ, .CHARLP
-                RET
-
-
-; - CALCVRAM ---------------------------
-; - CALC VRAM ADDRESS FOR CHAR C, LINE B
-; - IN:  A = CHAR (0..255), B = LINE (0..7)
-; - OUT: HL = VRAM BYTE ADDRESS (#7000..#8FFF)
-; - CLOBBERS: AF
-; -
-
-CALCVRAM        PUSH    BC
-                AND     %11100000
-                RRCA
-                RRCA                    ; (C >> 5) * 8
-                ADD     A, B            ; + LINE = Y_OFF (0..63)
-                LD      H, A
-                SRL     H               ; H = Y_OFF >> 1
-                RRA                     ; BIT 0 OF Y_OFF INTO CARRY
-                LD      A, 0
-                RRA                     ; A = (Y_OFF & 1) << 7 (#00 OR #80)
-                POP     BC
-                LD      L, A
-                LD      A, C
-                AND     %00011111       ; C & 31
-                ADD     A, A            ; * 2
-                OR      L               ; COMBINE WITH LOW BYTE
-                LD      L, A
+                PUSH    DE              ; SCANLINE SOURCE START
+                PUSH    HL              ; VRAM LINE ADDRESS
+                CALL    SETWRT
+                DI                      ; SETWRT ENDS WITH AN UNCONDITIONAL EI;
+                                        ; KEEP THE 64-BYTE BURST ATOMIC
+                LD      B, 32           ; 32 GLYPHS SHARE THIS VRAM LINE
+.GLYPHLP        LD      A, (DE)         ; 1BPP ROW BYTE
+                CALL    EXPNORM         ; H = PIXELS 0-3, L = PIXELS 4-5
                 LD      A, H
-                ADD     A, #70          ; VR_FNORM >> 8 = #70
-                LD      H, A
+                OUT     (VDPDR), A
+                LD      A, L
+                OUT     (VDPDR), A
+                LD      HL, 8           ; SAME SCANLINE OF THE NEXT GLYPH
+                ADD     HL, DE
+                EX      DE, HL
+                DJNZ    .GLYPHLP
+                EI
+
+                POP     HL              ; VRAM LINE ADDRESS
+                LD      DE, 128         ; NEXT VRAM LINE
+                ADD     HL, DE
+                POP     DE              ; SCANLINE SOURCE START
+                INC     DE              ; NEXT SCANLINE OF THE SAME GLYPHS
+                POP     BC
+                DJNZ    .LINELP
+
+                POP     DE              ; GLYPH ROW BASE
+                INC     D               ; + 256 BYTES = NEXT GLYPH ROW
+                DEC     C
+                JR      NZ, .ROWLP
+
+                LD      IX, ENASCR_B
+                CALL    BIOSCALL
                 RET
 
 
@@ -156,32 +153,37 @@ CALCVRAM        PUSH    BC
 
 ; - EXPNORM ----------------------------
 ; - EXPAND 1BPP ROW BYTE TO 2-BYTE 2BPP (COLOR 1)
-; - IN:  A = 1BPP ROM BYTE (BITS 7-2 = 6 PIXELS)
-; - OUT: D = BYTE 0 (PIXELS 0-3), E = BYTE 1 (PIXELS 4-5)
-; - CLOBBERS: AF, B, DE
+; - IN:  A = 1BPP ROW BYTE (BITS 7-2 = 6 PIXELS)
+; - OUT: H = BYTE 0 (PIXELS 0-3), L = BYTE 1 (PIXELS 4-5)
+; - CLOBBERS: AF, HL
+; -
+; - GRAPHIC 5 PACKS 4 PIXELS OF 2 BITS PER BYTE, MSB FIRST, SO PIXEL K OF INK
+; - COLOR 1 IS BIT (6 - 2*K). BITS 1-0 OF THE SOURCE ARE COLUMNS 6-7, WHICH ARE
+; - NEVER BLITTED AND ARE IGNORED HERE. THE SOURCE BYTE IS WALKED WITH ADD A,A
+; - SO NO SECOND REGISTER IS NEEDED -- FONTINIT KEEPS ITS SOURCE POINTER IN DE
+; - AND ITS GLYPH COUNTER IN B ACROSS THE CALL.
 ; -
 
-EXPNORM         LD      B, A
-                LD      DE, 0
-                BIT     7, B
-                JR      Z, .P1
-                SET     6, D
-.P1             BIT     6, B
-                JR      Z, .P2
-                SET     4, D
-.P2             BIT     5, B
-                JR      Z, .P3
-                SET     2, D
-.P3             BIT     4, B
-                JR      Z, .P4
-                SET     0, D
-.P4             BIT     3, B
-                JR      Z, .P5
-                SET     6, E
-.P5             BIT     2, B
-                JR      Z, .DONE
-                SET     4, E
-.DONE           RET
+EXPNORM         LD      HL, 0
+                ADD     A, A            ; BIT 7 -> CARRY
+                JR      NC, .P1
+                SET     6, H
+.P1             ADD     A, A
+                JR      NC, .P2
+                SET     4, H
+.P2             ADD     A, A
+                JR      NC, .P3
+                SET     2, H
+.P3             ADD     A, A
+                JR      NC, .P4
+                SET     0, H
+.P4             ADD     A, A
+                JR      NC, .P5
+                SET     6, L
+.P5             ADD     A, A
+                RET     NC
+                SET     4, L
+                RET
 
 
 ; --- ASSETS                    ----------------------------------------
