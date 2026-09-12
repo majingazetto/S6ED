@@ -5,6 +5,11 @@ Produces a 512x212 Screen 6 canvas holding the 256 glyph cells in exactly the
 layout the editor blits from: glyph N sits at ((N & 31) * 8, (N >> 5) * 8), so
 whatever comes back converts straight into FONT.BIN with no re-layout.
 
+With --variants it lays four of those grids out as 2x2 blocks -- NORMAL,
+BOLD, ITALIC and BOLD+ITALIC -- and pre-fills the three derived blocks by
+machine from NORMAL, so the artist retouches a starting point instead of
+drawing 756 glyphs from scratch.
+
 Colour 0 background, colour 1 ink (the only colour the artist draws in),
 colour 2 chrome and guides, colour 3 the reserved column.
 """
@@ -16,7 +21,7 @@ from pathlib import Path
 
 CELL_W, CELL_H = 8, 8          # VRAM pitch of one glyph slot
 DRAW_W = 5                     # columns 0-4: the artist's area
-BOLD_COL = 5                   # column 5: left free so BOLD can grow into it
+BOLD_COL = 5                   # column 5: the gap, and NORMAL must leave it
 SCREEN_W, SCREEN_H = 512, 212
 
 GRID_X, GRID_Y = 0, 12         # glyph grid origin
@@ -90,6 +95,77 @@ def italic(rows):
             for i, r in enumerate(rows)]
 
 
+def bolditalic(rows):
+    """Slant first, then thicken. Lossy at the right edge, unavoidably.
+
+    Either order pushes ink into column 6, which is never blitted: italic
+    lifts column 4 into column 5, and bold then has nowhere left to grow. On
+    the current face that costs 427 pixels across 91 of the 95 printable
+    glyphs, and two of them come out identical to plain ITALIC. Six pixels do
+    not hold both transforms, which is exactly why this block is the one worth
+    drawing by hand rather than deriving.
+    """
+    return bold(italic(rows))
+
+
+# --- FOUR WEIGHT SHEET LAYOUT --------------------------------------------
+# Four 256x64 blocks in a 2x2 arrangement inside the same 512x212 page. Two
+# blocks side by side come to 512 exactly, so there is no room for a gap or for
+# the row labels; FONTGUIDE keeps the single labelled grid as the per-glyph
+# reference. fontcheck.py carries the same origins -- keep the two in step.
+
+QUAD_W, QUAD_H = 32 * CELL_W, 8 * CELL_H       # one block: 256 x 64
+TITLE_Y = 1
+ROW1_Y, ROW2_Y = 20, 96                        # top of each band of blocks
+LEGEND_Y = 163
+
+VARIANTS = (
+    ("NORMAL",      (0,      ROW1_Y), None),
+    ("BOLD",        (QUAD_W, ROW1_Y), bold),
+    ("ITALIC",      (0,      ROW2_Y), italic),
+    ("BOLD+ITALIC", (QUAD_W, ROW2_Y), bolditalic),
+)
+
+LEGEND = (
+    "Blocks: NORMAL and BOLD on top, ITALIC and BOLD+ITALIC below. Rows: +00 +20 .. +E0.",
+    "Glyph N sits at ((N & 31) * 8, (N >> 5) * 8) inside its own block.",
+    "NORMAL: ink in columns 0-4. Column 5 stays empty; it is the gap between letters.",
+    "The other three: column 5 is yours. Columns 6-7 are never drawn, in any block.",
+    "The three derived blocks are pre-filled by machine from NORMAL. Redraw them freely.",
+    "BOLD+ITALIC loses its bold pixel off the right edge. Redraw that block first.",
+)
+
+
+def build_variants(font: bytes) -> Canvas:
+    """The four weight working sheet, pre-filled and ready to be drawn on."""
+    c = Canvas(SCREEN_W, SCREEN_H)
+    c.rect(0, 0, SCREEN_W, SCREEN_H, BG)
+    c.text(font, "S6ED 6x8 FONT SHEET - FOUR WEIGHTS - DRAW ON THIS ONE",
+           2, TITLE_Y, CHROME)
+
+    # Frame the blocks from the gaps between them, never from inside a cell, so
+    # nothing the artist gets can be mistaken for glyph ink. The one vertical
+    # rule sits on column 7 of the last cell of each left hand block, which the
+    # editor never blits and which fontcheck reads as chrome, not as ink.
+    for name, (qx, qy), fn in VARIANTS:
+        c.text(font, name, qx + 2, qy - CELL_H - 1, CHROME)
+        for code in range(256):
+            c.glyph(font, code,
+                    qx + (code & 31) * CELL_W,
+                    qy + (code >> 5) * CELL_H,
+                    transform=fn)
+    for y in (ROW1_Y, ROW2_Y):
+        c.rect(0, y - 1, SCREEN_W, 1, CHROME)
+        c.rect(0, y + QUAD_H, SCREEN_W, 1, CHROME)
+        c.rect(QUAD_W - 1, y, 1, QUAD_H, CHROME)
+
+    y = LEGEND_Y
+    for line in LEGEND:
+        c.text(font, line, 2, y, INK)
+        y += 8
+    return c
+
+
 def build(font: bytes, guides: bool) -> Canvas:
     c = Canvas(SCREEN_W, SCREEN_H)
     c.rect(0, 0, SCREEN_W, SCREEN_H, BG)
@@ -130,22 +206,23 @@ def build(font: bytes, guides: bool) -> Canvas:
     # engine will generate them. This is why column 5 has to stay empty.
     sample = "Hamburgefonstiv 0123"
     y = GRID_Y + 8 * CELL_H + 10
-    for name, fn in (("NORMAL", None), ("BOLD", bold), ("ITALIC", italic)):
+    for name, fn in (("NORMAL", None), ("BOLD", bold),
+                     ("ITALIC", italic), ("BOLD+ITALIC", bolditalic)):
         c.text(font, name, 2, y, CHROME)
-        c.text(font, sample, 56, y, INK, transform=fn)
+        c.text(font, sample, 80, y, INK, transform=fn)
         y += 10
 
     y += 6
     for line in (
         "RULES",
-        "  Ink only in columns 0-4 of each 8x8 cell.",
-        "  Column 5 (dotted yellow) must stay empty. BOLD grows one pixel right",
-        "  into it, ITALIC leans the top half into it, and it is what keeps",
+        "  Ink only in columns 0-4 of each 8x8 cell of the NORMAL block.",
+        "  Column 5 (dotted yellow) must stay empty there: it is what keeps",
         "  neighbouring characters from touching. Columns 6-7 are never drawn.",
+        "  BOLD, ITALIC and BOLD+ITALIC have blocks of their own on FONTSHEET",
+        "  and may use column 5. They arrive pre-filled by machine from NORMAL,",
+        "  sampled above; redraw them, that derivation is only a starting point.",
         "  Rows 0-6 for caps and x-height, baseline row 6, row 7 for descenders.",
         "  Monochrome: colour is chosen by the editor, not by the glyph.",
-        "  BOLD and ITALIC are generated from this one weight. Do not draw them.",
-        "  BOLD fills column 5, so bold text has no gap between letters. Expected.",
     ):
         c.text(font, line, 2, y, CHROME if line == "RULES" else INK)
         y += 8
@@ -203,20 +280,33 @@ def to_png(c: Canvas, palette) -> bytes:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--bios", required=True, help="MSX main BIOS ROM")
+    ap.add_argument("--bios", help="MSX main BIOS ROM, to bootstrap from scratch")
+    ap.add_argument("--font", help="FONT.BIN to build the sheets from (preferred)")
     ap.add_argument("--cgtable", default="0x1BBF",
                     help="charset offset inside the BIOS (default 0x1BBF)")
     ap.add_argument("--out", default="FONTSHEET", help="output basename")
     ap.add_argument("--guides", action="store_true",
                     help="annotated reference sheet instead of the clean one")
+    ap.add_argument("--variants", action="store_true",
+                    help="four weight 2x2 working sheet instead of one grid")
     a = ap.parse_args()
 
-    font = load_rom_charset(Path(a.bios), int(a.cgtable, 0))
-    if len(font) != 2048:
-        sys.exit("charset offset is past the end of the ROM")
+    if bool(a.bios) == bool(a.font):
+        sys.exit("give exactly one of --bios or --font")
+    if a.guides and a.variants:
+        sys.exit("--guides and --variants are different sheets; pick one")
+
+    if a.font:
+        font = Path(a.font).read_bytes()
+        if len(font) != 2048:
+            sys.exit("%s is %d bytes, expected 2048" % (a.font, len(font)))
+    else:
+        font = load_rom_charset(Path(a.bios), int(a.cgtable, 0))
+        if len(font) != 2048:
+            sys.exit("charset offset is past the end of the ROM")
 
     base = Path(a.out)
-    c = build(font, guides=a.guides)
+    c = build_variants(font) if a.variants else build(font, guides=a.guides)
     base.with_suffix(".SR6").write_bytes(to_sc6(c))
     base.with_suffix(".PL6").write_bytes(to_pl6(PALETTE))
     # Screen 6 palette as the editor sets it: black, white, blue, yellow.
