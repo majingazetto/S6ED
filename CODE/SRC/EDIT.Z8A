@@ -365,6 +365,356 @@ EDOVRCHR        CALL    EDINSCHR        ; FOR NOW, ROUTE TO INSERT
                 RET
 
 
+; --- REFLOW                    ----------------------------------------
+
+
+; - REFLOW -----------------------------
+; - CASCADE PARAGRAPH REFLOW STARTING AT LINE HL
+; - PULLS WORDS UPWARDS ACROSS SUBSEQUENT LINES UNTIL AN EMPTY LINE OR EOF
+; - IN:  HL = START LINE NUMBER (0-BASED)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+REFLOW          LD      (RFLINE), HL
+
+.RFLOOP         ; 1. CHECK IF NEXT LINE EXISTS (L + 1 < TOTLINES)
+                LD      HL, (RFLINE)
+                INC     HL              ; HL = L + 1
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                RET     NC              ; L + 1 >= TOTLINES: EOF REACHED, DONE!
+
+                ; 2. LOAD LINE L + 1 INTO WORKBUF2
+                CALL    LINEREAD        ; READS LINE L+1 INTO WORKBUF
+                LD      A, (WORKBUF)
+                OR      A
+                JR      NZ, .NOTEMP
+
+                ; LINE L+1 IS EMPTY (LEN == 0):
+                ; DELETE THE EMPTY LINE AND STOP (PARAGRAPH BOUNDARY)
+                LD      HL, (RFLINE)
+                INC     HL
+                CALL    LINEDEL
+                LD      HL, (TOTLINES)
+                DEC     HL
+                LD      (TOTLINES), HL
+                LD      A, #FF
+                LD      (MODIFIED), A
+                RET
+
+.NOTEMP         ; COPY LINE L+1 RECORD TO WORKBUF2
+                LD      HL, WORKBUF
+                LD      DE, WORKBUF2
+                LD      BC, WORKSIZ
+                LDIR
+
+                ; 3. LOAD LINE L INTO WORKBUF
+                LD      HL, (RFLINE)
+                CALL    LINEREAD
+                LD      A, (WORKBUF)
+                CP      TEXTCOLS        ; 80
+                JP      NC, .RFNEXT     ; LINE L IS FULL, ADVANCE TO L+1
+
+                ; 4. CALCULATE AVAILABLE SPACE ON LINE L
+                LD      E, A            ; E = LEN_A
+                LD      A, TEXTCOLS     ; 80
+                SUB     E               ; A = 80 - LEN_A
+                LD      (RFSPACE), A
+                XOR     A
+                LD      (RFSEP), A
+
+                ; DOES LINE L NEED A SEPARATOR SPACE?
+                ; ONLY IF LEN_A > 0 AND LAST CHAR IS NOT ' '
+                LD      A, (WORKBUF)
+                OR      A
+                JR      Z, .CHECKAL
+
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF
+                ADD     HL, DE          ; HL = WORKBUF + LEN_A (LAST CHAR)
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .CHECKAL
+
+                ; NEED SEPARATOR SPACE
+                LD      A, 1
+                LD      (RFSEP), A
+                LD      A, (RFSPACE)
+                DEC     A
+                JP      Z, .RFNEXT      ; ONLY 1 SPACE LEFT, CANNOT FIT ANY WORD
+                LD      (RFSPACE), A
+
+.CHECKAL        ; 5. CAN ENTIRE LINE L+1 FIT?
+                LD      A, (WORKBUF2)   ; LEN_B
+                LD      HL, RFSPACE
+                CP      (HL)
+                JP      Z, .RFALL       ; EXACT FIT
+                JP      C, .RFALL       ; FITS ENTIRELY
+
+                ; 6. PARTIAL FIT: FIND LONGEST WORD BOUNDARY <= RFSPACE
+                ; SCAN WORKBUF2 BACKWARDS FROM (RFSPACE) DOWN TO 1
+                LD      A, (RFSPACE)
+                LD      B, A            ; B = OFFSET IN LINE B (1..RFSPACE)
+.RFPART         LD      E, B
+                LD      D, 0
+                LD      HL, WORKBUF2
+                ADD     HL, DE          ; HL = WORKBUF2 + B
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .RFFND       ; FOUND SPACE!
+                DJNZ    .RFPART
+
+                ; NO WORD BOUNDARY FOUND WITHIN RFSPACE: STOP REFLOW
+                RET
+
+.RFFND          ; B = INDEX IN LINE B WHERE SPACE WAS FOUND
+                LD      A, B
+                LD      (RFCNT), A
+
+                ; APPEND SEPARATOR SPACE TO LINE L IF NEEDED
+                LD      A, (RFSEP)
+                OR      A
+                JR      Z, .NOPSEP
+
+                LD      A, (WORKBUF)    ; LEN_A
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      (HL), ' '
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+                LD      (HL), 0
+                LD      A, (WORKBUF)
+                INC     A
+                LD      (WORKBUF), A
+
+.NOPSEP         ; APPEND RFCNT BYTES FROM WORKBUF2 TO WORKBUF
+                LD      A, (WORKBUF)    ; CURRENT LEN_A
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE          ; DEST TEXT
+                EX      DE, HL          ; DE = DEST TEXT
+                LD      HL, WORKBUF2 + 1 ; HL = SOURCE TEXT
+                LD      A, (RFCNT)
+                LD      C, A
+                LD      B, 0
+                PUSH    BC
+                LDIR
+                POP     BC
+
+                ; APPEND ATTRIBUTES
+                LD      A, (WORKBUF)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE          ; DEST ATTR
+                EX      DE, HL          ; DE = DEST ATTR
+                LD      HL, WORKBUF2 + 1 + TEXTCOLS
+                LDIR
+
+                ; UPDATE LINE L LENGTH: LEN_A + RFCNT
+                LD      A, (WORKBUF)
+                LD      HL, RFCNT
+                ADD     A, (HL)
+                LD      (WORKBUF), A
+
+                CALL    .BLNK80
+
+                ; PERSIST UPDATED LINE L
+                LD      HL, (RFLINE)
+                CALL    LINEWRT
+
+                ; 7. UPDATE LINE L+1 FROM WORKBUF2 (SHIFT REMAINDER LEFT)
+                ; REMAINDER STARTS AFTER RFCNT IN WORKBUF2
+                LD      A, (WORKBUF2)   ; OLD LEN_B
+                LD      HL, RFCNT
+                SUB     (HL)
+                LD      B, A            ; B = INITIAL REMAINING CHARS
+                LD      A, (RFCNT)
+                INC     A               ; SKIP THE SPACE WE SPLIT AT
+                LD      C, A            ; C = 1-BASED SOURCE OFFSET IN WORKBUF2
+
+                ; SKIP ANY CONSECUTIVE LEADING SPACES IN THE REMAINDER
+.SKPPRE         LD      A, B
+                OR      A
+                JR      Z, .REMZERO
+                LD      E, C
+                LD      D, 0
+                LD      HL, WORKBUF2
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      ' '
+                JR      NZ, .SKPDONE
+                INC     C
+                DEC     B
+                JR      .SKPPRE
+
+.SKPDONE        ; B = REMAINING CHAR COUNT (1..80)
+                ; C = 1-BASED SOURCE OFFSET IN WORKBUF2
+                ; CONSTRUCT SHORTENED LINE L+1 IN WORKBUF
+                LD      A, B
+                LD      (WORKBUF), A    ; NEW LENGTH
+
+                ; COPY REMAINING TEXT FROM WORKBUF2 TO WORKBUF
+                LD      E, C
+                LD      D, 0
+                LD      HL, WORKBUF2
+                ADD     HL, DE          ; HL = WORKBUF2 + C
+                LD      DE, WORKBUF + 1
+                LD      C, B
+                LD      B, 0
+                PUSH    BC
+                LDIR
+                POP     BC
+
+                ; COPY REMAINING ATTRIBUTES FROM WORKBUF2 TO WORKBUF
+                LD      E, C
+                LD      D, 0
+                LD      HL, WORKBUF2 + TEXTCOLS
+                ADD     HL, DE          ; HL = WORKBUF2 + TEXTCOLS + C
+                LD      DE, WORKBUF + 1 + TEXTCOLS
+                LD      A, (WORKBUF)
+                LD      C, A
+                LD      B, 0
+                LDIR
+
+                CALL    .BLNK80
+
+                ; PERSIST SHORTENED LINE L+1
+                LD      HL, (RFLINE)
+                INC     HL
+                CALL    LINEWRT
+
+                LD      A, #FF
+                LD      (MODIFIED), A
+
+                ; ADVANCE RFLINE TO L + 1 AND CONTINUE CASCADE
+                JP      .RFNEXT
+
+.REMZERO        ; REMAINDER WAS EMPTY: DELETE LINE L+1
+                LD      HL, (RFLINE)
+                INC     HL
+                CALL    LINEDEL
+                LD      HL, (TOTLINES)
+                DEC     HL
+                LD      (TOTLINES), HL
+                LD      A, #FF
+                LD      (MODIFIED), A
+                JP      .RFLOOP
+
+.RFALL          ; ENTIRE LINE L+1 FITS ON LINE L!
+                LD      A, (RFSEP)
+                OR      A
+                JR      Z, .NOPSEP2
+
+                LD      A, (WORKBUF)    ; LEN_A
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      (HL), ' '
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+                LD      (HL), 0
+                LD      A, (WORKBUF)
+                INC     A
+                LD      (WORKBUF), A
+
+.NOPSEP2        LD      A, (WORKBUF2)   ; LEN_B
+                OR      A
+                JR      Z, .DELL1
+
+                LD      A, (WORKBUF)    ; CURRENT LEN_A
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE          ; DEST TEXT
+                EX      DE, HL          ; DE = DEST TEXT
+                LD      HL, WORKBUF2 + 1 ; HL = SOURCE TEXT
+                LD      A, (WORKBUF2)
+                LD      C, A
+                LD      B, 0
+                PUSH    BC
+                LDIR
+                POP     BC
+
+                ; APPEND ATTRIBUTES
+                LD      A, (WORKBUF)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE          ; DEST ATTR
+                EX      DE, HL          ; DE = DEST ATTR
+                LD      HL, WORKBUF2 + 1 + TEXTCOLS
+                LDIR
+
+                ; UPDATE LINE L LENGTH: LEN_A + LEN_B
+                LD      A, (WORKBUF)
+                LD      HL, WORKBUF2
+                ADD     A, (HL)
+                LD      (WORKBUF), A
+
+.DELL1          CALL    .BLNK80
+
+                ; PERSIST UPDATED LINE L
+                LD      HL, (RFLINE)
+                CALL    LINEWRT
+
+                ; DELETE LINE L+1 FROM DIRECTORY
+                LD      HL, (RFLINE)
+                INC     HL
+                CALL    LINEDEL
+
+                ; DECREMENT TOTLINES
+                LD      HL, (TOTLINES)
+                DEC     HL
+                LD      (TOTLINES), HL
+
+                LD      A, #FF
+                LD      (MODIFIED), A
+
+                ; DO NOT INCREMENT RFLINE; REPEAT FOR SAME RFLINE
+                JP      .RFLOOP
+
+.RFNEXT         ; ADVANCE TO NEXT LINE (L = L + 1)
+                LD      HL, (RFLINE)
+                INC     HL
+                LD      (RFLINE), HL
+                JP      .RFLOOP
+
+.BLNK80         ; BLANK CELLS OF WORKBUF FROM (WORKBUF) UP TO 79
+                LD      A, (WORKBUF)
+                CP      TEXTCOLS
+                RET     NC              ; ALREADY 80 COLS
+
+                LD      E, A
+                LD      D, 0
+                LD      A, TEXTCOLS
+                SUB     E
+                LD      B, A            ; B = 80 - LEN
+
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                PUSH    BC
+                PUSH    HL
+.BLKTXT         LD      (HL), ' '
+                INC     HL
+                DJNZ    .BLKTXT
+                POP     HL
+                POP     BC
+
+                LD      DE, TEXTCOLS
+                ADD     HL, DE
+.BLKATT         LD      (HL), 0
+                INC     HL
+                DJNZ    .BLKATT
+                RET
+
+
 ; --- EDDELBK                 ----------------------------------------
 
 
@@ -377,51 +727,101 @@ EDOVRCHR        CALL    EDINSCHR        ; FOR NOW, ROUTE TO INSERT
 
 EDDELBK         LD      A, (CURX)
                 OR      A
-                RET     Z               ; AT COL 0, CANNOT BACKSPACE
+                JR      Z, .ATCOL0
+
+                ; IN-LINE BACKSPACE (CURX > 0)
                 DEC     A
                 LD      (CURX), A
-                
+
                 ; LOAD LINE RECORD
                 LD      HL, (DOCLINE)
                 CALL    LINEREAD
-                
-                ; SHIFT LEFT FROM CURX UP TO COL 78
+
+                ; SHIFT LEFT FROM CURX UP TO COL 78 (TEXT AND ATTRS)
                 LD      A, (CURX)
                 LD      B, A
 .SHIFTLP        LD      A, B
                 CP      79
-                JR      Z, .BLANKLST
+                JR      Z, .BLANKLS
                 LD      E, B
                 LD      D, 0
+                ; SHIFT TEXT
                 LD      HL, WORKBUF + 2 ; SOURCE: WORKBUF + 1 + B + 1
                 ADD     HL, DE
                 LD      A, (HL)
                 DEC     HL              ; DEST: WORKBUF + 1 + B
                 LD      (HL), A
+                ; SHIFT ATTRIBUTE
+                LD      HL, WORKBUF + 1 + TEXTCOLS + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                DEC     HL
+                LD      (HL), A
                 INC     B
                 JR      .SHIFTLP
-                
-.BLANKLST       LD      HL, WORKBUF + 80
-                LD      (HL), ' '       ; BLANK LAST COL
-                
+
+.BLANKLS        LD      HL, WORKBUF + 80
+                LD      (HL), ' '       ; BLANK LAST TEXT COL
+                LD      HL, WORKBUF + 80 + TEXTCOLS
+                LD      (HL), 0         ; BLANK LAST ATTR COL
+
                 ; DECREASE LINE LENGTH IF > 0
                 LD      A, (WORKBUF)
                 OR      A
                 JR      Z, .DELWRT
                 DEC     A
                 LD      (WORKBUF), A
-                
+
 .DELWRT         LD      HL, (DOCLINE)
                 CALL    LINEWRT
-                
+
                 LD      A, (CURY)
                 INC     A
                 LD      B, A
                 CALL    RENDEROW
-                
+
                 LD      A, #FF
                 LD      (MODIFIED), A
                 RET
+
+.ATCOL0         ; BACKSPACE AT COLUMN 0
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                RET     NZ              ; IN WRAP_DEV: DO NOTHING AT COL 0
+
+                LD      HL, (DOCLINE)
+                LD      A, H
+                OR      L
+                RET     Z               ; AT DOCLINE 0: TOP OF DOC, DO NOTHING
+
+                ; READ PREVIOUS LINE (DOCLINE - 1) TO FIND SEAM COLUMN
+                DEC     HL
+                CALL    LINEREAD
+                LD      A, (WORKBUF)    ; FORMER LENGTH OF LINE L-1
+                LD      (CURX), A       ; CURSOR SITS AT THE SEAM
+
+                ; DOCLINE DECREMENTS TO LINE L-1
+                LD      HL, (DOCLINE)
+                DEC     HL
+                LD      (DOCLINE), HL
+
+                ; IF WE WERE AT THE TOP ROW OF VIEWPORT (CURY == 0), SCROLL TOPLINE UP
+                LD      A, (CURY)
+                OR      A
+                JR      NZ, .NOTOP
+                LD      HL, (TOPLINE)
+                DEC     HL
+                LD      (TOPLINE), HL
+
+.NOTOP          CALL    SETCURY         ; RECOMPUTE CURY = DOCLINE - TOPLINE
+
+                ; CASCADE REFLOW STARTING AT DOCLINE
+                LD      HL, (DOCLINE)
+                CALL    REFLOW
+
+                CALL    REDRAW          ; FULL REDRAW
+                CALL    DRWGUT          ; REDRAW GUTTER LINE NUMBERS
+                JP      DRWSCRL         ; TAIL CALL: RECOMPUTE SCROLLBAR
 
 
 ; --- EDDELCHR                  ----------------------------------------
@@ -436,42 +836,81 @@ EDDELBK         LD      A, (CURX)
 
 EDDELCHR        LD      HL, (DOCLINE)
                 CALL    LINEREAD
-                
+
+                LD      A, (WORKBUF)    ; LINE LENGTH
+                LD      B, A
                 LD      A, (CURX)
+                CP      B
+                JR      NC, .ATEOL      ; CURX >= LENGTH: AT OR PAST END OF LINE
+
+                ; IN-LINE DELETE (CURX < LENGTH)
                 LD      B, A
 .DCHSHFT        LD      A, B
                 CP      79
                 JR      Z, .DCHLAST
                 LD      E, B
                 LD      D, 0
+                ; SHIFT TEXT
                 LD      HL, WORKBUF + 2
+                ADD     HL, DE
+                LD      A, (HL)
+                DEC     HL
+                LD      (HL), A
+                ; SHIFT ATTRIBUTE
+                LD      HL, WORKBUF + 1 + TEXTCOLS + 1
                 ADD     HL, DE
                 LD      A, (HL)
                 DEC     HL
                 LD      (HL), A
                 INC     B
                 JR      .DCHSHFT
-                
+
 .DCHLAST        LD      HL, WORKBUF + 80
                 LD      (HL), ' '
-                
+                LD      HL, WORKBUF + 80 + TEXTCOLS
+                LD      (HL), 0
+
                 LD      A, (WORKBUF)
                 OR      A
                 JR      Z, .DCHWRT
                 DEC     A
                 LD      (WORKBUF), A
-                
+
 .DCHWRT         LD      HL, (DOCLINE)
                 CALL    LINEWRT
-                
+
                 LD      A, (CURY)
                 INC     A
                 LD      B, A
                 CALL    RENDEROW
-                
+
                 LD      A, #FF
                 LD      (MODIFIED), A
                 RET
+
+.ATEOL          ; CURX >= LENGTH: AT OR PAST END OF LINE
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                RET     NZ              ; IN WRAP_DEV: DO NOTHING PAST END OF LINE
+
+                ; IN WRAP_TXT: CHECK IF NEXT LINE EXISTS (DOCLINE + 1 < TOTLINES)
+                LD      HL, (DOCLINE)
+                INC     HL
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                RET     NC              ; NO NEXT LINE: BOTTOM OF DOCUMENT
+
+                ; CLAMP CURX TO CURRENT LENGTH (THE JOIN SEAM)
+                LD      A, (WORKBUF)
+                LD      (CURX), A
+
+                ; CASCADE REFLOW STARTING AT DOCLINE
+                LD      HL, (DOCLINE)
+                CALL    REFLOW
+
+                CALL    REDRAW
+                CALL    DRWGUT
+                JP      DRWSCRL         ; TAIL CALL: RECOMPUTE SCROLLBAR
 
 
 ; --- EDNWLIN                 ----------------------------------------
