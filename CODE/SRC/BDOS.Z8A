@@ -425,7 +425,7 @@ DGETMAX         PUSH    HL
                 ; - "HIGH" LEVEL ROUTINES
                 ; - 
 
-; - DSKCREATE --------
+; - DSKCREAT ---------
 ; - CREATE FILE
 ; - HL: FILENAMEZ
 ; - OUTPUT:
