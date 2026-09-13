@@ -40,7 +40,7 @@ ifeq ($(DEBUG),1)
 DEFINES			+= -DDEBUG
 endif
 
-# FONTBIN=1 uses the bundled RES/FONT.BIN instead of the MSX ROM charset (default: 1).
+# FONTBIN=1 uses the bundled RES/FONTS.BIN instead of the MSX ROM charset (default: 1).
 FONTBIN			?= 1
 ifeq ($(FONTBIN),1)
 DEFINES			+= -D_FONTBIN_
@@ -70,10 +70,15 @@ $(DSKFILE): $(OUTPUT) TEST.TXT AUTOEXEC.BAT
 
 # -	 Build Target ------------------------------------------------------------
 
-$(RES_DIR)/FONT.BIN: $(RES_DIR)/FONT.PNG $(RES_DIR)/fontcheck.py
-	python3 $(RES_DIR)/fontcheck.py $< --out $@
+$(RES_DIR)/FONTS.BIN: $(RES_DIR)/FONT.PNG $(RES_DIR)/fontcheck.py
+	python3 $(RES_DIR)/fontcheck.py $< --variant normal --out $(RES_DIR)/FONT_NORM.BIN
+	python3 $(RES_DIR)/fontcheck.py $< --variant bold --out $(RES_DIR)/FONT_BOLD.BIN
+	python3 $(RES_DIR)/fontcheck.py $< --variant italic --out $(RES_DIR)/FONT_ITAL.BIN
+	python3 $(RES_DIR)/fontcheck.py $< --variant bolditalic --out $(RES_DIR)/FONT_BI.BIN
+	cat $(RES_DIR)/FONT_NORM.BIN $(RES_DIR)/FONT_BOLD.BIN $(RES_DIR)/FONT_ITAL.BIN $(RES_DIR)/FONT_BI.BIN > $@
+	@$(RM) $(RES_DIR)/FONT_NORM.BIN $(RES_DIR)/FONT_BOLD.BIN $(RES_DIR)/FONT_ITAL.BIN $(RES_DIR)/FONT_BI.BIN
 
-$(OUTPUT): $(ALL_SOURCES_GEN) $(RES_DIR)/FONT.BIN
+$(OUTPUT): $(ALL_SOURCES_GEN) $(RES_DIR)/FONTS.BIN
 	@$(ASM) --lst=$(LSTFILE) --sym=$(SYMFILE) $(INCLUDES) $(DEFINES) $(MAIN)
 
 # -	 Run Targets -------------------------------------------------------------

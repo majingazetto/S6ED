@@ -57,6 +57,9 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTCOPY         ; 45
                 DEFW    ACTCUT          ; 46
                 DEFW    ACTPAST         ; 47
+                DEFW    ACTTGLBD        ; 48
+                DEFW    ACTTGLIT        ; 49
+                DEFW    ACTCYCMK        ; 50
 
 
 ; --- ACTNONE                   ----------------------------------------
@@ -1943,15 +1946,210 @@ ACTPAST         LD      HL, (CLIPLEN)
                 JR      NZ, .PSTCHAR
                 LD      A, ' '
 
-.PSTCHAR        ; 4. PRINTABLE CHARACTER (#20..#7E)
+.PSTCHAR        ; 4. PRINTABLE CHARACTER (#20..#FE)
                 CP      #20
                 JR      C, .PSTLP       ; IGNORE NON-PRINTABLE CONTROL CODES
                 CP      #7F
-                JR      NC, .PSTLP
+                JR      Z, .PSTLP       ; IGNORE DEL
+                CP      #FF
+                JR      Z, .PSTLP       ; IGNORE SENTINEL
                 CALL    EDINSCHR
                 JR      .PSTLP
 
 .PSTDONE        CALL    DRWSCRL
+                CALL    DRWSTAT
+                RET
+
+
+; --- ACTTGLBD                  ----------------------------------------
+
+
+; - ACTTGLBD ---------------------------
+; - TOGGLE BOLD ATTRIBUTE ON SELECTION OR TYPING STATE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTTGLBD        LD      A, (MKUPMD)
+                OR      A
+                JR      Z, .RAWBD       ; MKUP_OFF: RAW ATTRIBUTE TOGGLE
+                ; MARKUP MODE (MD OR LITE)
+                LD      A, (SELACT)
+                OR      A
+                JR      NZ, .WRPBD
+                LD      A, 1            ; 1 = BOLD
+                JP      INSDELIM
+.WRPBD          LD      A, 1            ; 1 = BOLD
+                JP      WRAPSEL
+
+.RAWBD          LD      A, (SELACT)
+                OR      A
+                JR      NZ, .SELBD
+                ; NO SELECTION: TOGGLE TYPING ATTRIBUTE
+                LD      A, (TYPATTR)
+                XOR     ATRBOLD
+                LD      (TYPATTR), A
+                CALL    DRWSTAT
+                RET
+.SELBD          LD      A, ATRBOLD
+                CALL    APPLSEL
+                RET
+
+
+; --- ACTTGLIT                  ----------------------------------------
+
+
+; - ACTTGLIT ---------------------------
+; - TOGGLE ITALIC ATTRIBUTE ON SELECTION OR TYPING STATE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTTGLIT        LD      A, (MKUPMD)
+                OR      A
+                JR      Z, .RAWIT       ; MKUP_OFF: RAW ATTRIBUTE TOGGLE
+                ; MARKUP MODE (MD OR LITE)
+                LD      A, (SELACT)
+                OR      A
+                JR      NZ, .WRPIT
+                LD      A, 2            ; 2 = ITALIC
+                JP      INSDELIM
+.WRPIT          LD      A, 2            ; 2 = ITALIC
+                JP      WRAPSEL
+
+.RAWIT          LD      A, (SELACT)
+                OR      A
+                JR      NZ, .SELIT
+                ; NO SELECTION: TOGGLE TYPING ATTRIBUTE
+                LD      A, (TYPATTR)
+                XOR     ATRITAL
+                LD      (TYPATTR), A
+                CALL    DRWSTAT
+                RET
+.SELIT          LD      A, ATRITAL
+                CALL    APPLSEL
+                RET
+
+
+; --- APPLSEL                   ----------------------------------------
+
+
+; - APPLSEL ----------------------------
+; - TOGGLE ATTRIBUTE BITS ACROSS ACTIVE SELECTION
+; - IN:  A = ATTRIBUTE MASK TO TOGGLE (ATRBOLD OR ATRITAL)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+APPLSEL         LD      (STYLMASK), A
+                CALL    SELNORM
+
+                ; VERIFY SELECTION IS NOT EMPTY
+                LD      HL, (SELSTRL)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JR      NZ, .APPLINIT
+                LD      A, (SELSTRX)
+                LD      HL, SELENDX
+                CP      (HL)
+                RET     Z               ; EMPTY: NOTHING TO STYLE
+
+.APPLINIT       LD      HL, (SELSTRL)
+                LD      (STYLLN), HL
+
+.APPLLINE       ; READ CURRENT LINE RECORD INTO WORKBUF
+                LD      HL, (STYLLN)
+                CALL    LINEREAD
+
+                ; DETERMINE XA FOR THIS LINE
+                LD      HL, (STYLLN)
+                LD      DE, (SELSTRL)
+                CALL    CMPHLDE
+                JR      NZ, .APPLMIDL
+                LD      A, (SELSTRX)
+                JR      .APPLSETXA
+.APPLMIDL       XOR     A
+.APPLSETXA      LD      (STYLXA), A
+
+                ; DETERMINE XB FOR THIS LINE
+                LD      A, (WORKBUF)
+                LD      (STYLXB), A     ; DEFAULT XB = LINE LENGTH
+                LD      HL, (STYLLN)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JR      NZ, .APPLNOTEND
+                LD      A, (SELENDX)
+                LD      (STYLXB), A
+.APPLNOTEND     ; CLAMP XB TO LINE LENGTH
+                LD      A, (WORKBUF)
+                LD      HL, STYLXB
+                CP      (HL)
+                JR      NC, .APPLXBOK
+                LD      (STYLXB), A
+
+.APPLXBOK       ; CHECK IF XA < XB
+                LD      A, (STYLXA)
+                LD      HL, STYLXB
+                CP      (HL)
+                JR      NC, .APPLCHKNXT ; NO CHARS ON THIS LINE
+
+                ; COUNT = XB - XA
+                SUB     (HL)
+                NEG                     ; A = COUNT
+                LD      B, A            ; B = COUNT (1..80)
+
+                LD      A, (STYLXA)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE          ; HL = WORKBUF + 1 + TEXTCOLS + XA
+                LD      A, (STYLMASK)
+                LD      C, A            ; C = MASK TO TOGGLE
+
+.APPLCELL       LD      A, (HL)
+                XOR     C
+                LD      (HL), A
+                INC     HL
+                DJNZ    .APPLCELL
+
+                ; WRITE LINE BACK TO MAPPER
+                LD      HL, (STYLLN)
+                CALL    LINEWRT
+
+                ; IF ON SCREEN, RE-RENDER ROW
+                LD      HL, (STYLLN)
+                LD      DE, (TOPLINE)
+                OR      A
+                SBC     HL, DE
+                JR      C, .APPLCHKNXT  ; L < TOPLINE: OFF SCREEN ABOVE
+                LD      A, H
+                OR      A
+                JR      NZ, .APPLCHKNXT ; L - TOPLINE >= 256
+                LD      A, L
+                CP      SCRROWS         ; 24
+                JR      NC, .APPLCHKNXT ; OFF SCREEN BELOW
+                INC     A               ; SCREEN ROW = A + 1 (1..24)
+                LD      B, A
+                CALL    RENDEROW
+
+.APPLCHKNXT     ; CHECK IF LAST LINE
+                LD      HL, (STYLLN)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JR      Z, .APPLDONE
+
+                ; NEXT LINE
+                LD      HL, (STYLLN)
+                INC     HL
+                LD      (STYLLN), HL
+                JP      .APPLLINE
+
+.APPLDONE       ; REDRAW SELECTION XOR HIGHLIGHT OVER UPDATED ROWS
+                CALL    SELPOST
+                LD      A, #FF
+                LD      (MODIFIED), A
                 CALL    DRWSTAT
                 RET
 

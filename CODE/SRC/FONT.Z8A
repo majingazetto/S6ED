@@ -106,7 +106,11 @@ FONTINIT
 
                 LD      HL, VR_FNORM    ; RUNNING VRAM LINE ADDRESS
                 LD      DE, FONTSRC     ; BASE OF THE CURRENT GLYPH ROW
-                LD      C, 8            ; 8 GLYPH ROWS OF 32 GLYPHS
+                IFDEF   _FONTBIN_
+                LD      C, 32           ; 4 VARIANTS X 8 GLYPH ROWS = 32
+                ELSE
+                LD      C, 8            ; 1 VARIANT (BIOS CHARSET)
+                ENDIF
 
 .ROWLP          PUSH    DE              ; KEEP THE GLYPH ROW BASE
                 LD      B, 8            ; 8 SCANLINES PER GLYPH ROW
@@ -189,7 +193,7 @@ EXPNORM         LD      HL, 0
 ; --- ASSETS                    ----------------------------------------
 
                 IFDEF   _FONTBIN_
-FONTSRC         INCBIN  "FONT.BIN"
+FONTSRC         INCBIN  "FONTS.BIN"
                 ELSE
 FONTSRC         EQU     FONTRAM         ; FILLED AT STARTUP BY FONTROM
                 ENDIF
