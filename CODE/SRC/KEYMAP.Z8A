@@ -28,7 +28,26 @@ KMAPSTD         ; UNMODIFIED CURSORS
                 DEFB    CUP,     MODGRPH, ACPGUP
                 DEFB    CDOWN,   MODGRPH, ACPGDN
 
+                ; SHIFT + CURSORS (TEXT SELECTION)
+                DEFB    CLEFT,   MODSHFT, ACSLML
+                DEFB    CRIGHT,  MODSHFT, ACSLMR
+                DEFB    CUP,     MODSHFT, ACSLMU
+                DEFB    CDOWN,   MODSHFT, ACSLMD
+
+                ; SHIFT + CTRL + CURSORS
+                DEFB    CLEFT,   MODSHFT | MODCTRL, ACSLBOL
+                DEFB    CRIGHT,  MODSHFT | MODCTRL, ACSLEOL
+                DEFB    CUP,     MODSHFT | MODCTRL, ACSLTOP
+                DEFB    CDOWN,   MODSHFT | MODCTRL, ACSLBOT
+
+                ; SHIFT + GRAPH + CURSORS
+                DEFB    CLEFT,   MODSHFT | MODGRPH, ACSLWLF
+                DEFB    CRIGHT,  MODSHFT | MODGRPH, ACSLWRT
+                DEFB    CUP,     MODSHFT | MODGRPH, ACSLPGU
+                DEFB    CDOWN,   MODSHFT | MODGRPH, ACSLPGD
+
                 ; EDITING & SYSTEM
+                DEFB    CTRL_A,  MODANY,  ACSELAL
                 DEFB    BS,      MODNONE, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
@@ -78,6 +97,24 @@ KMAPWS          ; WORDSTAR DIAMOND
                 DEFB    BS,      MODGRPH, ACDWLFT
                 DEFB    CUP,     MODGRPH, ACPGUP
                 DEFB    CDOWN,   MODGRPH, ACPGDN
+
+                ; SHIFT + CURSORS (TEXT SELECTION)
+                DEFB    CLEFT,   MODSHFT, ACSLML
+                DEFB    CRIGHT,  MODSHFT, ACSLMR
+                DEFB    CUP,     MODSHFT, ACSLMU
+                DEFB    CDOWN,   MODSHFT, ACSLMD
+
+                ; SHIFT + CTRL + CURSORS
+                DEFB    CLEFT,   MODSHFT | MODCTRL, ACSLBOL
+                DEFB    CRIGHT,  MODSHFT | MODCTRL, ACSLEOL
+                DEFB    CUP,     MODSHFT | MODCTRL, ACSLTOP
+                DEFB    CDOWN,   MODSHFT | MODCTRL, ACSLBOT
+
+                ; SHIFT + GRAPH + CURSORS
+                DEFB    CLEFT,   MODSHFT | MODGRPH, ACSLWLF
+                DEFB    CRIGHT,  MODSHFT | MODGRPH, ACSLWRT
+                DEFB    CUP,     MODSHFT | MODGRPH, ACSLPGU
+                DEFB    CDOWN,   MODSHFT | MODGRPH, ACSLPGD
 
                 ; EDITING & SYSTEM
                 DEFB    BS,      MODNONE, ACDELBK

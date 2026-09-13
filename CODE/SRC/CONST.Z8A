@@ -205,7 +205,22 @@ ACVIINS         EQU     26              ; VI i
 ACVIAPP         EQU     27              ; VI a
 ACVINRM         EQU     28              ; VI ESC
 ACVILED         EQU     29              ; VI LEADER 'd'
-ACMAX           EQU     30
+ACSLML          EQU     30              ; SHIFT + <
+ACSLMR          EQU     31              ; SHIFT + >
+ACSLMU          EQU     32              ; SHIFT + UP
+ACSLMD          EQU     33              ; SHIFT + DOWN
+ACSLBOL         EQU     34              ; SHIFT + CTRL + <
+ACSLEOL         EQU     35              ; SHIFT + CTRL + >
+ACSLTOP         EQU     36              ; SHIFT + CTRL + UP
+ACSLBOT         EQU     37              ; SHIFT + CTRL + DOWN
+ACSLWLF         EQU     38              ; SHIFT + GRAPH + <
+ACSLWRT         EQU     39              ; SHIFT + GRAPH + >
+ACSLPGU         EQU     40              ; SHIFT + GRAPH + UP
+ACSLPGD         EQU     41              ; SHIFT + GRAPH + DOWN
+ACSELAL         EQU     42              ; CTRL + A (SELECT ALL)
+ACDSEL          EQU     43              ; DESELECT
+ACDLS           EQU     44              ; DELETE SELECTION
+ACMAX           EQU     45
 
 
 ; --- KEYMAP PROFILES           ----------------------------------------

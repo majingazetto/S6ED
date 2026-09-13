@@ -107,7 +107,13 @@ BLDSTAT         LD      DE, STATBUF
 .OVRP           LD      HL, .STROVR
                 CALL    .CPYSTR
 
-.DONEINS        ; 4. MODIFIED INDICATOR
+.DONEINS        ; 4. SELECTION INDICATOR
+                LD      A, (SELACT)
+                OR      A
+                JR      Z, .NOTSEL
+                LD      HL, .STRSEL
+                CALL    .CPYSTR
+.NOTSEL         ; 5. MODIFIED INDICATOR
                 LD      A, (MODIFIED)
                 OR      A
                 JR      Z, .NOTMOD
@@ -124,7 +130,7 @@ BLDSTAT         LD      DE, STATBUF
                 LD      (DE), A
                 INC     DE
 
-.DONEMOD        ; 5. "Ln " + (DOCLINE + 1)
+.DONEMOD        ; 6. "Ln " + (DOCLINE + 1)
                 LD      HL, .STRLN
                 CALL    .CPYSTR
                 LD      HL, (DOCLINE)
@@ -176,6 +182,7 @@ BLDSTAT         LD      DE, STATBUF
 .STRWTXT        DEFM    " [TXT]", 0
 .STRINS         DEFM    " [INS] ", 0
 .STROVR         DEFM    " [OVR] ", 0
+.STRSEL         DEFM    "[SEL] ", 0
 .STRLN          DEFM    "Ln ", 0
 .STRCOL         DEFM    " Col ", 0
 .STRSEP         DEFM    " | ", 0
