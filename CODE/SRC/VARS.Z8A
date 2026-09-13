@@ -70,6 +70,8 @@ TOTLINES        DEFW    1               ; TOTAL LINES IN DOCUMENT
 MODIFIED        DEFB    0               ; FF = BUFFER MODIFIED SINCE LAST SAVE
 INSMODE         DEFB    INS_MODE        ; INSERT (FF) OR OVERWRITE (00)
 WRAPMODE        DEFB    0               ; 0 = WRAP_DEV, 1 = WRAP_TXT
+TYPATTR         DEFB    0               ; ACTIVE TYPING ATTRIBUTE (ATRBOLD, ATRITAL)
+MKUPMD          DEFB    0               ; 0=OFF, 1=MD, 2=LITE
 
 LANGMODE        DEFB    LGNONE       ; CURRENT LANGUAGE/TOKENIZER MODE
 BLNKPH       DEFB    0               ; CURSOR BLINK PHASE (TOGGLED BY TIMI)
@@ -151,6 +153,10 @@ RFLINE          DEFW    0               ; REFLOW: RECEIVER LINE NUMBER (L)
 RFSPACE         DEFB    0               ; REFLOW: AVAILABLE SPACE ON RECEIVER
 RFSEP           DEFB    0               ; REFLOW: 1 = SEPARATOR SPACE NEEDED
 RFCNT           DEFB    0               ; REFLOW: BYTES TO TRANSFER
+STYLMASK        DEFB    0               ; APPLSEL: ATTRIBUTE MASK TO TOGGLE
+STYLLN          DEFW    0               ; APPLSEL: CURRENT LINE ITERATOR
+STYLXA          DEFB    0               ; APPLSEL: START COLUMN
+STYLXB          DEFB    0               ; APPLSEL: END COLUMN
 FILEBUF         DEFS    256             ; TEMPORARY BUFFER FOR DISK READS
 
 

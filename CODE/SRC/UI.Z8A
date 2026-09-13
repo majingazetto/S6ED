@@ -107,13 +107,42 @@ BLDSTAT         LD      DE, STATBUF
 .OVRP           LD      HL, .STROVR
                 CALL    .CPYSTR
 
-.DONEINS        ; 4. SELECTION INDICATOR
+.DONEINS        ; 4. TYPING STYLE INDICATOR
+                LD      A, (TYPATTR)
+                AND     ATRFMSK
+                JR      Z, .NOTSTYL
+                CP      1
+                JR      NZ, .NOTB
+                LD      HL, .STRBD
+                CALL    .CPYSTR
+                JR      .NOTSTYL
+.NOTB           CP      2
+                JR      NZ, .NOTIT
+                LD      HL, .STRIT
+                CALL    .CPYSTR
+                JR      .NOTSTYL
+.NOTIT          LD      HL, .STRBI
+                CALL    .CPYSTR
+
+.NOTSTYL        ; 5. MARKUP MODE INDICATOR
+                LD      A, (MKUPMD)
+                OR      A
+                JR      Z, .NOTMKUP
+                CP      MKUP_MD
+                JR      NZ, .ISLIT
+                LD      HL, .STRMD
+                CALL    .CPYSTR
+                JR      .NOTMKUP
+.ISLIT          LD      HL, .STRLIT
+                CALL    .CPYSTR
+
+.NOTMKUP        ; 6. SELECTION INDICATOR
                 LD      A, (SELACT)
                 OR      A
                 JR      Z, .NOTSEL
                 LD      HL, .STRSEL
                 CALL    .CPYSTR
-.NOTSEL         ; 5. MODIFIED INDICATOR
+.NOTSEL         ; 7. MODIFIED INDICATOR
                 LD      A, (MODIFIED)
                 OR      A
                 JR      Z, .NOTMOD
@@ -182,6 +211,11 @@ BLDSTAT         LD      DE, STATBUF
 .STRWTXT        DEFM    " [TXT]", 0
 .STRINS         DEFM    " [INS] ", 0
 .STROVR         DEFM    " [OVR] ", 0
+.STRBD          DEFM    "[B] ", 0
+.STRIT          DEFM    "[I] ", 0
+.STRBI          DEFM    "[BI] ", 0
+.STRMD          DEFM    "[MD] ", 0
+.STRLIT         DEFM    "[LIT] ", 0
 .STRSEL         DEFM    "[SEL] ", 0
 .STRLN          DEFM    "Ln ", 0
 .STRCOL         DEFM    " Col ", 0

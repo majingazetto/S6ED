@@ -47,22 +47,26 @@ KMAPSTD         ; UNMODIFIED CURSORS
                 DEFB    CDOWN,   MODSHFT | MODGRPH, ACSLPGD
 
                 ; EDITING & SYSTEM
-                DEFB    CTRL_A,  MODANY,  ACSELAL
-                DEFB    CTRL_C,  MODANY,  ACCOPY
-                DEFB    CTRL_X,  MODANY,  ACCUT
-                DEFB    CTRL_V,  MODANY,  ACPAST
+                DEFB    CTRL_A,  MODCTRL, ACSELAL
+                DEFB    CTRL_B,  MODCTRL, ACTGLBD
+                DEFB    CTRL_C,  MODCTRL, ACCOPY
+                DEFB    CTRL_I,  MODCTRL, ACTGLIT
+                DEFB    CTRL_X,  MODCTRL, ACCUT
+                DEFB    CTRL_V,  MODCTRL, ACPAST
                 DEFB    BS,      MODNONE, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
                 DEFB    INSKEY,  MODANY,  ACTGLIN
-                DEFB    CTRL_S,  MODANY,  ACSAVE
-                DEFB    CTRL_W,  MODANY,  ACTGLWR
-                DEFB    CTRL_K,  MODANY,  ACCYCKM
-                DEFB    CTRL_Y,  MODANY,  ACDELLN
-                DEFB    CTRL_Q,  MODANY,  ACQUIT
+                DEFB    CTRL_S,  MODCTRL, ACSAVE
+                DEFB    CTRL_W,  MODCTRL, ACTGLWR
+                DEFB    CTRL_K,  MODCTRL, ACCYCKM
+                DEFB    CTRL_Y,  MODCTRL, ACDELLN
+                DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    ESC,     MODANY,  ACQUIT
                 DEFB    F1KEY,   MODANY,  ACHELP
                 DEFB    F2KEY,   MODANY,  ACSAVE
+                DEFB    F3KEY,   MODANY,  ACCYCMK
+                DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    F5KEY,   MODANY,  ACCYCKM
                 DEFB    #FF
 
@@ -71,16 +75,16 @@ KMAPSTD         ; UNMODIFIED CURSORS
 
 
 KMAPWS          ; WORDSTAR DIAMOND
-                DEFB    CTRL_S,  MODANY,  ACMVL
-                DEFB    CTRL_D,  MODANY,  ACMVR
-                DEFB    CTRL_E,  MODANY,  ACMVU
-                DEFB    CTRL_X,  MODANY,  ACMVD
-                DEFB    CTRL_A,  MODANY,  ACWLFT
-                DEFB    CTRL_F,  MODANY,  ACWRGT
-                DEFB    CTRL_R,  MODANY,  ACPGUP
-                DEFB    CTRL_C,  MODANY,  ACPGDN
-                DEFB    CTRL_G,  MODANY,  ACDELFW
-                DEFB    CTRL_Y,  MODANY,  ACDELLN
+                DEFB    CTRL_S,  MODCTRL, ACMVL
+                DEFB    CTRL_D,  MODCTRL, ACMVR
+                DEFB    CTRL_E,  MODCTRL, ACMVU
+                DEFB    CTRL_X,  MODCTRL, ACMVD
+                DEFB    CTRL_A,  MODCTRL, ACWLFT
+                DEFB    CTRL_F,  MODCTRL, ACWRGT
+                DEFB    CTRL_R,  MODCTRL, ACPGUP
+                DEFB    CTRL_C,  MODCTRL, ACPGDN
+                DEFB    CTRL_G,  MODCTRL, ACDELFW
+                DEFB    CTRL_Y,  MODCTRL, ACDELLN
 
                 ; UNMODIFIED CURSORS
                 DEFB    CLEFT,   MODNONE, ACMVL
@@ -120,16 +124,20 @@ KMAPWS          ; WORDSTAR DIAMOND
                 DEFB    CDOWN,   MODSHFT | MODGRPH, ACSLPGD
 
                 ; EDITING & SYSTEM
+                DEFB    CTRL_B,  MODCTRL, ACTGLBD
+                DEFB    CTRL_I,  MODCTRL, ACTGLIT
                 DEFB    BS,      MODNONE, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
                 DEFB    INSKEY,  MODANY,  ACTGLIN
-                DEFB    CTRL_K,  MODANY,  ACCYCKM
-                DEFB    CTRL_W,  MODANY,  ACTGLWR
-                DEFB    CTRL_Q,  MODANY,  ACQUIT
+                DEFB    CTRL_K,  MODCTRL, ACCYCKM
+                DEFB    CTRL_W,  MODCTRL, ACTGLWR
+                DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    ESC,     MODANY,  ACQUIT
                 DEFB    F1KEY,   MODANY,  ACHELP
                 DEFB    F2KEY,   MODANY,  ACSAVE
+                DEFB    F3KEY,   MODANY,  ACCYCMK
+                DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    F5KEY,   MODANY,  ACCYCKM
                 DEFB    #FF
 
@@ -138,16 +146,16 @@ KMAPWS          ; WORDSTAR DIAMOND
 
 
 KMAPEMAC        ; EMACS NAVIGATION & EDITING
-                DEFB    CTRL_B,  MODANY,  ACMVL
-                DEFB    CTRL_F,  MODANY,  ACMVR
-                DEFB    CTRL_P,  MODANY,  ACMVU
-                DEFB    CTRL_N,  MODANY,  ACMVD
-                DEFB    CTRL_A,  MODANY,  ACBOL
-                DEFB    CTRL_E,  MODANY,  ACEOL
-                DEFB    CTRL_D,  MODANY,  ACDELFW
-                DEFB    CTRL_Y,  MODANY,  ACDELLN
-                DEFB    CTRL_K,  MODANY,  ACCYCKM
-                DEFB    CTRL_S,  MODANY,  ACSAVE
+                DEFB    CTRL_B,  MODCTRL, ACMVL
+                DEFB    CTRL_F,  MODCTRL, ACMVR
+                DEFB    CTRL_P,  MODCTRL, ACMVU
+                DEFB    CTRL_N,  MODCTRL, ACMVD
+                DEFB    CTRL_A,  MODCTRL, ACBOL
+                DEFB    CTRL_E,  MODCTRL, ACEOL
+                DEFB    CTRL_D,  MODCTRL, ACDELFW
+                DEFB    CTRL_Y,  MODCTRL, ACDELLN
+                DEFB    CTRL_K,  MODCTRL, ACCYCKM
+                DEFB    CTRL_S,  MODCTRL, ACSAVE
 
                 ; UNMODIFIED CURSORS
                 DEFB    CLEFT,   MODNONE, ACMVL
@@ -173,11 +181,13 @@ KMAPEMAC        ; EMACS NAVIGATION & EDITING
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
                 DEFB    INSKEY,  MODANY,  ACTGLIN
-                DEFB    CTRL_W,  MODANY,  ACTGLWR
-                DEFB    CTRL_Q,  MODANY,  ACQUIT
+                DEFB    CTRL_W,  MODCTRL, ACTGLWR
+                DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    ESC,     MODANY,  ACQUIT
                 DEFB    F1KEY,   MODANY,  ACHELP
                 DEFB    F2KEY,   MODANY,  ACSAVE
+                DEFB    F3KEY,   MODANY,  ACCYCMK
+                DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    F5KEY,   MODANY,  ACCYCKM
                 DEFB    #FF
 
@@ -218,11 +228,13 @@ KMAPVIN         ; VI NORMAL MOVEMENT
                 DEFB    CDOWN,   MODCTRL, ACBOT
 
                 ; EDITING & SYSTEM
-                DEFB    CTRL_K,  MODANY,  ACCYCKM
-                DEFB    CTRL_S,  MODANY,  ACSAVE
-                DEFB    CTRL_Q,  MODANY,  ACQUIT
+                DEFB    CTRL_K,  MODCTRL, ACCYCKM
+                DEFB    CTRL_S,  MODCTRL, ACSAVE
+                DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    F1KEY,   MODANY,  ACHELP
                 DEFB    F2KEY,   MODANY,  ACSAVE
+                DEFB    F3KEY,   MODANY,  ACCYCMK
+                DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    F5KEY,   MODANY,  ACCYCKM
                 DEFB    #FF
 
@@ -234,6 +246,8 @@ KMAPVII         ; RETURN TO NORMAL MODE
                 DEFB    ESC,     MODANY,  ACVINRM
 
                 ; CURSORS & BASIC EDITING
+                DEFB    CTRL_B,  MODCTRL, ACTGLBD
+                DEFB    CTRL_I,  MODCTRL, ACTGLIT
                 DEFB    CLEFT,   MODANY,  ACMVL
                 DEFB    CRIGHT,  MODANY,  ACMVR
                 DEFB    CUP,     MODANY,  ACMVU
@@ -243,5 +257,7 @@ KMAPVII         ; RETURN TO NORMAL MODE
                 DEFB    CR,      MODANY,  ACNWLIN
                 DEFB    F1KEY,   MODANY,  ACHELP
                 DEFB    F2KEY,   MODANY,  ACSAVE
+                DEFB    F3KEY,   MODANY,  ACCYCMK
+                DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    F5KEY,   MODANY,  ACCYCKM
                 DEFB    #FF

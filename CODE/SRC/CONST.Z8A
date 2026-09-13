@@ -224,7 +224,10 @@ ACDLS           EQU     44              ; DELETE SELECTION
 ACCOPY          EQU     45              ; CTRL + C / VI y (COPY)
 ACCUT           EQU     46              ; CTRL + X / VI x (CUT)
 ACPAST          EQU     47              ; CTRL + V / VI p (PASTE)
-ACMAX           EQU     48
+ACTGLBD         EQU     48              ; CTRL + B (TOGGLE BOLD)
+ACTGLIT         EQU     49              ; CTRL + I (TOGGLE ITALIC)
+ACCYCMK         EQU     50              ; F3 / CTRL + T (CYCLE MARKUP MODE)
+ACMAX           EQU     51
 
 
 ; --- KEYMAP PROFILES           ----------------------------------------
@@ -237,3 +240,12 @@ KMVI            EQU     3               ; VI MODAL
 
 VIMNORM         EQU     0               ; VI NORMAL MODE
 VIMINS          EQU     1               ; VI INSERT MODE
+
+
+; --- MARKUP MODES              ----------------------------------------
+
+
+MKUP_OFF        EQU     0               ; PLAIN TEXT / CODE (NO MARKUP)
+MKUP_MD         EQU     1               ; COMMONMARK (**BOLD**, *ITALIC*, _ITALIC_)
+MKUP_LIT        EQU     2               ; LITE / CHAT (*BOLD*, _ITALIC_)
+MKUP_MAX        EQU     3

@@ -41,6 +41,7 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
                 LD      B, A            ; B = MODIFIERS
                 POP     AF              ; RESTORE KEYCODE
                 LD      C, A            ; C = KEYCODE
+                CALL    TRNGRPH         ; TRANSLATE GRAPH ACCENTS IF GRAPH HELD
 
                 ; CHECK VI LEADER KEY
                 LD      A, (VILEAD)
@@ -76,7 +77,7 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
                 CALL    EXECACT
                 RET
 
-.NOTMAPP        ; UNMAPPED: CHECK PRINTABLE RANGE (#20..#7E)
+.NOTMAPP        ; UNMAPPED: CHECK PRINTABLE RANGE (#20..#FE)
                 LD      A, (KMAPID)
                 CP      KMVI
                 JR      NZ, .DOPRINT
@@ -87,9 +88,11 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
 
 .DOPRINT        LD      A, C
                 CP      #20
-                RET     C
+                RET     C               ; REJECT CONTROL CODES (#00..#1F)
                 CP      #7F
-                RET     NC
+                RET     Z               ; REJECT DEL (#7F)
+                CP      #FF
+                RET     Z               ; REJECT SENTINEL / BLANK (#FF)
 
                 LD      A, (SELACT)
                 OR      A
@@ -187,3 +190,43 @@ KMAPSW          LD      A, (KMAPID)
                 LD      HL, KMAPVIN
                 LD      (KMAPPTR), HL
                 RET
+
+
+; --- TRNGRPH                   ----------------------------------------
+
+
+; - TRNGRPH ----------------------------
+; - TRANSLATE GRAPH COMBINATIONS TO SPANISH ACCENTED CHARACTERS
+; - IN:  C = KEYCODE
+; - OUT: C = TRANSLATED KEYCODE (OR UNCHANGED)
+; - CLOBBERS: AF, HL
+; -
+
+TRNGRPH         LD      A, (MODKEYS)
+                AND     MODGRPH
+                RET     Z               ; GRAPH NOT PRESSED
+
+                LD      HL, .GRPTBL
+.GRLOOP         LD      A, (HL)
+                OR      A
+                RET     Z               ; END OF TABLE: LEAVE C UNCHANGED
+                CP      C
+                JR      Z, .GRFND
+                INC     HL
+                INC     HL
+                JR      .GRLOOP
+
+.GRFND          INC     HL
+                LD      A, (HL)
+                LD      C, A            ; C = TRANSLATED ACCENTED CHAR
+                RET
+
+.GRPTBL         ; PAIRS: [INPUT KEYCODE, OUTPUT ACCENTED CODE]
+                ; SUPPORTS BOTH RAW ASCII AND MSX BIOS GRAPH CODES
+                DEFB    #61, #A0, #C4, #A0, #41, #A0, #65, #82
+                DEFB    #CD, #82, #45, #90, #69, #A1, #DC, #A1
+                DEFB    #49, #A1, #6F, #A2, #C2, #A2, #4F, #A2
+                DEFB    #75, #A3, #C0, #A3, #55, #A3, #6E, #A4
+                DEFB    #5B, #A4, #4E, #A5, #D3, #A5, #3F, #A8
+                DEFB    #2F, #A8, #F6, #A8, #21, #AD, #31, #AD
+                DEFB    #AC, #AD, #77, #81, #57, #9A, #00

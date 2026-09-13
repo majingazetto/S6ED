@@ -266,6 +266,7 @@ CTRL_D          EQU     #04
 CTRL_E          EQU     #05
 CTRL_F          EQU     #06
 CTRL_G          EQU     #07
+CTRL_I          EQU     #09
 CTRL_K          EQU     #0B
 CTRL_L          EQU     #0C
 CTRL_N          EQU     #0E
@@ -274,6 +275,8 @@ CTRL_P          EQU     #10
 CTRL_Q          EQU     #11
 CTRL_R          EQU     #12
 CTRL_S          EQU     #13
+CTRL_T          EQU     #14
+CTRL_U          EQU     #15
 CTRL_V          EQU     #16
 CTRL_W          EQU     #17
 CTRL_X          EQU     #18

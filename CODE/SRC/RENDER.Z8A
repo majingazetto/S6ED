@@ -48,6 +48,7 @@ RENDEROW        PUSH    BC
                 RET
 
 .VALID          CALL    LINEREAD        ; LOAD RECORD INTO WORKBUF
+                CALL    SCANMKUP        ; DYNAMICALLY HIGHLIGHT MARKUP ON LINE
                 POP     BC
                 PUSH    BC
 
@@ -83,9 +84,25 @@ RENDEROW        PUSH    BC
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE
                 LD      A, (HL)         ; A = CHARCODE
+                PUSH    AF
+
+                ; GET ATTRIBUTE & VARIANT BASE SY
+                LD      DE, TEXTCOLS
+                ADD     HL, DE          ; HL = WORKBUF + 1 + TEXTCOLS + C
+                LD      A, (HL)
+                AND     ATRFMSK         ; 0=NORM, 1=BOLD, 2=ITAL, 3=BI
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                LD      DE, .SYTBL
+                ADD     HL, DE
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)         ; DE = BASE SY (256, 320, 384, 448)
 
                 ; 6. CALC FONT SX/SY
                 ; SX = (CHAR & 31) * 8
+                POP     AF              ; RESTORE CHARCODE
                 PUSH    AF
                 AND     %00011111       ; CHAR & 31
                 LD      L, A
@@ -95,7 +112,7 @@ RENDEROW        PUSH    BC
                 ADD     HL, HL          ; * 8
                 LD      (VDP_SX), HL
 
-                ; SY = FNORM_SY + (CHAR >> 5) * 8
+                ; SY = BASE_SY + (CHAR >> 5) * 8
                 POP     AF
                 SRL     A
                 SRL     A
@@ -107,8 +124,7 @@ RENDEROW        PUSH    BC
                 ADD     A, A            ; * 8
                 LD      L, A
                 LD      H, 0
-                LD      DE, FNORM_SY
-                ADD     HL, DE
+                ADD     HL, DE          ; + BASE SY
                 LD      (VDP_SY), HL
 
                 ; 7. ISSUE LMMM
@@ -131,6 +147,11 @@ RENDEROW        PUSH    BC
                 
                 POP     BC
                 RET
+
+.SYTBL          DEFW    FNORM_SY        ; 256 (NORMAL)
+                DEFW    FBOLD_SY        ; 320 (BOLD)
+                DEFW    FITAL_SY        ; 384 (ITALIC)
+                DEFW    FBI_SY          ; 448 (BOLD+ITALIC)
 
 
 ; --- CLRROW                    ----------------------------------------

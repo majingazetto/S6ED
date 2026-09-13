@@ -280,7 +280,7 @@ WBINS           LD      (WBBASE), HL
                 LDDR
                 POP     BC
 
-.WBPUT          ; PLACE THE CHARACTER
+.WBPUT          ; PLACE THE CHARACTER AND ATTRIBUTE
                 LD      HL, (WBBASE)
                 LD      A, (WBCOL)
                 LD      E, A
@@ -288,6 +288,10 @@ WBINS           LD      (WBBASE), HL
                 INC     HL
                 ADD     HL, DE          ; HL = BASE + 1 + COLUMN
                 LD      (HL), C
+                LD      DE, TEXTCOLS
+                ADD     HL, DE          ; HL = BASE + 1 + TEXTCOLS + COLUMN
+                LD      A, (TYPATTR)
+                LD      (HL), A
 
                 ; LENGTH. TWO CASES, AND THEY ARE NOT THE SAME:
                 ;   COLUMN >= LENGTH -- WRITING PAST THE END, NOTHING SHIFTED,

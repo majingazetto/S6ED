@@ -1,0 +1,592 @@
+;                                       ****************************************
+;                                       * MARKUP ENGINE                        *
+;                                       ****************************************
+;
+; REAL-TIME LINE HIGHLIGHTER AND DELIMITER WRAPPER SUPPORTING:
+; - MKUP_MD  (COMMONMARK: **BOLD**, *ITALIC*, _ITALIC_)
+; - MKUP_LIT (LITE/CHAT:  *BOLD*, _ITALIC_)
+; - MKUP_OFF (PLAIN TEXT / CODE)
+
+
+; --- SCANMKUP                  ----------------------------------------
+
+
+; - SCANMKUP ---------------------------
+; - SCAN WORKBUF FOR MARKUP DELIMITERS
+; - IN:  NONE (SCANS WORKBUF)
+; - OUT: ATTRIBUTES IN WORKBUF+81..160 SET
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+SCANMKUP        LD      A, (MKUPMD)
+                OR      A
+                RET     Z               ; MKUP_OFF: PRESERVE MANUAL ATTRS
+
+                ; 1. CLEAR ATTRIBUTES (COLS 0..79)
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      B, TEXTCOLS
+                XOR     A
+.CLRATR         LD      (HL), A
+                INC     HL
+                DJNZ    .CLRATR
+
+                ; 2. CHECK LINE LENGTH
+                LD      A, (WORKBUF)
+                CP      2
+                RET     C               ; LEN < 2: CANNOT CONTAIN PAIR
+
+                LD      A, (MKUPMD)
+                CP      MKUP_LIT
+                JP      Z, SCNLIT
+                JP      SCNMD
+
+
+; --- SCNLIT                    ----------------------------------------
+
+
+; - SCNLIT -----------------------------
+; - SCAN LITE/CHAT MARKUP (*BOLD*, _ITALIC_)
+; - IN:  NONE (SCANS WORKBUF)
+; - OUT: ATTRS UPDATED
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+SCNLIT          ; --- PASS 1: BOLD (*) ---
+                LD      C, 0            ; C = COL INDEX
+.LITBLP         LD      A, (WORKBUF)
+                CP      C
+                JR      Z, .LITITP      ; DONE BOLD PASS
+                JR      C, .LITITP
+
+                LD      E, C
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      '*'
+                JR      NZ, .LITBNX
+
+                ; FOUND OPENING '*': SEARCH FOR CLOSING '*'
+                LD      A, C
+                INC     A
+                LD      B, A            ; B = J = C + 1
+.LITFCL         LD      A, (WORKBUF)
+                CP      B
+                JR      Z, .LITBNX      ; REACHED EOL WITHOUT CLOSING '*'
+                JR      C, .LITBNX
+
+                LD      E, B
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      '*'
+                JR      Z, .LITBMK      ; FOUND CLOSING '*' AT B
+                INC     B
+                JR      .LITFCL
+
+.LITBMK         ; CHECK IF NON-EMPTY (B > C + 1)
+                LD      A, B
+                SUB     C
+                DEC     A               ; COUNT = B - C - 1
+                JR      Z, .LITBNX      ; EMPTY '**': SKIP
+
+                ; STAMP ATRBOLD ON COLS C+1 .. B-1
+                PUSH    BC
+                LD      B, A            ; B = LOOP COUNT
+                LD      A, C
+                INC     A
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+.LITBST         LD      A, (HL)
+                OR      ATRBOLD
+                LD      (HL), A
+                INC     HL
+                DJNZ    .LITBST
+                POP     BC
+                LD      C, B            ; ADVANCE C TO CLOSING DELIMITER
+
+.LITBNX         INC     C
+                JR      .LITBLP
+
+.LITITP         ; --- PASS 2: ITALIC (_) ---
+                LD      C, 0
+.LITILP         LD      A, (WORKBUF)
+                CP      C
+                JR      Z, .LITDON
+                JR      C, .LITDON
+
+                LD      E, C
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      '_'
+                JR      NZ, .LITINX
+
+                ; FOUND OPENING '_': SEARCH FOR CLOSING '_'
+                LD      A, C
+                INC     A
+                LD      B, A            ; B = J = C + 1
+.LITFIL         LD      A, (WORKBUF)
+                CP      B
+                JR      Z, .LITINX
+                JR      C, .LITINX
+
+                LD      E, B
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      '_'
+                JR      Z, .LITIMK
+                INC     B
+                JR      .LITFIL
+
+.LITIMK         LD      A, B
+                SUB     C
+                DEC     A               ; COUNT = B - C - 1
+                JR      Z, .LITINX
+
+                PUSH    BC
+                LD      B, A
+                LD      A, C
+                INC     A
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+.LITIST         LD      A, (HL)
+                OR      ATRITAL
+                LD      (HL), A
+                INC     HL
+                DJNZ    .LITIST
+                POP     BC
+                LD      C, B
+
+.LITINX         INC     C
+                JR      .LITILP
+
+.LITDON         RET
+
+
+; --- SCNMD                     ----------------------------------------
+
+
+; - SCNMD ------------------------------
+; - SCAN MARKDOWN (**BOLD**, *ITALIC*, _ITALIC_)
+; - IN:  NONE (SCANS WORKBUF)
+; - OUT: ATTRS UPDATED
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+SCNMD           ; --- PASS 1: BOLD (**) ---
+                LD      C, 0
+.MDBLP          LD      A, (WORKBUF)
+                DEC     A
+                CP      C
+                JR      C, .MDITP       ; NEED AT LEAST 2 CHARS FOR CLOSING '**'
+                JR      Z, .MDITP
+
+                LD      E, C
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      '*'
+                JR      NZ, .MDBNX
+                INC     HL
+                LD      A, (HL)
+                CP      '*'
+                JR      NZ, .MDBNX
+
+                ; FOUND OPENING '**' AT C AND C+1
+                ; SEARCH FOR CLOSING '**' AT J >= C+2
+                LD      A, C
+                ADD     A, 2
+                LD      B, A            ; B = J = C + 2
+.MDFCB          LD      A, (WORKBUF)
+                DEC     A
+                CP      B
+                JR      C, .MDBNX
+                JR      Z, .MDBNX
+
+                LD      E, B
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      '*'
+                JR      NZ, .MDFCBNX
+                INC     HL
+                LD      A, (HL)
+                CP      '*'
+                JR      Z, .MDBMK       ; FOUND CLOSING '**' AT B, B+1
+
+.MDFCBNX        INC     B
+                JR      .MDFCB
+
+.MDBMK          ; CHECK IF NON-EMPTY (B > C + 2)
+                LD      A, B
+                SUB     C
+                SUB     2               ; COUNT = B - (C + 2)
+                JR      Z, .MDBNX       ; EMPTY '****'
+
+                PUSH    BC
+                LD      B, A
+                LD      A, C
+                ADD     A, 2
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+.MDBST          LD      A, (HL)
+                OR      ATRBOLD
+                LD      (HL), A
+                INC     HL
+                DJNZ    .MDBST
+                POP     BC
+                LD      C, B
+                INC     C               ; ADVANCE PAST SECOND '*' OF CLOSING
+
+.MDBNX          INC     C
+                JR      .MDBLP
+
+.MDITP          ; --- PASS 2: ITALIC (*) ---
+                LD      C, 0
+.MDILP          LD      A, (WORKBUF)
+                CP      C
+                JR      Z, .MDUNP
+                JR      C, .MDUNP
+
+                LD      E, C
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      '*'
+                JR      NZ, .MDINX
+
+                ; CHECK IF PART OF '**' (LOOK AT ADJACENT CHARS)
+                INC     HL
+                LD      A, (HL)
+                CP      '*'
+                JR      Z, .MDISK2      ; IS '**': SKIP BOTH
+                DEC     HL
+                DEC     HL
+                LD      A, (HL)
+                CP      '*'
+                JR      Z, .MDINX       ; WAS SECOND OF '**'
+
+                ; SINGLE '*' OPENING: SEARCH FOR SINGLE '*' CLOSING
+                LD      A, C
+                INC     A
+                LD      B, A
+.MDFCI          LD      A, (WORKBUF)
+                CP      B
+                JR      Z, .MDINX
+                JR      C, .MDINX
+
+                LD      E, B
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      '*'
+                JR      NZ, .MDFCINX
+                ; CHECK NOT '**'
+                INC     HL
+                LD      A, (HL)
+                CP      '*'
+                JR      Z, .MDFCINX     ; IS '**', KEEP SEARCHING
+                DEC     HL
+                DEC     HL
+                LD      A, (HL)
+                CP      '*'
+                JR      Z, .MDFCINX
+
+                ; VALID SINGLE '*' CLOSING AT B
+                LD      A, B
+                SUB     C
+                DEC     A
+                JR      Z, .MDINX
+
+                PUSH    BC
+                LD      B, A
+                LD      A, C
+                INC     A
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+.MDIST          LD      A, (HL)
+                OR      ATRITAL
+                LD      (HL), A
+                INC     HL
+                DJNZ    .MDIST
+                POP     BC
+                LD      C, B
+                JR      .MDINX
+
+.MDFCINX        INC     B
+                JR      .MDFCI
+
+.MDISK2         INC     C               ; SKIP SECOND '*'
+.MDINX          INC     C
+                JR      .MDILP
+
+.MDUNP          ; --- PASS 3: ITALIC (_) ---
+                LD      C, 0
+.MDULP          LD      A, (WORKBUF)
+                CP      C
+                JR      Z, .MDDON
+                JR      C, .MDDON
+
+                LD      E, C
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      '_'
+                JR      NZ, .MDUNX
+
+                LD      A, C
+                INC     A
+                LD      B, A
+.MDFCU          LD      A, (WORKBUF)
+                CP      B
+                JR      Z, .MDUNX
+                JR      C, .MDUNX
+
+                LD      E, B
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      '_'
+                JR      Z, .MDUMK
+                INC     B
+                JR      .MDFCU
+
+.MDUMK          LD      A, B
+                SUB     C
+                DEC     A
+                JR      Z, .MDUNX
+
+                PUSH    BC
+                LD      B, A
+                LD      A, C
+                INC     A
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+.MDUST          LD      A, (HL)
+                OR      ATRITAL
+                LD      (HL), A
+                INC     HL
+                DJNZ    .MDUST
+                POP     BC
+                LD      C, B
+
+.MDUNX          INC     C
+                JR      .MDULP
+
+.MDDON          RET
+
+
+; --- ACTCYCMK                  ----------------------------------------
+
+
+; - ACTCYCMK ---------------------------
+; - CYCLE MARKUP MODE: OFF -> MD -> LIT -> OFF
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTCYCMK        LD      A, (MKUPMD)
+                INC     A
+                CP      MKUP_MAX
+                JR      C, .SETMD
+                XOR     A
+.SETMD          LD      (MKUPMD), A
+                CALL    REDRAW
+                CALL    DRWSTAT
+                RET
+
+
+; --- INSDELIM                  ----------------------------------------
+
+
+; - INSDELIM ---------------------------
+; - INSERT MARKUP DELIMITERS AT CURSOR (NO SELECTION)
+; - IN:  A = 1 FOR BOLD, 2 FOR ITALIC
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+INSDELIM        CP      1
+                JR      NZ, .INSIT
+
+                ; BOLD INSERTION
+                LD      A, (MKUPMD)
+                CP      MKUP_MD
+                JR      Z, .INSMDBD
+
+                ; LITE BOLD: INSERT '**' AND CURX-1
+                LD      A, '*'
+                CALL    EDINSCHR
+                LD      A, '*'
+                CALL    EDINSCHR
+                LD      A, (CURX)
+                DEC     A
+                LD      (CURX), A
+                RET
+
+.INSMDBD        ; MD BOLD: INSERT '****' AND CURX-2
+                LD      A, '*'
+                CALL    EDINSCHR
+                LD      A, '*'
+                CALL    EDINSCHR
+                LD      A, '*'
+                CALL    EDINSCHR
+                LD      A, '*'
+                CALL    EDINSCHR
+                LD      A, (CURX)
+                SUB     2
+                LD      (CURX), A
+                RET
+
+.INSIT          ; ITALIC INSERTION
+                LD      A, (MKUPMD)
+                CP      MKUP_MD
+                JR      Z, .INSMDIT
+
+                ; LITE ITALIC: INSERT '__' AND CURX-1
+                LD      A, '_'
+                CALL    EDINSCHR
+                LD      A, '_'
+                CALL    EDINSCHR
+                LD      A, (CURX)
+                DEC     A
+                LD      (CURX), A
+                RET
+
+.INSMDIT        ; MD ITALIC: INSERT '**' AND CURX-1
+                LD      A, '*'
+                CALL    EDINSCHR
+                LD      A, '*'
+                CALL    EDINSCHR
+                LD      A, (CURX)
+                DEC     A
+                LD      (CURX), A
+                RET
+
+
+; --- WRAPSEL                   ----------------------------------------
+
+
+; - WRAPSEL ----------------------------
+; - WRAP SINGLE-LINE SELECTION WITH DELIMITERS
+; - IN:  A = 1 FOR BOLD, 2 FOR ITALIC
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WRAPSEL         PUSH    AF              ; SAVE STYLE (1=BOLD, 2=ITALIC)
+                CALL    SELNORM
+
+                ; VERIFY SINGLE-LINE SELECTION
+                LD      HL, (SELSTRL)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JP      NZ, .WRPMUL
+
+                ; LOAD LINE INTO WORKBUF
+                LD      HL, (SELSTRL)
+                CALL    LINEREAD
+
+                POP     AF              ; RESTORE STYLE
+                CP      1
+                JR      NZ, .WRPIT
+
+                ; --- WRAP BOLD ---
+                LD      A, (MKUPMD)
+                CP      MKUP_MD
+                JR      Z, .WRPMDBD
+
+                ; LITE BOLD: WRAP WITH '*' ... '*'
+                ; 1. INSERT CLOSING '*' AT SELENDX
+                LD      HL, WORKBUF
+                LD      A, (SELENDX)
+                LD      C, '*'
+                CALL    WBINS
+                ; 2. INSERT OPENING '*' AT SELSTRX
+                LD      HL, WORKBUF
+                LD      A, (SELSTRX)
+                LD      C, '*'
+                CALL    WBINS
+                JP      .WRPFIN
+
+.WRPMDBD        ; MD BOLD: WRAP WITH '**' ... '**'
+                ; 1. INSERT CLOSING '**' AT SELENDX
+                LD      HL, WORKBUF
+                LD      A, (SELENDX)
+                LD      C, '*'
+                CALL    WBINS
+                LD      HL, WORKBUF
+                LD      A, (SELENDX)
+                INC     A
+                LD      C, '*'
+                CALL    WBINS
+                ; 2. INSERT OPENING '**' AT SELSTRX
+                LD      HL, WORKBUF
+                LD      A, (SELSTRX)
+                LD      C, '*'
+                CALL    WBINS
+                LD      HL, WORKBUF
+                LD      A, (SELSTRX)
+                INC     A
+                LD      C, '*'
+                CALL    WBINS
+                JP      .WRPFIN
+
+.WRPIT          ; --- WRAP ITALIC ---
+                LD      A, (MKUPMD)
+                CP      MKUP_MD
+                JR      Z, .WRPMDIT
+
+                ; LITE ITALIC: WRAP WITH '_' ... '_'
+                LD      HL, WORKBUF
+                LD      A, (SELENDX)
+                LD      C, '_'
+                CALL    WBINS
+                LD      HL, WORKBUF
+                LD      A, (SELSTRX)
+                LD      C, '_'
+                CALL    WBINS
+                JP      .WRPFIN
+
+.WRPMDIT        ; MD ITALIC: WRAP WITH '*' ... '*'
+                LD      HL, WORKBUF
+                LD      A, (SELENDX)
+                LD      C, '*'
+                CALL    WBINS
+                LD      HL, WORKBUF
+                LD      A, (SELSTRX)
+                LD      C, '*'
+                CALL    WBINS
+                JP      .WRPFIN
+
+.WRPFIN         ; COMMIT WORKBUF AND CLEAR SELECTION
+                LD      HL, (SELSTRL)
+                CALL    LINEWRT
+                CALL    ACTDSEL
+                CALL    REDRAW
+                RET
+
+.WRPMUL         POP     AF              ; MULTI-LINE: CLEANUP STACK
+                RET
