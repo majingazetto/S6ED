@@ -49,75 +49,8 @@ MAINLOOP        ; POLL KEYBOARD VIA BIOS CHSNS (#009C)
                 LD      IX, CHGET
                 CALL    BIOSCALL
 
-                ; DISPATCH SPECIAL AND CONTROL KEYS
-                CP      ESC
-                JP      Z, TERM
-                CP      CTRL_Q
-                JP      Z, TERM
-
-                CP      CTRL_S
-                JR      NZ, .NOTSAVE
-                CALL    FILESAVE
-                JR      .DRAWCUR
-
-.NOTSAVE        CP      CRIGHT
-                JR      NZ, .NOTR
-                CALL    EDMOVCHR
-                JR      .DRAWCUR
-
-.NOTR           CP      CLEFT
-                JR      NZ, .NOTL
-                CALL    EDMOVCHR
-                JR      .DRAWCUR
-
-.NOTL           CP      CDOWN
-                JR      NZ, .NOTDN
-                CALL    EDMOVROW
-                JR      .DRAWCUR
-
-.NOTDN          CP      CUP
-                JR      NZ, .NOTUP
-                CALL    EDMOVROW
-                JR      .DRAWCUR
-
-.NOTUP          CP      CR
-                JR      NZ, .NOTCR
-                CALL    EDNWLIN
-                JR      .DRAWCUR
-
-.NOTCR          CP      BS
-                JR      NZ, .NOTBS
-                CALL    EDDELBK
-                JR      .DRAWCUR
-
-.NOTBS          CP      DEL
-                JR      NZ, .NOTDEL
-                CALL    EDDELCHR
-                JR      .DRAWCUR
-
-.NOTDEL         CP      CTRL_W
-                JR      NZ, .NOTW
-                CALL    EDTGLWRP
-                JR      .DRAWCUR
-
-.NOTW           ; PRINTABLE ASCII CHAR CHECK (#20..#7E)
-                CP      #20
-                JR      C, .DRAWCUR     ; IGNORE UNHANDLED CONTROL CODES
-                CP      #7F
-                JR      NC, .DRAWCUR    ; IGNORE #7F AND ABOVE
-
-
-                ; INSERT OR OVERWRITE MODE
-                PUSH    AF
-                LD      A, (INSMODE)
-                CP      INS_MODE
-                JR      NZ, .DOWRITE
-                POP     AF
-                CALL    EDINSCHR
-                JR      .DRAWCUR
-
-.DOWRITE        POP     AF
-                CALL    EDOVRCHR
+                ; DISPATCH KEYPRESS THROUGH ACTIVE KEYMAP AND ACTION CATALOG
+                CALL    DISPKEY
 
 .DRAWCUR        ; REDRAW CURSOR AT CURRENT POSITION & RESET BLINK
                 CALL    DRWCUR

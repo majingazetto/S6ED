@@ -75,6 +75,12 @@ LANGMODE        DEFB    LGNONE       ; CURRENT LANGUAGE/TOKENIZER MODE
 BLNKPH       DEFB    0               ; CURSOR BLINK PHASE (TOGGLED BY TIMI)
 BLNKCNT         DEFB    0               ; BLINK TICK COUNTER
 
+KMAPID          DEFB    0               ; 0=STD, 1=WS, 2=EMACS, 3=VI
+KMAPPTR         DEFW    0               ; POINTER TO ACTIVE KEYMAP TABLE
+VIMODE          DEFB    0               ; 0=NORMAL, 1=INSERT
+VILEAD          DEFB    0               ; VI LEADER KEY PENDING
+MODKEYS         DEFB    0               ; LAST READ MODIFIERS BYTE
+
 
 ; --- FILE                      ----------------------------------------
 
@@ -144,6 +150,9 @@ B2DEND          DEFS    1
 
                 ; FUNCTION KEYS SAVE BUFFER
 FNKBUF          DEFS    10
+
+                ; STATUS BAR TEXT BUFFER
+STATBUF         DEFS    80
 
 
 ; --- LINE DIRECTORY            ----------------------------------------
