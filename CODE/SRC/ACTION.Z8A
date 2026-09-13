@@ -54,6 +54,9 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTSELAL        ; 42
                 DEFW    ACTDSEL         ; 43
                 DEFW    ACTDLS          ; 44
+                DEFW    ACTCOPY         ; 45
+                DEFW    ACTCUT          ; 46
+                DEFW    ACTPAST         ; 47
 
 
 ; --- ACTNONE                   ----------------------------------------
@@ -1693,3 +1696,260 @@ ACTDLS          LD      A, (SELACT)
                 LD      (SELDRAWN), A
                 CALL    DRWSTAT
                 RET
+
+
+; --- ACTCOPY                   ----------------------------------------
+
+
+; - ACTCOPY ----------------------------
+; - COPY ACTIVE SELECTION TO CLIPBUF
+; - IN:  NONE
+; - OUT: (CLIPLEN) = BYTES WRITTEN
+; - CLOBBERS: ALL
+; -
+
+ACTCOPY         LD      A, (SELACT)
+                OR      A
+                RET     Z               ; NO SELECTION ACTIVE
+                CALL    SELNORM
+
+                ; VERIFY SELECTION IS NOT EMPTY
+                LD      HL, (SELSTRL)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JR      NZ, .CPYINIT
+                LD      A, (SELSTRX)
+                LD      HL, SELENDX
+                CP      (HL)
+                RET     Z               ; EMPTY: NOTHING TO COPY
+
+.CPYINIT        LD      HL, CLIPBUF
+                LD      (CPYPTR), HL
+                LD      HL, 0
+                LD      (CPYCNT), HL
+                LD      HL, (SELSTRL)
+                LD      (SELTMPL), HL
+
+.CPYLINE        ; CHECK IF TOTAL BYTES EXCEEDS CLIPMAX
+                LD      HL, (CPYCNT)
+                LD      DE, CLIPMAX
+                CALL    CMPHLDE
+                JP      NC, .CPYEXIT    ; CLIPBOARD FULL
+
+                ; READ CURRENT LINE INTO WORKBUF
+                LD      HL, (SELTMPL)
+                CALL    LINEREAD
+
+                ; DETERMINE XA FOR THIS LINE
+                LD      HL, (SELTMPL)
+                LD      DE, (SELSTRL)
+                CALL    CMPHLDE
+                JR      NZ, .CPYMIDL
+                LD      A, (SELSTRX)
+                JR      .CPYSETXA
+.CPYMIDL        XOR     A
+.CPYSETXA       LD      (SELTMPXA), A
+
+                ; DETERMINE XB FOR THIS LINE
+                LD      A, (WORKBUF)
+                LD      (SELTMPXB), A   ; DEFAULT XB = LINE LENGTH
+                LD      HL, (SELTMPL)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JR      NZ, .CPYNOTEND
+                LD      A, (SELENDX)
+                LD      (SELTMPXB), A
+.CPYNOTEND      ; CLAMP XB TO LINE LENGTH
+                LD      A, (WORKBUF)
+                LD      HL, SELTMPXB
+                CP      (HL)
+                JR      NC, .CPYXBOK
+                LD      (SELTMPXB), A
+
+.CPYXBOK        ; CHECK IF XA < XB
+                LD      A, (SELTMPXA)
+                LD      HL, SELTMPXB
+                CP      (HL)
+                JR      NC, .CPYCHKNXT  ; NO CHARS ON THIS LINE
+
+                ; K = XB - XA
+                SUB     (HL)
+                NEG                     ; A = K
+                LD      C, A            ; C = K (1..80)
+
+                ; CLAMP K TO REMAINING CLIPBOARD SPACE (CLIPMAX - CPYCNT)
+                LD      HL, CLIPMAX
+                LD      DE, (CPYCNT)
+                OR      A
+                SBC     HL, DE          ; HL = REMAINING
+                LD      A, H
+                OR      A
+                JR      NZ, .CPYKOK     ; REMAINING > 255: K DEFINITELY FITS
+                LD      A, C
+                CP      L
+                JR      C, .CPYKOK      ; K < REMAINING
+                LD      C, L            ; CLAMP K = REMAINING
+.CPYKOK         LD      A, C
+                OR      A
+                JR      Z, .CPYEXIT
+
+                ; COPY K BYTES FROM WORKBUF + 1 + XA TO (CPYPTR)
+                PUSH    BC              ; SAVE K IN C
+                LD      A, (SELTMPXA)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE          ; HL = SRC
+                LD      DE, (CPYPTR)    ; DE = DEST
+                LD      B, 0            ; BC = K
+                LDIR
+                LD      (CPYPTR), DE    ; UPDATE WRITE POINTER
+                POP     BC              ; RESTORE K IN C
+
+                ; CPYCNT += K
+                LD      HL, (CPYCNT)
+                LD      B, 0
+                ADD     HL, BC
+                LD      (CPYCNT), HL
+
+.CPYCHKNXT      ; IF SELTMPL == SELENDL, WE ARE FINISHED
+                LD      HL, (SELTMPL)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JR      Z, .CPYEXIT
+
+                ; NOT LAST LINE: APPEND CRLF (#0D, #0A) IF AT LEAST 2 BYTES REMAIN
+                LD      HL, CLIPMAX
+                LD      DE, (CPYCNT)
+                OR      A
+                SBC     HL, DE
+                LD      A, H
+                OR      A
+                JR      NZ, .CPYCRLF
+                LD      A, L
+                CP      2
+                JR      C, .CPYEXIT     ; NO ROOM FOR CRLF
+
+.CPYCRLF        LD      HL, (CPYPTR)
+                LD      (HL), #0D
+                INC     HL
+                LD      (HL), #0A
+                INC     HL
+                LD      (CPYPTR), HL
+                LD      HL, (CPYCNT)
+                INC     HL
+                INC     HL
+                LD      (CPYCNT), HL
+
+                ; ADVANCE TO NEXT LINE
+                LD      HL, (SELTMPL)
+                INC     HL
+                LD      (SELTMPL), HL
+                JP      .CPYLINE
+
+.CPYEXIT        LD      HL, (CPYCNT)
+                LD      (CLIPLEN), HL
+                RET
+
+
+; --- ACTCUT                     ----------------------------------------
+
+
+; - ACTCUT -----------------------------
+; - CUT ACTIVE SELECTION TO CLIPBUF
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTCUT          CALL    ACTCOPY
+                LD      HL, (CLIPLEN)
+                LD      A, H
+                OR      L
+                RET     Z               ; NOTHING COPIED
+                JP      ACTDLS          ; DELETE SELECTION FROM DOCUMENT
+
+
+; --- ACTPAST                   ----------------------------------------
+
+
+; - ACTPAST ----------------------------
+; - PASTE CLIPBUF AT CURRENT CURSOR
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTPAST         LD      HL, (CLIPLEN)
+                LD      A, H
+                OR      L
+                RET     Z               ; CLIPBOARD EMPTY
+
+                ; IF ACTIVE SELECTION, DELETE IT FIRST
+                LD      A, (SELACT)
+                OR      A
+                JR      Z, .PSTINIT
+                CALL    ACTDLS
+
+.PSTINIT        LD      HL, (CLIPLEN)
+                LD      (CPYCNT), HL
+                LD      HL, CLIPBUF
+                LD      (CLIPRD), HL
+
+.PSTLP          LD      HL, (CPYCNT)
+                LD      A, H
+                OR      L
+                JR      Z, .PSTDONE
+                DEC     HL
+                LD      (CPYCNT), HL
+
+                LD      HL, (CLIPRD)
+                LD      A, (HL)
+                INC     HL
+                LD      (CLIPRD), HL
+
+                ; 1. CHECK IF CR (#0D)
+                CP      #0D
+                JR      NZ, .PSTNOTCR
+                CALL    EDNWLIN
+
+                ; CHECK IF NEXT BYTE IS LF (#0A) AND CONSUME IT
+                LD      HL, (CPYCNT)
+                LD      A, H
+                OR      L
+                JR      Z, .PSTDONE
+                LD      HL, (CLIPRD)
+                LD      A, (HL)
+                CP      #0A
+                JR      NZ, .PSTLP
+                ; CONSUME LF
+                INC     HL
+                LD      (CLIPRD), HL
+                LD      HL, (CPYCNT)
+                DEC     HL
+                LD      (CPYCNT), HL
+                JR      .PSTLP
+
+.PSTNOTCR       ; 2. CHECK IF LF (#0A)
+                CP      #0A
+                JR      NZ, .PSTNOTLF
+                CALL    EDNWLIN
+                JR      .PSTLP
+
+.PSTNOTLF       ; 3. CHECK IF TAB (#09)
+                CP      #09
+                JR      NZ, .PSTCHAR
+                LD      A, ' '
+
+.PSTCHAR        ; 4. PRINTABLE CHARACTER (#20..#7E)
+                CP      #20
+                JR      C, .PSTLP       ; IGNORE NON-PRINTABLE CONTROL CODES
+                CP      #7F
+                JR      NC, .PSTLP
+                CALL    EDINSCHR
+                JR      .PSTLP
+
+.PSTDONE        CALL    DRWSCRL
+                CALL    DRWSTAT
+                RET
+
