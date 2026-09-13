@@ -161,3 +161,60 @@ OVR_MODE        EQU     0               ; OVERWRITE
 WRAP_DEV        EQU     0               ; DEVELOPER MODE: CLAMP AT COL 79 (NO AUTO-WRAP)
 WRAP_TXT        EQU     1               ; TEXT MODE: SMART WORD-WRAP
 
+
+; --- MODIFIERS BITMASK         ----------------------------------------
+
+
+MODNONE         EQU     %00000000
+MODSHFT         EQU     %00000001       ; SHIFT (ROW 6 BIT 0)
+MODCTRL         EQU     %00000010       ; CTRL  (ROW 6 BIT 1)
+MODGRPH         EQU     %00000100       ; GRAPH (ROW 6 BIT 2)
+MODANY          EQU     %11111111       ; MATCH ANY MODIFIER STATE
+
+
+; --- ACTION CATALOG IDS        ----------------------------------------
+
+
+ACNONE          EQU     0
+ACMVL           EQU     1
+ACMVR           EQU     2
+ACMVU           EQU     3
+ACMVD           EQU     4
+ACBOL           EQU     5               ; CTRL + <
+ACEOL           EQU     6               ; CTRL + >
+ACTOP           EQU     7               ; CTRL + UP
+ACBOT           EQU     8               ; CTRL + DOWN
+ACWLFT          EQU     9               ; GRAPH + <
+ACWRGT          EQU     10              ; GRAPH + >
+ACDWLFT         EQU     11              ; GRAPH + BS
+ACPGUP          EQU     12              ; GRAPH + UP
+ACPGDN          EQU     13              ; GRAPH + DOWN
+ACDELBK         EQU     14              ; BS
+ACDELFW         EQU     15              ; DEL
+ACDELLN         EQU     16              ; CTRL + Y (OR dd IN VI)
+ACNWLIN         EQU     17              ; CR
+ACOPNBL         EQU     18              ; VI o
+ACOPNAB         EQU     19              ; VI O
+ACTGLIN         EQU     20              ; INS
+ACTGLWR         EQU     21              ; CTRL + W
+ACSAVE          EQU     22              ; F2 / CTRL + S
+ACQUIT          EQU     23              ; ESC / CTRL + Q
+ACHELP          EQU     24              ; F1
+ACCYCKM         EQU     25              ; F5 / CTRL + K
+ACVIINS         EQU     26              ; VI i
+ACVIAPP         EQU     27              ; VI a
+ACVINRM         EQU     28              ; VI ESC
+ACVILED         EQU     29              ; VI LEADER 'd'
+ACMAX           EQU     30
+
+
+; --- KEYMAP PROFILES           ----------------------------------------
+
+
+KMSTD           EQU     0               ; STANDARD / CUA (DEFAULT)
+KMWS            EQU     1               ; WORDSTAR / TURBO PASCAL
+KMEMACS         EQU     2               ; EMACS
+KMVI            EQU     3               ; VI MODAL
+
+VIMNORM         EQU     0               ; VI NORMAL MODE
+VIMINS          EQU     1               ; VI INSERT MODE

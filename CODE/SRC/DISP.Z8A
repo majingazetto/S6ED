@@ -1,0 +1,182 @@
+;                                       ****************************************
+;                                       * DISPATCHER                           *
+;                                       ****************************************
+;
+; KEYBOARD INPUT DISPATCH ENGINE AND MODAL VI STATE MACHINE.
+; SCANS KEYMAP TABLES AND DISPATCHES TO ATOMIC ACTION VECTORS.
+
+
+; --- READMOD                   ----------------------------------------
+
+
+; - READMOD ----------------------------
+; - READ MODIFIER KEYS VIA BIOS SNSMAT
+; - IN:  NONE
+; - OUT: A = MODIFIER BITS (BIT 0=SHIFT, BIT 1=CTRL, BIT 2=GRAPH)
+; - CLOBBERS: AF, C
+; -
+
+READMOD         LD      A, 6
+                LD      IX, SNSMAT
+                CALL    BIOSCALL
+                CPL
+                AND     %00000111
+                LD      (MODKEYS), A
+                RET
+
+
+; --- DISPKEY                   ----------------------------------------
+
+
+; - DISPKEY ----------------------------
+; - DISPATCH A KEYPRESS THROUGH ACTIVE KEYMAP
+; - IN:  A = KEYCODE FROM CHGET
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
+                CALL    READMOD
+                LD      A, (MODKEYS)
+                LD      B, A            ; B = MODIFIERS
+                POP     AF              ; RESTORE KEYCODE
+                LD      C, A            ; C = KEYCODE
+
+                ; CHECK VI LEADER KEY
+                LD      A, (VILEAD)
+                OR      A
+                JR      Z, .NOLEAD
+                XOR     A
+                LD      (VILEAD), A
+                LD      A, C
+                CP      'd'
+                JP      Z, ACTDELLN
+
+.NOLEAD         ; SCAN ACTIVE KEYMAP TABLE
+                LD      HL, (KMAPPTR)
+.KSCAN          LD      A, (HL)
+                CP      #FF             ; END OF TABLE SENTINEL
+                JR      Z, .NOTMAPP
+                CP      C
+                JR      NZ, .KNEXT
+                INC     HL
+                LD      A, (HL)         ; MODIFIER MASK IN TABLE
+                CP      MODANY
+                JR      Z, .KMATCH
+                CP      B
+                JR      Z, .KMATCH
+                DEC     HL              ; MISMATCH: RESTORE AND ADVANCE
+.KNEXT          INC     HL
+                INC     HL
+                INC     HL
+                JR      .KSCAN
+
+.KMATCH         INC     HL
+                LD      A, (HL)         ; A = ACTION ID
+                CALL    EXECACT
+                RET
+
+.NOTMAPP        ; UNMAPPED: CHECK PRINTABLE RANGE (#20..#7E)
+                LD      A, (KMAPID)
+                CP      KMVI
+                JR      NZ, .DOPRINT
+                ; IN VI NORMAL MODE, UNMAPPED CHARACTERS DO NOT TYPE
+                LD      A, (VIMODE)
+                CP      VIMNORM
+                RET     Z
+
+.DOPRINT        LD      A, C
+                CP      #20
+                RET     C
+                CP      #7F
+                RET     NC
+
+                LD      A, (INSMODE)
+                CP      INS_MODE
+                LD      A, C
+                JP      Z, EDINSCHR
+                JP      EDOVRCHR
+
+
+; --- EXECACT                   ----------------------------------------
+
+
+; - EXECACT ----------------------------
+; - EXECUTE AN ACTION BY ACTION ID
+; - IN:  A = ACTION ID
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+EXECACT         CP      ACMAX
+                RET     NC
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                LD      DE, ACTTBL
+                ADD     HL, DE
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)
+                EX      DE, HL
+                CALL    CALHL
+                RET
+
+
+; --- KMAPCYC                   ----------------------------------------
+
+
+; - KMAPCYC ----------------------------
+; - CYCLE ACTIVE KEYMAP PROFILE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+KMAPCYC         LD      A, (KMAPID)
+                INC     A
+                CP      4
+                JR      C, .KCYCOK
+                XOR     A
+.KCYCOK         LD      (KMAPID), A
+                CALL    KMAPSW
+                CALL    DRWSTAT
+                RET
+
+
+; --- KMAPSW                    ----------------------------------------
+
+
+; - KMAPSW -----------------------------
+; - REPOINT KMAPPTR ACCORDING TO KMAPID
+; - IN:  NONE (USES KMAPID)
+; - OUT: NONE
+; - CLOBBERS: AF, HL
+; -
+
+KMAPSW          LD      A, (KMAPID)
+                OR      A
+                JR      NZ, .NOTSTD
+                LD      HL, KMAPSTD
+                LD      (KMAPPTR), HL
+                RET
+
+.NOTSTD         CP      KMWS
+                JR      NZ, .NOTWS
+                LD      HL, KMAPWS
+                LD      (KMAPPTR), HL
+                RET
+
+.NOTWS          CP      KMEMACS
+                JR      NZ, .NOTEMACS
+                LD      HL, KMAPEMAC
+                LD      (KMAPPTR), HL
+                RET
+
+.NOTEMACS       ; KMVI
+                XOR     A
+                LD      (VIMODE), A
+                LD      (VILEAD), A
+                LD      HL, KMAPVIN
+                LD      (KMAPPTR), HL
+                RET

@@ -40,14 +40,145 @@ DRWSTAT         LD      HL, 0
                 LD      HL, VDPCMBLK
                 CALL    HMMV
 
+                ; FORMAT STATUS STRING IN STATBUF
+                CALL    BLDSTAT
+
                 ; PRINT STATUS TEXT
-                LD      HL, STATEXT
+                LD      HL, STATBUF
                 LD      DE, 6           ; DX = 6
                 LD      BC, 202         ; DY = 202
                 CALL    BLTSTR
                 RET
 
-STATEXT         DEFM    "Ln 1, Col 1 | TEST.TXT", 0
+
+; - BLDSTAT ----------------------------
+; - BUILD DYNAMIC STATUS BAR TEXT
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+BLDSTAT         LD      DE, STATBUF
+
+                ; 1. PROFILE TAG: [STD], [WS ], [EMC], [VI-N], [VI-I]
+                LD      A, (KMAPID)
+                OR      A
+                JR      NZ, .NOTSTDP
+                LD      HL, .STRSTD
+                CALL    .CPYSTR
+                JR      .DONEKMAP
+.NOTSTDP        CP      KMWS
+                JR      NZ, .NOTWSP
+                LD      HL, .STRWS
+                CALL    .CPYSTR
+                JR      .DONEKMAP
+.NOTWSP         CP      KMEMACS
+                JR      NZ, .NOTEMCP
+                LD      HL, .STREMC
+                CALL    .CPYSTR
+                JR      .DONEKMAP
+.NOTEMCP        ; VI PROFILE
+                LD      A, (VIMODE)
+                CP      VIMNORM
+                JR      NZ, .VIINSP
+                LD      HL, .STRVIN
+                CALL    .CPYSTR
+                JR      .DONEKMAP
+.VIINSP         LD      HL, .STRVII
+                CALL    .CPYSTR
+
+.DONEKMAP       ; 2. WRAP MODE
+                LD      A, (WRAPMODE)
+                CP      WRAP_DEV
+                JR      NZ, .WRTXT
+                LD      HL, .STRWDEV
+                CALL    .CPYSTR
+                JR      .DONEWRAP
+.WRTXT          LD      HL, .STRWTXT
+                CALL    .CPYSTR
+
+.DONEWRAP       ; 3. INSERT / OVERWRITE
+                LD      A, (INSMODE)
+                CP      INS_MODE
+                JR      NZ, .OVRP
+                LD      HL, .STRINS
+                CALL    .CPYSTR
+                JR      .DONEINS
+.OVRP           LD      HL, .STROVR
+                CALL    .CPYSTR
+
+.DONEINS        ; 4. MODIFIED INDICATOR
+                LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .NOTMOD
+                LD      A, '*'
+                LD      (DE), A
+                INC     DE
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
+                JR      .DONEMOD
+.NOTMOD         LD      A, ' '
+                LD      (DE), A
+                INC     DE
+                LD      (DE), A
+                INC     DE
+
+.DONEMOD        ; 5. "Ln " + (DOCLINE + 1)
+                LD      HL, .STRLN
+                CALL    .CPYSTR
+                LD      HL, (DOCLINE)
+                INC     HL
+                PUSH    DE
+                CALL    B2D16
+                EX      DE, HL          ; HL = STRING
+                POP     DE
+                CALL    .CPYSTR
+
+                ; " Col " + (CURX + 1)
+                LD      HL, .STRCOL
+                CALL    .CPYSTR
+                LD      A, (CURX)
+                INC     A
+                PUSH    DE
+                CALL    B2D8
+                EX      DE, HL
+                POP     DE
+                CALL    .CPYSTR
+
+                ; " | "
+                LD      HL, .STRSEP
+                CALL    .CPYSTR
+
+                ; FILENAME
+                LD      HL, FILENAME
+                CALL    .CPYSTR
+
+                ; TERMINATING NULL
+                XOR     A
+                LD      (DE), A
+                RET
+
+.CPYSTR         LD      A, (HL)
+                OR      A
+                RET     Z
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                JR      .CPYSTR
+
+.STRSTD         DEFM    "[STD] ", 0
+.STRWS          DEFM    "[WS]  ", 0
+.STREMC         DEFM    "[EMC] ", 0
+.STRVIN         DEFM    "[VI-N]", 0
+.STRVII         DEFM    "[VI-I]", 0
+.STRWDEV        DEFM    " [DEV]", 0
+.STRWTXT        DEFM    " [TXT]", 0
+.STRINS         DEFM    " [INS] ", 0
+.STROVR         DEFM    " [OVR] ", 0
+.STRLN          DEFM    "Ln ", 0
+.STRCOL         DEFM    " Col ", 0
+.STRSEP         DEFM    " | ", 0
 
 
 ; --- DRWMENU               ----------------------------------------

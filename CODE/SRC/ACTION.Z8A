@@ -1,0 +1,708 @@
+;                                       ****************************************
+;                                       * ACTION                               *
+;                                       ****************************************
+;
+; ATOMIC ACTION IMPLEMENTATIONS AND ACTION VECTOR TABLE (ACTTBL).
+; ALL ACTIONS OPERATE ON SYSTEM AND EDITOR STATE (DOCLINE, CURX, WORKBUF, ETC.)
+
+
+; --- ACTTBL                    ----------------------------------------
+
+
+ACTTBL          DEFW    ACTNONE         ; 0
+                DEFW    ACTMVL          ; 1
+                DEFW    ACTMVR          ; 2
+                DEFW    ACTMVU          ; 3
+                DEFW    ACTMVD          ; 4
+                DEFW    ACTBOL          ; 5
+                DEFW    ACTEOL          ; 6
+                DEFW    ACTTOP          ; 7
+                DEFW    ACTBOT          ; 8
+                DEFW    ACTWLFT         ; 9
+                DEFW    ACTWRGT         ; 10
+                DEFW    ACTDWLFT        ; 11
+                DEFW    ACTPGUP         ; 12
+                DEFW    ACTPGDN         ; 13
+                DEFW    ACTDELBK        ; 14
+                DEFW    ACTDELFW        ; 15
+                DEFW    ACTDELLN        ; 16
+                DEFW    ACTNWLIN        ; 17
+                DEFW    ACTOPNBL        ; 18
+                DEFW    ACTOPNAB        ; 19
+                DEFW    ACTTGLIN        ; 20
+                DEFW    ACTTGLWR        ; 21
+                DEFW    ACTSAVE         ; 22
+                DEFW    ACTQUIT         ; 23
+                DEFW    ACTHELP         ; 24
+                DEFW    ACTCYCKM        ; 25
+                DEFW    ACTVIINS        ; 26
+                DEFW    ACTVIAPP        ; 27
+                DEFW    ACTVINRM        ; 28
+                DEFW    ACTVILED        ; 29
+
+
+; --- ACTNONE                   ----------------------------------------
+
+
+; - ACTNONE ----------------------------
+; - NO OPERATION
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+ACTNONE         RET
+
+
+; --- ACTMVL                    ----------------------------------------
+
+
+; - ACTMVL -----------------------------
+; - MOVE CURSOR LEFT ONE COLUMN
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTMVL          LD      A, CLEFT
+                CALL    EDMOVCHR
+                RET
+
+
+; --- ACTMVR                    ----------------------------------------
+
+
+; - ACTMVR -----------------------------
+; - MOVE CURSOR RIGHT ONE COLUMN
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTMVR          LD      A, CRIGHT
+                CALL    EDMOVCHR
+                RET
+
+
+; --- ACTMVU                    ----------------------------------------
+
+
+; - ACTMVU -----------------------------
+; - MOVE CURSOR UP ONE ROW
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTMVU          LD      A, CUP
+                CALL    EDMOVROW
+                RET
+
+
+; --- ACTMVD                    ----------------------------------------
+
+
+; - ACTMVD -----------------------------
+; - MOVE CURSOR DOWN ONE ROW
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTMVD          LD      A, CDOWN
+                CALL    EDMOVROW
+                RET
+
+
+; --- ACTBOL                    ----------------------------------------
+
+
+; - ACTBOL -----------------------------
+; - MOVE CURSOR TO BEGINNING OF LINE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+ACTBOL          XOR     A
+                LD      (CURX), A
+                RET
+
+
+; --- ACTEOL                    ----------------------------------------
+
+
+; - ACTEOL -----------------------------
+; - MOVE CURSOR TO END OF LINE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTEOL          LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                LD      A, (WORKBUF)
+                CP      TEXTCOLS
+                JR      C, .EOLSET
+                LD      A, TEXTCOLS - 1
+.EOLSET         LD      (CURX), A
+                RET
+
+
+; --- ACTTOP                    ----------------------------------------
+
+
+; - ACTTOP -----------------------------
+; - MOVE CURSOR TO TOP OF DOCUMENT
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTTOP          LD      HL, 0
+                LD      (DOCLINE), HL
+                LD      (TOPLINE), HL
+                XOR     A
+                LD      (CURX), A
+                LD      (CURY), A
+                CALL    REDRAW
+                CALL    DRWGUT
+                CALL    DRWSCRL
+                RET
+
+
+; --- ACTBOT                    ----------------------------------------
+
+
+; - ACTBOT -----------------------------
+; - MOVE CURSOR TO BOTTOM OF DOCUMENT
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTBOT          LD      HL, (TOTLINES)
+                DEC     HL
+                LD      (DOCLINE), HL
+                LD      DE, SCRROWS
+                CALL    CMPHLDE
+                JR      C, .SHORTDOC
+                LD      HL, (TOTLINES)
+                LD      DE, SCRROWS
+                OR      A
+                SBC     HL, DE
+                LD      (TOPLINE), HL
+                LD      A, SCRROWS - 1
+                LD      (CURY), A
+                JR      .REDBOT
+.SHORTDOC       LD      HL, 0
+                LD      (TOPLINE), HL
+                LD      A, (DOCLINE)
+                LD      (CURY), A
+.REDBOT         XOR     A
+                LD      (CURX), A
+                CALL    REDRAW
+                CALL    DRWGUT
+                CALL    DRWSCRL
+                RET
+
+
+; --- ACTWLFT                   ----------------------------------------
+
+
+; - ACTWLFT ----------------------------
+; - MOVE CURSOR TO START OF PREV WORD
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTWLFT         LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                LD      A, (CURX)
+                OR      A
+                RET     Z
+                DEC     A
+                LD      B, A            ; B = SCAN COLUMN
+
+                ; 1. SKIP SPACES TO THE LEFT
+.WLSKPSPC       LD      E, B
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      ' '
+                JR      NZ, .WLSKPW
+                LD      A, B
+                OR      A
+                JR      Z, .WLBOL
+                DEC     B
+                JR      .WLSKPSPC
+
+                ; 2. SCAN WORD CHARACTERS TO FIND START
+.WLSKPW         LD      E, B
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .WLFND
+                LD      A, B
+                OR      A
+                JR      Z, .WLBOL
+                DEC     B
+                JR      .WLSKPW
+
+.WLFND          INC     B
+                LD      A, B
+                LD      (CURX), A
+                RET
+
+.WLBOL          XOR     A
+                LD      (CURX), A
+                RET
+
+
+; --- ACTWRGT                   ----------------------------------------
+
+
+; - ACTWRGT ----------------------------
+; - MOVE CURSOR TO START OF NEXT WORD
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTWRGT         LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                LD      A, (WORKBUF)
+                LD      C, A            ; C = LENGTH
+                LD      A, (CURX)
+                CP      C
+                RET     NC
+.WRSKPNON       INC     A
+                CP      C
+                JR      NC, .WREOL
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .WRSKPSPC
+                LD      A, E
+                JR      .WRSKPNON
+.WRSKPSPC       INC     E
+                LD      A, E
+                CP      C
+                JR      NC, .WREOL
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .WRSKPSPC
+                LD      A, E
+                LD      (CURX), A
+                RET
+.WREOL          LD      A, C
+                CP      TEXTCOLS
+                JR      C, .WRSET
+                LD      A, TEXTCOLS - 1
+.WRSET          LD      (CURX), A
+                RET
+
+
+; --- ACTDWLFT                  ----------------------------------------
+
+
+; - ACTDWLFT ---------------------------
+; - DELETE ENTIRE PREVIOUS WORD
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTDWLFT        LD      A, (CURX)
+                OR      A
+                RET     Z
+                ; FIND TARGET COLUMN IN B
+                PUSH    AF
+                CALL    ACTWLFT
+                LD      A, (CURX)
+                LD      B, A
+                POP     AF
+                LD      (CURX), A
+.DWLP           LD      A, (CURX)
+                CP      B
+                RET     Z
+                RET     C
+                PUSH    BC
+                CALL    EDDELBK
+                POP     BC
+                JR      .DWLP
+
+
+; --- ACTPGUP                   ----------------------------------------
+
+
+; - ACTPGUP ----------------------------
+; - SCROLL UP ONE PAGE (24 ROWS)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTPGUP         LD      HL, (TOPLINE)
+                LD      A, H
+                OR      L
+                JR      Z, .PGUTOP
+                LD      DE, SCRROWS
+                OR      A
+                SBC     HL, DE
+                JR      NC, .PGUSET
+                LD      HL, 0
+.PGUSET         LD      (TOPLINE), HL
+                LD      HL, (DOCLINE)
+                OR      A
+                SBC     HL, DE
+                JR      NC, .PGUDOC
+                LD      HL, 0
+.PGUDOC         LD      (DOCLINE), HL
+                CALL    SETCURY
+                CALL    REDRAW
+                CALL    DRWGUT
+                CALL    DRWSCRL
+                RET
+.PGUTOP         XOR     A
+                LD      (CURY), A
+                LD      HL, 0
+                LD      (DOCLINE), HL
+                RET
+
+
+; --- ACTPGDN                   ----------------------------------------
+
+
+; - ACTPGDN ----------------------------
+; - SCROLL DOWN ONE PAGE (24 ROWS)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTPGDN         LD      HL, (TOPLINE)
+                LD      DE, SCRROWS
+                ADD     HL, DE
+                EX      DE, HL          ; DE = TARGET TOP
+                LD      HL, (TOTLINES)
+                CALL    CMPHLDE
+                JR      C, .PGDBOT
+                JR      Z, .PGDBOT
+                EX      DE, HL
+                LD      (TOPLINE), HL
+                LD      HL, (DOCLINE)
+                LD      DE, SCRROWS
+                ADD     HL, DE
+                LD      (DOCLINE), HL
+                CALL    SETCURY
+                CALL    REDRAW
+                CALL    DRWGUT
+                CALL    DRWSCRL
+                RET
+.PGDBOT         JP      ACTBOT
+
+
+; --- ACTDELBK                  ----------------------------------------
+
+
+; - ACTDELBK ---------------------------
+; - DELETE CHARACTER BEFORE CURSOR
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTDELBK        CALL    EDDELBK
+                RET
+
+
+; --- ACTDELFW                  ----------------------------------------
+
+
+; - ACTDELFW ---------------------------
+; - DELETE CHARACTER AT CURSOR
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTDELFW        CALL    EDDELCHR
+                RET
+
+
+; --- ACTDELLN                  ----------------------------------------
+
+
+; - ACTDELLN ---------------------------
+; - DELETE ENTIRE CURRENT LINE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTDELLN        LD      HL, (TOTLINES)
+                LD      A, H
+                OR      L
+                RET     Z
+                LD      DE, 1
+                CALL    CMPHLDE
+                JR      NZ, .DLMULT
+                ; SINGLE LINE LEFT: CLEAR RECORD TO SPACES
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                XOR     A
+                LD      (WORKBUF), A
+                LD      HL, WORKBUF + 1
+                LD      (HL), ' '
+                LD      DE, WORKBUF + 2
+                LD      BC, TEXTCOLS - 1
+                LDIR
+                LD      HL, (DOCLINE)
+                CALL    LINEWRT
+                LD      A, (CURY)
+                INC     A
+                LD      B, A
+                CALL    RENDEROW
+                XOR     A
+                LD      (CURX), A
+                LD      A, #FF
+                LD      (MODIFIED), A
+                RET
+.DLMULT         LD      HL, (DOCLINE)
+                CALL    LINEDEL
+                LD      HL, (TOTLINES)
+                DEC     HL
+                LD      (TOTLINES), HL
+                LD      HL, (DOCLINE)
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JR      C, .DLOK
+                DEC     HL
+                LD      (DOCLINE), HL
+.DLOK           CALL    SETCURY
+                XOR     A
+                LD      (CURX), A
+                CALL    REDRAW
+                CALL    DRWGUT
+                CALL    DRWSCRL
+                LD      A, #FF
+                LD      (MODIFIED), A
+                RET
+
+
+; --- ACTNWLIN                  ----------------------------------------
+
+
+; - ACTNWLIN ---------------------------
+; - SPLIT LINE AND INSERT NEWLINE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTNWLIN        CALL    EDNWLIN
+                RET
+
+
+; --- ACTOPNBL                  ----------------------------------------
+
+
+; - ACTOPNBL ---------------------------
+; - OPEN NEW EMPTY LINE BELOW (VI LOWERCASE 'O')
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTOPNBL        CALL    ACTEOL
+                CALL    EDNWLIN
+                CALL    ACTVIINS
+                RET
+
+
+; --- ACTOPNAB                  ----------------------------------------
+
+
+; - ACTOPNAB ---------------------------
+; - OPEN NEW EMPTY LINE ABOVE (VI O)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTOPNAB        CALL    ACTBOL
+                CALL    EDNWLIN
+                LD      A, CUP
+                CALL    EDMOVROW
+                CALL    ACTVIINS
+                RET
+
+
+; --- ACTTGLIN                  ----------------------------------------
+
+
+; - ACTTGLIN ---------------------------
+; - TOGGLE INSERT / OVERWRITE MODE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+ACTTGLIN        LD      A, (INSMODE)
+                XOR     INS_MODE
+                LD      (INSMODE), A
+                CALL    DRWSTAT
+                RET
+
+
+; --- ACTTGLWR                  ----------------------------------------
+
+
+; - ACTTGLWR ---------------------------
+; - TOGGLE DEVELOPER / TEXT WRAP MODE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTTGLWR        CALL    EDTGLWRP
+                CALL    DRWSTAT
+                RET
+
+
+; --- ACTSAVE                   ----------------------------------------
+
+
+; - ACTSAVE ----------------------------
+; - SAVE DOCUMENT TO DISK
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSAVE         CALL    FILESAVE
+                CALL    DRWSTAT
+                RET
+
+
+; --- ACTQUIT                   ----------------------------------------
+
+
+; - ACTQUIT ----------------------------
+; - EXIT EDITOR TO DOS
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTQUIT         JP      TERM
+
+
+; --- ACTHELP                   ----------------------------------------
+
+
+; - ACTHELP ----------------------------
+; - DISPLAY HELP SCREEN STUB
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+ACTHELP         RET
+
+
+; --- ACTCYCKM                  ----------------------------------------
+
+
+; - ACTCYCKM ---------------------------
+; - CYCLE ACTIVE KEYMAP PROFILE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTCYCKM        CALL    KMAPCYC
+                RET
+
+
+; --- ACTVIINS                  ----------------------------------------
+
+
+; - ACTVIINS ---------------------------
+; - SWITCH VI TO INSERT MODE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVIINS        LD      A, VIMINS
+                LD      (VIMODE), A
+                LD      HL, KMAPVII
+                LD      (KMAPPTR), HL
+                CALL    DRWSTAT
+                RET
+
+
+; --- ACTVIAPP                  ----------------------------------------
+
+
+; - ACTVIAPP ---------------------------
+; - ADVANCE AND SWITCH VI TO INSERT
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVIAPP        LD      A, CRIGHT
+                CALL    EDMOVCHR
+                CALL    ACTVIINS
+                RET
+
+
+; --- ACTVINRM                  ----------------------------------------
+
+
+; - ACTVINRM ---------------------------
+; - SWITCH VI TO NORMAL MODE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVINRM        LD      A, VIMNORM
+                LD      (VIMODE), A
+                LD      HL, KMAPVIN
+                LD      (KMAPPTR), HL
+                LD      A, (CURX)
+                OR      A
+                JR      Z, .VINORM0
+                DEC     A
+                LD      (CURX), A
+.VINORM0        CALL    DRWSTAT
+                RET
+
+
+; --- ACTVILED                  ----------------------------------------
+
+
+; - ACTVILED ---------------------------
+; - SET VI DELETE LEADER PENDING
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+ACTVILED        LD      A, 'd'
+                LD      (VILEAD), A
+                RET

@@ -493,10 +493,70 @@ With 256KB RAM (common expansion):
 Nextor systems often have 512KB or more mapped RAM.
 ```
 
+## Keybinding Engine & Modal Vi Machine
+
+A three-tier pluggable keyboard dispatch architecture supporting multiple editing profiles with zero hardcoded key handling:
+
+### Architecture
+
+1. **Action Catalog (`ACTION.Z8A`)**:
+   - Central vector jump table (`ACTTBL`, 30 entries) routing Action IDs (`ACNONE`..`ACVILED`) to atomic action subroutines (`ACTNONE`..`ACTVILED`).
+   - Every action operates strictly on editor and document state (`DOCLINE`, `CURX`, `WORKBUF`, `INSMODE`, etc.) with zero keycode knowledge.
+2. **Compact Keymap Tables (`KEYMAP.Z8A`)**:
+   - Concise 3-byte tuple format: `[Keycode (1B), Modifiers (1B), ActionID (1B)]`, terminated by `#FF`.
+   - Dedicated tables for each profile: `KMAPSTD` (Standard/CUA), `KMAPWS` (WordStar), `KMAPEMAC` (Emacs), `KMAPVIN` (Vi Normal), and `KMAPVII` (Vi Insert).
+3. **Dispatcher & Vi State Machine (`DISP.Z8A`)**:
+   - `READMOD`: Polls PPI Row 6 directly via BIOS `SNSMAT` (#0141) to capture modifier states (`MODSHFT`, `MODCTRL`, `MODGRPH`).
+   - `DISPKEY`: Matches incoming keycode and active modifier mask against the active keymap table. Supports wildcard modifier matching (`MODANY`).
+   - Modal machine manages Vi transitions (`VIMODE` 0=Normal, 1=Insert) and leader-key sequences (e.g. `d` followed by `d` executes line delete `ACTDELLN`).
+   - Fallback logic allows typing printable characters (#20..#7E) while preventing accidental character insertion in Vi Normal mode.
+
+### Key Navigation Standards (Standard / CUA)
+
+```
+Navigation:
+  Arrows                  : Up / Down / Left / Right by single cell
+  CTRL + Left / Right     : Line BOL (beginning) / EOL (end)
+  CTRL + Up / Down        : Document Top / Bottom
+  GRAPH + Left / Right    : Previous word / Next word
+  GRAPH + Up / Down       : Page Up / Page Down (24 lines)
+
+Editing:
+  GRAPH + Backspace       : Delete previous word
+  Backspace               : Delete character before cursor
+  DEL                     : Delete character at cursor
+  Enter (CR)              : Insert line break (respecting wrap mode)
+  INS                     : Toggle Insert / Overwrite mode
+  CTRL + Y                : Delete entire current line
+
+System:
+  CTRL + S / F2           : Save document to disk
+  CTRL + K / F5           : Cycle keymap profile (STD -> WS -> EMC -> VI)
+  CTRL + W                : Toggle Developer clamp / Text word-wrap mode
+  CTRL + Q / ESC          : Quit to DOS
+
+* Note: Combinations with SHIFT are reserved for text selection (Sprint 2).
+* Note: Ctrl+A is reserved strictly for "Select All" (Sprint 2).
+```
+
+### Dynamic Status Bar (`UI.Z8A`)
+
+```
+Layout:
+  [KMAP] [WRAP] [INS] [*] Ln X, Col Y | FILENAME
+
+Tags:
+  Profile : [STD] (Standard), [WS] (WordStar), [EMC] (Emacs), [VI-N] (Vi Normal), [VI-I] (Vi Insert)
+  Wrap    : [DEV] (Developer clamp at col 79), [TXT] (Word wrap)
+  Mode    : [INS] (Insert), [OVR] (Overwrite)
+  Dirty   : '*' if modified, ' ' if clean
+```
+
 ## Build System
 
 Follows MSX workspace convention:
 - Assembler: `sjasmplus`
 - Preprocessor: `gcc -E -P` for Z80 source
-- Emulator target: `m2+`
-- ROM format: TBD (MSX-DOS .COM or ROM cartridge)
+- Emulator target: `m2d2 128k S6ED.DSK` (stock 128 kB Philips NMS 8250) or `m2d2 S6ED.DSK` (2 MB)
+- Executable: MSX-DOS 2 `.COM` (running under MSX-DOS 2 kernel cartridge)
+

@@ -70,6 +70,9 @@ ENOMEM       DEFM    "Out of mapper memory.$"
                 INCLUDE RENDER.Z8A
                 INCLUDE SCROLL.Z8A
                 INCLUDE EDIT.Z8A
+                INCLUDE ACTION.Z8A
+                INCLUDE KEYMAP.Z8A
+                INCLUDE DISP.Z8A
                 INCLUDE INPUT.Z8A
                 INCLUDE UI.Z8A
                 INCLUDE FILEIO.Z8A
@@ -103,6 +106,9 @@ INIT            DBG     "1: INIT START"
                 LD      (INSMODE), A
                 LD      A, WRAP_DEV
                 LD      (WRAPMODE), A
+                XOR     A
+                LD      (KMAPID), A
+                CALL    KMAPSW          ; INITIALIZE KMAPPTR TO KMAPSTD
 
 
                 LD      (SAVESP), SP    ; PRESERVE ORIGINAL DOS STACK

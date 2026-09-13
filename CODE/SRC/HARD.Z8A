@@ -253,20 +253,30 @@ F3KEY           EQU     #F3
 F4KEY           EQU     #F4
 F5KEY           EQU     #F5
 
+                ; MSX DEDICATED KEYS
+INSKEY          EQU     #12
+HOMEKEY         EQU     #0B
+CLSKEY          EQU     #0C
+
                 ; CONTROL KEYS
 CTRL_A          EQU     #01
+CTRL_B          EQU     #02
 CTRL_C          EQU     #03
+CTRL_D          EQU     #04
+CTRL_E          EQU     #05
 CTRL_F          EQU     #06
 CTRL_G          EQU     #07
 CTRL_K          EQU     #0B
 CTRL_L          EQU     #0C
 CTRL_N          EQU     #0E
 CTRL_O          EQU     #0F
+CTRL_P          EQU     #10
 CTRL_Q          EQU     #11
 CTRL_R          EQU     #12
 CTRL_S          EQU     #13
 CTRL_V          EQU     #16
 CTRL_W          EQU     #17
 CTRL_X          EQU     #18
+CTRL_Y          EQU     #19
 CTRL_Z          EQU     #1A
 
