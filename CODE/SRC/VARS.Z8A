@@ -144,6 +144,13 @@ PWTAIL          DEFB    0               ; EDPSHWR: FF = CURSOR MOVED TO THE TAIL
 WBBASE          DEFW    0               ; WBINS: RECORD BASE ADDRESS
 WBCOL           DEFB    0               ; WBINS: INSERT COLUMN
 WBCNT           DEFB    0               ; WBINS: BYTES TO SHIFT RIGHT
+JOINLA          DEFW    0               ; EDJOIN: TARGET LINE NUMBER (LINE A)
+JOINLB          DEFW    0               ; EDJOIN: SOURCE LINE NUMBER (LINE B)
+JOINCOL         DEFB    0               ; EDJOIN: JOIN SEAM COLUMN (FORMER LEN OF LINE A)
+RFLINE          DEFW    0               ; REFLOW: RECEIVER LINE NUMBER (L)
+RFSPACE         DEFB    0               ; REFLOW: AVAILABLE SPACE ON RECEIVER
+RFSEP           DEFB    0               ; REFLOW: 1 = SEPARATOR SPACE NEEDED
+RFCNT           DEFB    0               ; REFLOW: BYTES TO TRANSFER
 FILEBUF         DEFS    256             ; TEMPORARY BUFFER FOR DISK READS
 
 

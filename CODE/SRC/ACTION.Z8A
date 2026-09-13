@@ -590,6 +590,7 @@ ACTDELBK        LD      A, (SELACT)
                 OR      A
                 JP      NZ, ACTDLS
                 CALL    EDDELBK
+                CALL    DRWSTAT
                 RET
 
 
@@ -607,6 +608,7 @@ ACTDELFW        LD      A, (SELACT)
                 OR      A
                 JP      NZ, ACTDLS
                 CALL    EDDELCHR
+                CALL    DRWSTAT
                 RET
 
 
