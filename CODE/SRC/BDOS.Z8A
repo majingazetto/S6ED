@@ -606,17 +606,17 @@ STREXIT         CALL    STROUT
 TERM            ; RESTORE MAPPER SEGMENTS IF INITIALIZED
                 LD      A, (MAPRDY)
                 AND     A
-                JR      Z, .NOMAPRES
+                JR      Z, .NOMAPRS
                 LD      A, (DEFSEG1)
                 CALL    PUTP1
                 LD      A, (DEFSEG2)
                 CALL    PUTP2
                 CALL    SEGFREE         ; HAND BACK EVERY SEGMENT WE CLAIMED
 
-.NOMAPRES       ; RESTORE SCREEN IF INITIALIZED
+.NOMAPRS        ; RESTORE SCREEN IF INITIALIZED
                 LD      A, (SCRRDY)
                 AND     A
-                JR      Z, .NOSCRRES
+                JR      Z, .NOSCRRS
                 XOR     A
                 LD      IX, CHGMOD
                 CALL    BIOSCALL
@@ -625,14 +625,14 @@ TERM            ; RESTORE MAPPER SEGMENTS IF INITIALIZED
                 LD      A, 1
                 LD      (CLIKSW), A
 
-.NOSCRRES       ; RESTORE ORIGINAL STACK POINTER
+.NOSCRRS        ; RESTORE ORIGINAL STACK POINTER
                 LD      HL, (SAVESP)
                 LD      A, H
                 OR      L
-                JR      Z, .NOSTKRES
+                JR      Z, .NOSTKRS
                 LD      SP, HL
 
-.NOSTKRES       LD      A, (DOS2) 
+.NOSTKRS        LD      A, (DOS2) 
                 AND     A
                 JR      Z, .TERM0
                 LD      B, 0
@@ -787,7 +787,7 @@ EXTPARM         LD      A,(#80)
                 LD      C,0
 .COUNT          LD      A,(HL)
                 AND     A
-                JR      Z,.ENDCOUNT
+                JR      Z,.CNTEND
                 CP      ' ' 
                 JR      NZ,.ADDPAR
                 INC     HL
@@ -805,11 +805,11 @@ EXTPARM         LD      A,(#80)
                 CP      ' '
                 JR      Z,.COUNT
                 AND     A
-                JR      Z,.ENDCOUNT
+                JR      Z,.CNTEND
                 INC     HL
                 JR      .NEXT
 
-.ENDCOUNT       LD      A,C 
+.CNTEND         LD      A,C 
                 EXX
                 LD      (HL),A
                 AND     A

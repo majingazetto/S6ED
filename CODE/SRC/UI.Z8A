@@ -66,38 +66,38 @@ BLDSTAT         LD      DE, STATBUF
                 JR      NZ, .NOTSTDP
                 LD      HL, .STRSTD
                 CALL    .CPYSTR
-                JR      .DONEKMAP
+                JR      .DONKMAP
 .NOTSTDP        CP      KMWS
                 JR      NZ, .NOTWSP
                 LD      HL, .STRWS
                 CALL    .CPYSTR
-                JR      .DONEKMAP
+                JR      .DONKMAP
 .NOTWSP         CP      KMEMACS
                 JR      NZ, .NOTEMCP
                 LD      HL, .STREMC
                 CALL    .CPYSTR
-                JR      .DONEKMAP
+                JR      .DONKMAP
 .NOTEMCP        ; VI PROFILE
                 LD      A, (VIMODE)
                 CP      VIMNORM
                 JR      NZ, .VIINSP
                 LD      HL, .STRVIN
                 CALL    .CPYSTR
-                JR      .DONEKMAP
+                JR      .DONKMAP
 .VIINSP         LD      HL, .STRVII
                 CALL    .CPYSTR
 
-.DONEKMAP       ; 2. WRAP MODE
+.DONKMAP        ; 2. WRAP MODE
                 LD      A, (WRAPMODE)
                 CP      WRAP_DEV
                 JR      NZ, .WRTXT
                 LD      HL, .STRWDEV
                 CALL    .CPYSTR
-                JR      .DONEWRAP
+                JR      .DONWRAP
 .WRTXT          LD      HL, .STRWTXT
                 CALL    .CPYSTR
 
-.DONEWRAP       ; 3. INSERT / OVERWRITE
+.DONWRAP        ; 3. INSERT / OVERWRITE
                 LD      A, (INSMODE)
                 CP      INS_MODE
                 JR      NZ, .OVRP

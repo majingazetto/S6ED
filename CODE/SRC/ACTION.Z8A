@@ -234,7 +234,7 @@ ACTBOT          CALL    CHKUNSEL
                 LD      (DOCLINE), HL
                 LD      DE, SCRROWS
                 CALL    CMPHLDE
-                JR      C, .SHORTDOC
+                JR      C, .SHRTDOC
                 LD      HL, (TOTLINES)
                 LD      DE, SCRROWS
                 OR      A
@@ -243,7 +243,7 @@ ACTBOT          CALL    CHKUNSEL
                 LD      A, SCRROWS - 1
                 LD      (CURY), A
                 JR      .REDBOT
-.SHORTDOC       LD      HL, 0
+.SHRTDOC        LD      HL, 0
                 LD      (TOPLINE), HL
                 LD      A, (DOCLINE)
                 LD      (CURY), A
@@ -275,7 +275,7 @@ ACTWLFT         CALL    CHKUNSEL
                 LD      B, A            ; B = SCAN COLUMN
 
                 ; 1. SKIP SPACES TO THE LEFT
-.WLSKPSPC       LD      E, B
+.WLSKSPC        LD      E, B
                 LD      D, 0
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE
@@ -286,7 +286,7 @@ ACTWLFT         CALL    CHKUNSEL
                 OR      A
                 JR      Z, .WLBOL
                 DEC     B
-                JR      .WLSKPSPC
+                JR      .WLSKSPC
 
                 ; 2. SCAN WORD CHARACTERS TO FIND START
 .WLSKPW         LD      E, B
@@ -330,7 +330,7 @@ ACTWRGT         CALL    CHKUNSEL
                 LD      A, (CURX)
                 CP      C
                 RET     NC
-.WRSKPNON       INC     A
+.WRSKNON        INC     A
                 CP      C
                 JR      NC, .WREOL
                 LD      E, A
@@ -339,10 +339,10 @@ ACTWRGT         CALL    CHKUNSEL
                 ADD     HL, DE
                 LD      A, (HL)
                 CP      ' '
-                JR      Z, .WRSKPSPC
+                JR      Z, .WRSKSPC
                 LD      A, E
-                JR      .WRSKPNON
-.WRSKPSPC       INC     E
+                JR      .WRSKNON
+.WRSKSPC        INC     E
                 LD      A, E
                 CP      C
                 JR      NC, .WREOL
@@ -351,7 +351,7 @@ ACTWRGT         CALL    CHKUNSEL
                 ADD     HL, DE
                 LD      A, (HL)
                 CP      ' '
-                JR      Z, .WRSKPSPC
+                JR      Z, .WRSKSPC
                 LD      A, E
                 LD      (CURX), A
                 RET
@@ -1031,7 +1031,7 @@ SELPAIN         LD      B, 0            ; B = SCREEN ROW INDEX (0..23)
                 CALL    CMPHLDE
                 JR      NZ, .NOTEQ
                 JR      .CHKCOLS        ; L == END
-.NOTEQ          JP      NC, .DONEPAIN   ; L > END: PAST SELECTION, STOP
+.NOTEQ          JP      NC, .DONPAIN    ; L > END: PAST SELECTION, STOP
 
 .CHKCOLS        ; L IS WITHIN SELECTION [SELSTRL, SELENDL]
                 ; DETERMINE XA
@@ -1144,7 +1144,7 @@ SELPAIN         LD      B, 0            ; B = SCREEN ROW INDEX (0..23)
                 JP      C, .ROWLP
                 RET
 
-.DONEPAIN       POP     BC
+.DONPAIN        POP     BC
                 RET
 
 
@@ -1413,13 +1413,13 @@ ACTDLS          LD      A, (SELACT)
                 LD      HL, (SELSTRL)
                 LD      DE, (SELENDL)
                 CALL    CMPHLDE
-                JR      NZ, .DLSNOTEM
+                JR      NZ, .DLSNEMP
                 LD      A, (SELSTRX)
                 LD      HL, SELENDX
                 CP      (HL)
                 JP      Z, .DLSCLR      ; EMPTY RANGE: JUST CLEAR AND EXIT
 
-.DLSNOTEM       ; CHECK SINGLE-LINE VS MULTI-LINE
+.DLSNEMP        ; CHECK SINGLE-LINE VS MULTI-LINE
                 LD      HL, (SELSTRL)
                 LD      DE, (SELENDL)
                 CALL    CMPHLDE
@@ -1751,9 +1751,9 @@ ACTCOPY         LD      A, (SELACT)
                 CALL    CMPHLDE
                 JR      NZ, .CPYMIDL
                 LD      A, (SELSTRX)
-                JR      .CPYSETXA
+                JR      .CPYSETX
 .CPYMIDL        XOR     A
-.CPYSETXA       LD      (SELTMPXA), A
+.CPYSETX        LD      (SELTMPXA), A
 
                 ; DETERMINE XB FOR THIS LINE
                 LD      A, (WORKBUF)
@@ -1761,10 +1761,10 @@ ACTCOPY         LD      A, (SELACT)
                 LD      HL, (SELTMPL)
                 LD      DE, (SELENDL)
                 CALL    CMPHLDE
-                JR      NZ, .CPYNOTEND
+                JR      NZ, .CPYNEND
                 LD      A, (SELENDX)
                 LD      (SELTMPXB), A
-.CPYNOTEND      ; CLAMP XB TO LINE LENGTH
+.CPYNEND        ; CLAMP XB TO LINE LENGTH
                 LD      A, (WORKBUF)
                 LD      HL, SELTMPXB
                 CP      (HL)
@@ -1775,7 +1775,7 @@ ACTCOPY         LD      A, (SELACT)
                 LD      A, (SELTMPXA)
                 LD      HL, SELTMPXB
                 CP      (HL)
-                JR      NC, .CPYCHKNXT  ; NO CHARS ON THIS LINE
+                JR      NC, .CPYCHKN    ; NO CHARS ON THIS LINE
 
                 ; K = XB - XA
                 SUB     (HL)
@@ -1817,7 +1817,7 @@ ACTCOPY         LD      A, (SELACT)
                 ADD     HL, BC
                 LD      (CPYCNT), HL
 
-.CPYCHKNXT      ; IF SELTMPL == SELENDL, WE ARE FINISHED
+.CPYCHKN        ; IF SELTMPL == SELENDL, WE ARE FINISHED
                 LD      HL, (SELTMPL)
                 LD      DE, (SELENDL)
                 CALL    CMPHLDE
@@ -1915,7 +1915,7 @@ ACTPAST         LD      HL, (CLIPLEN)
 
                 ; 1. CHECK IF CR (#0D)
                 CP      #0D
-                JR      NZ, .PSTNOTCR
+                JR      NZ, .PSTNOCR
                 CALL    EDNWLIN
 
                 ; CHECK IF NEXT BYTE IS LF (#0A) AND CONSUME IT
@@ -1935,13 +1935,13 @@ ACTPAST         LD      HL, (CLIPLEN)
                 LD      (CPYCNT), HL
                 JR      .PSTLP
 
-.PSTNOTCR       ; 2. CHECK IF LF (#0A)
+.PSTNOCR        ; 2. CHECK IF LF (#0A)
                 CP      #0A
-                JR      NZ, .PSTNOTLF
+                JR      NZ, .PSTNOLF
                 CALL    EDNWLIN
                 JR      .PSTLP
 
-.PSTNOTLF       ; 3. CHECK IF TAB (#09)
+.PSTNOLF        ; 3. CHECK IF TAB (#09)
                 CP      #09
                 JR      NZ, .PSTCHAR
                 LD      A, ' '
@@ -2050,16 +2050,16 @@ APPLSEL         LD      (STYLMASK), A
                 LD      HL, (SELSTRL)
                 LD      DE, (SELENDL)
                 CALL    CMPHLDE
-                JR      NZ, .APPLINIT
+                JR      NZ, .APLINIT
                 LD      A, (SELSTRX)
                 LD      HL, SELENDX
                 CP      (HL)
                 RET     Z               ; EMPTY: NOTHING TO STYLE
 
-.APPLINIT       LD      HL, (SELSTRL)
+.APLINIT        LD      HL, (SELSTRL)
                 LD      (STYLLN), HL
 
-.APPLLINE       ; READ CURRENT LINE RECORD INTO WORKBUF
+.APLLINE        ; READ CURRENT LINE RECORD INTO WORKBUF
                 LD      HL, (STYLLN)
                 CALL    LINEREAD
 
@@ -2067,11 +2067,11 @@ APPLSEL         LD      (STYLMASK), A
                 LD      HL, (STYLLN)
                 LD      DE, (SELSTRL)
                 CALL    CMPHLDE
-                JR      NZ, .APPLMIDL
+                JR      NZ, .APLMIDL
                 LD      A, (SELSTRX)
-                JR      .APPLSETXA
-.APPLMIDL       XOR     A
-.APPLSETXA      LD      (STYLXA), A
+                JR      .APLSETX
+.APLMIDL        XOR     A
+.APLSETX        LD      (STYLXA), A
 
                 ; DETERMINE XB FOR THIS LINE
                 LD      A, (WORKBUF)
@@ -2079,21 +2079,21 @@ APPLSEL         LD      (STYLMASK), A
                 LD      HL, (STYLLN)
                 LD      DE, (SELENDL)
                 CALL    CMPHLDE
-                JR      NZ, .APPLNOTEND
+                JR      NZ, .APLNEND
                 LD      A, (SELENDX)
                 LD      (STYLXB), A
-.APPLNOTEND     ; CLAMP XB TO LINE LENGTH
+.APLNEND        ; CLAMP XB TO LINE LENGTH
                 LD      A, (WORKBUF)
                 LD      HL, STYLXB
                 CP      (HL)
-                JR      NC, .APPLXBOK
+                JR      NC, .APLXBOK
                 LD      (STYLXB), A
 
-.APPLXBOK       ; CHECK IF XA < XB
+.APLXBOK        ; CHECK IF XA < XB
                 LD      A, (STYLXA)
                 LD      HL, STYLXB
                 CP      (HL)
-                JR      NC, .APPLCHKNXT ; NO CHARS ON THIS LINE
+                JR      NC, .APLCHKN    ; NO CHARS ON THIS LINE
 
                 ; COUNT = XB - XA
                 SUB     (HL)
@@ -2108,11 +2108,11 @@ APPLSEL         LD      (STYLMASK), A
                 LD      A, (STYLMASK)
                 LD      C, A            ; C = MASK TO TOGGLE
 
-.APPLCELL       LD      A, (HL)
+.APLCELL        LD      A, (HL)
                 XOR     C
                 LD      (HL), A
                 INC     HL
-                DJNZ    .APPLCELL
+                DJNZ    .APLCELL
 
                 ; WRITE LINE BACK TO MAPPER
                 LD      HL, (STYLLN)
@@ -2123,30 +2123,30 @@ APPLSEL         LD      (STYLMASK), A
                 LD      DE, (TOPLINE)
                 OR      A
                 SBC     HL, DE
-                JR      C, .APPLCHKNXT  ; L < TOPLINE: OFF SCREEN ABOVE
+                JR      C, .APLCHKN     ; L < TOPLINE: OFF SCREEN ABOVE
                 LD      A, H
                 OR      A
-                JR      NZ, .APPLCHKNXT ; L - TOPLINE >= 256
+                JR      NZ, .APLCHKN    ; L - TOPLINE >= 256
                 LD      A, L
                 CP      SCRROWS         ; 24
-                JR      NC, .APPLCHKNXT ; OFF SCREEN BELOW
+                JR      NC, .APLCHKN    ; OFF SCREEN BELOW
                 INC     A               ; SCREEN ROW = A + 1 (1..24)
                 LD      B, A
                 CALL    RENDEROW
 
-.APPLCHKNXT     ; CHECK IF LAST LINE
+.APLCHKN        ; CHECK IF LAST LINE
                 LD      HL, (STYLLN)
                 LD      DE, (SELENDL)
                 CALL    CMPHLDE
-                JR      Z, .APPLDONE
+                JR      Z, .APLDONE
 
                 ; NEXT LINE
                 LD      HL, (STYLLN)
                 INC     HL
                 LD      (STYLLN), HL
-                JP      .APPLLINE
+                JP      .APLLINE
 
-.APPLDONE       ; REDRAW SELECTION XOR HIGHLIGHT OVER UPDATED ROWS
+.APLDONE        ; REDRAW SELECTION XOR HIGHLIGHT OVER UPDATED ROWS
                 CALL    SELPOST
                 LD      A, #FF
                 LD      (MODIFIED), A
