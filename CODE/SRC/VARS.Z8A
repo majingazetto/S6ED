@@ -98,6 +98,11 @@ DRWENDX         DEFB    0               ; PAINTED END COL
 SELTMPL         DEFW    0               ; TEMP LINE VAR
 SELTMPXA        DEFB    0               ; TEMP COL XA
 SELTMPXB        DEFB    0               ; TEMP COL XB
+CLIPLEN         DEFW    0               ; BYTES CURRENTLY IN CLIPBOARD
+CLIPRD          DEFW    0               ; CLIPBOARD READ POINTER
+CPYCNT          DEFW    0               ; CLIPBOARD TEMP COUNTER
+CPYPTR          DEFW    0               ; CLIPBOARD WRITE POINTER
+CLIPBUF         DEFS    CLIPMAX, 0      ; CLIPBOARD BUFFER IN PAGE 0 RAM
 
 
 ; --- FILE                      ----------------------------------------

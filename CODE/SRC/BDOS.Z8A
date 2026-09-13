@@ -620,7 +620,7 @@ TERM            ; RESTORE MAPPER SEGMENTS IF INITIALIZED
                 XOR     A
                 LD      IX, CHGMOD
                 CALL    BIOSCALL
-                LD      IX, DSPFNK
+                LD      IX, ERAFNK
                 CALL    BIOSCALL
                 LD      A, 1
                 LD      (CLIKSW), A

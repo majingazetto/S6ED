@@ -121,6 +121,7 @@ DIRSIZ          EQU     3               ; BYTES PER LINE DIRECTORY ENTRY
 LINEREC         EQU     161             ; MAX LINE RECORD: 1 + 80 + 80
 TEXTCOLS        EQU     80              ; MAX CHARS PER LINE
 WORKSIZ         EQU     LINEREC         ; WORK BUFFER SIZE (= MAX RECORD)
+CLIPMAX         EQU     2048            ; MAX CLIPBOARD BUFFER CAPACITY
 
 DIRPAGE         EQU     #4000           ; PAGE 1 — LINE DIRECTORY (FIXED SEGMENT)
 TXPAGE          EQU     #8000           ; PAGE 2 — TEXT WINDOW (SWITCHED)
@@ -220,7 +221,10 @@ ACSLPGD         EQU     41              ; SHIFT + GRAPH + DOWN
 ACSELAL         EQU     42              ; CTRL + A (SELECT ALL)
 ACDSEL          EQU     43              ; DESELECT
 ACDLS           EQU     44              ; DELETE SELECTION
-ACMAX           EQU     45
+ACCOPY          EQU     45              ; CTRL + C / VI y (COPY)
+ACCUT           EQU     46              ; CTRL + X / VI x (CUT)
+ACPAST          EQU     47              ; CTRL + V / VI p (PASTE)
+ACMAX           EQU     48
 
 
 ; --- KEYMAP PROFILES           ----------------------------------------
