@@ -81,14 +81,14 @@ FILELOAD        PUSH    HL
 
 .ISCR           LD      A, 1
                 LD      (WASCR), A
-                CALL    STORELINE
+                CALL    STORLINE
                 JR      C, .OOM
                 JR      .SKIP
 
 .ISLF           LD      A, (WASCR)
                 AND     A
                 JR      NZ, .SKIPLF     ; IF CRLF, SKIP THE LF
-                CALL    STORELINE
+                CALL    STORLINE
                 JR      C, .OOM
                 JR      .SKIP
 .SKIPLF         XOR     A
@@ -111,13 +111,13 @@ FILELOAD        PUSH    HL
 .EOF            LD      A, (CURLLEN)
                 AND     A
                 JR      Z, .CHKTOT
-                CALL    STORELINE       ; STORE FINAL PENDING LINE
+                CALL    STORLINE        ; STORE FINAL PENDING LINE
                 JR      .CLSFIL
 .CHKTOT         LD      HL, (TOTLINES)
                 LD      A, H
                 OR      L
                 JR      NZ, .CLSFIL
-                CALL    STORELINE       ; ENSURE AT LEAST 1 LINE IF FILE WAS EMPTY
+                CALL    STORLINE        ; ENSURE AT LEAST 1 LINE IF FILE WAS EMPTY
 .CLSFIL         LD      A, (FILEHAND)
                 CALL    DSKCLOSE
                 
@@ -129,11 +129,11 @@ FILELOAD        PUSH    HL
                 LD      (CURY), A
                 RET
 
-; - STORELINE --------
+; - STORLINE ---------
 ; - FINISH CURRENT LINE, ADD TO DIRECTORY, PREPARE NEXT
 ; -
 
-STORELINE       LD      A, (TXSEG)
+STORLINE        LD      A, (TXSEG)
                 CALL    PUTP2
                 
                 LD      HL, TXPAGE
