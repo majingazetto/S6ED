@@ -39,6 +39,21 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTVIAPP        ; 27
                 DEFW    ACTVINRM        ; 28
                 DEFW    ACTVILED        ; 29
+                DEFW    ACTSLML         ; 30
+                DEFW    ACTSLMR         ; 31
+                DEFW    ACTSLMU         ; 32
+                DEFW    ACTSLMD         ; 33
+                DEFW    ACTSLBOL        ; 34
+                DEFW    ACTSLEOL        ; 35
+                DEFW    ACTSLTOP        ; 36
+                DEFW    ACTSLBOT        ; 37
+                DEFW    ACTSLWLF        ; 38
+                DEFW    ACTSLWRT        ; 39
+                DEFW    ACTSLPGU        ; 40
+                DEFW    ACTSLPGD        ; 41
+                DEFW    ACTSELAL        ; 42
+                DEFW    ACTDSEL         ; 43
+                DEFW    ACTDLS          ; 44
 
 
 ; --- ACTNONE                   ----------------------------------------
@@ -54,6 +69,25 @@ ACTTBL          DEFW    ACTNONE         ; 0
 ACTNONE         RET
 
 
+; --- CHKUNSEL                  ----------------------------------------
+
+
+; - CHKUNSEL ---------------------------
+; - CANCEL SELECTION IF SHIFT IS NOT HELD
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+CHKUNSEL        LD      A, (MODKEYS)
+                AND     MODSHFT
+                RET     NZ              ; SHIFT PRESSED: PRESERVE SELECTION
+                LD      A, (SELACT)
+                OR      A
+                RET     Z               ; NO SELECTION ACTIVE
+                JP      ACTDSEL
+
+
 ; --- ACTMVL                    ----------------------------------------
 
 
@@ -64,7 +98,8 @@ ACTNONE         RET
 ; - CLOBBERS: ALL
 ; -
 
-ACTMVL          LD      A, CLEFT
+ACTMVL          CALL    CHKUNSEL
+                LD      A, CLEFT
                 CALL    EDMOVCHR
                 RET
 
@@ -79,7 +114,8 @@ ACTMVL          LD      A, CLEFT
 ; - CLOBBERS: ALL
 ; -
 
-ACTMVR          LD      A, CRIGHT
+ACTMVR          CALL    CHKUNSEL
+                LD      A, CRIGHT
                 CALL    EDMOVCHR
                 RET
 
@@ -94,7 +130,8 @@ ACTMVR          LD      A, CRIGHT
 ; - CLOBBERS: ALL
 ; -
 
-ACTMVU          LD      A, CUP
+ACTMVU          CALL    CHKUNSEL
+                LD      A, CUP
                 CALL    EDMOVROW
                 RET
 
@@ -109,7 +146,8 @@ ACTMVU          LD      A, CUP
 ; - CLOBBERS: ALL
 ; -
 
-ACTMVD          LD      A, CDOWN
+ACTMVD          CALL    CHKUNSEL
+                LD      A, CDOWN
                 CALL    EDMOVROW
                 RET
 
@@ -124,7 +162,8 @@ ACTMVD          LD      A, CDOWN
 ; - CLOBBERS: AF
 ; -
 
-ACTBOL          XOR     A
+ACTBOL          CALL    CHKUNSEL
+                XOR     A
                 LD      (CURX), A
                 RET
 
@@ -139,7 +178,8 @@ ACTBOL          XOR     A
 ; - CLOBBERS: ALL
 ; -
 
-ACTEOL          LD      HL, (DOCLINE)
+ACTEOL          CALL    CHKUNSEL
+                LD      HL, (DOCLINE)
                 CALL    LINEREAD
                 LD      A, (WORKBUF)
                 CP      TEXTCOLS
@@ -159,7 +199,8 @@ ACTEOL          LD      HL, (DOCLINE)
 ; - CLOBBERS: ALL
 ; -
 
-ACTTOP          LD      HL, 0
+ACTTOP          CALL    CHKUNSEL
+                LD      HL, 0
                 LD      (DOCLINE), HL
                 LD      (TOPLINE), HL
                 XOR     A
@@ -181,7 +222,8 @@ ACTTOP          LD      HL, 0
 ; - CLOBBERS: ALL
 ; -
 
-ACTBOT          LD      HL, (TOTLINES)
+ACTBOT          CALL    CHKUNSEL
+                LD      HL, (TOTLINES)
                 DEC     HL
                 LD      (DOCLINE), HL
                 LD      DE, SCRROWS
@@ -217,7 +259,8 @@ ACTBOT          LD      HL, (TOTLINES)
 ; - CLOBBERS: ALL
 ; -
 
-ACTWLFT         LD      HL, (DOCLINE)
+ACTWLFT         CALL    CHKUNSEL
+                LD      HL, (DOCLINE)
                 CALL    LINEREAD
                 LD      A, (CURX)
                 OR      A
@@ -273,7 +316,8 @@ ACTWLFT         LD      HL, (DOCLINE)
 ; - CLOBBERS: ALL
 ; -
 
-ACTWRGT         LD      HL, (DOCLINE)
+ACTWRGT         CALL    CHKUNSEL
+                LD      HL, (DOCLINE)
                 CALL    LINEREAD
                 LD      A, (WORKBUF)
                 LD      C, A            ; C = LENGTH
@@ -467,7 +511,8 @@ ACTDWLFT        LD      A, (CURX)
 ; - CLOBBERS: ALL
 ; -
 
-ACTPGUP         LD      HL, (TOPLINE)
+ACTPGUP         CALL    CHKUNSEL
+                LD      HL, (TOPLINE)
                 LD      A, H
                 OR      L
                 JR      Z, .PGUTOP
@@ -505,7 +550,8 @@ ACTPGUP         LD      HL, (TOPLINE)
 ; - CLOBBERS: ALL
 ; -
 
-ACTPGDN         LD      HL, (TOPLINE)
+ACTPGDN         CALL    CHKUNSEL
+                LD      HL, (TOPLINE)
                 LD      DE, SCRROWS
                 ADD     HL, DE
                 EX      DE, HL          ; DE = TARGET TOP
@@ -537,7 +583,10 @@ ACTPGDN         LD      HL, (TOPLINE)
 ; - CLOBBERS: ALL
 ; -
 
-ACTDELBK        CALL    EDDELBK
+ACTDELBK        LD      A, (SELACT)
+                OR      A
+                JP      NZ, ACTDLS
+                CALL    EDDELBK
                 RET
 
 
@@ -551,7 +600,10 @@ ACTDELBK        CALL    EDDELBK
 ; - CLOBBERS: ALL
 ; -
 
-ACTDELFW        CALL    EDDELCHR
+ACTDELFW        LD      A, (SELACT)
+                OR      A
+                JP      NZ, ACTDLS
+                CALL    EDDELCHR
                 RET
 
 
@@ -720,7 +772,11 @@ ACTSAVE         CALL    FILESAVE
 ; - CLOBBERS: ALL
 ; -
 
-ACTQUIT         JP      TERM
+ACTQUIT         LD      A, (SELACT)
+                OR      A
+                JR      Z, .DOQUIT
+                JP      ACTDSEL
+.DOQUIT         JP      TERM
 
 
 ; --- ACTHELP                   ----------------------------------------
@@ -819,4 +875,821 @@ ACTVINRM        LD      A, VIMNORM
 
 ACTVILED        LD      A, 'd'
                 LD      (VILEAD), A
+                RET
+
+
+; --- SELBEG                    ----------------------------------------
+
+
+; - SELBEG -----------------------------
+; - INITIALIZE SELECTION ANCHOR IF INACTIVE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, HL
+; -
+
+SELBEG          LD      A, (SELACT)
+                OR      A
+                RET     NZ              ; ALREADY ACTIVE
+                LD      A, 1
+                LD      (SELACT), A
+                LD      A, (CURX)
+                LD      (SELANCX), A
+                LD      HL, (DOCLINE)
+                LD      (SELANCL), HL
+                RET
+
+
+; --- SELPRE                    ----------------------------------------
+
+
+; - SELPRE -----------------------------
+; - UN-XOR CURRENTLY PAINTED SELECTION
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SELPRE          LD      A, (SELDRAWN)
+                OR      A
+                RET     Z
+                LD      HL, DRWSTRL
+                LD      DE, SELSTRL
+                LD      BC, 6
+                LDIR
+                CALL    SELPAIN         ; UN-XOR INVERT
+                XOR     A
+                LD      (SELDRAWN), A
+                RET
+
+
+; --- SELPOST                   ----------------------------------------
+
+
+; - SELPOST ----------------------------
+; - NORMALIZE AND XOR-PAINT NEW SELECTION
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SELPOST         CALL    SELNORM
+                LD      HL, (SELSTRL)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JR      NZ, .PNTNEW
+                LD      A, (SELSTRX)
+                LD      HL, SELENDX
+                CP      (HL)
+                RET     Z               ; EMPTY: DO NOT PAINT
+.PNTNEW         CALL    SELPAIN         ; XOR INVERT
+                LD      HL, SELSTRL
+                LD      DE, DRWSTRL
+                LD      BC, 6
+                LDIR
+                LD      A, 1
+                LD      (SELDRAWN), A
+                CALL    DRWSTAT
+                RET
+
+
+; --- SELNORM                   ----------------------------------------
+
+
+; - SELNORM ----------------------------
+; - NORMALIZE ANCHOR AND CURSOR TO START/END
+; - IN:  NONE
+; - OUT: SELSTRL, SELSTRX, SELENDL, SELENDX
+; - CLOBBERS: AF, DE, HL
+; -
+
+SELNORM         LD      HL, (DOCLINE)
+                LD      DE, (SELANCL)
+                CALL    CMPHLDE
+                JR      C, .NCURFST     ; DOCLINE < SELANCL
+                JR      NZ, .NANCFST    ; DOCLINE > SELANCL
+                LD      A, (CURX)
+                LD      HL, SELANCX
+                CP      (HL)
+                JR      C, .NCURFST
+.NANCFST        LD      HL, (SELANCL)
+                LD      (SELSTRL), HL
+                LD      A, (SELANCX)
+                LD      (SELSTRX), A
+                LD      HL, (DOCLINE)
+                LD      (SELENDL), HL
+                LD      A, (CURX)
+                LD      (SELENDX), A
+                RET
+
+.NCURFST        LD      HL, (DOCLINE)
+                LD      (SELSTRL), HL
+                LD      A, (CURX)
+                LD      (SELSTRX), A
+                LD      HL, (SELANCL)
+                LD      (SELENDL), HL
+                LD      A, (SELANCX)
+                LD      (SELENDX), A
+                RET
+
+
+; --- SELPAIN                   ----------------------------------------
+
+
+; - SELPAIN ----------------------------
+; - XOR-INVERT VISIBLE ROWS IN SELSTRL..SELENDL
+; - IN:  SELSTRL, SELSTRX, SELENDL, SELENDX
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SELPAIN         LD      B, 0            ; B = SCREEN ROW INDEX (0..23)
+.ROWLP          PUSH    BC
+                ; CALC DOC LINE L = TOPLINE + B
+                LD      HL, (TOPLINE)
+                LD      E, B
+                LD      D, 0
+                ADD     HL, DE          ; HL = L
+                LD      (SELTMPL), HL
+
+                ; 1. CHECK IF L < SELSTRL
+                LD      DE, (SELSTRL)
+                CALL    CMPHLDE
+                JP      C, .NEXTROW     ; L < START: OUTSIDE
+
+                ; 2. CHECK IF L > SELENDL
+                LD      HL, (SELTMPL)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JR      NZ, .NOTEQ
+                JR      .CHKCOLS        ; L == END
+.NOTEQ          JP      NC, .DONEPAIN   ; L > END: PAST SELECTION, STOP
+
+.CHKCOLS        ; L IS WITHIN SELECTION [SELSTRL, SELENDL]
+                ; DETERMINE XA
+                LD      HL, (SELTMPL)
+                LD      DE, (SELSTRL)
+                CALL    CMPHLDE
+                JR      NZ, .NOTSTRT
+                ; L == START: XA = SELSTRX
+                LD      A, (SELSTRX)
+                JR      .SETXA
+.NOTSTRT        ; L > START: XA = 0
+                XOR     A
+.SETXA          LD      (SELTMPXA), A
+
+                ; DETERMINE XB
+                LD      HL, (SELTMPL)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JR      NZ, .NOTEND
+                ; L == END: XB = SELENDX
+                LD      A, (SELENDX)
+                JR      .SETXB
+.NOTEND         ; L < END: XB = MIN(LINE_LEN + 1, 80)
+                LD      HL, (SELTMPL)
+                CALL    DIRREAD         ; A = SEG, DE = OFFSET
+                LD      C, A
+                LD      A, (TXSEG)
+                CP      C
+                JR      Z, .HAVSEG
+                LD      A, C
+                LD      (TXSEG), A
+                CALL    PUTP2
+.HAVSEG         LD      HL, TXPAGE
+                ADD     HL, DE
+                LD      A, (HL)         ; A = LINE LEN
+                OR      A
+                JR      NZ, .NONEMP
+                LD      A, 1            ; EMPTY LINE: 1 CHAR BLOCK
+                JR      .SETXB
+.NONEMP         INC     A               ; INCLUDE TRAILING CHAR
+                CP      TEXTCOLS
+                JR      C, .SETXB
+                LD      A, TEXTCOLS
+.SETXB          LD      (SELTMPXB), A
+
+                ; CHECK IF XA < XB
+                LD      A, (SELTMPXA)
+                LD      HL, SELTMPXB
+                CP      (HL)
+                JP      NC, .NEXTROW    ; XA >= XB: NOTHING ON THIS ROW
+
+                ; ISSUE LMMV | VDP_XOR
+                POP     BC
+                PUSH    BC              ; B = ROW (0..23)
+                LD      A, (SELTMPXA)
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL          ; * 4
+                ADD     HL, DE          ; * 6
+                LD      DE, GUTL_PX
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+
+                ; DY = (B + 1) * 8
+                POP     BC
+                PUSH    BC
+                LD      A, B
+                INC     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_DY), HL
+
+                ; NX = (XB - XA) * 6
+                LD      A, (SELTMPXB)
+                LD      HL, SELTMPXA
+                SUB     (HL)            ; A = XB - XA
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL
+                ADD     HL, DE
+                LD      (VDP_NX), HL
+
+                ; NY = 8
+                LD      HL, CELLH
+                LD      (VDP_NY), HL
+
+                ; CLR = COL_HI (3)
+                LD      A, COL_HI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_XOR
+                CALL    LMMV
+
+.NEXTROW        POP     BC
+                INC     B
+                LD      A, B
+                CP      SCRROWS         ; 24
+                JP      C, .ROWLP
+                RET
+
+.DONEPAIN       POP     BC
+                RET
+
+
+; --- ACTDSEL                   ----------------------------------------
+
+
+; - ACTDSEL ----------------------------
+; - CANCEL ACTIVE SELECTION
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTDSEL         LD      A, (SELACT)
+                OR      A
+                RET     Z
+                CALL    SELPRE          ; UN-XOR IF DRAWN
+                XOR     A
+                LD      (SELACT), A
+                LD      (SELDRAWN), A
+                CALL    DRWSTAT
+                RET
+
+
+; --- ACTSELAL                  ----------------------------------------
+
+
+; - ACTSELAL ---------------------------
+; - SELECT ENTIRE DOCUMENT
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSELAL        CALL    SELPRE          ; UN-XOR EXISTING IF DRAWN
+                LD      HL, 0
+                LD      (SELANCL), HL
+                XOR     A
+                LD      (SELANCX), A
+                LD      A, 1
+                LD      (SELACT), A
+
+                ; MOVE CURSOR TO END OF LAST LINE
+                LD      HL, (TOTLINES)
+                DEC     HL
+                LD      (DOCLINE), HL
+                CALL    LINEREAD
+                LD      A, (WORKBUF)
+                LD      (CURX), A
+
+                CALL    SETCURY
+                CALL    REDRAW
+                CALL    DRWGUT
+                CALL    DRWSCRL
+                CALL    SELPOST
+                RET
+
+
+; --- ACTSLML                   ----------------------------------------
+
+
+; - ACTSLML ----------------------------
+; - EXTEND SELECTION ONE CHAR LEFT
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSLML         CALL    SELBEG
+                CALL    SELPRE
+                CALL    ACTMVL
+                JP      SELPOST
+
+
+; --- ACTSLMR                   ----------------------------------------
+
+
+; - ACTSLMR ----------------------------
+; - EXTEND SELECTION ONE CHAR RIGHT
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSLMR         CALL    SELBEG
+                CALL    SELPRE
+                CALL    ACTMVR
+                JP      SELPOST
+
+
+; --- ACTSLMU                   ----------------------------------------
+
+
+; - ACTSLMU ----------------------------
+; - EXTEND SELECTION ONE ROW UP
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSLMU         CALL    SELBEG
+                CALL    SELPRE
+                CALL    ACTMVU
+                JP      SELPOST
+
+
+; --- ACTSLMD                   ----------------------------------------
+
+
+; - ACTSLMD ----------------------------
+; - EXTEND SELECTION ONE ROW DOWN
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSLMD         CALL    SELBEG
+                CALL    SELPRE
+                CALL    ACTMVD
+                JP      SELPOST
+
+
+; --- ACTSLBOL                  ----------------------------------------
+
+
+; - ACTSLBOL ---------------------------
+; - EXTEND SELECTION TO BEGINNING OF LINE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSLBOL        CALL    SELBEG
+                CALL    SELPRE
+                CALL    ACTBOL
+                JP      SELPOST
+
+
+; --- ACTSLEOL                  ----------------------------------------
+
+
+; - ACTSLEOL ---------------------------
+; - EXTEND SELECTION TO END OF LINE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSLEOL        CALL    SELBEG
+                CALL    SELPRE
+                CALL    ACTEOL
+                JP      SELPOST
+
+
+; --- ACTSLTOP                  ----------------------------------------
+
+
+; - ACTSLTOP ---------------------------
+; - EXTEND SELECTION TO TOP OF DOCUMENT
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSLTOP        CALL    SELBEG
+                CALL    SELPRE
+                CALL    ACTTOP
+                JP      SELPOST
+
+
+; --- ACTSLBOT                  ----------------------------------------
+
+
+; - ACTSLBOT ---------------------------
+; - EXTEND SELECTION TO BOTTOM OF DOCUMENT
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSLBOT        CALL    SELBEG
+                CALL    SELPRE
+                CALL    ACTBOT
+                JP      SELPOST
+
+
+; --- ACTSLWLF                  ----------------------------------------
+
+
+; - ACTSLWLF ---------------------------
+; - EXTEND SELECTION TO PREV WORD
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSLWLF        CALL    SELBEG
+                CALL    SELPRE
+                CALL    ACTWLFT
+                JP      SELPOST
+
+
+; --- ACTSLWRT                  ----------------------------------------
+
+
+; - ACTSLWRT ---------------------------
+; - EXTEND SELECTION TO NEXT WORD
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSLWRT        CALL    SELBEG
+                CALL    SELPRE
+                CALL    ACTWRGT
+                JP      SELPOST
+
+
+; --- ACTSLPGU                  ----------------------------------------
+
+
+; - ACTSLPGU ---------------------------
+; - EXTEND SELECTION ONE PAGE UP
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSLPGU        CALL    SELBEG
+                CALL    SELPRE
+                CALL    ACTPGUP
+                JP      SELPOST
+
+
+; --- ACTSLPGD                  ----------------------------------------
+
+
+; - ACTSLPGD ---------------------------
+; - EXTEND SELECTION ONE PAGE DOWN
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSLPGD        CALL    SELBEG
+                CALL    SELPRE
+                CALL    ACTPGDN
+                JP      SELPOST
+
+
+; --- ACTDLS                    ----------------------------------------
+
+
+; - ACTDLS -----------------------------
+; - DELETE ACTIVE SELECTION
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTDLS          LD      A, (SELACT)
+                OR      A
+                RET     Z               ; NOTHING SELECTED
+                CALL    SELPRE          ; UN-XOR VISIBLE OVERLAY
+                CALL    SELNORM         ; NORMALIZE RANGE
+                LD      HL, (SELSTRL)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JR      NZ, .DLSNOTEM
+                LD      A, (SELSTRX)
+                LD      HL, SELENDX
+                CP      (HL)
+                JP      Z, .DLSCLR      ; EMPTY RANGE: JUST CLEAR AND EXIT
+
+.DLSNOTEM       ; CHECK SINGLE-LINE VS MULTI-LINE
+                LD      HL, (SELSTRL)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JP      NZ, .DLSMULT
+
+                ; --- SINGLE LINE DELETION -----------------------------
+                LD      HL, (SELSTRL)
+                CALL    LINEREAD        ; READ LINE INTO WORKBUF
+
+                LD      A, (SELSTRX)
+                LD      B, A            ; B = STARTX
+                LD      A, (SELENDX)
+                LD      C, A            ; C = ENDX
+                SUB     B               ; A = ENDX - STARTX = K
+                JP      Z, .DLSCLR
+                LD      (DWK), A        ; DWK = K
+
+                ; 1. SHIFT TEXT
+                LD      A, B
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DEST
+
+                LD      A, C
+                LD      L, A
+                LD      H, 0
+                LD      BC, WORKBUF + 1
+                ADD     HL, BC          ; HL = SRC
+
+                LD      A, (SELENDX)
+                LD      C, A
+                LD      A, TEXTCOLS
+                SUB     C               ; A = 80 - ENDX
+                JR      Z, .NOSHFT
+                LD      C, A
+                LD      B, 0
+                LDIR
+
+.NOSHFT         ; 2. SHIFT ATTRS
+                LD      A, (SELSTRX)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 81
+                ADD     HL, DE
+                EX      DE, HL
+
+                LD      A, (SELENDX)
+                LD      L, A
+                LD      H, 0
+                LD      BC, WORKBUF + 81
+                ADD     HL, BC
+
+                LD      A, (SELENDX)
+                LD      C, A
+                LD      A, TEXTCOLS
+                SUB     C
+                JR      Z, .NOSHFTA
+                LD      C, A
+                LD      B, 0
+                LDIR
+
+.NOSHFTA        ; 3. BLANK VACATED TAIL
+                LD      A, (DWK)
+                LD      C, A
+                LD      A, TEXTCOLS
+                SUB     C
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      B, C
+.BLKTXT2        LD      (HL), ' '
+                INC     HL
+                DJNZ    .BLKTXT2
+
+                LD      A, (DWK)
+                LD      C, A
+                LD      A, TEXTCOLS
+                SUB     C
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 81
+                ADD     HL, DE
+                LD      B, C
+.BLKATR2        LD      (HL), 0
+                INC     HL
+                DJNZ    .BLKATR2
+
+                ; 4. UPDATE LENGTH
+                LD      HL, WORKBUF
+                LD      E, (HL)         ; CURRENT LENGTH
+                LD      A, (SELSTRX)
+                LD      B, A            ; B = STARTX
+                LD      A, (SELENDX)
+                LD      C, A            ; C = ENDX
+                LD      A, E
+                CP      B
+                JR      C, .DLSSETC     ; LEN < STARTX: UNCHANGED
+                JR      Z, .DLSSETC     ; LEN == STARTX: UNCHANGED
+                CP      C
+                JR      C, .DLSSETT     ; LEN < ENDX: LEN = STARTX
+                JR      Z, .DLSSETT
+                LD      A, (DWK)
+                LD      D, A
+                LD      A, E
+                SUB     D
+                LD      (HL), A
+                JR      .DLSSETC
+.DLSSETT        LD      (HL), B
+
+.DLSSETC        ; 5. WRITE LINE TO MAPPER
+                LD      HL, (SELSTRL)
+                CALL    LINEWRT
+
+                ; 6. SET CURSOR POSITION
+                LD      A, (SELSTRX)
+                LD      (CURX), A
+                LD      HL, (SELSTRL)
+                LD      (DOCLINE), HL
+                CALL    SETCURY
+
+                ; 7. RENDER ROW
+                LD      A, (CURY)
+                INC     A
+                LD      B, A
+                CALL    RENDEROW
+                JP      .DLSFIN
+
+.DLSMULT        ; --- MULTI-LINE DELETION ------------------------------
+                ; 1. READ END LINE INTO WORKBUF2
+                LD      HL, (SELENDL)
+                CALL    LINEREAD
+                LD      HL, WORKBUF
+                LD      DE, WORKBUF2
+                LD      BC, WORKSIZ
+                LDIR
+
+                ; 2. READ START LINE INTO WORKBUF
+                LD      HL, (SELSTRL)
+                CALL    LINEREAD
+
+                ; 3. SPLICE TAIL OF WORKBUF2 (FROM ENDX TO LEN2) ONTO WORKBUF AT STARTX
+                LD      A, (WORKBUF2)   ; LEN2
+                LD      HL, SELENDX
+                CP      (HL)
+                JR      C, .NOTAIL
+                JR      Z, .NOTAIL
+                SUB     (HL)            ; A = M
+                LD      C, A            ; C = M
+                LD      A, (SELSTRX)
+                ADD     A, C
+                CP      TEXTCOLS + 1
+                JR      C, .NOTRUNC
+                LD      A, TEXTCOLS
+                LD      HL, SELSTRX
+                SUB     (HL)
+                LD      C, A            ; C = CLAMPED M
+.NOTRUNC        ; COPY TEXT TAIL
+                LD      A, (SELENDX)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF2 + 1
+                ADD     HL, DE          ; HL = SRC
+                PUSH    HL              ; SAVE SRC
+                LD      A, (SELSTRX)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DEST
+                POP     HL              ; HL = SRC
+                PUSH    BC              ; SAVE M IN C
+                LD      B, 0
+                LDIR
+
+                ; COPY ATTR TAIL
+                LD      A, (SELENDX)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF2 + 81
+                ADD     HL, DE          ; HL = SRC ATTR
+                PUSH    HL              ; SAVE SRC ATTR
+                LD      A, (SELSTRX)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 81
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DEST ATTR
+                POP     HL              ; HL = SRC ATTR
+                POP     BC              ; RESTORE M IN C
+                PUSH    BC
+                LD      B, 0
+                LDIR
+                POP     BC              ; C = M
+                LD      A, (SELSTRX)
+                ADD     A, C
+                LD      (WORKBUF), A
+                JR      .SAVESTR
+
+.NOTAIL         LD      A, (SELSTRX)
+                LD      (WORKBUF), A
+
+.SAVESTR        ; CLEAR TAIL OF WORKBUF (FROM LEN TO 80)
+                LD      A, (WORKBUF)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, TEXTCOLS
+                SUB     E
+                JR      Z, .NOTBLKT
+                LD      B, A
+.BLKTX3         LD      (HL), ' '
+                INC     HL
+                DJNZ    .BLKTX3
+
+.NOTBLKT        LD      A, (WORKBUF)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 81
+                ADD     HL, DE
+                LD      A, TEXTCOLS
+                SUB     E
+                JR      Z, .WRTSTR
+                LD      B, A
+.BLKAT3         LD      (HL), 0
+                INC     HL
+                DJNZ    .BLKAT3
+
+.WRTSTR         ; WRITE UPDATED START LINE TO MAPPER
+                LD      HL, (SELSTRL)
+                CALL    LINEWRT
+
+                ; 4. DELETE INTERMEDIATE LINES AND END LINE
+                LD      HL, (SELENDL)
+                LD      DE, (SELSTRL)
+                OR      A
+                SBC     HL, DE          ; HL = COUNT TO DELETE
+                LD      (SELTMPL), HL
+
+.DELOOP         LD      HL, (SELTMPL)
+                LD      A, H
+                OR      L
+                JR      Z, .DELDONE
+                DEC     HL
+                LD      (SELTMPL), HL
+
+                LD      HL, (SELSTRL)
+                INC     HL              ; LINE TO DELETE = SELSTRL + 1
+                CALL    LINEDEL
+
+                LD      HL, (TOTLINES)
+                DEC     HL
+                LD      (TOTLINES), HL
+                JR      .DELOOP
+
+.DELDONE        ; 5. RE-POSITION CURSOR AT START
+                LD      A, (SELSTRX)
+                LD      (CURX), A
+                LD      HL, (SELSTRL)
+                LD      (DOCLINE), HL
+                CALL    SETCURY
+                CALL    REDRAW
+                CALL    DRWGUT
+                CALL    DRWSCRL
+
+.DLSFIN         XOR     A
+                LD      (SELACT), A
+                LD      (SELDRAWN), A
+                LD      A, #FF
+                LD      (MODIFIED), A
+                CALL    DRWSTAT
+                RET
+
+.DLSCLR         XOR     A
+                LD      (SELACT), A
+                LD      (SELDRAWN), A
+                CALL    DRWSTAT
                 RET

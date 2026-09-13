@@ -91,7 +91,14 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
                 CP      #7F
                 RET     NC
 
-                LD      A, (INSMODE)
+                LD      A, (SELACT)
+                OR      A
+                JR      Z, .NOSELDEL
+                PUSH    BC
+                CALL    ACTDLS          ; DELETE ACTIVE SELECTION FIRST
+                POP     BC
+
+.NOSELDEL       LD      A, (INSMODE)
                 CP      INS_MODE
                 LD      A, C
                 JP      Z, EDINSCHR

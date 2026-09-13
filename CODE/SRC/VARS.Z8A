@@ -83,6 +83,21 @@ MODKEYS         DEFB    0               ; LAST READ MODIFIERS BYTE
 DWK             DEFB    0               ; WORD DELETE: COUNT K
 DWTO            DEFB    0               ; WORD DELETE: DEST COLUMN
 DWFROM          DEFB    0               ; WORD DELETE: SOURCE COLUMN
+SELACT          DEFB    0               ; 0=INACTIVE, 1=SELECTION ACTIVE
+SELDRAWN        DEFB    0               ; 0=NOT PAINTED, 1=XOR OVERLAY PAINTED
+SELANCL         DEFW    0               ; ANCHOR DOCUMENT LINE
+SELANCX         DEFB    0               ; ANCHOR COLUMN
+SELSTRL         DEFW    0               ; NORMALIZED START LINE
+SELSTRX         DEFB    0               ; NORMALIZED START COL
+SELENDL         DEFW    0               ; NORMALIZED END LINE
+SELENDX         DEFB    0               ; NORMALIZED END COL
+DRWSTRL         DEFW    0               ; PAINTED START LINE
+DRWSTRX         DEFB    0               ; PAINTED START COL
+DRWENDL         DEFW    0               ; PAINTED END LINE
+DRWENDX         DEFB    0               ; PAINTED END COL
+SELTMPL         DEFW    0               ; TEMP LINE VAR
+SELTMPXA        DEFB    0               ; TEMP COL XA
+SELTMPXB        DEFB    0               ; TEMP COL XB
 
 
 ; --- FILE                      ----------------------------------------
