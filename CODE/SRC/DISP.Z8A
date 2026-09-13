@@ -96,12 +96,12 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
 
                 LD      A, (SELACT)
                 OR      A
-                JR      Z, .NOSELDEL
+                JR      Z, .NOSELDL
                 PUSH    BC
                 CALL    ACTDLS          ; DELETE ACTIVE SELECTION FIRST
                 POP     BC
 
-.NOSELDEL       LD      A, (INSMODE)
+.NOSELDL        LD      A, (INSMODE)
                 CP      INS_MODE
                 LD      A, C
                 JP      Z, EDINSCHR
@@ -178,12 +178,12 @@ KMAPSW          LD      A, (KMAPID)
                 RET
 
 .NOTWS          CP      KMEMACS
-                JR      NZ, .NOTEMACS
+                JR      NZ, .NOTEMAC
                 LD      HL, KMAPEMAC
                 LD      (KMAPPTR), HL
                 RET
 
-.NOTEMACS       ; KMVI
+.NOTEMAC        ; KMVI
                 XOR     A
                 LD      (VIMODE), A
                 LD      (VILEAD), A
