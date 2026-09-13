@@ -326,21 +326,135 @@ ACTWRGT         LD      HL, (DOCLINE)
 ACTDWLFT        LD      A, (CURX)
                 OR      A
                 RET     Z
-                ; FIND TARGET COLUMN IN B
-                PUSH    AF
+                LD      (DWFROM), A
                 CALL    ACTWLFT
                 LD      A, (CURX)
-                LD      B, A
-                POP     AF
-                LD      (CURX), A
-.DWLP           LD      A, (CURX)
+                LD      (DWTO), A
+                LD      A, (DWFROM)
+                LD      (CURX), A       ; RESTORE CURX
+                LD      HL, DWTO
+                SUB     (HL)            ; A = DWFROM - DWTO = K
+                RET     Z               ; DELTA IS ZERO, NOTHING TO DELETE
+                LD      (DWK), A
+
+                ; 1. SHIFT TEXT (WORKBUF + 1)
+                ; DEST = WORKBUF + 1 + DWTO
+                ; SRC  = WORKBUF + 1 + DWFROM
+                ; COUNT = TEXTCOLS - DWFROM
+                LD      A, (DWTO)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DEST
+
+                LD      A, (DWFROM)
+                LD      L, A
+                LD      H, 0
+                LD      BC, WORKBUF + 1
+                ADD     HL, BC          ; HL = SRC
+
+                LD      A, (DWFROM)
+                LD      C, A
+                LD      A, TEXTCOLS     ; 80
+                SUB     C               ; A = 80 - DWFROM
+                JR      Z, .NOSHFTT
+                LD      C, A
+                LD      B, 0            ; BC = COUNT
+                LDIR
+
+.NOSHFTT        ; 2. SHIFT ATTRIBUTES (WORKBUF + 81)
+                LD      A, (DWTO)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 81
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DEST
+
+                LD      A, (DWFROM)
+                LD      L, A
+                LD      H, 0
+                LD      BC, WORKBUF + 81
+                ADD     HL, BC          ; HL = SRC
+
+                LD      A, (DWFROM)
+                LD      C, A
+                LD      A, TEXTCOLS
+                SUB     C
+                JR      Z, .NOSHFTA
+                LD      C, A
+                LD      B, 0
+                LDIR
+
+.NOSHFTA        ; 3. CLEAR VACATED TAIL IN TEXT (K BYTES AT 80 - K)
+                LD      A, (DWK)
+                LD      C, A
+                LD      A, TEXTCOLS
+                SUB     C               ; A = 80 - K
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      B, C            ; B = K
+.BLKTXT         LD      (HL), ' '
+                INC     HL
+                DJNZ    .BLKTXT
+
+                ; 4. CLEAR VACATED TAIL IN ATTRS (K BYTES AT 80 - K)
+                LD      A, (DWK)
+                LD      C, A
+                LD      A, TEXTCOLS
+                SUB     C
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 81
+                ADD     HL, DE
+                LD      B, C
+.BLKATR         LD      (HL), 0
+                INC     HL
+                DJNZ    .BLKATR
+
+                ; 5. UPDATE LINE LENGTH
+                LD      HL, WORKBUF
+                LD      E, (HL)         ; E = CURRENT LENGTH
+                LD      A, (DWTO)
+                LD      B, A            ; B = DWTO
+                LD      A, (DWFROM)
+                LD      C, A            ; C = DWFROM
+                LD      A, E
                 CP      B
-                RET     Z
-                RET     C
-                PUSH    BC
-                CALL    EDDELBK
-                POP     BC
-                JR      .DWLP
+                JR      C, .DONELEN     ; LEN < DWTO: UNCHANGED
+                JR      Z, .DONELEN     ; LEN == DWTO: UNCHANGED
+                CP      C
+                JR      C, .SETTO       ; LEN < DWFROM: NEW LEN = DWTO
+                JR      Z, .SETTO       ; LEN == DWFROM: NEW LEN = DWTO
+                ; LEN > DWFROM: NEW LEN = LEN - K
+                LD      A, (DWK)
+                LD      D, A
+                LD      A, E
+                SUB     D               ; A = LEN - K
+                LD      (HL), A
+                JR      .DONELEN
+
+.SETTO          LD      (HL), B
+
+.DONELEN        ; 6. SET CURX TO DWTO
+                LD      A, (DWTO)
+                LD      (CURX), A
+
+                ; 7. WRITE TO MAPPER & RENDER ROW ONCE
+                LD      HL, (DOCLINE)
+                CALL    LINEWRT
+
+                LD      A, (CURY)
+                INC     A
+                LD      B, A
+                CALL    RENDEROW
+
+                LD      A, #FF
+                LD      (MODIFIED), A
+                CALL    DRWSTAT
+                RET
 
 
 ; --- ACTPGUP                   ----------------------------------------
