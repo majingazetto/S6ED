@@ -23,6 +23,25 @@ BIOSCALL        PUSH    AF
                 RET
 
 
+; --- READROW                   ----------------------------------------
+
+
+; - READROW ----------------------------
+; - READ A KEYBOARD MATRIX ROW VIA BIOS SNSMAT
+; - IN:  A = ROW NUMBER (0..11)
+; - OUT: A = ROW DATA (ACTIVE LOW: 0=PRESSED, 1=RELEASED)
+; - CLOBBERS: AF, IX
+; -
+
+READROW         PUSH    BC
+                LD      IX, SNSMAT
+                CALL    BIOSCALL
+                POP     BC
+                RET
+
+
+
+
 ; - DBGMSG -----------------------------
 ; - OUTPUT INLINE STRING TO OPENMSX DEBUGDEVICE (PORTS #2E/#2F)
 ; - USAGE: CALL DBGMSG; DEFM "TEXT", 10, 0

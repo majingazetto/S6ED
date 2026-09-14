@@ -17,8 +17,7 @@
 ; -
 
 READMOD         LD      A, 6
-                LD      IX, SNSMAT
-                CALL    BIOSCALL
+                CALL    READROW
                 CPL
                 AND     %00000111
                 LD      (MODKEYS), A
@@ -42,6 +41,15 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
                 POP     AF              ; RESTORE KEYCODE
                 LD      C, A            ; C = KEYCODE
                 CALL    TRNGRPH         ; TRANSLATE GRAPH ACCENTS IF GRAPH HELD
+                CALL    TRNDEAD         ; TRANSLATE DEAD KEY IF PENDING
+
+                ; NORMALIZE BIOS GRAVE ACCENT (#85 = à) TO SPANISH ACUTE (#A0 = á)
+                LD      A, C
+                CP      #85
+                JR      NZ, .NOA85
+                LD      C, #A0
+.NOA85
+
 
                 ; CHECK VI LEADER KEY
                 LD      A, (VILEAD)
@@ -230,3 +238,77 @@ TRNGRPH         LD      A, (MODKEYS)
                 DEFB    #5B, #A4, #4E, #A5, #D3, #A5, #3F, #A8
                 DEFB    #2F, #A8, #F6, #A8, #21, #AD, #31, #AD
                 DEFB    #AC, #AD, #77, #81, #57, #9A, #00
+
+
+; --- TRNDEAD                   ----------------------------------------
+
+
+; - TRNDEAD ----------------------------
+; - COMBINE PENDING DEAD KEY WITH VOWEL
+; - IN:  C = KEYCODE
+; - OUT: C = TRANSLATED KEYCODE (OR UNCHANGED)
+; - CLOBBERS: AF, HL
+; -
+
+TRNDEAD         LD      A, (DEADST)
+                OR      A
+                RET     Z               ; NO DEAD KEY PENDING
+
+                PUSH    AF              ; PRESERVE DEAD STATE (1=ACUTE, 2=DIAERESIS)
+                XOR     A
+                LD      (DEADST), A     ; RESET DEAD STATE
+
+                ; IF KEY IS ESC OR BS, CANCEL DEAD KEY AND LEAVE C UNCHANGED
+                LD      A, C
+                CP      #1B             ; ESC
+                JR      Z, .DEDQUIT
+                CP      #08             ; BS
+                JR      Z, .DEDQUIT
+
+                POP     AF              ; RESTORE DEAD STATE
+                CP      DEDDIAR
+                JR      Z, .DODIAER
+
+                ; ACUTE ACCENT: LOOK UP IN .ACTTBL
+                LD      HL, .ACTTBL
+.ACTLP          LD      A, (HL)
+                OR      A
+                RET     Z               ; NOT FOUND: LEAVE C UNCHANGED
+                CP      C
+                JR      Z, .ACTFND
+                INC     HL
+                INC     HL
+                JR      .ACTLP
+
+.ACTFND         INC     HL
+                LD      C, (HL)         ; C = ACCENTED CHAR CODE
+                RET
+
+.DODIAER        ; DIAERESIS: LOOK UP IN .DIATBL
+                LD      HL, .DIATBL
+.DIALP          LD      A, (HL)
+                OR      A
+                RET     Z               ; NOT FOUND: LEAVE C UNCHANGED
+                CP      C
+                JR      Z, .DIAFND
+                INC     HL
+                INC     HL
+                JR      .DIALP
+
+.DIAFND         INC     HL
+                LD      C, (HL)         ; C = DIAERESIS CHAR CODE
+                RET
+
+.DEDQUIT        POP     AF              ; CLEANUP STACK
+                RET
+
+.ACTTBL         ; PAIRS: [INPUT KEYCODE, OUTPUT ACCENTED CODE]
+                DEFB    #61, #A0, #41, #A0, #65, #82, #45, #90
+                DEFB    #69, #A1, #49, #A1, #6F, #A2, #4F, #A2
+                DEFB    #75, #A3, #55, #A3, #6E, #A4, #4E, #A5
+                DEFB    #85, #A0, #20, #27, #27, #27, #00
+
+.DIATBL         ; PAIRS FOR DIAERESIS: [INPUT KEYCODE, OUTPUT CODE]
+                DEFB    #75, #81, #55, #9A, #20, #22, #22, #22
+                DEFB    #00
+

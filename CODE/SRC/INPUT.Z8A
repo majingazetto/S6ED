@@ -3,7 +3,8 @@
 ;                                       ****************************************
 ;
 ; KEYBOARD INPUT AND MAIN DISPATCH LOOP.
-; USES BDOS _DIRIO (#06) FOR NON-BLOCKING CONSOLE INPUT.
+; CHECKS MATRIX ACCENT COMBOS (GRAPH + VOWELS) AND HARDWARE DEAD KEY.
+; USES BIOS CHSNS / CHGET FOR NON-BLOCKING CONSOLE INPUT.
 ; CURSOR BLINKING TIMED VIA SYSTEM JIFFY (#FC9E).
 
 
@@ -17,7 +18,11 @@
 ; - CLOBBERS: ALL
 ; -
 
-MAINLOOP        ; POLL KEYBOARD VIA BIOS CHSNS (#009C)
+MAINLOOP        ; CHECK MATRIX ACCENTS (GRAPH COMBOS & HARDWARE DEAD KEY)
+                CALL    CHKACNT
+                JR      C, .GOTACNT
+
+                ; POLL KEYBOARD VIA BIOS CHSNS (#009C)
                 LD      IX, CHSNS
                 CALL    BIOSCALL
                 JR      NZ, .KEYHIT
@@ -38,6 +43,18 @@ MAINLOOP        ; POLL KEYBOARD VIA BIOS CHSNS (#009C)
                 LD      (BLNKPH), A
                 JR      MAINLOOP
 
+.GOTACNT        ; ACCENT KEY HIT DIRECTLY FROM MATRIX: ERASE CURSOR IF VISIBLE
+                PUSH    AF
+                LD      A, (BLNKPH)
+                AND     A
+                JR      Z, .ACNOERA
+                CALL    DRWCUR
+                XOR     A
+                LD      (BLNKPH), A
+.ACNOERA        POP     AF
+                CALL    DISPKEY
+                JR      .DRAWCUR
+
 .KEYHIT         ; IF CURSOR IS VISIBLE, ERASE BEFORE EDITING/MOVING
                 LD      A, (BLNKPH)
                 AND     A
@@ -49,6 +66,10 @@ MAINLOOP        ; POLL KEYBOARD VIA BIOS CHSNS (#009C)
                 LD      IX, CHGET
                 CALL    BIOSCALL
 
+                ; FILTER OUT MSX 2-BYTE GRAPHIC SEQUENCE (#01 FOLLOWED BY CODE)
+                CP      #01
+                JR      Z, .DRPGRPH
+
                 ; DISPATCH KEYPRESS THROUGH ACTIVE KEYMAP AND ACTION CATALOG
                 CALL    DISPKEY
 
@@ -59,3 +80,211 @@ MAINLOOP        ; POLL KEYBOARD VIA BIOS CHSNS (#009C)
                 LD      A, (JIFFY)
                 LD      (BLNKCNT), A
                 JP      MAINLOOP
+
+.DRPGRPH        ; READ AND DISCARD TRAILING GRAPHIC CODE BYTE
+                LD      IX, CHSNS
+                CALL    BIOSCALL
+                JR      Z, .DRAWCUR
+                LD      IX, CHGET
+                CALL    BIOSCALL
+                JR      .DRAWCUR
+
+
+; --- CHKACNT                   ----------------------------------------
+
+
+; - CHKACNT ----------------------------
+; - CHECK KEYBOARD MATRIX FOR DEAD KEY AND GRAPH+ACCENT KEYS
+; - BYPASSES REGIONAL BIOS GRAPH TABLES (JAPANESE BIOS DROPS A, O, U, N)
+; - IN:  NONE
+; - OUT: CARRY SET: A = ACCENTED CHAR CODE READY TO DISPATCH
+; -      CARRY RESET: NO GRAPH ACCENT HIT
+; - CLOBBERS: ALL
+; -
+
+CHKACNT         ; --- STEP 1: CHECK HARDWARE DEAD KEY (ROW 2, BIT 5) ---
+                LD      A, 2
+                CALL    READROW
+                BIT     5, A
+                JR      NZ, .NODED
+
+                ; DEAD KEY IS PRESSED: CHECK EDGE DETECTION
+                LD      A, (LASTDED)
+                OR      A
+                JR      NZ, .CHKGRP     ; ALREADY HELD, SKIP TO GRAPH CHECK
+
+                LD      A, 1
+                LD      (LASTDED), A    ; MARK DEAD KEY HELD
+
+                ; CHECK SHIFT (ROW 6, BIT 0)
+                LD      A, 6
+                CALL    READROW
+                BIT     0, A            ; 0 = SHIFT PRESSED
+                JR      Z, .DEDSHF
+                LD      A, DEDACUT      ; 1 = ACUTE ACCENT
+                JR      .DEDSET
+.DEDSHF         LD      A, DEDDIAR      ; 2 = DIAERESIS
+.DEDSET         LD      (DEADST), A
+
+                ; PURGE BIOS KEYBOARD BUFFER
+                LD      IX, KILBUF
+                CALL    BIOSCALL
+                JR      .CHKGRP
+
+.NODED          XOR     A
+                LD      (LASTDED), A    ; CLEAR DEAD KEY HELD FLAG
+
+.CHKGRP         ; --- STEP 2: CHECK GRAPH KEY (ROW 6, BIT 2) ---
+                LD      A, 6
+                CALL    READROW
+                BIT     2, A            ; 0 = GRAPH PRESSED
+                JR      Z, .GRPDWN
+
+                ; GRAPH NOT PRESSED: CLEAR LAST PRESSED GRAPH KEY
+                LD      A, (LASTGRP)
+                OR      A
+                JR      Z, .NOGPCLR
+                XOR     A
+                LD      (LASTGRP), A
+                LD      IX, KILBUF
+                CALL    BIOSCALL
+.NOGPCLR        OR      A               ; RESET CARRY
+                RET
+
+.GRPDWN         ; --- STEP 3: SCAN ACCENT KEYS ---
+                ; ROW 2: BIT 6 = 'A', BIT 4 = '?'
+                LD      A, 2
+                CALL    READROW
+                BIT     6, A
+                LD      C, #61          ; 'a'
+                JR      Z, .GRPFND
+                BIT     4, A
+                LD      C, #3F          ; '?'
+                JR      Z, .GRPFND
+
+                ; ROW 3: BIT 2 = 'E', BIT 6 = 'I'
+                LD      A, 3
+                CALL    READROW
+                BIT     2, A
+                LD      C, #65          ; 'e'
+                JR      Z, .GRPFND
+                BIT     6, A
+                LD      C, #69          ; 'i'
+                JR      Z, .GRPFND
+
+                ; ROW 4: BIT 4 = 'O', BIT 3 = 'N'
+                LD      A, 4
+                CALL    READROW
+                BIT     4, A
+                LD      C, #6F          ; 'o'
+                JR      Z, .GRPFND
+                BIT     3, A
+                LD      C, #6E          ; 'n'
+                JR      Z, .GRPFND
+
+                ; ROW 5: BIT 2 = 'U', BIT 4 = 'W'
+                LD      A, 5
+                CALL    READROW
+                BIT     2, A
+                LD      C, #75          ; 'u'
+                JR      Z, .GRPFND
+                BIT     4, A
+                LD      C, #77          ; 'w'
+                JR      Z, .GRPFND
+
+                ; ROW 0: BIT 1 = '1'
+                LD      A, 0
+                CALL    READROW
+                BIT     1, A
+                LD      C, #31          ; '1'
+                JR      Z, .GRPFND
+
+                ; NO ACCENT KEY PRESSED WITH GRAPH
+                LD      A, (LASTGRP)
+                OR      A
+                JR      Z, .NOACCLR
+                XOR     A
+                LD      (LASTGRP), A
+                LD      IX, KILBUF
+                CALL    BIOSCALL
+.NOACCLR        OR      A               ; RESET CARRY
+                RET
+
+.GRPFND         ; ACCENT KEY FOUND IN C!
+                ; CHECK DEBOUNCING / REPEAT
+                LD      A, (LASTGRP)
+                CP      C
+                JR      NZ, .GRPINIT    ; NEW KEY PRESSED
+
+                ; SAME KEY HELD: CHECK EXPIRY OF (GRPTIM)
+                LD      A, (JIFFY)
+                LD      HL, GRPTIM
+                SUB     (HL)            ; A = JIFFY - GRPTIM
+                AND     #80             ; TEST SIGN (BIT 7)
+                JR      NZ, .GRPBUSY    ; STILL WAITING: RETURN NC
+
+                ; TIMER EXPIRED: SCHEDULE NEXT REPEAT (~70 MS)
+                LD      A, (JIFFY)
+                ADD     A, 4
+                LD      (GRPTIM), A
+                JR      .GRPTRN
+
+.GRPINIT        LD      A, C
+                LD      (LASTGRP), A
+                LD      A, (JIFFY)
+                ADD     A, 25           ; INITIAL DELAY (~400 MS)
+                LD      (GRPTIM), A
+                JR      .GRPTRN
+
+.GRPBUSY        LD      IX, KILBUF
+                CALL    BIOSCALL        ; PURGE BIOS BUFFER WHILE KEY HELD
+                OR      A               ; RESET CARRY: NO KEY
+                RET
+
+.GRPTRN         ; TRANSLATE C INTO ACCENTED CHARACTER
+                ; CHECK SHIFT (ROW 6, BIT 0)
+                PUSH    BC
+                LD      A, 6
+                CALL    READROW
+                BIT     0, A            ; 0 = SHIFT PRESSED
+                POP     BC
+                JR      Z, .GRPSHFT
+
+                ; UNSHIFTED TABLE
+                LD      HL, .GRPTBL
+                JR      .GRPLKUP
+
+.GRPSHFT        ; SHIFTED TABLE
+                LD      HL, .GRPSHTB
+
+.GRPLKUP        LD      A, (HL)
+                OR      A
+                JR      Z, .GRPFAIL     ; NOT FOUND (SAFETY)
+                CP      C
+                JR      Z, .GRPOK
+                INC     HL
+                INC     HL
+                JR      .GRPLKUP
+
+.GRPOK          INC     HL
+                LD      A, (HL)         ; A = ACCENTED CHAR CODE
+                PUSH    AF
+                LD      IX, KILBUF
+                CALL    BIOSCALL        ; PURGE ANY JUNK FROM BIOS KEYBUF
+                POP     AF
+                SCF                     ; SET CARRY: CHARACTER READY IN A
+                RET
+
+.GRPFAIL        XOR     A               ; RESET CARRY
+                RET
+
+.GRPTBL         ; UNSHIFTED GRAPH ACCENTS: [KEY, CHAR]
+                DEFB    #61, #A0, #65, #82, #69, #A1, #6F, #A2
+                DEFB    #75, #A3, #6E, #A4, #77, #81, #31, #AD
+                DEFB    #3F, #A8, #00
+
+.GRPSHTB        ; SHIFTED GRAPH ACCENTS: [KEY, CHAR]
+                DEFB    #61, #A0, #65, #90, #69, #A1, #6F, #A2
+                DEFB    #75, #A3, #6E, #A5, #77, #9A, #31, #AD
+                DEFB    #3F, #A8, #00
+
