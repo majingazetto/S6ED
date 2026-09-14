@@ -603,8 +603,7 @@ STREXIT         CALL    STROUT
 ; - TERMINATE PROGRAM
 ; - 
 
-TERM            CALL    UNBLINK         ; RESTORE HTIMI HOOK
-                ; RESTORE MAPPER SEGMENTS IF INITIALIZED
+TERM            ; RESTORE MAPPER SEGMENTS IF INITIALIZED
                 LD      A, (MAPRDY)
                 AND     A
                 JR      Z, .NOMAPRS
