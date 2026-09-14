@@ -25,7 +25,7 @@ MALLSEG      DEFW    0               ; ALL_SEG ENTRY ADDRESS
 MFRESEG      DEFW    0               ; FRE_SEG ENTRY ADDRESS
 MRDSEG       DEFW    0               ; RD_SEG  ENTRY ADDRESS
 MWRSEG       DEFW    0               ; WR_SEG  ENTRY ADDRESS
-MPUTP1       DEFW    0               ; PUT_P1  ENTRY ADDRESS (PAGE 1: DIR)
+MPUTP1       DEFW    0               ; PUT_P1  ENTRY ADDRESS (RESTORE ONLY)
 MGETP1       DEFW    0               ; GET_P1  ENTRY ADDRESS
 MPUTP2       DEFW    0               ; PUT_P2  ENTRY ADDRESS (PAGE 2: TEXT)
 MGETP2       DEFW    0               ; GET_P2  ENTRY ADDRESS
@@ -33,15 +33,16 @@ MGETP2       DEFW    0               ; GET_P2  ENTRY ADDRESS
 
 ; --- SEGMENTS                  ----------------------------------------
 
-DIRSEG          DEFB    0               ; SEGMENT NUMBER BANKED AT PAGE 1 (DIR)
 TXSEG           DEFB    0               ; SEGMENT NUMBER BANKED AT PAGE 2 (TEXT)
 TXSEG0          DEFB    0               ; FIRST TEXT SEGMENT (RECORD 0 LIVES HERE)
 APPSEG          DEFB    0               ; SEGMENT THE APPEND CURSOR WRITES INTO
 
                 ; EVERY SEGMENT CLAIMED THROUGH SEGGET IS RECORDED HERE SO THE
-                ; EDITOR CAN HAND THEM ALL BACK ON EXIT. ENTRY 0 IS ALWAYS THE
-                ; LINE DIRECTORY, ENTRY 1 THE FIRST TEXT SEGMENT; ENTRIES 2 AND
-                ; UP ARE TEXT SEGMENTS GROWN ON DEMAND AND DROPPED BY SEGTRIM.
+                ; EDITOR CAN HAND THEM ALL BACK ON EXIT. THE TWO SEGMENTS THE
+                ; EDITOR STARTS WITH ARE NOT IN HERE: DEFSEG1 AND DEFSEG2 ARE
+                ; THE TPA'S OWN, NEVER ALLOCATED AND NEVER RETURNED. SO EVERY
+                ; ENTRY IS A TEXT SEGMENT GROWN ON DEMAND AND DROPPED BY
+                ; SEGTRIM.
 
 SEGTBL          DEFS    MAXSEGS
 SEGCNT          DEFB    0               ; ENTRIES USED IN SEGTBL
@@ -196,15 +197,6 @@ FNKBUF          DEFS    10
 STATBUF         DEFS    80
 
 
-; --- LINE DIRECTORY            ----------------------------------------
-
-                ; LIVES AT DIRPAGE (#4000) IN A DEDICATED MAPPER SEGMENT.
-                ; ALLOCATED AT STARTUP BY BUFINIT, BANKED INTO PAGE 1 VIA
-                ; PUTP1 — NEVER SWITCHED. ACCESSED AS FLAT ARRAY DIRECTLY.
-                ; CAPACITY: MAXLINES ENTRIES × DIRSIZ BYTES = 16380 BYTES.
-
-
-
 ; --- VDP COMMAND BLOCK          ----------------------------------------
 
                 ; STANDARD 15-BYTE BLOCK FOR R#32 TO R#46
@@ -225,3 +217,20 @@ UNKNOWN         DEFM    "Unknown("
 .CODE           DEFS    5               ; ROOM FOR "NNN)$"
 
 ENDVARS
+
+
+; --- LINE DIRECTORY            ----------------------------------------
+
+                ; DIRBASE AND MAXLINES ARE DEFINED IN CONST.Z8A AND DERIVED
+                ; FROM ENDVARS, WHICH IS THE LABEL JUST ABOVE. THE DIRECTORY
+                ; OCCUPIES DIRBASE .. #7FFF AND IS DELIBERATELY LEFT OUTSIDE
+                ; THE VARS .. ENDVARS BLOCK THAT INIT ZEROES: ENTRY N IS ONLY
+                ; EVER READ FOR N < TOTLINES, AND EVERY SUCH ENTRY IS WRITTEN
+                ; BY BUFRESET, STORLINE, DIRWRITE OR LINEINS FIRST.
+                ;
+                ; NOTHING MAY BE DECLARED BELOW THIS POINT. A NEW VARIABLE
+                ; HERE WOULD SIT INSIDE THE DIRECTORY AND BE OVERWRITTEN BY
+                ; THE FIRST LINES OF THE DOCUMENT -- PUT IT ABOVE ENDVARS.
+
+                ASSERT  DIRBASE + MAXLINES * DIRSIZ <= TXPAGE
+                ASSERT  MAXLINES >= 2000
