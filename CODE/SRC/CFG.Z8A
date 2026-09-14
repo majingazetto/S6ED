@@ -1,0 +1,359 @@
+; **********************************************
+; * CFG.Z8A - CONFIGURATION FILE (S6ED.CFG)    *
+; **********************************************
+
+
+; --- CFGLOAD                   ----------------------------------------
+
+
+; - CFGLOAD ----------------------------
+; - LOAD S6ED.CFG IF PRESENT AND APPLY
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+CFGLOAD         LD      HL, CFGNAME
+                CALL    DSKOPEN
+                RET     C               ; FILE NOT FOUND: USE DEFAULTS
+
+                LD      C, A            ; C = FILE HANDLE
+                LD      HL, 255         ; READ UP TO 255 BYTES
+                LD      DE, FILEBUF
+                CALL    DSKREAD         ; HL = BYTES READ
+                LD      A, C
+                PUSH    HL
+                CALL    DSKCLOSE
+                POP     BC              ; BC = BYTES READ
+
+                LD      A, B
+                OR      C
+                RET     Z               ; EMPTY FILE
+
+                ; NULL-TERMINATE BUFFER
+                LD      HL, FILEBUF
+                ADD     HL, BC
+                LD      (HL), 0
+
+                ; PARSE LINES FROM FILEBUF
+                LD      HL, FILEBUF
+.LINELP         LD      A, (HL)
+                OR      A
+                RET     Z               ; END OF BUFFER
+
+                ; SKIP LEADING WHITESPACE / EMPTY LINES
+                CP      ' '
+                JR      Z, .NEXTCH
+                CP      9               ; TAB
+                JR      Z, .NEXTCH
+                CP      13              ; CR
+                JR      Z, .NEXTCH
+                CP      10              ; LF
+                JR      Z, .NEXTCH
+                CP      ';'             ; COMMENT
+                JP      Z, .SKPLIN
+                CP      '#'             ; COMMENT
+                JP      Z, .SKPLIN
+                JR      .PARSLN
+
+.NEXTCH         INC     HL
+                JR      .LINELP
+
+.PARSLN         ; CHECK "PROFILE="
+                PUSH    HL
+                LD      DE, KEYPROF
+                CALL    STRPREF
+                JR      NC, .NOTPRF
+                CALL    PARSPRF
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JR      .SKPLIN
+
+.NOTPRF         POP     HL
+                PUSH    HL
+                LD      DE, KEYWRAP
+                CALL    STRPREF
+                JR      NC, .NOTWRP
+                CALL    PARSWRP
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JR      .SKPLIN
+
+.NOTWRP         POP     HL
+                PUSH    HL
+                LD      DE, KEYMKUP
+                CALL    STRPREF
+                JR      NC, .NOTMKP
+                CALL    PARSMKP
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JR      .SKPLIN
+
+.NOTMKP         POP     HL
+                PUSH    HL
+                LD      DE, KEYCLK
+                CALL    STRPREF
+                JR      NC, .NOTCLK
+                CALL    PARSCLK
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JR      .SKPLIN
+
+.NOTCLK         POP     HL
+                PUSH    HL
+                LD      DE, KEYTAB
+                CALL    STRPREF
+                JR      NC, .NOTTAB
+                CALL    PARSTAB
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JR      .SKPLIN
+
+.NOTTAB         POP     HL
+                PUSH    HL
+                LD      DE, KEYEOL
+                CALL    STRPREF
+                JR      NC, .NOTEOL
+                CALL    PARSEOL
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JR      .SKPLIN
+
+.NOTEOL         POP     HL
+
+.SKPLIN         ; ADVANCE HL TO END OF CURRENT LINE (CR, LF, OR 0)
+                LD      A, (HL)
+                OR      A
+                RET     Z
+                CP      13
+                JR      Z, .EOLS
+                CP      10
+                JR      Z, .EOLS
+                INC     HL
+                JR      .SKPLIN
+
+.EOLS           ; SKIP CR/LF CHARACTERS
+                INC     HL
+                LD      A, (HL)
+                CP      10
+                JR      Z, .EOLS
+                CP      13
+                JR      Z, .EOLS
+                JP      .LINELP
+
+
+; --- STRPREF                   ----------------------------------------
+
+
+; - STRPREF ----------------------------
+; - MATCH NULL-TERMINATED PREFIX AT HL
+; - IN:  HL = INPUT STRING
+; -      DE = PREFIX STRING (ASCIIZ)
+; - OUT: CY = 1 IF MATCH, HL ADVANCED PAST PREFIX
+; -      CY = 0 IF NO MATCH
+; - CLOBBERS: A, B, DE
+; -
+
+STRPREF         LD      A, (DE)
+                OR      A
+                JR      Z, .MATCH
+                LD      B, A
+                LD      A, (HL)
+                CP      B
+                JR      NZ, .NOMTCH
+                INC     HL
+                INC     DE
+                JR      STRPREF
+.MATCH          SCF
+                RET
+.NOMTCH         XOR     A
+                RET
+
+
+; --- PARSPRF                   ----------------------------------------
+
+
+; - PARSPRF ----------------------------
+; - PARSE PROFILE VALUE (STD, WS, EMC, VI)
+; - IN:  HL = POINTER TO VALUE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+PARSPRF         LD      A, (HL)
+                CP      'S'             ; STD
+                JR      Z, .SETSTD
+                CP      's'
+                JR      Z, .SETSTD
+                CP      'W'             ; WS
+                JR      Z, .SETWS
+                CP      'w'
+                JR      Z, .SETWS
+                CP      'E'             ; EMC
+                JR      Z, .SETEMC
+                CP      'e'
+                JR      Z, .SETEMC
+                CP      'V'             ; VI
+                JR      Z, .SETVI
+                CP      'v'
+                JR      Z, .SETVI
+                RET
+.SETSTD         XOR     A
+                JR      .SETPRF
+.SETWS          LD      A, 1
+                JR      .SETPRF
+.SETEMC         LD      A, 2
+                JR      .SETPRF
+.SETVI          LD      A, 3
+.SETPRF         LD      (KMAPID), A
+                JP      KMAPSW
+
+
+; --- PARSWRP                   ----------------------------------------
+
+
+; - PARSWRP ----------------------------
+; - PARSE WRAP VALUE (DEV, TXT)
+; - IN:  HL = POINTER TO VALUE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+PARSWRP         LD      A, (HL)
+                CP      'D'             ; DEV
+                JR      Z, .SETDEV
+                CP      'd'
+                JR      Z, .SETDEV
+                CP      'T'             ; TXT
+                JR      Z, .SETTXT
+                CP      't'
+                JR      Z, .SETTXT
+                RET
+.SETDEV         XOR     A
+                LD      (WRAPMODE), A
+                RET
+.SETTXT         LD      A, 1
+                LD      (WRAPMODE), A
+                RET
+
+
+; --- PARSMKP                   ----------------------------------------
+
+
+; - PARSMKP ----------------------------
+; - PARSE MARKUP VALUE (OFF, MD, LIT)
+; - IN:  HL = POINTER TO VALUE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+PARSMKP         LD      A, (HL)
+                CP      'O'             ; OFF
+                JR      Z, .SETOFF
+                CP      'o'
+                JR      Z, .SETOFF
+                CP      'M'             ; MD
+                JR      Z, .SETMD
+                CP      'm'
+                JR      Z, .SETMD
+                CP      'L'             ; LIT
+                JR      Z, .SETLIT
+                CP      'l'
+                JR      Z, .SETLIT
+                RET
+.SETOFF         XOR     A
+                LD      (MKUPMD), A
+                RET
+.SETMD          LD      A, 1
+                LD      (MKUPMD), A
+                RET
+.SETLIT         LD      A, 2
+                LD      (MKUPMD), A
+                RET
+
+
+; --- PARSCLK                   ----------------------------------------
+
+
+; - PARSCLK ----------------------------
+; - PARSE CLOCK VALUE (0, 1)
+; - IN:  HL = POINTER TO VALUE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+PARSCLK         LD      A, (HL)
+                CP      '1'
+                JR      Z, .CLKON
+                CP      '0'
+                JR      Z, .CLKOFF
+                RET
+.CLKON          LD      A, 1
+                LD      (SHOWCLK), A
+                RET
+.CLKOFF         XOR     A
+                LD      (SHOWCLK), A
+                RET
+
+
+; --- PARSTAB                   ----------------------------------------
+
+
+; - PARSTAB ----------------------------
+; - PARSE TABWIDTH VALUE (2, 4, 8)
+; - IN:  HL = POINTER TO VALUE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+PARSTAB         LD      A, (HL)
+                CP      '2'
+                JR      Z, .TAB2
+                CP      '4'
+                JR      Z, .TAB4
+                CP      '8'
+                JR      Z, .TAB8
+                RET
+.TAB2           LD      A, 2
+                LD      (TABWIDTH), A
+                RET
+.TAB4           LD      A, 4
+                LD      (TABWIDTH), A
+                RET
+.TAB8           LD      A, 8
+                LD      (TABWIDTH), A
+                RET
+
+
+; --- PARSEOL                   ----------------------------------------
+
+
+; - PARSEOL ----------------------------
+; - PARSE EOL VALUE (DOS, UNIX)
+; - IN:  HL = POINTER TO VALUE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+PARSEOL         LD      A, (HL)
+                CP      'D'             ; DOS
+                JR      Z, .EOLDOS
+                CP      'd'
+                JR      Z, .EOLDOS
+                CP      'U'             ; UNIX
+                JR      Z, .EOLUNX
+                CP      'u'
+                JR      Z, .EOLUNX
+                RET
+.EOLDOS         XOR     A
+                LD      (SAVEEOL), A
+                RET
+.EOLUNX         LD      A, 1
+                LD      (SAVEEOL), A
+                RET
+
+
+; --- CFG DATA                  ----------------------------------------
+
+
+CFGNAME         DEFM    "S6ED.CFG", 0
+KEYPROF         DEFM    "PROFILE=", 0
+KEYWRAP         DEFM    "WRAP=", 0
+KEYMKUP         DEFM    "MARKUP=", 0
+KEYCLK          DEFM    "CLOCK=", 0
+KEYTAB          DEFM    "TABWIDTH=", 0
+KEYEOL          DEFM    "EOL=", 0

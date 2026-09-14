@@ -49,6 +49,7 @@ MAINLOOP        ; SUPPRESS BIOS KANA LOCK AND KANA LED
                 LD      A, (BLNKPH)
                 XOR     1
                 LD      (BLNKPH), A
+                CALL    UPDMCLK
                 JR      MAINLOOP
 
 .GOTACNT        ; ACCENT KEY HIT DIRECTLY FROM MATRIX: ERASE CURSOR IF VISIBLE

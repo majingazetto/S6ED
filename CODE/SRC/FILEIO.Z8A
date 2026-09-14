@@ -263,10 +263,16 @@ FILESAVE        LD      HL, FILENAME
                 LD      A, (SAVHAND)
                 CALL    DSKWRITE
                 
-.WREOL          ; WRITE CR, LF
+.WREOL          ; WRITE CR, LF (DOS) OR LF ONLY (UNIX)
                 LD      HL, 2
                 LD      DE, CRLFSTR
-                LD      A, (SAVHAND)
+                LD      A, (SAVEEOL)
+                OR      A
+                JR      Z, .WREOL2
+                ; UNIX EOL: WRITE LF ONLY
+                LD      HL, 1
+                INC     DE
+.WREOL2         LD      A, (SAVHAND)
                 CALL    DSKWRITE
                 
                 POP     BC

@@ -196,6 +196,8 @@ _FDEL           EQU     #13
 _SETDTA         EQU     #1A
 _WRBLK          EQU     #26
 _RDBLK          EQU     #27
+_GDATE          EQU     #2A
+_GTIME          EQU     #2C
 _TERM0          EQU     #00
 
                 ; DOS2 CALLS

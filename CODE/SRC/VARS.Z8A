@@ -67,6 +67,11 @@ INSMODE         DEFB    INS_MODE        ; INSERT (FF) OR OVERWRITE (00)
 WRAPMODE        DEFB    0               ; 0 = WRAP_DEV, 1 = WRAP_TXT
 TYPATTR         DEFB    0               ; ACTIVE TYPING ATTRIBUTE (ATRBOLD, ATRITAL)
 MKUPMD          DEFB    0               ; 0=OFF, 1=MD, 2=LITE
+SHOWCLK         DEFB    1               ; 0=OFF, 1=SHOW CLOCK IN MENU ROW
+TABWIDTH        DEFB    4               ; TAB WIDTH (2, 4, 8)
+SAVEEOL         DEFB    0               ; 0=DOS (CRLF), 1=UNIX (LF)
+CLKMIN          DEFB    0               ; CACHED MINUTE FOR CLOCK (#FF=NEEDS DRAW)
+CLKBUF          DEFS    6               ; "HH:MM", 0
 
                 ; NON-ZERO WHILE A BATCH EDIT IS RUNNING. EDINSCHR, EDNWLIN
                 ; AND EDPSHWR THEN DO ALL THEIR BOOKKEEPING -- CURX, CURY,
