@@ -383,15 +383,31 @@ languages that need multi-line state (block comments, heredocs — future).
 
 ```
 0000H–00FFH   Page 0 — DOS2 zero page (BDOS entry at 0005H)
-0100H–3FFFH   Page 0 — Editor code + small vars  (~16KB, .COM loads here)
-4000H–7FFFH   Page 1 — Line directory segment (DIRSEG, fixed — never switched)
+0100H–3FFFH   Page 0 — Editor code (.COM loads here, spills into page 1)
+4000H–7FFFH   Page 1 — Rest of the image, then the line directory. Plain TPA
+                       RAM: code up to OUTEND, the VARS..ENDVARS block, then
+                       the directory from ENDVARS to 7FFFH. Never banked.
 8000H–BFFFH   Page 2 — Text segment window (TXSEG, switched per line access)
 C000H–FFFFH   Page 3 — DOS2/Nextor kernel (untouched)
 ```
 
-Code target: keep within page 0 (0100H–3FFFH ≈ 16KB).
-If code overflows page 0, page 1 can host an extra code segment instead;
-the directory would then fall back to RDSEG/WRSEG access (slower but functional).
+Pages 0 and 1 are one contiguous stretch of TPA RAM holding the whole program;
+the split at 4000H matters only to the mapper. Measured on the current build:
+code 0100H–4CA9H, variables 4CAAH–590BH (`VARS`..`ENDVARS`), directory
+590CH–7FFFH = 3,324 entries.
+
+**Page 1 cannot be banked** — the running code lives there. The directory is
+therefore plain RAM, not a mapper segment, and its base and capacity are
+derived from `ENDVARS` at assembly time so they track the image as it grows:
+
+```
+DIRBASE   EQU  ENDVARS
+MAXLINES  EQU  (TXPAGE - DIRBASE) / DIRSIZ
+```
+
+`VARS.Z8A` asserts `DIRBASE + MAXLINES * DIRSIZ <= TXPAGE` and
+`MAXLINES >= 2000`, so an image that grows into the directory fails the build
+instead of corrupting itself at run time.
 
 ### Mapper Segment Usage
 
@@ -405,8 +421,10 @@ located at startup via EXTBIO (D=4, E=2 → HL = jump table).
 Startup sequence:
   1. MAPINIT: EXTBIO → store PUT_P1, GET_P1, PUT_P2, GET_P2,
               ALL_SEG, FRE_SEG, RD_SEG, WR_SEG entry addresses in VARS
-  2. BUFINIT: ALLSEG → DIRSEG; PUTP1 → bank into page 1 (4000H, permanent)
-              ALLSEG → TXSEG;  PUTP2 → bank into page 2 (8000H, first text)
+  2. BUFINIT: TXSEG0 = DEFSEG2, the TPA's own page 2 segment — already
+              mapped, so no ALLSEG at boot. Further text segments are
+              claimed on demand by SEGGET. The directory needs none: it
+              is plain RAM at DIRBASE.
 ```
 
 ```
@@ -442,23 +460,28 @@ Segment capacity:
 
 ### Line Directory
 
-Flat array at DIRPAGE (4000H) in a dedicated mapper segment (DIRSEG).
-Banked into page 1 at startup via PUT_P1 — **never switched**.
-Directly accessible as a flat array; no RDSEG/WRSEG needed.
+Flat array in plain TPA RAM at DIRBASE (= ENDVARS), running up to the page 2
+window. Not a mapper segment and never banked, so it is directly accessible;
+no RDSEG/WRSEG needed.
 
 ```
 Entry: 3 bytes
   [1 byte : segment number]   which text segment holds this line
   [2 bytes: byte offset]      position of line record within that segment
 
-Capacity: 16384 / 3 = 5461 → MAXLINES = 5460
+Capacity: (8000H - DIRBASE) / 3 → MAXLINES = 3,324 on the current build
 ```
+
+Capacity is not the binding limit: MAXSEGS (32) × LINEPSEG (101) caps text at
+3,232 records, and a stock 128 kB machine exhausts the mapper an order of
+magnitude before that. Every path that adds a directory entry — `STORLINE`,
+`EDNWLIN`, `EDPSHWR` — refuses once `TOTLINES` reaches `MAXLINES`.
 
 ### Editing Workflow
 
 ```
 Open line N for editing:
-  1. entry_addr = DIRPAGE + N*3              ; direct — page 1 always mapped
+  1. entry_addr = DIRBASE + N*3              ; direct — plain RAM
      A  = (entry_addr)                       ; text segment number
      DE = (entry_addr+1)                     ; byte offset within segment
   2. CP (TXSEG): if different → PUTP2 A / LD (TXSEG), A

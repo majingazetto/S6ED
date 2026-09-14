@@ -129,11 +129,25 @@ FILELOAD        PUSH    HL
                 LD      (CURY), A
                 RET
 
-; - STORLINE ---------
+; - STORLINE ---------------------------
 ; - FINISH CURRENT LINE, ADD TO DIRECTORY, PREPARE NEXT
+; - IN:  NONE (USES CURLLEN, LINEOFF, TXSEG, TOTLINES)
+; - OUT: CY = 1  NO ROOM LEFT (DIRECTORY FULL, OR NO MAPPER SEGMENT LEFT)
+; - CLOBBERS: ALL
 ; -
 
-STORLINE        LD      A, (TXSEG)
+STORLINE        ; REFUSE IF THE LINE DIRECTORY IS FULL. EDNWLIN AND EDPSHWR
+                ; ALREADY GUARD THEIR OWN INSERTS; THE LOADER DID NOT, AND A
+                ; LONG ENOUGH FILE WOULD HAVE WALKED PAST THE END OF THE
+                ; DIRECTORY. THE CALLER'S .OOM PATH SHOWS WHAT LOADED.
+                LD      HL, (TOTLINES)
+                LD      DE, MAXLINES
+                CALL    CMPHLDE
+                JR      C, .HAVROOM
+                SCF
+                RET
+
+.HAVROOM        LD      A, (TXSEG)
                 CALL    PUTP2
                 
                 LD      HL, TXPAGE
