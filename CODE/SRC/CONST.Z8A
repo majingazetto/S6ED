@@ -20,31 +20,25 @@ SCRROWS         EQU     24              ; TEXT AREA ROWS (ROWS 1-24)
 CELLW           EQU     6               ; CELL WIDTH IN PIXELS
 CELLH           EQU     8               ; CELL HEIGHT IN PIXELS
 
-                ; PIXEL LAYOUT
-GUTL_PX         EQU     24              ; LEFT GUTTER WIDTH (4 CHARS × 6PX)
-GUTR_PX         EQU     8               ; RIGHT GUTTER WIDTH (SCROLLBAR)
-TXAREAPX       EQU     480             ; TEXT AREA WIDTH (80 × 6PX)
-TXORG_X         EQU     GUTL_PX         ; TEXT AREA X ORIGIN
+                ; PIXEL LAYOUT. THE 80 X 6 PX TEXT AREA IS CENTRED IN THE
+                ; 512 PX LINE WITH A 16 PX MARGIN ON EACH SIDE. 16 PX IS 4
+                ; BYTES IN G5, SO EVERY EVEN COLUMN STARTS ON A BYTE BOUNDARY
+                ; AND THE BYTE COMMANDS (HMMV, HMMM, YMMM) CAN ADDRESS IT.
+                ; THE LINE NUMBER GUTTER AND THE SCROLLBAR THAT USED TO FILL
+                ; THESE 32 PX WERE REMOVED (SEE DESIGN.MD, LAYOUT).
+MARGPX          EQU     16              ; SIDE MARGIN: (512 - 480) / 2
+TXAREAPX        EQU     480             ; TEXT AREA WIDTH (80 × 6PX)
+TXORG_X         EQU     MARGPX          ; TEXT AREA X ORIGIN
 TXORG_Y         EQU     CELLH           ; TEXT AREA Y ORIGIN (SKIP MENU ROW 0)
-SCRTOTY      EQU     212             ; TOTAL SCREEN HEIGHT IN PIXELS
+SCRTOTY         EQU     212             ; TOTAL SCREEN HEIGHT IN PIXELS
 
                 ; ROWS (IN CHARACTER UNITS)
 MNUROW          EQU     0               ; MENU BAR ROW
-TXRFIRST    EQU     1               ; FIRST TEXT ROW
-TXRLAST     EQU     24              ; LAST TEXT ROW
+TXRFIRST        EQU     1               ; FIRST TEXT ROW
+TXRLAST         EQU     24              ; LAST TEXT ROW
 STBROW          EQU     25              ; STATUS BAR ROW
-
-                ; SCROLL RECTANGLE. THE VERTICAL SCROLL HMMM COVERS THE LINE
-                ; NUMBER GUTTER AS WELL AS THE TEXT, SO THE NUMBERS TRAVEL IN
-                ; HARDWARE AND ONLY THE ONE NEW ROW HAS TO BE DRAWN. THE
-                ; SCROLLBAR AT X 504-511 STAYS OUTSIDE IT.
-SCRLWPX         EQU     GUTL_PX + TXAREAPX      ; 504
-
-                ; SCROLLBAR THUMB GEOMETRY
-THMTOP          EQU     TXORG_Y                 ; 8: TOP OF THE TRACK
-THMTRK          EQU     SCRROWS * CELLH         ; 192: TRACK HEIGHT
-THMH            EQU     24                      ; THUMB HEIGHT
-THMTRAV         EQU     THMTRK - THMH           ; 168: TRAVEL RANGE
+STBTX_X         EQU     6               ; STATUS BAR TEXT ORIGIN X
+STBTX_Y         EQU     202             ; STATUS BAR TEXT ORIGIN Y (BAR IS 200..211)
 
 
 ; --- VRAM MAP                  ----------------------------------------

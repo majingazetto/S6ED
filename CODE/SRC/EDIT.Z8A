@@ -3,7 +3,7 @@
 ;                                       ****************************************
 ;
 ; ALL EDITING OPERATIONS WORK ON WORKBUF (CURRENT LINE LOADED BY LINEREAD).
-; AFTER #EAC EDIT: LINEWRT TO PERSIST, PUTLINE TO RE-RENDER, DRWGUT.
+; AFTER EACH EDIT: LINEWRT TO PERSIST, RENDEROW TO RE-RENDER.
 
 
 ; --- EDINSCHR                  ----------------------------------------
@@ -64,7 +64,7 @@ EDINSCHR        PUSH    AF
                 LD      A, (CURY)
                 INC     A
                 LD      B, A            ; B = SCREEN ROW (1..24)
-                CALL    RENDEROW
+                CALL    RENDIFF         ; ONLY THE CELLS THAT CHANGED
 
 .NOREND         ; ADVANCE CURSOR
                 LD      A, (CURX)
@@ -306,18 +306,16 @@ EDPSHWR         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 CALL    RENDEROW        ; SHORTENED HEAD
                 INC     B
                 CALL    RENDEROW        ; THE WORD THAT MOVED DOWN
-                CALL    DRWGUT
                 JP      SETCURY
 
 .PWBOT          ; AT THE BOTTOM THE NEW LINE ONLY FITS IF THE VIEW SCROLLS
                 LD      HL, (TOPLINE)
                 INC     HL
                 LD      (TOPLINE), HL
-                CALL    SCROLLDN        ; RENDERS ROW 24 AND ITS LINE NUMBER
+                CALL    SCROLLDN        ; RENDERS ROW 24
 
                 LD      B, TXRLAST - 1  ; ROW 23 NOW HOLDS THE SHORTENED HEAD
                 CALL    RENDEROW
-                CALL    DRWGUT
                 JP      SETCURY
 
 .PWHOLD         ; PAINTING IS DEFERRED, BUT THE VIEWPORT STILL HAS TO FOLLOW
@@ -1012,7 +1010,7 @@ EDDELBK         LD      A, (CURX)
                 LD      A, (CURY)
                 INC     A
                 LD      B, A
-                CALL    RENDEROW
+                CALL    RENDIFF         ; ONLY THE CELLS THAT CHANGED
 
                 LD      A, #FF
                 LD      (MODIFIED), A
@@ -1053,9 +1051,7 @@ EDDELBK         LD      A, (CURX)
                 LD      HL, (DOCLINE)
                 CALL    REFLOW
 
-                CALL    REDRAW          ; FULL REDRAW
-                CALL    DRWGUT          ; REDRAW GUTTER LINE NUMBERS
-                JP      DRWSCRL         ; TAIL CALL: RECOMPUTE SCROLLBAR
+                JP      REDRAW          ; TAIL CALL: FULL REDRAW
 
 
 ; --- EDDELCHR                  ----------------------------------------
@@ -1116,7 +1112,7 @@ EDDELCHR        LD      HL, (DOCLINE)
                 LD      A, (CURY)
                 INC     A
                 LD      B, A
-                CALL    RENDEROW
+                CALL    RENDIFF         ; ONLY THE CELLS THAT CHANGED
 
                 LD      A, #FF
                 LD      (MODIFIED), A
@@ -1142,9 +1138,7 @@ EDDELCHR        LD      HL, (DOCLINE)
                 LD      HL, (DOCLINE)
                 CALL    REFLOW
 
-                CALL    REDRAW
-                CALL    DRWGUT
-                JP      DRWSCRL         ; TAIL CALL: RECOMPUTE SCROLLBAR
+                JP      REDRAW          ; TAIL CALL
 
 
 ; --- EDNWLIN                 ----------------------------------------
@@ -1242,7 +1236,6 @@ EDNWLIN         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 ; RENDER NEW LINE (ROW B)
                 INC     B
                 CALL    RENDEROW
-                CALL    DRWGUT
                 JR      .NWDONE
 
 .NWATBOT        ; AT BOTTOM OF SCREEN: THE VIEWPORT FOLLOWS THE NEW LINE. THE
@@ -1260,7 +1253,6 @@ EDNWLIN         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 ; RENDER SHORTENED HEAD (ROW 23)
                 LD      B, 23
                 CALL    RENDEROW
-                CALL    DRWGUT
 
 .NWDONE         LD      A, #FF
                 LD      (MODIFIED), A
@@ -1410,11 +1402,36 @@ EDMOVROW        CP      CDOWN
                 LD      (CURY), A
                 RET
                 
-.SCRLUP         LD      HL, (TOPLINE)
-                DEC     HL
+.SCRLUP         ; TOP ROW: THE MOVE SCROLLS. TAKE THE QUEUED REPEATS OF THE KEY
+                ; (KEYRUN) AND SCROLL ONCE BY THE WHOLE COUNT. DOCLINE IS ALREADY
+                ; ONE BACK, SO AT MOST DOCLINE MORE, CAPPED AT 200.
+                LD      HL, (DOCLINE)
+                LD      B, 200
+                LD      A, H
+                OR      A
+                JR      NZ, .UPCAP
+                LD      A, L
+                CP      200
+                JR      NC, .UPCAP
+                LD      B, L
+.UPCAP          LD      C, CUP
+                CALL    KEYRUN          ; A = EXTRA ROWS
+                LD      E, A
+                LD      D, 0
+                LD      HL, (DOCLINE)
+                OR      A
+                SBC     HL, DE
+                LD      (DOCLINE), HL
+                INC     E               ; E = ROWS IN ALL
+                LD      HL, (TOPLINE)
+                OR      A
+                SBC     HL, DE
                 LD      (TOPLINE), HL
-                CALL    SCROLLUP
-                RET
+                LD      A, E
+                CP      SCRROWS
+                JP      NC, REDRAW      ; A PAGE OR MORE: NOTHING ON SCREEN SURVIVES
+                LD      C, A
+                JP      SCRLUPN
                 
 .DOWN           ; CDOWN:
                 LD      HL, (DOCLINE)
@@ -1430,11 +1447,37 @@ EDMOVROW        CP      CDOWN
                 LD      (CURY), A
                 RET
                 
-.SCRLDN         LD      HL, (TOPLINE)
-                INC     HL
+.SCRLDN         ; BOTTOM ROW: THE MOVE SCROLLS. SAME AS .SCRLUP, DOWNWARDS.
+                ; DOCLINE IS ALREADY ONE ON, SO AT MOST TOTLINES - 1 - DOCLINE MORE.
+                LD      HL, (TOTLINES)
+                DEC     HL
+                LD      DE, (DOCLINE)
+                OR      A
+                SBC     HL, DE
+                LD      B, 200
+                LD      A, H
+                OR      A
+                JR      NZ, .DNCAP
+                LD      A, L
+                CP      200
+                JR      NC, .DNCAP
+                LD      B, L
+.DNCAP          LD      C, CDOWN
+                CALL    KEYRUN          ; A = EXTRA ROWS
+                LD      E, A
+                LD      D, 0
+                LD      HL, (DOCLINE)
+                ADD     HL, DE
+                LD      (DOCLINE), HL
+                INC     E               ; E = ROWS IN ALL
+                LD      HL, (TOPLINE)
+                ADD     HL, DE
                 LD      (TOPLINE), HL
-                CALL    SCROLLDN
-                RET
+                LD      A, E
+                CP      SCRROWS
+                JP      NC, REDRAW
+                LD      C, A
+                JP      SCRLDNN
 
 
 

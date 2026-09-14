@@ -72,6 +72,7 @@ CNSDFG          EQU     #F3DE
 FNKSTR          EQU     #F87F
 REPCNT          EQU     #F3F7
 JIFFY           EQU     #FC9E
+GETPNT          EQU     #F3FA           ; KEYBOARD BUFFER READ POINTER (NEXT KEY CHGET RETURNS)
 STATFL          EQU     #F3E7
 
 RG10SA          EQU     #FFE9
