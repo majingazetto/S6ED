@@ -60,6 +60,7 @@ RG4SAV          EQU     RG0SAV + 4
 RG6SAV          EQU     RG0SAV + 6
 RG7SAV          EQU     RG0SAV + 7
 RG8SAV          EQU     #FFE7
+RG9SAV          EQU     #FFE8
 EXPTBL          EQU     #FCC1
 SLTTBL          EQU     #FCC5
 EXTVDP          EQU     #FFE7

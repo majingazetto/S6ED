@@ -18,7 +18,10 @@
 ; - CLOBBERS: ALL
 ; -
 
-MAINLOOP        ; SUPPRESS BIOS KANA LOCK AND KANA LED
+MAINLOOP        ; CHECK CLOCK / COLON UPDATE
+                CALL    CHKCLK
+
+                ; SUPPRESS BIOS KANA LOCK AND KANA LED
                 LD      A, (KANAST)
                 OR      A
                 CALL    NZ, KANARST
@@ -49,7 +52,6 @@ MAINLOOP        ; SUPPRESS BIOS KANA LOCK AND KANA LED
                 LD      A, (BLNKPH)
                 XOR     1
                 LD      (BLNKPH), A
-                CALL    UPDMCLK
                 JR      MAINLOOP
 
 .GOTACNT        ; ACCENT KEY HIT DIRECTLY FROM MATRIX: ERASE CURSOR IF VISIBLE
@@ -91,6 +93,7 @@ MAINLOOP        ; SUPPRESS BIOS KANA LOCK AND KANA LED
 .DRAWCUR        ; STATUS BAR FOLLOWS THE KEY (LN / COL / FLAGS), THEN THE CURSOR
                 CALL    DRWSTAT
                 CALL    DRWCUR
+                CALL    CHKCLK          ; UPDATE CLOCK EVEN WHILE MOVING/TYPING
                 LD      A, 1
                 LD      (BLNKPH), A
                 LD      A, (JIFFY)
