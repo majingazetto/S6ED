@@ -249,3 +249,12 @@ MKUP_OFF        EQU     0               ; PLAIN TEXT / CODE (NO MARKUP)
 MKUP_MD         EQU     1               ; COMMONMARK (**BOLD**, *ITALIC*, _ITALIC_)
 MKUP_LIT        EQU     2               ; LITE / CHAT (*BOLD*, _ITALIC_)
 MKUP_MAX        EQU     3
+
+
+; --- DEAD KEY STATES           ----------------------------------------
+
+
+DEDNONE         EQU     0               ; NO DEAD KEY PENDING
+DEDACUT         EQU     1               ; ACUTE ACCENT PENDING
+DEDDIAR         EQU     2               ; DIAERESIS PENDING
+

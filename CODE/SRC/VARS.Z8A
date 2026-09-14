@@ -82,7 +82,12 @@ KMAPPTR         DEFW    0               ; POINTER TO ACTIVE KEYMAP TABLE
 VIMODE          DEFB    0               ; 0=NORMAL, 1=INSERT
 VILEAD          DEFB    0               ; VI LEADER KEY PENDING
 MODKEYS         DEFB    0               ; LAST READ MODIFIERS BYTE
+DEADST          DEFB    0               ; DEAD KEY STATE (0=NONE, 1=ACUTE, 2=DIAERESIS)
+LASTGRP         DEFB    0               ; LAST MATRIX GRAPH ACCENT KEY PRESSED
+GRPTIM          DEFB    0               ; JIFFY TIMESTAMP FOR GRAPH REPEAT
+LASTDED         DEFB    0               ; LAST DEAD KEY MATRIX STATE (FOR EDGE DETECT)
 DWK             DEFB    0               ; WORD DELETE: COUNT K
+
 DWTO            DEFB    0               ; WORD DELETE: DEST COLUMN
 DWFROM          DEFB    0               ; WORD DELETE: SOURCE COLUMN
 SELACT          DEFB    0               ; 0=INACTIVE, 1=SELECTION ACTIVE
