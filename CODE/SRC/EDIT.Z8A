@@ -94,6 +94,16 @@ EDPSHWR         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 CALL    CMPHLDE
                 RET     NC
 
+                ; RESERVE THE RECORD FOR THE WORD THAT IS ABOUT TO MOVE DOWN
+                ; BEFORE TOUCHING ANYTHING -- SAME REASON AS IN EDNWLIN. POP
+                ; DOES NOT TOUCH THE FLAGS, SO NEWREC'S CARRY SURVIVES IT.
+                PUSH    BC              ; SAVE C (CHAR TO INSERT)
+                CALL    NEWREC
+                POP     BC
+                RET     C               ; NO MAPPER MEMORY: LEAVE THE LINE ALONE
+                LD      (NRSEG), A
+                LD      (NROFF), DE
+
                 ; 1. SPLIT COLUMN = START OF THE TRAILING WORD
                 PUSH    BC              ; SAVE C (CHAR TO INSERT)
                 LD      B, TEXTCOLS - 2 ; SCAN BACK FROM COLUMN 78
@@ -154,10 +164,10 @@ EDPSHWR         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
 
-                ; 6. PUT THE TAIL IN A FRESH RECORD
-                CALL    NEWREC          ; A = SEG, DE = OFFSET, PAGE 2 BANKED
-                PUSH    AF
-                PUSH    DE
+                ; 6. PUT THE TAIL IN THE RECORD RESERVED AT THE TOP. LINEWRT
+                ;    HAS RE-BANKED PAGE 2 SINCE NEWREC, SO BANK IT BACK.
+                CALL    APPBANK
+                LD      DE, (NROFF)
                 LD      HL, TXPAGE
                 ADD     HL, DE
                 EX      DE, HL          ; DE = DESTINATION
@@ -171,8 +181,8 @@ EDPSHWR         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 PUSH    HL
                 CALL    LINEINS
                 POP     HL
-                POP     DE              ; DE = OFFSET
-                POP     AF              ; A  = SEGMENT
+                LD      DE, (NROFF)
+                LD      A, (NRSEG)
                 CALL    DIRWRITE
 
                 LD      HL, (TOTLINES)
@@ -933,21 +943,32 @@ EDNWLIN         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 CALL    CMPHLDE
                 RET     NC
 
-                ; 1. LOAD THE LINE THAT IS ABOUT TO BE SPLIT
+                ; 1. RESERVE THE RECORD FOR THE TAIL FIRST. NEWREC IS THE ONLY
+                ;    STEP HERE THAT CAN FAIL, AND EVERY STEP AFTER IT MUTATES
+                ;    THE DOCUMENT. RESERVING IT IN THE MIDDLE MEANT THE HEAD
+                ;    WAS ALREADY TRUNCATED AND WRITTEN BACK WHEN THE MAPPER RAN
+                ;    OUT, AND THE TAIL WENT WITH IT.
+                CALL    NEWREC
+                RET     C               ; NO MAPPER MEMORY: LEAVE THE LINE ALONE
+                LD      (NRSEG), A
+                LD      (NROFF), DE
+
+                ; 2. LOAD THE LINE THAT IS ABOUT TO BE SPLIT
                 LD      HL, (DOCLINE)
                 CALL    LINEREAD
 
-                ; 2. TAIL -> WORKBUF2, HEAD TRUNCATED IN PLACE
+                ; 3. TAIL -> WORKBUF2, HEAD TRUNCATED IN PLACE
                 CALL    SPLITL
 
-                ; 3. WRITE THE SHORTENED HEAD BACK
+                ; 4. WRITE THE SHORTENED HEAD BACK
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
 
-                ; 4. PUT THE TAIL IN A FRESH RECORD
-                CALL    NEWREC          ; A = SEG, DE = OFFSET, PAGE 2 BANKED
-                PUSH    AF
-                PUSH    DE
+                ; 5. PUT THE TAIL IN THE RESERVED RECORD. IT LIVES IN THE
+                ;    APPEND SEGMENT, AND LINEREAD / LINEWRT HAVE RE-BANKED
+                ;    PAGE 2 SINCE NEWREC, SO BANK IT BACK.
+                CALL    APPBANK
+                LD      DE, (NROFF)
                 LD      HL, TXPAGE
                 ADD     HL, DE
                 EX      DE, HL          ; DE = DESTINATION
@@ -955,21 +976,21 @@ EDNWLIN         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 LD      BC, WORKSIZ
                 LDIR
 
-                ; 5. OPEN A DIRECTORY SLOT AFTER THE CURRENT LINE AND FILL IT
+                ; 6. OPEN A DIRECTORY SLOT AFTER THE CURRENT LINE AND FILL IT
                 LD      HL, (DOCLINE)
                 INC     HL
                 PUSH    HL
                 CALL    LINEINS
                 POP     HL
-                POP     DE              ; DE = OFFSET
-                POP     AF              ; A  = SEGMENT
+                LD      DE, (NROFF)
+                LD      A, (NRSEG)
                 CALL    DIRWRITE
 
                 LD      HL, (TOTLINES)
                 INC     HL
                 LD      (TOTLINES), HL
 
-                ; 6. ADVANCE TO NEW LINE
+                ; 7. ADVANCE TO NEW LINE
                 XOR     A
                 LD      (CURX), A
 
