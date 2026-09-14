@@ -73,11 +73,9 @@ SAVEEOL         DEFB    0               ; 0=DOS (CRLF), 1=UNIX (LF)
 AUTOLOD         DEFB    1               ; 1=AUTO-DETECT EOL ON LOAD, 0=FIXED BY CFG
 EOLARED         DEFB    0               ; 1=EOL FORMAT ALREADY DETECTED ON LOAD
 CLKHZ           DEFB    60              ; VDP INTERRUPT FREQUENCY (50 OR 60)
-CLKCNT          DEFB    60              ; FRAMES UNTIL NEXT COLON TOGGLE
+CLKJIF          DEFW    0               ; JIFFY STAMP OF THE LAST COLON TOGGLE
 CLKPH           DEFB    0               ; COLON BLINK PHASE (0=VISIBLE, 1=INVISIBLE)
-CLKDIRT         DEFB    0               ; 1=COLON / CLOCK NEEDS REDRAW
 CLKMIN          DEFB    #FF             ; CACHED MINUTE FOR CLOCK (#FF=NEEDS DRAW)
-CLKSEC          DEFB    #FF             ; CACHED SECOND FOR BLINK (#FF=NEEDS DRAW)
 CLKBUF          DEFS    6               ; "HH:MM", 0
 
                 ; NON-ZERO WHILE A BATCH EDIT IS RUNNING. EDINSCHR, EDNWLIN
@@ -86,8 +84,8 @@ CLKBUF          DEFS    6               ; "HH:MM", 0
                 ; WHICH THE CALLER DOES ONCE WHEN IT IS DONE.
 RNDHOLD         DEFB    0               ; FF = DEFER ALL PAINTING
 
-LANGMODE        DEFB    LGNONE       ; CURRENT LANGUAGE/TOKENIZER MODE
-BLNKPH       DEFB    0               ; CURSOR BLINK PHASE (TOGGLED BY TIMI)
+LANGMODE        DEFB    LGNONE          ; CURRENT LANGUAGE/TOKENIZER MODE
+BLNKPH          DEFB    0               ; CURSOR BLINK PHASE (POLLED FROM JIFFY)
 BLNKCNT         DEFB    0               ; BLINK TICK COUNTER
 
 KMAPID          DEFB    0               ; 0=STD, 1=WS, 2=EMACS, 3=VI
@@ -209,12 +207,6 @@ FILEBUF         DEFS    256             ; TEMPORARY BUFFER FOR DISK READS
                 IFNDEF  _FONTBIN_
 FONTRAM         DEFS    FONTSIZ
                 ENDIF
-
-
-; --- BLINK HANDLER             ----------------------------------------
-
-
-PRVHTIMI        DEFS    5               ; SAVED ORIGINAL HTIMI HOOK (5 BYTES)
 
 
 ; --- GENERIC / UTIL            ----------------------------------------

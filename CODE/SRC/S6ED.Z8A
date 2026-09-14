@@ -123,13 +123,12 @@ INIT            DBG     "1: INIT START"
                 JR      Z, .ISNTSC
                 LD      A, 50
 .ISNTSC         LD      (CLKHZ), A
-                LD      (CLKCNT), A
+                LD      HL, (JIFFY)
+                LD      (CLKJIF), HL
                 XOR     A
                 LD      (CLKPH), A
-                LD      (CLKDIRT), A
                 DEC     A               ; A = #FF
                 LD      (CLKMIN), A
-                LD      (CLKSEC), A
                 XOR     A
                 LD      (KMAPID), A
                 CALL    KMAPSW          ; INITIALIZE KMAPPTR TO KMAPSTD
@@ -157,7 +156,6 @@ INIT            DBG     "1: INIT START"
                 ; INITIALIZE SCREEN
                 DBG     "5: SCRINIT"
                 CALL    SCRINIT
-                CALL    HKBLINK
 
                 ; INITIALIZE FONT TABLES IN VRAM
                 DBG     "6: FONTINIT"
@@ -320,84 +318,6 @@ PALDATA         DEFB    #00, #00        ; 0: BLACK
                 DEFB    #77, #07        ; 1: WHITE FG
                 DEFB    #17, #02        ; 2: BLUE UI (R=1, B=7, G=2)
                 DEFB    #70, #07        ; 3: YELLOW HI (R=7, B=0, G=7)
-
-
-; --- HOOKS                     ----------------------------------------
-
-
-; - HKBLINK ----------------------------
-; - INSTALL HTIMI HOOK FOR CLOCK BLINK
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: AF, BC, DE, HL
-; -
-
-HKBLINK         DI
-                LD      HL, HTIMI
-                LD      DE, PRVHTIMI
-                LD      BC, 5
-                LDIR
-                LD      A, #C3          ; JP OPCODE
-                LD      (HTIMI), A
-                LD      HL, TIMIINT
-                LD      (HTIMI + 1), HL
-                EI
-                RET
-
-
-; - UNBLINK ----------------------------
-; - UNHOOK HTIMI HOOK ON EXIT
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: AF, BC, DE, HL
-; -
-
-UNBLINK         LD      A, (PRVHTIMI)
-                OR      A
-                RET     Z               ; NOT INSTALLED
-                DI
-                LD      HL, PRVHTIMI
-                LD      DE, HTIMI
-                LD      BC, 5
-                LDIR
-                XOR     A
-                LD      (PRVHTIMI), A
-                EI
-                RET
-
-
-; - TIMIINT ----------------------------
-; - HTIMI VBLANK TIMER HOOK (50HZ/60HZ)
-; - IN:  NONE (INTERRUPT CONTEXT)
-; - OUT: NONE
-; - CLOBBERS: NONE (AF PRESERVED)
-; -
-
-TIMIINT         PUSH    AF
-                LD      A, (SHOWCLK)
-                OR      A
-                JR      Z, .EXIT
-
-                LD      A, (CLKCNT)
-                DEC     A
-                LD      (CLKCNT), A
-                JR      NZ, .EXIT
-
-                ; 1 SECOND ELAPSED: RELOAD TICK COUNTER (50 OR 60)
-                LD      A, (CLKHZ)
-                LD      (CLKCNT), A
-
-                ; TOGGLE COLON PHASE (0=VISIBLE, 1=INVISIBLE)
-                LD      A, (CLKPH)
-                XOR     1
-                LD      (CLKPH), A
-
-                ; SET DIRTY FLAG FOR MAIN THREAD REPAINT
-                LD      A, 1
-                LD      (CLKDIRT), A
-
-.EXIT           POP     AF
-                JP      PRVHTIMI
 
 
 ; --- VARS                      ----------------------------------------

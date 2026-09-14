@@ -341,17 +341,37 @@ MNUTEXT         DEFM    "S6ED | File  Edit  View  Options  Help", 0
 ; - TEST IF CLOCK / COLON NEEDS REDRAW (CALLED IN MAINLOOP & .DRAWCUR)
 ; - IN:  NONE
 ; - OUT: NONE
-; - CLOBBERS: ALL IF REDRAW, NONE IF CLEAN
+; - CLOBBERS: AF, BC, DE, HL
 ; -
 
 CHKCLK          LD      A, (SHOWCLK)
                 OR      A
                 RET     Z
-                LD      A, (CLKDIRT)
+
+                ; JIFFY IS A 16-BIT FRAME COUNTER. SUBTRACTING THE STAMP AS
+                ; A WORD KEEPS THE ELAPSED COUNT EXACT ACROSS ITS WRAP AND
+                ; ACROSS STALLS LONGER THAN 256 FRAMES -- AN 8-BIT DIFFERENCE
+                ; WRAPS DURING A LONG FILE SAVE AND SWALLOWS A TOGGLE.
+                LD      HL, (JIFFY)
+                LD      DE, (CLKJIF)
                 OR      A
-                RET     Z
-                XOR     A
-                LD      (CLKDIRT), A
+                SBC     HL, DE          ; HL = FRAMES SINCE THE LAST TOGGLE
+                LD      A, (CLKHZ)
+                LD      E, A
+                LD      D, 0
+                OR      A
+                SBC     HL, DE
+                RET     C               ; LESS THAN ONE SECOND
+
+                ; 1 SECOND ELAPSED: RESTAMP
+                LD      HL, (JIFFY)
+                LD      (CLKJIF), HL
+
+                ; TOGGLE COLON PHASE (0 = ON, 1 = OFF)
+                LD      A, (CLKPH)
+                XOR     1
+                LD      (CLKPH), A
+
                 JP      UPDMCLK
 
 
@@ -376,23 +396,25 @@ UPDMCLK         LD      A, (SHOWCLK)
                 JR      NZ, .MINCHG     ; MINUTE CHANGED (OR FIRST DRAW)
 
                 ; MINUTE IS THE SAME: UPDATE ONLY COLON CELL (DX = 488, DY = 0)
-                ; CLEAR 6X8 BOX AT DX = 488, DY = 0 (COLOR 2: CLR_UI)
+                ; CLEAR 6X8 BOX AT DX = 488, DY = 0 (COLOR 2: COL_UI).
+                ; LMMV, NOT HMMV -- SEE THE NOTE AT THE .MINCHG CLEAR BELOW.
                 LD      HL, 488
                 LD      (VDP_DX), HL
                 LD      HL, 0
                 LD      (VDP_DY), HL
-                LD      HL, 6           ; 1 GLYPH
+                LD      HL, CELLW
                 LD      (VDP_NX), HL
-                LD      HL, 8
+                LD      HL, CELLH
                 LD      (VDP_NY), HL
-                LD      A, CLR_UI
+                LD      A, COL_UI
                 LD      (VDP_CLR), A
                 XOR     A
                 LD      (VDP_ARG), A
                 LD      HL, VDPCMBLK
-                CALL    HMMV
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
 
-                ; CHECK COLON PHASE TOGGLED BY HTIMI (0 = ON, 1 = OFF)
+                ; CHECK COLON PHASE SET BY CHKCLK (0 = ON, 1 = OFF)
                 LD      A, (CLKPH)
                 OR      A
                 RET     NZ              ; 1: OFF (LEAVE ERASED/BLANK)
@@ -434,21 +456,33 @@ UPDMCLK         LD      A, (SHOWCLK)
                 XOR     A
                 LD      (CLKBUF + 5), A
 
-                ; CLEAR 30X8 BOX AT DX = 476, DY = 0 (COLOR 2: CLR_UI)
+                ; CLEAR 30X8 BOX AT DX = 476, DY = 0 (COLOR 2: COL_UI).
+                ;
+                ; LMMV, NOT HMMV. HMMV WORKS IN BYTE UNITS AND SCREEN 6 PACKS
+                ; 4 PIXELS PER BYTE, SO NX = 30 IS TRUNCATED TO 28 AND PIXELS
+                ; 504-505 -- COLUMN 4 OF THE LAST MINUTE DIGIT -- ARE NEVER
+                ; CLEARED. MEASURED: A '7' DRAWN OVER A '6' KEPT THE RIGHT
+                ; STROKE OF THE '6' AT ROWS 3-5, AND THE RESIDUE ACCUMULATED
+                ; FROM DIGIT TO DIGIT. ROUNDING NX UP TO 32 WOULD FIX THIS BOX
+                ; BUT NOT THE COLON CELL ABOVE, WHERE 6 -> 8 WOULD ERASE THE
+                ; FIRST TWO PIXEL COLUMNS OF THE MINUTES. LMMV IS DOT-EXACT.
+                ; HMMV IS ONLY SAFE WHERE DX AND NX ARE BOTH MULTIPLES OF 4,
+                ; AS IN RENDEROW, WHICH ROUNDS ITS RUN LENGTH UP EXPLICITLY.
                 LD      HL, 476
                 LD      (VDP_DX), HL
                 LD      HL, 0
                 LD      (VDP_DY), HL
-                LD      HL, 30          ; 5 GLYPHS * 6 PX
+                LD      HL, 5 * CELLW   ; 5 GLYPHS
                 LD      (VDP_NX), HL
-                LD      HL, 8
+                LD      HL, CELLH
                 LD      (VDP_NY), HL
-                LD      A, CLR_UI
+                LD      A, COL_UI
                 LD      (VDP_CLR), A
                 XOR     A
                 LD      (VDP_ARG), A
                 LD      HL, VDPCMBLK
-                CALL    HMMV
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
 
                 ; BLIT STRING "HH:MM" WITH TIMP TRANSPARENCY
                 LD      HL, CLKBUF
