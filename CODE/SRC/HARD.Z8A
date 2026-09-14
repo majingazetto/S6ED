@@ -7,6 +7,9 @@
 
 
 SYSTEM          EQU     #2D
+PSG_REG         EQU     #A0
+PSG_WRT         EQU     #A1
+PSG_RD          EQU     #A2
 
 
 ; --- BIOS                              ----------------------------------------
@@ -48,6 +51,8 @@ HTIMI           EQU     #FD9F
 HKEYI           EQU     #FD9A
 CLIKSW          EQU     #F3DB
 SCRMOD          EQU     #FCAF
+KANAST          EQU     #FCAC
+KANAMOD         EQU     #FAFC
 RG0SAV          EQU     #F3DF
 RG1SAV          EQU     RG0SAV + 1
 RG3SAV          EQU     RG0SAV + 3
