@@ -55,6 +55,9 @@ BUFRESET        CALL    SEGTRIM
                 CALL    DIRWRITE
 
                 ; INITIALIZE VARS
+                LD      A, FREENIL
+                LD      (FREEHD), A     ; SEGTRIM JUST DROPPED THE GROWN
+                                        ; SEGMENTS; ANY LINK INTO THEM IS DEAD
                 LD      HL, LINEREC     ; RECORD 0 IS TAKEN, NEXT ONE STARTS HERE
                 LD      (LINEOFF), HL
 
@@ -238,8 +241,20 @@ LINEWRT         ; TODO: IMPLEMENT REPACKING IF SIZE CHANGES
 ; --- APPEND CURSOR             ----------------------------------------
 ;
 ; NEW RECORDS ARE APPENDED AT (APPSEG, LINEOFF), WHICH ONLY EVER MOVES FORWARD.
-; SPACE BELONGING TO A DELETED LINE IS NOT RECLAIMED UNTIL THE FILE IS RELOADED
-; -- A COMPACTOR IS FUTURE WORK. A 16KB SEGMENT HOLDS LINEPSEG (101) RECORDS.
+; A 16KB SEGMENT HOLDS LINEPSEG (101) RECORDS.
+;
+; DELETED RECORDS GO ON A FREE LIST INSTEAD OF BEING ABANDONED. THEY ARE ALL
+; THE SAME SIZE, SO NO COMPACTOR IS NEEDED -- LINEDEL PUSHES THE RECORD AND
+; NEWREC POPS IT BEFORE EXTENDING LINEOFF. WITHOUT THIS, EVERY JOIN, REFLOW
+; AND MULTI-LINE DELETE BURNED 161 BYTES FOR GOOD, AND ALTERNATING ENTER AND
+; BACKSPACE WALKED THE APPEND CURSOR THROUGH THE WHOLE MAPPER WHILE THE
+; DOCUMENT STAYED THE SAME SIZE. ON A STOCK 128KB MSX2 THAT IS ~300 KEYSTROKE
+; PAIRS BEFORE ENTER STARTS BEING REFUSED.
+;
+; A RECORD IS ON THE FREE LIST OR IN THE DIRECTORY, NEVER BOTH: LINEINS
+; DUPLICATES A DIRECTORY ENTRY ONLY FOR THE INSTANT BEFORE ITS CALLER FILLS
+; THE NEW SLOT WITH A FRESHLY RESERVED RECORD, AND NO LINEDEL CAN RUN IN
+; BETWEEN.
 
 
 ; - APPBANK ----------
@@ -250,12 +265,92 @@ LINEWRT         ; TODO: IMPLEMENT REPACKING IF SIZE CHANGES
 ; -
 
 APPBANK         LD      A, (APPSEG)
-                LD      (TXSEG), A      ; PAGE 2 NOW HOLDS THE APPEND SEGMENT
+                ; FALL THROUGH INTO RECBANK
+
+
+; - RECBANK ----------------------------
+; - BANK AN ARBITRARY TEXT SEGMENT INTO PAGE 2, KEEPING TXSEG IN STEP
+; - IN:  A = SEGMENT NUMBER
+; - OUT: NONE
+; - CLOBBERS: AF, HL
+; -
+; - TXSEG MUST FOLLOW EVERY BANK, OR THE .SAME SHORT-CIRCUIT IN LINEREAD /
+; - LINEWRT / LINELEN SKIPS A RE-BANK IT NEEDED AND READS THE WRONG SEGMENT.
+; -
+
+RECBANK         LD      (TXSEG), A
                 JP      PUTP2
+
+
+; - FREEPSH ----------------------------
+; - PUSH A RECORD ONTO THE FREE LIST
+; - IN:  A  = SEGMENT NUMBER
+; -      DE = BYTE OFFSET WITHIN THAT SEGMENT
+; - OUT: NONE (PAGE 2 IS LEFT BANKED ON THAT SEGMENT)
+; - CLOBBERS: AF, DE, HL
+; -
+
+FREEPSH         PUSH    AF
+                PUSH    DE
+                CALL    RECBANK
+                POP     DE
+                PUSH    DE
+                LD      HL, TXPAGE
+                ADD     HL, DE          ; HL = THE RECORD BEING FREED
+                LD      A, (FREEHD)
+                LD      (HL), A         ; LINK: SEGMENT
+                INC     HL
+                LD      A, (FREEOF)
+                LD      (HL), A         ; LINK: OFFSET LOW
+                INC     HL
+                LD      A, (FREEOF + 1)
+                LD      (HL), A         ; LINK: OFFSET HIGH
+                POP     DE
+                LD      (FREEOF), DE
+                POP     AF
+                LD      (FREEHD), A
+                RET
+
+
+; - FREEPOP ----------------------------
+; - TAKE THE FIRST RECORD OFF THE FREE LIST
+; - IN:  NONE
+; - OUT: CY = 0  A  = SEGMENT NUMBER
+; -              DE = BYTE OFFSET, PAGE 2 BANKED ON THAT SEGMENT
+; -      CY = 1  THE LIST IS EMPTY, NOTHING WAS TOUCHED
+; - CLOBBERS: AF, DE, HL
+; -
+
+FREEPOP         LD      A, (FREEHD)
+                CP      FREENIL
+                JR      Z, .NOFREE
+
+                CALL    RECBANK
+                LD      DE, (FREEOF)    ; DE = THE RECORD WE ARE HANDING OUT
+                LD      HL, TXPAGE
+                ADD     HL, DE
+                LD      A, (HL)
+                LD      (FREEHD), A     ; LINK: SEGMENT -> NEW HEAD
+                INC     HL
+                LD      A, (HL)
+                LD      (FREEOF), A     ; LINK: OFFSET LOW
+                INC     HL
+                LD      A, (HL)
+                LD      (FREEOF + 1), A ; LINK: OFFSET HIGH
+                LD      A, (TXSEG)      ; THE SEGMENT RECBANK JUST SELECTED
+                OR      A               ; CY = 0: RECORD HANDED OUT
+                RET
+
+.NOFREE         SCF
+                RET
 
 
 ; - NEWREC -----------
 ; - RESERVE SPACE FOR ONE NEW LINE RECORD
+; - TAKES A DELETED RECORD OFF THE FREE LIST IF THERE IS ONE, AND ONLY
+; - EXTENDS THE APPEND CURSOR WHEN THERE IS NOT. THE RECORD HANDED BACK IS
+; - THEREFORE NOT ALWAYS IN APPSEG -- CALLERS MUST BANK THE SEGMENT THIS
+; - RETURNS, NOT THE APPEND SEGMENT.
 ; - IN:  NONE
 ; - OUT: CY = 0  A  = SEGMENT NUMBER
 ; -              DE = OFFSET OF THE RESERVED RECORD
@@ -276,7 +371,10 @@ APPBANK         LD      A, (APPSEG)
 ; - TELLING THE USER WHY IS A STATUS BAR JOB AND IS NOT WIRED UP YET.
 ; -
 
-NEWREC          LD      HL, (LINEOFF)
+NEWREC          CALL    FREEPOP         ; REUSE A DELETED RECORD IF THERE IS ONE
+                RET     NC              ; CY = 0: A = SEGMENT, DE = OFFSET
+
+                LD      HL, (LINEOFF)
                 LD      DE, SEGLAST + 1
                 CALL    CMPHLDE
                 JR      C, .HAVE        ; A WHOLE RECORD STILL FITS
@@ -345,10 +443,15 @@ LINEINS         LD      DE, (TOTLINES)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; - SHIFTS ENTRIES N+1..TOTLINES-1 DOWN ONE SLOT. TOTLINES IS LEFT ALONE.
-; - THE RECORD ITSELF IS NOT RECLAIMED -- SEE THE APPEND CURSOR NOTE ABOVE.
+; - THE RECORD GOES BACK ON THE FREE LIST FOR NEWREC TO HAND OUT AGAIN.
 ; -
 
 LINEDEL         PUSH    HL              ; SAVE N
+                CALL    DIRREAD         ; A = SEGMENT, DE = OFFSET OF ITS RECORD
+                CALL    FREEPSH         ; HAND THE RECORD BACK BEFORE IT IS LOST
+                POP     HL
+                PUSH    HL              ; SAVE N
+
                 LD      DE, (TOTLINES)
                 EX      DE, HL          ; HL = TOTLINES, DE = N
                 OR      A
