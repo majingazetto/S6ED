@@ -78,6 +78,7 @@ ENOMEM       DEFM    "Out of mapper memory.$"
                 INCLUDE UI.Z8A
                 INCLUDE FILEIO.Z8A
                 INCLUDE PARAMS.Z8A
+                INCLUDE CFG.Z8A
 
 
 ; --- INIT                      ----------------------------------------
@@ -109,6 +110,12 @@ INIT            DBG     "1: INIT START"
                 LD      (WRAPMODE), A
                 LD      A, MKUP_MD
                 LD      (MKUPMD), A
+                LD      A, 1
+                LD      (SHOWCLK), A
+                LD      A, 4
+                LD      (TABWIDTH), A
+                LD      A, #FF
+                LD      (CLKMIN), A
                 XOR     A
                 LD      (KMAPID), A
                 CALL    KMAPSW          ; INITIALIZE KMAPPTR TO KMAPSTD
@@ -144,6 +151,10 @@ INIT            DBG     "1: INIT START"
                 ; INITIALIZE EMPTY TEXT BUFFER
                 DBG     "7: BUFINIT"
                 CALL    BUFINIT
+
+                ; LOAD CONFIGURATION FROM S6ED.CFG (IF PRESENT)
+                DBG     "7b: CFGLOAD"
+                CALL    CFGLOAD
 
                 ; CHECK COMMAND-LINE PARAMS: OPTIONAL FILENAME TO LOAD
                 DBG     "8: PARAMS"

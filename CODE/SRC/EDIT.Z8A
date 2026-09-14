@@ -1362,15 +1362,107 @@ EDMOVCHR        CP      CRIGHT
                 ; CLEFT:
                 LD      A, (CURX)
                 OR      A
-                RET     Z               ; AT COL 0
+                JR      Z, .LEFT0
                 DEC     A
                 LD      (CURX), A
                 RET
+
+.LEFT0          LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                RET     NZ              ; WRAP_DEV: STAY AT COL 0
+                ; WRAP_TXT: WRAP TO PREVIOUS LINE
+                LD      HL, (DOCLINE)
+                LD      A, H
+                OR      L
+                RET     Z               ; ALREADY AT LINE 0, CANNOT WRAP UP
+                DEC     HL
+                CALL    LINELEN         ; A = PREV LINE LENGTH (0..80)
+                CALL    GETMAXC
+                LD      (CURX), A
+                LD      A, CUP
+                CALL    EDMOVROW
+                RET
                 
-.RIGHT          LD      A, (CURX)
+.RIGHT          LD      HL, (DOCLINE)
+                CALL    LINELEN         ; A = LINE LENGTH (0..80)
+                CALL    GETMAXC         ; A = MAX ALLOWED CURX (0..79)
+                LD      B, A            ; B = MAX CURX
+                LD      A, (CURX)
+                CP      B
+                JR      NC, .RGTWRAP    ; AT OR BEYOND MAX COLUMN
                 INC     A
                 CP      TEXTCOLS        ; 80
-                RET     NC              ; CLAMP TO COL 79
+                RET     NC
+                LD      (CURX), A
+                RET
+
+.RGTWRAP        LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                RET     NZ              ; WRAP_DEV: STAY AT MAX COLUMN
+                ; WRAP_TXT: WRAP TO NEXT LINE
+                LD      HL, (DOCLINE)
+                INC     HL
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                RET     NC              ; AT LAST LINE, CANNOT WRAP DOWN
+                XOR     A
+                LD      (CURX), A
+                LD      A, CDOWN
+                CALL    EDMOVROW
+                RET
+
+
+; --- GETMAXC                   ----------------------------------------
+
+
+; - GETMAXC ----------------------------
+; - CALCULATE MAXIMUM ALLOWED CURX FOR LINE
+; - IN:  A = LINE LENGTH (0..80)
+; - OUT: A = MAX CURX (0..79)
+; - CLOBBERS: B
+; -
+
+GETMAXC         LD      B, A
+                LD      A, (KMAPID)
+                CP      3               ; 3 = VI PROFILE
+                JR      NZ, .NOTVI
+                LD      A, (VIMODE)
+                OR      A
+                JR      NZ, .NOTVI      ; 1 = VI INSERT MODE -> CAN APPEND AT LEN
+                ; VI NORMAL MODE: CANNOT ADVANCE PAST LAST CHAR (LEN - 1)
+                LD      A, B
+                OR      A
+                RET     Z               ; EMPTY LINE -> COL 0
+                DEC     A
+                CP      TEXTCOLS
+                RET     C
+                LD      A, TEXTCOLS - 1
+                RET
+.NOTVI          LD      A, B
+                CP      TEXTCOLS
+                RET     C
+                LD      A, TEXTCOLS - 1
+                RET
+
+
+; --- EDCLMPX                   ----------------------------------------
+
+
+; - EDCLMPX ----------------------------
+; - CLAMP CURX TO CURRENT DOCLINE LENGTH
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+EDCLMPX         LD      HL, (DOCLINE)
+                CALL    LINELEN
+                CALL    GETMAXC
+                LD      B, A
+                LD      A, (CURX)
+                CP      B
+                RET     C               ; CURX < MAX -> OK
+                LD      A, B
                 LD      (CURX), A
                 RET
 

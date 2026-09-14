@@ -139,6 +139,7 @@ ACTMVR          CALL    CHKUNSEL
 ACTMVU          CALL    CHKUNSEL
                 LD      A, CUP
                 CALL    EDMOVROW
+                CALL    EDCLMPX
                 RET
 
 
@@ -155,6 +156,7 @@ ACTMVU          CALL    CHKUNSEL
 ACTMVD          CALL    CHKUNSEL
                 LD      A, CDOWN
                 CALL    EDMOVROW
+                CALL    EDCLMPX
                 RET
 
 
@@ -540,11 +542,13 @@ ACTPGUP         CALL    CHKUNSEL
                 DEC     C
                 JR      NZ, .PAGE
                 CALL    SETCURY
+                CALL    EDCLMPX
                 JP      REDRAW
 .PGUTOP         XOR     A
                 LD      (CURY), A
                 LD      HL, 0
                 LD      (DOCLINE), HL
+                CALL    EDCLMPX
                 LD      A, B
                 OR      A
                 RET     Z               ; ALREADY ON THE FIRST PAGE: CURSOR ONLY
@@ -591,6 +595,7 @@ ACTPGDN         CALL    CHKUNSEL
                 JR      NC, .PGDCUR
                 LD      (DOCLINE), HL
 .PGDCUR         CALL    SETCURY
+                CALL    EDCLMPX
                 JP      REDRAW
 .PGDBOT         JP      ACTBOT
 
