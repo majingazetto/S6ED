@@ -243,8 +243,11 @@ EDPSHWR         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 CALL    LINEWRT
 
                 ; 6. PUT THE TAIL IN THE RECORD RESERVED AT THE TOP. LINEWRT
-                ;    HAS RE-BANKED PAGE 2 SINCE NEWREC, SO BANK IT BACK.
-                CALL    APPBANK
+                ;    HAS RE-BANKED PAGE 2 SINCE NEWREC, SO BANK IT BACK --
+                ;    NRSEG, NOT APPSEG: NEWREC MAY HAVE HANDED OUT A RECYCLED
+                ;    RECORD FROM ANY SEGMENT.
+                LD      A, (NRSEG)
+                CALL    RECBANK
                 LD      DE, (NROFF)
                 LD      HL, TXPAGE
                 ADD     HL, DE
@@ -1348,10 +1351,12 @@ EDNWLIN         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
 
-                ; 5. PUT THE TAIL IN THE RESERVED RECORD. IT LIVES IN THE
-                ;    APPEND SEGMENT, AND LINEREAD / LINEWRT HAVE RE-BANKED
-                ;    PAGE 2 SINCE NEWREC, SO BANK IT BACK.
-                CALL    APPBANK
+                ; 5. PUT THE TAIL IN THE RESERVED RECORD. LINEREAD / LINEWRT
+                ;    HAVE RE-BANKED PAGE 2 SINCE NEWREC, SO BANK IT BACK --
+                ;    NRSEG, NOT APPSEG: NEWREC MAY HAVE HANDED OUT A RECYCLED
+                ;    RECORD FROM ANY SEGMENT.
+                LD      A, (NRSEG)
+                CALL    RECBANK
                 LD      DE, (NROFF)
                 LD      HL, TXPAGE
                 ADD     HL, DE
