@@ -334,6 +334,27 @@ DRWMENU         LD      HL, 0
 MNUTEXT         DEFM    "S6ED | File  Edit  View  Options  Help", 0
 
 
+; --- CHKCLK                    ----------------------------------------
+
+
+; - CHKCLK -----------------------------
+; - TEST IF CLOCK / COLON NEEDS REDRAW (CALLED IN MAINLOOP & .DRAWCUR)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL IF REDRAW, NONE IF CLEAN
+; -
+
+CHKCLK          LD      A, (SHOWCLK)
+                OR      A
+                RET     Z
+                LD      A, (CLKDIRT)
+                OR      A
+                RET     Z
+                XOR     A
+                LD      (CLKDIRT), A
+                JP      UPDMCLK
+
+
 ; --- UPDMCLK                   ----------------------------------------
 
 
@@ -354,16 +375,7 @@ UPDMCLK         LD      A, (SHOWCLK)
                 CP      L
                 JR      NZ, .MINCHG     ; MINUTE CHANGED (OR FIRST DRAW)
 
-                ; MINUTE IS THE SAME: CHECK IF SECOND CHANGED
-                LD      A, (CLKSEC)
-                CP      D
-                RET     Z               ; SECOND HAS NOT CHANGED: NOTHING TO DO
-
-                ; SECOND CHANGED: BLINK COLON CELL ONLY (DX = 488, DY = 0)
-                LD      A, D
-                LD      (CLKSEC), A     ; UPDATE CACHED SECOND
-
-                PUSH    DE              ; PRESERVE D = SECONDS
+                ; MINUTE IS THE SAME: UPDATE ONLY COLON CELL (DX = 488, DY = 0)
                 ; CLEAR 6X8 BOX AT DX = 488, DY = 0 (COLOR 2: CLR_UI)
                 LD      HL, 488
                 LD      (VDP_DX), HL
@@ -379,13 +391,13 @@ UPDMCLK         LD      A, (SHOWCLK)
                 LD      (VDP_ARG), A
                 LD      HL, VDPCMBLK
                 CALL    HMMV
-                POP     DE              ; RESTORE D = SECONDS
 
-                ; IF ODD SECOND (BIT 0 == 1), LEAVE BLANK
-                BIT     0, D
-                RET     NZ
+                ; CHECK COLON PHASE TOGGLED BY HTIMI (0 = ON, 1 = OFF)
+                LD      A, (CLKPH)
+                OR      A
+                RET     NZ              ; 1: OFF (LEAVE ERASED/BLANK)
 
-                ; IF EVEN SECOND (BIT 0 == 0), BLIT COLON GLYPH
+                ; 0: ON (DRAW COLON GLYPH)
                 LD      A, ':'
                 LD      HL, 488
                 LD      DE, 0
@@ -395,10 +407,7 @@ UPDMCLK         LD      A, (SHOWCLK)
 .MINCHG         ; MINUTE CHANGED: FULL REDRAW OF "HH:MM"
                 LD      A, L
                 LD      (CLKMIN), A     ; UPDATE CACHED MINUTE
-                LD      A, D
-                LD      (CLKSEC), A     ; UPDATE CACHED SECOND
                 PUSH    HL              ; H = HOURS, L = MINUTES
-                PUSH    DE              ; D = SECONDS
 
                 ; FORMAT "HH:MM", 0 INTO CLKBUF
                 LD      A, H            ; H = HOURS (0..23)
@@ -408,11 +417,11 @@ UPDMCLK         LD      A, (SHOWCLK)
                 LD      A, E
                 LD      (CLKBUF + 1), A
 
-                POP     DE              ; D = SECONDS
+                LD      A, (CLKPH)
+                OR      A
                 LD      A, ':'
-                BIT     0, D
                 JR      Z, .SETCOL
-                LD      A, ' '          ; IF ODD SECOND ON MINUTE ROLL, BLANK
+                LD      A, ' '
 .SETCOL         LD      (CLKBUF + 2), A
 
                 POP     HL              ; RESTORE L = MINUTES
