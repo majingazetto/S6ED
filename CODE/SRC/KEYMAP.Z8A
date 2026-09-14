@@ -53,6 +53,7 @@ KMAPSTD         ; UNMODIFIED CURSORS
                 DEFB    CTRL_I,  MODCTRL, ACTGLIT
                 DEFB    CTRL_X,  MODCTRL, ACCUT
                 DEFB    CTRL_V,  MODCTRL, ACPAST
+                DEFB    TAB,     MODNONE, ACTABS
                 DEFB    BS,      MODNONE, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
@@ -126,6 +127,7 @@ KMAPWS          ; WORDSTAR DIAMOND
                 ; EDITING & SYSTEM
                 DEFB    CTRL_B,  MODCTRL, ACTGLBD
                 DEFB    CTRL_I,  MODCTRL, ACTGLIT
+                DEFB    TAB,     MODNONE, ACTABS
                 DEFB    BS,      MODNONE, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
@@ -177,6 +179,7 @@ KMAPEMAC        ; EMACS NAVIGATION & EDITING
                 DEFB    CDOWN,   MODGRPH, ACPGDN
 
                 ; EDITING & SYSTEM
+                DEFB    TAB,     MODNONE, ACTABS
                 DEFB    BS,      MODNONE, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
@@ -252,6 +255,7 @@ KMAPVII         ; RETURN TO NORMAL MODE
                 DEFB    CRIGHT,  MODANY,  ACMVR
                 DEFB    CUP,     MODANY,  ACMVU
                 DEFB    CDOWN,   MODANY,  ACMVD
+                DEFB    TAB,     MODNONE, ACTABS
                 DEFB    BS,      MODNONE, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN

@@ -114,8 +114,11 @@ INIT            DBG     "1: INIT START"
                 LD      (SHOWCLK), A
                 LD      A, 4
                 LD      (TABWIDTH), A
+                LD      A, 1
+                LD      (AUTOLOD), A
                 LD      A, #FF
                 LD      (CLKMIN), A
+                LD      (CLKSEC), A
                 XOR     A
                 LD      (KMAPID), A
                 CALL    KMAPSW          ; INITIALIZE KMAPPTR TO KMAPSTD

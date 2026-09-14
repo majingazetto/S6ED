@@ -60,6 +60,7 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTTGLBD        ; 48
                 DEFW    ACTTGLIT        ; 49
                 DEFW    ACTCYCMK        ; 50
+                DEFW    ACTTAB          ; 51
 
 
 ; --- ACTNONE                   ----------------------------------------
@@ -2082,7 +2083,7 @@ ACTPAST         LD      HL, (CLIPLEN)
 
 .PSTLF          CALL    PSTADV
                 CALL    PSTNL
-                JR      C, .PSTDONE
+                JP      C, .PSTDONE
                 JR      .PSTLP
 
 .PSTRUN         ; MEASURE THE RUN: CONSECUTIVE INSERTABLE BYTES, NEVER MORE
@@ -2097,6 +2098,8 @@ ACTPAST         LD      HL, (CLIPLEN)
                 CP      TEXTCOLS
                 JR      Z, .PSTGOT
                 LD      A, (HL)
+                CP      #09
+                JR      Z, .PSTGOT      ; TAB EXPANSION HANDLED BY .PSTONE
                 CALL    PSTOK
                 JR      NC, .PSTGOT
                 INC     HL
@@ -2145,16 +2148,17 @@ ACTPAST         LD      HL, (CLIPLEN)
                 LD      (CPYCNT), HL
                 JP      .PSTLP
 
-.PSTONE         ; ONE CHARACTER THAT DOES NOT FIT. WHAT HAPPENS TO IT IS THE
-                ; WRAP MODE'S DECISION -- CLAMP IN WRAP_DEV, PUSH THE TRAILING
-                ; WORD DOWN IN WRAP_TXT -- AND ONLY EDINSCHR KNOWS THOSE RULES.
-                ; AFTER A PUSH WRAP THE NEXT PASS FINDS A NEARLY EMPTY LINE AND
-                ; USUALLY SWALLOWS THE REST OF THE RUN IN ONE GO.
+.PSTONE         ; ONE CHARACTER THAT DOES NOT FIT, OR TAB TO EXPAND.
+                ; WHAT HAPPENS TO IT IS THE WRAP MODE'S DECISION -- CLAMP IN
+                ; WRAP_DEV, PUSH THE TRAILING WORD DOWN IN WRAP_TXT.
                 LD      HL, (CLIPRD)
                 LD      A, (HL)
                 CP      #09
                 JR      NZ, .PSTSCHR
-                LD      A, ' '
+                CALL    ACTTAB
+                CALL    PSTADV
+                JP      .PSTLP
+
 .PSTSCHR        CALL    EDINSCHR
                 CALL    PSTADV
                 JP      .PSTLP
@@ -2495,5 +2499,43 @@ APPLSEL         LD      (STYLMASK), A
                 LD      A, #FF
                 LD      (MODIFIED), A
                 CALL    DRWSTAT
+                RET
+
+
+; --- ACTTAB                    ----------------------------------------
+
+
+; - ACTTAB -----------------------------
+; - INSERT SPACES UP TO NEXT TAB STOP
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTTAB          LD      A, (SELACT)
+                OR      A
+                CALL    NZ, ACTDLS      ; DELETE ACTIVE SELECTION FIRST
+
+                ; CALCULATE SPACES: TABWIDTH - (CURX % TABWIDTH)
+                LD      A, (CURX)
+                LD      C, A
+                LD      A, (TABWIDTH)
+                LD      B, A            ; B = TABWIDTH
+                LD      A, C
+.TABMD          CP      B
+                JR      C, .TABRM
+                SUB     B
+                JR      .TABMD
+.TABRM          ; A = CURX % TABWIDTH
+                LD      C, A
+                LD      A, B
+                SUB     C               ; A = TABWIDTH - (CURX % TABWIDTH)
+                LD      B, A            ; B = SPACES TO INSERT (1..8)
+
+.TABLP          PUSH    BC
+                LD      A, ' '
+                CALL    EDINSCHR
+                POP     BC
+                DJNZ    .TABLP
                 RET
 
