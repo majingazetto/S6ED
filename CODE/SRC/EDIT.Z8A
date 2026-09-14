@@ -754,7 +754,7 @@ REFLOW          LD      (RFLINE), HL
                 ADD     A, (HL)
                 LD      (WORKBUF), A
 
-                CALL    .BLNK80
+                CALL    RECBL80
 
                 ; PERSIST UPDATED LINE L
                 LD      HL, (RFLINE)
@@ -814,7 +814,7 @@ REFLOW          LD      (RFLINE), HL
                 LD      B, 0
                 LDIR
 
-                CALL    .BLNK80
+                CALL    RECBL80
 
                 ; PERSIST SHORTENED LINE L+1
                 LD      HL, (RFLINE)
@@ -890,7 +890,7 @@ REFLOW          LD      (RFLINE), HL
                 ADD     A, (HL)
                 LD      (WORKBUF), A
 
-.DELL1          CALL    .BLNK80
+.DELL1          CALL    RECBL80
 
                 ; PERSIST UPDATED LINE L
                 LD      HL, (RFLINE)
@@ -918,8 +918,18 @@ REFLOW          LD      (RFLINE), HL
                 LD      (RFLINE), HL
                 JP      .RFLOOP
 
-.BLNK80         ; BLANK CELLS OF WORKBUF FROM (WORKBUF) UP TO 79
-                LD      A, (WORKBUF)
+; --- RECBL80                   ----------------------------------------
+
+
+; - RECBL80 ----------------------------
+; - BLANK THE TAIL OF THE RECORD HELD IN WORKBUF: SPACES IN THE TEXT HALF
+; - AND ZERO ATTRIBUTES, FROM THE LENGTH BYTE UP TO COLUMN 79.
+; - IN:  WORKBUF HOLDS A LINE RECORD, (WORKBUF) = LENGTH
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+RECBL80         LD      A, (WORKBUF)
                 CP      TEXTCOLS
                 RET     NC              ; ALREADY 80 COLS
 
@@ -945,6 +955,166 @@ REFLOW          LD      (RFLINE), HL
                 INC     HL
                 DJNZ    .BLKATT
                 RET
+
+
+; --- JOIN2L                    ----------------------------------------
+
+
+; - JOIN2L -----------------------------
+; - JOIN TWO ADJACENT LINES IN DEV MODE (LINE B APPENDED TO A, B DELETED)
+; - IN:  HL = LINE A (TARGET LINE NUMBER)
+; -      DE = LINE B (SOURCE TO DELETE)
+; - OUT: CY = 0 : SUCCESS, JOINCOL = LEN A
+; -      CY = 1 : FAILED (> TEXTCOLS)
+; - CLOBBERS: ALL
+; -
+
+JOIN2L          LD      (JOINLA), HL
+                LD      (JOINLB), DE
+
+                ; READ LINE B (SOURCE) INTO WORKBUF2
+                EX      DE, HL          ; HL = LINE B
+                CALL    LINEREAD
+                LD      HL, WORKBUF
+                LD      DE, WORKBUF2
+                LD      BC, WORKSIZ
+                LDIR
+
+                ; READ LINE A (TARGET) INTO WORKBUF
+                LD      HL, (JOINLA)
+                CALL    LINEREAD
+
+                ; SAVE ORIGINAL LENGTH OF LINE A
+                LD      A, (WORKBUF)
+                LD      (JOINCOL), A
+
+                ; CHECK IF COMBINED LENGTH EXCEEDS 80 COLUMNS
+                LD      B, A            ; B = LEN_A
+                LD      A, (WORKBUF2)   ; A = LEN_B
+                ADD     A, B            ; A = LEN_A + LEN_B
+                CP      TEXTCOLS + 1
+                JR      NC, .JNBIG      ; > 80: REJECT
+
+                ; APPEND LINE B TEXT & ATTRS IF LEN_B > 0
+                LD      A, (WORKBUF2)
+                OR      A
+                JR      Z, .JNDEL
+
+                ; APPEND TEXT
+                LD      A, (JOINCOL)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DEST TEXT (WORKBUF + 1 + LEN_A)
+                LD      HL, WORKBUF2 + 1 ; HL = SRC TEXT
+                LD      A, (WORKBUF2)
+                LD      C, A
+                LD      B, 0
+                PUSH    BC
+                LDIR
+                POP     BC
+
+                ; APPEND ATTRIBUTES
+                LD      A, (JOINCOL)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DEST ATTR
+                LD      HL, WORKBUF2 + 1 + TEXTCOLS ; HL = SRC ATTR
+                LDIR
+
+                ; UPDATE LINE A LENGTH
+                LD      A, (JOINCOL)
+                LD      HL, WORKBUF2
+                ADD     A, (HL)
+                LD      (WORKBUF), A
+
+                ; BLANK UNUSED TAIL CELLS UP TO 79
+                CALL    RECBL80
+
+                ; WRITE UPDATED LINE A BACK
+                LD      HL, (JOINLA)
+                CALL    LINEWRT
+
+.JNDEL          ; DELETE LINE B FROM DIRECTORY
+                LD      HL, (JOINLB)
+                CALL    LINEDEL
+
+                ; DECREMENT TOTAL LINE COUNT
+                LD      HL, (TOTLINES)
+                DEC     HL
+                LD      (TOTLINES), HL
+
+                LD      A, #FF
+                LD      (MODIFIED), A
+                OR      A               ; CLEAR CARRY (CY = 0: SUCCESS)
+                RET
+
+.JNBIG          SCF                     ; SET CARRY (CY = 1: FAILED)
+                RET
+
+
+; --- EDJNDEV                   ----------------------------------------
+
+
+; - EDJNDEV ----------------------------
+; - BACKSPACE AT COL 0 IN WRAP_DEV: JOIN CURRENT LINE INTO PREVIOUS LINE
+; - IN:  NONE (DOCLINE > 0)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+EDJNDEV         LD      HL, (DOCLINE)
+                DEC     HL              ; LINE A = DOCLINE - 1
+                LD      DE, (DOCLINE)   ; LINE B = DOCLINE
+                CALL    JOIN2L
+                RET     C               ; FAILED (> 80 COLS)
+
+                ; POSITION CURSOR AT SEAM ON LINE A
+                LD      A, (JOINCOL)
+                LD      (CURX), A
+
+                ; MOVE DOCLINE UP
+                LD      HL, (DOCLINE)
+                DEC     HL
+                LD      (DOCLINE), HL
+
+                ; IF AT TOP OF VIEWPORT (CURY == 0), SCROLL TOPLINE UP
+                LD      A, (CURY)
+                OR      A
+                JR      NZ, .JNTOP
+                LD      HL, (TOPLINE)
+                DEC     HL
+                LD      (TOPLINE), HL
+
+.JNTOP          CALL    SETCURY
+                JP      REDRAW
+
+
+; --- EDDELDV                   ----------------------------------------
+
+
+; - EDDELDV ----------------------------
+; - DELETE AT EOL IN WRAP_DEV: PULL NEXT LINE UP INTO CURRENT LINE
+; - IN:  NONE (DOCLINE + 1 < TOTLINES)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+EDDELDV         LD      HL, (DOCLINE)   ; LINE A = DOCLINE
+                LD      DE, (DOCLINE)
+                INC     DE              ; LINE B = DOCLINE + 1
+                CALL    JOIN2L
+                RET     C               ; FAILED (> 80 COLS)
+
+                ; CURSOR STAYS AT SEAM ON LINE A
+                LD      A, (JOINCOL)
+                LD      (CURX), A
+
+                ; DOCLINE, TOPLINE, CURY DO NOT CHANGE
+                JP      REDRAW
 
 
 ; --- EDDELBK                 ----------------------------------------
@@ -1017,14 +1187,14 @@ EDDELBK         LD      A, (CURX)
                 RET
 
 .ATCOL0         ; BACKSPACE AT COLUMN 0
-                LD      A, (WRAPMODE)
-                CP      WRAP_TXT
-                RET     NZ              ; IN WRAP_DEV: DO NOTHING AT COL 0
-
                 LD      HL, (DOCLINE)
                 LD      A, H
                 OR      L
                 RET     Z               ; AT DOCLINE 0: TOP OF DOC, DO NOTHING
+
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JP      NZ, EDJNDEV     ; IN WRAP_DEV: DEV LINE JOIN / LINE DELETE
 
                 ; READ PREVIOUS LINE (DOCLINE - 1) TO FIND SEAM COLUMN
                 DEC     HL
@@ -1119,16 +1289,16 @@ EDDELCHR        LD      HL, (DOCLINE)
                 RET
 
 .ATEOL          ; CURX >= LENGTH: AT OR PAST END OF LINE
-                LD      A, (WRAPMODE)
-                CP      WRAP_TXT
-                RET     NZ              ; IN WRAP_DEV: DO NOTHING PAST END OF LINE
-
-                ; IN WRAP_TXT: CHECK IF NEXT LINE EXISTS (DOCLINE + 1 < TOTLINES)
+                ; CHECK IF NEXT LINE EXISTS (DOCLINE + 1 < TOTLINES)
                 LD      HL, (DOCLINE)
                 INC     HL
                 LD      DE, (TOTLINES)
                 CALL    CMPHLDE
                 RET     NC              ; NO NEXT LINE: BOTTOM OF DOCUMENT
+
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JP      NZ, EDDELDV     ; IN WRAP_DEV: DEV LINE JOIN / LINE DELETE BELOW
 
                 ; CLAMP CURX TO CURRENT LENGTH (THE JOIN SEAM)
                 LD      A, (WORKBUF)
