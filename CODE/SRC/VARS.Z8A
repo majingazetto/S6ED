@@ -70,7 +70,10 @@ MKUPMD          DEFB    0               ; 0=OFF, 1=MD, 2=LITE
 SHOWCLK         DEFB    1               ; 0=OFF, 1=SHOW CLOCK IN MENU ROW
 TABWIDTH        DEFB    4               ; TAB WIDTH (2, 4, 8)
 SAVEEOL         DEFB    0               ; 0=DOS (CRLF), 1=UNIX (LF)
+AUTOLOD         DEFB    1               ; 1=AUTO-DETECT EOL ON LOAD, 0=FIXED BY CFG
+EOLARED         DEFB    0               ; 1=EOL FORMAT ALREADY DETECTED ON LOAD
 CLKMIN          DEFB    0               ; CACHED MINUTE FOR CLOCK (#FF=NEEDS DRAW)
+CLKSEC          DEFB    0               ; CACHED SECOND FOR BLINK (#FF=NEEDS DRAW)
 CLKBUF          DEFS    6               ; "HH:MM", 0
 
                 ; NON-ZERO WHILE A BATCH EDIT IS RUNNING. EDINSCHR, EDNWLIN

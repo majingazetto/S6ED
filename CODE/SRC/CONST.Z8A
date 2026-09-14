@@ -242,7 +242,8 @@ ACPAST          EQU     47              ; CTRL + V / VI p (PASTE)
 ACTGLBD         EQU     48              ; CTRL + B (TOGGLE BOLD)
 ACTGLIT         EQU     49              ; CTRL + I (TOGGLE ITALIC)
 ACCYCMK         EQU     50              ; F3 / CTRL + T (CYCLE MARKUP MODE)
-ACMAX           EQU     51
+ACTABS          EQU     51              ; TAB (INSERT SPACES TO NEXT TAB STOP)
+ACMAX           EQU     52
 
 
 ; --- KEYMAP PROFILES           ----------------------------------------

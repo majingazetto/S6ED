@@ -31,6 +31,7 @@ FILELOAD        PUSH    HL
                 XOR     A
                 LD      (CURLLEN), A
                 LD      (WASCR), A
+                LD      (EOLARED), A
 
 .READBLK        LD      A, (FILEHAND)
                 LD      HL, 256
@@ -38,7 +39,7 @@ FILELOAD        PUSH    HL
                 CALL    DSKREAD         ; HL = BYTES READ
                 LD      A, H
                 OR      L
-                JR      Z, .EOF
+                JP      Z, .EOF
                 
                 LD      B, H
                 LD      C, L            ; BC = BYTES TO PROCESS
@@ -50,7 +51,9 @@ FILELOAD        PUSH    HL
                 CP      13              ; CR
                 JR      Z, .ISCR
                 CP      10              ; LF
-                JR      Z, .ISLF
+                JP      Z, .ISLF
+                CP      9               ; TAB
+                JR      Z, .ISTAB
                 
                 ; REGULAR CHARACTER: CLEAR WASCR
                 PUSH    AF
@@ -65,7 +68,7 @@ FILELOAD        PUSH    HL
                 
                 LD      A, (CURLLEN)
                 CP      80
-                JR      NC, .SKIP       ; TRUNCATE
+                JP      NC, .SKIP       ; TRUNCATE
                 
                 LD      HL, TXPAGE + 1  ; SKIP LEN BYTE
                 LD      DE, (LINEOFF)
@@ -77,23 +80,85 @@ FILELOAD        PUSH    HL
                 
                 INC     A
                 LD      (CURLLEN), A
-                JR      .SKIP
+                JP      .SKIP
+
+.ISTAB          ; TAB EXPANSION: INSERT SPACES UP TO NEXT TAB STOP
+                XOR     A
+                LD      (WASCR), A
+
+                LD      A, (TABWIDTH)
+                LD      D, A            ; D = TABWIDTH
+                LD      A, (CURLLEN)
+.TABMD          CP      D
+                JR      C, .TABRM
+                SUB     D
+                JR      .TABMD
+.TABRM          ; A = CURLLEN % TABWIDTH
+                LD      E, A
+                LD      A, D
+                SUB     E               ; A = SPACES TO ADD (1..TABWIDTH)
+                LD      E, A            ; E = COUNT OF SPACES
+
+.TABSP          LD      A, (CURLLEN)
+                CP      80
+                JR      NC, .SKIP       ; TRUNCATE AT 80 COLS
+
+                LD      A, (TXSEG)
+                CALL    PUTP2
+
+                LD      HL, TXPAGE + 1
+                LD      BC, (LINEOFF)
+                ADD     HL, BC
+                LD      A, (CURLLEN)
+                LD      C, A
+                LD      B, 0
+                ADD     HL, BC
+                LD      (HL), ' '
+
+                LD      A, (CURLLEN)
+                INC     A
+                LD      (CURLLEN), A
+
+                DEC     E
+                JR      NZ, .TABSP
+                JP      .SKIP
 
 .ISCR           LD      A, 1
                 LD      (WASCR), A
-                CALL    STORLINE
+                ; EOL AUTO-DETECT: DOS CRLF
+                LD      A, (AUTOLOD)
+                OR      A
+                JR      Z, .STORCR
+                LD      A, (EOLARED)
+                OR      A
+                JR      NZ, .STORCR
+                XOR     A
+                LD      (SAVEEOL), A    ; DETECTED DOS (CRLF)
+                INC     A
+                LD      (EOLARED), A
+.STORCR         CALL    STORLINE
                 JR      C, .OOM
-                JR      .SKIP
+                JP      .SKIP
 
 .ISLF           LD      A, (WASCR)
                 AND     A
                 JR      NZ, .SKIPLF     ; IF CRLF, SKIP THE LF
-                CALL    STORLINE
+                ; STANDALONE LF: UNIX EOL
+                LD      A, (AUTOLOD)
+                OR      A
+                JR      Z, .STORLF
+                LD      A, (EOLARED)
+                OR      A
+                JR      NZ, .STORLF
+                LD      A, 1
+                LD      (SAVEEOL), A    ; DETECTED UNIX (LF)
+                LD      (EOLARED), A
+.STORLF         CALL    STORLINE
                 JR      C, .OOM
-                JR      .SKIP
+                JP      .SKIP
 .SKIPLF         XOR     A
                 LD      (WASCR), A
-                JR      .SKIP
+                JP      .SKIP
 
 .OOM            POP     HL              ; BALANCE PUSH HL IN .PROCLP
                 POP     BC              ; BALANCE PUSH BC IN .PROCLP
@@ -105,8 +170,8 @@ FILELOAD        PUSH    HL
                 DEC     BC
                 LD      A, B
                 OR      C
-                JR      NZ, .PROCLP
-                JR      .READBLK
+                JP      NZ, .PROCLP
+                JP      .READBLK
 
 .EOF            LD      A, (CURLLEN)
                 AND     A

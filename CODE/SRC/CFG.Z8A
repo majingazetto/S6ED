@@ -323,13 +323,17 @@ PARSTAB         LD      A, (HL)
 
 
 ; - PARSEOL ----------------------------
-; - PARSE EOL VALUE (DOS, UNIX)
+; - PARSE EOL VALUE (AUTO, DOS, UNIX)
 ; - IN:  HL = POINTER TO VALUE
 ; - OUT: NONE
 ; - CLOBBERS: AF
 ; -
 
 PARSEOL         LD      A, (HL)
+                CP      'A'             ; AUTO
+                JR      Z, .EOLAUT
+                CP      'a'
+                JR      Z, .EOLAUT
                 CP      'D'             ; DOS
                 JR      Z, .EOLDOS
                 CP      'd'
@@ -339,11 +343,17 @@ PARSEOL         LD      A, (HL)
                 CP      'u'
                 JR      Z, .EOLUNX
                 RET
+.EOLAUT         LD      A, 1
+                LD      (AUTOLOD), A
+                RET
 .EOLDOS         XOR     A
                 LD      (SAVEEOL), A
+                LD      (AUTOLOD), A    ; FIXED DOS
                 RET
 .EOLUNX         LD      A, 1
                 LD      (SAVEEOL), A
+                XOR     A
+                LD      (AUTOLOD), A    ; FIXED UNIX
                 RET
 
 
