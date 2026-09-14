@@ -88,19 +88,32 @@ SCROLLUP        ; MOVE 504X184 PX AREA (ROWS 1..23 -> ROWS 2..24)
 
 ; - SHIFTDN ----------------------------
 ; - SHIFT SCREEN ROWS BELOW ROW B DOWN ONE ROW
+; - THE ONE-ROW ENTRY POINT OF SHIFTDNN, WHICH FOLLOWS IT.
 ; - IN:  B = SCREEN ROW OF NEW LINE (1..23)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-SHIFTDN         ; ROWS B..23 MOVE TO (B+1)..24 (DOWNWARD)
-                ; NUMBER OF ROWS TO MOVE = 24 - B
-                LD      A, 24
+SHIFTDN         LD      C, 1            ; ONE ROW: FALL INTO THE GENERAL CASE
+
+
+; - SHIFTDNN ---------------------------
+; - SHIFT SCREEN ROWS BELOW ROW B DOWN BY C ROWS
+; - ROWS B..(24-C) MOVE TO (B+C)..24, IN ONE HMMM. INSERTING SEVERAL LINES
+; - AT ONCE COSTS THE SAME SINGLE BLIT AS INSERTING ONE.
+; - IN:  B = FIRST ROW THAT MOVES (1..24), C = ROWS TO SHIFT BY (1..23)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SHIFTDNN        ; NUMBER OF ROWS TO MOVE = 25 - C - B
+                LD      A, 25
+                SUB     C
                 SUB     B
                 RET     Z               ; NO ROWS BELOW TO SHIFT
                 RET     C
 
-                ; NY = (23 - B) * 8 PIXELS
+                ; NY = ROWS * 8 PIXELS
                 ADD     A, A
                 ADD     A, A
                 ADD     A, A            ; * 8
@@ -112,9 +125,17 @@ SHIFTDN         ; ROWS B..23 MOVE TO (B+1)..24 (DOWNWARD)
                 LD      (VDP_SX), HL
                 LD      (VDP_DX), HL
 
-                LD      HL, 191         ; BOTTOM OF ROWS 1..23
+                ; SY = BOTTOM OF ROW 24 - C, DY = BOTTOM OF ROW 24
+                LD      A, 25
+                SUB     C
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; (25 - C) * 8
+                DEC     A
+                LD      L, A
+                LD      H, 0
                 LD      (VDP_SY), HL
-                LD      HL, 199         ; BOTTOM OF ROWS 2..24
+                LD      HL, 199         ; BOTTOM OF ROW 24
                 LD      (VDP_DY), HL
 
                 LD      HL, TXAREAPX    ; 480
@@ -123,6 +144,5 @@ SHIFTDN         ; ROWS B..23 MOVE TO (B+1)..24 (DOWNWARD)
                 LD      A, VDP_DIY      ; #08 (BOTTOM-TO-TOP)
                 LD      (VDP_ARG), A
                 LD      HL, VDPCMBLK
-                CALL    HMMM
-                RET
+                JP      HMMM
 
