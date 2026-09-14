@@ -57,13 +57,16 @@ EDINSCHR        PUSH    AF
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
 
-                ; RE-RENDER CURRENT ROW
+                ; RE-RENDER CURRENT ROW, UNLESS A BATCH EDIT IS RUNNING
+                LD      A, (RNDHOLD)
+                OR      A
+                JR      NZ, .NOREND
                 LD      A, (CURY)
                 INC     A
                 LD      B, A            ; B = SCREEN ROW (1..24)
                 CALL    RENDEROW
 
-                ; ADVANCE CURSOR
+.NOREND         ; ADVANCE CURSOR
                 LD      A, (CURX)
                 INC     A
                 CP      TEXTCOLS
@@ -71,6 +74,81 @@ EDINSCHR        PUSH    AF
                 LD      (CURX), A
 .NOMOV          LD      A, #FF
                 LD      (MODIFIED), A
+                RET
+
+
+; --- EDINSRUN                  ----------------------------------------
+
+
+; - EDINSRUN ---------------------------
+; - INSERT A RUN OF CHARACTERS ON THE CURRENT LINE IN ONE PASS
+; - ONE LINEREAD AND ONE LINEWRT FOR THE WHOLE RUN INSTEAD OF A PAIR PER
+; - CHARACTER, AND NO PAINTING AT ALL -- THE CALLER PAINTS WHEN IT IS DONE.
+; - IT REFUSES RATHER THAN TRUNCATE: A RUN THAT DOES NOT FIT IS THE WRAP
+; - MODE'S BUSINESS, AND ONLY EDINSCHR KNOWS THOSE RULES.
+; - IN:  HL = SOURCE, B = COUNT (1-80)
+; - OUT: CY = 0  THE WHOLE RUN WENT IN
+; -      CY = 1  IT DOES NOT FIT; NOTHING WAS WRITTEN AND A HOLDS HOW MANY
+; -              CHARACTERS WOULD HAVE FITTED (0-79), SO THE CALLER CAN PUT
+; -              THAT MUCH IN AS A BATCH AND ONLY THEN GO CHARACTER BY
+; -              CHARACTER
+; - CLOBBERS: ALL
+; -
+
+EDINSRUN        LD      (WBSRC), HL     ; SURVIVES LINEREAD
+                LD      A, B
+                LD      (WBRUN), A
+                OR      A
+                RET     Z               ; EMPTY RUN, CY = 0
+
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+
+                ; ROOM ON THIS LINE = TEXTCOLS - MAX(LENGTH, COLUMN).
+                ; MEASURING FROM THE LENGTH NEVER OVERSTATES IT: A RECORD IS
+                ; SPACE PADDED, SO COLUMNS LENGTH..79 ARE ALWAYS FREE.
+                LD      A, (WORKBUF)    ; LENGTH
+                LD      C, A
+                LD      A, (CURX)
+                CP      C
+                JR      NC, .IRHAVE     ; COLUMN >= LENGTH: MEASURE FROM IT
+                LD      A, C
+.IRHAVE         LD      C, A
+                LD      A, TEXTCOLS
+                SUB     C
+                LD      C, A            ; C = ROOM
+                LD      A, (WBRUN)
+                CP      C
+                JR      Z, .IRFITS
+                JR      C, .IRFITS
+                LD      A, C            ; TOO LONG: HAND BACK THE ROOM
+                SCF
+                RET
+
+.IRFITS         LD      HL, WORKBUF
+                LD      DE, (WBSRC)
+                LD      A, (WBRUN)
+                LD      B, A
+                LD      A, (CURX)
+                CALL    WBINSN
+
+                LD      HL, (DOCLINE)
+                CALL    LINEWRT
+
+                ; THE CURSOR ADVANCES BY THE WHOLE RUN, CLAMPED THE WAY
+                ; EDINSCHR CLAMPS ITS SINGLE STEP
+                LD      A, (CURX)
+                LD      C, A
+                LD      A, (WBRUN)
+                ADD     A, C
+                CP      TEXTCOLS
+                JR      C, .IRSETX
+                LD      A, TEXTCOLS - 1
+.IRSETX         LD      (CURX), A
+
+                LD      A, #FF
+                LD      (MODIFIED), A
+                OR      A               ; CY = 0: THE RUN IS IN
                 RET
 
 
@@ -209,6 +287,10 @@ EDPSHWR         ; REFUSE IF THE LINE DIRECTORY IS FULL
 
                 ; 9. UPDATE THE DISPLAY. CURY STILL HOLDS THE HEAD'S ROW --
                 ;    SETCURY RECOMPUTES IT FROM DOCLINE AND TOPLINE AT THE END.
+                LD      A, (RNDHOLD)
+                OR      A
+                JR      NZ, .PWHOLD
+
                 LD      A, (CURY)
                 CP      SCRROWS - 1     ; 23
                 JR      Z, .PWBOT
@@ -236,6 +318,16 @@ EDPSHWR         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 LD      B, TXRLAST - 1  ; ROW 23 NOW HOLDS THE SHORTENED HEAD
                 CALL    RENDEROW
                 CALL    DRWGUT
+                JP      SETCURY
+
+.PWHOLD         ; PAINTING IS DEFERRED, BUT THE VIEWPORT STILL HAS TO FOLLOW
+                ; THE NEW LINE WHEN IT LANDS BELOW THE LAST ROW.
+                LD      A, (CURY)
+                CP      SCRROWS - 1     ; 23
+                JP      NZ, SETCURY
+                LD      HL, (TOPLINE)
+                INC     HL
+                LD      (TOPLINE), HL
                 JP      SETCURY
 
 
@@ -324,6 +416,134 @@ WBINS           LD      (WBBASE), HL
                 RET     NC              ; ALREADY 80, CANNOT GROW
                 INC     A
                 LD      (HL), A
+                RET
+
+
+; --- WBINSN                    ----------------------------------------
+
+
+; - WBINSN -----------------------------
+; - INSERT A RUN OF CHARACTERS INTO A LINE RECORD AT A COLUMN
+; - THE BATCH FORM OF WBINS: TEXT AND ATTRIBUTES SHIFT RIGHT BY N IN TWO
+; - LDDR INSTEAD OF N PAIRS, AND THE RUN IS COPIED IN AS A BLOCK. WHATEVER
+; - PASSES COLUMN 79 IS LOST, SO THE CALLER MUST HAVE MADE ROOM FIRST:
+; -     MAX(LENGTH, COLUMN) + N <= TEXTCOLS
+; - TAB BECOMES A SPACE ON THE WAY IN. EVERY INSERTED CELL TAKES TYPATTR,
+; - EXACTLY AS WBINS DOES FOR ONE CHARACTER.
+; - IN:  HL = RECORD BASE, A = COLUMN (0-79), DE = SOURCE, B = COUNT (1-80)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WBINSN          LD      (WBBASE), HL
+                LD      (WBCOL), A
+                LD      (WBSRC), DE
+                LD      A, B
+                OR      A
+                RET     Z               ; EMPTY RUN
+                LD      (WBRUN), A
+
+                ; BYTES TO SHIFT RIGHT = TEXTCOLS - COLUMN - N
+                LD      C, A
+                LD      A, (WBCOL)
+                ADD     A, C            ; COLUMN + N, AT MOST 159
+                LD      C, A
+                LD      A, TEXTCOLS
+                SUB     C
+                JR      Z, .WNFILL      ; THE RUN REACHES THE EDGE: NO SHIFT
+                JR      C, .WNFILL      ; PRECONDITION BROKEN; DO NOT WRAP BC
+                LD      (WBCNT), A
+
+                ; TEXT HALF: COLUMNS COL..(79-N) MOVE UP TO COL+N..79
+                LD      HL, (WBBASE)
+                LD      DE, TEXTCOLS
+                ADD     HL, DE          ; HL = BASE + 80 (TEXT OF COLUMN 79)
+                LD      D, H
+                LD      E, L            ; DE = LAST DESTINATION BYTE
+                LD      A, (WBRUN)
+                LD      C, A
+                LD      B, 0
+                OR      A
+                SBC     HL, BC          ; HL = LAST SOURCE BYTE
+                LD      A, (WBCNT)
+                LD      C, A
+                LD      B, 0
+                LDDR
+
+                ; ATTRIBUTE HALF, EXACTLY THE SAME SHIFT
+                LD      HL, (WBBASE)
+                LD      DE, TEXTCOLS + TEXTCOLS
+                ADD     HL, DE          ; HL = BASE + 160 (ATTR OF COLUMN 79)
+                LD      D, H
+                LD      E, L
+                LD      A, (WBRUN)
+                LD      C, A
+                LD      B, 0
+                OR      A
+                SBC     HL, BC
+                LD      A, (WBCNT)
+                LD      C, A
+                LD      B, 0
+                LDDR
+
+.WNFILL         ; TEXT: COPY THE RUN IN, TRANSLATING TAB TO A SPACE
+                LD      HL, (WBBASE)
+                INC     HL
+                LD      A, (WBCOL)
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE          ; HL = BASE + 1 + COLUMN
+                EX      DE, HL          ; DE = DESTINATION
+                LD      HL, (WBSRC)
+                LD      A, (WBRUN)
+                LD      B, A
+.WNCOPY         LD      A, (HL)
+                CP      #09
+                JR      NZ, .WNPUT
+                LD      A, ' '
+.WNPUT          LD      (DE), A
+                INC     HL
+                INC     DE
+                DJNZ    .WNCOPY
+
+                ; ATTRIBUTES: N CELLS OF THE CURRENT TYPING ATTRIBUTE
+                LD      HL, (WBBASE)
+                LD      DE, TEXTCOLS + 1
+                ADD     HL, DE          ; HL = BASE + 81 (ATTR OF COLUMN 0)
+                LD      A, (WBCOL)
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                LD      A, (WBRUN)
+                LD      B, A
+                LD      A, (TYPATTR)
+.WNATTR         LD      (HL), A
+                INC     HL
+                DJNZ    .WNATTR
+
+                ; LENGTH, THE SAME TWO CASES WBINS DOCUMENTS:
+                ;   COLUMN >= LENGTH -- NOTHING SHIFTED, THE LINE NOW REACHES
+                ;                       COLUMN + N.
+                ;   COLUMN <  LENGTH -- REAL CHARACTERS WERE PUSHED RIGHT, SO
+                ;                       THE LINE IS N LONGER (CAPPED AT 80).
+                LD      HL, (WBBASE)
+                LD      A, (WBCOL)
+                CP      (HL)
+                JR      C, .WNGROW      ; COLUMN < LENGTH
+                LD      C, A
+                LD      A, (WBRUN)
+                ADD     A, C
+                LD      (HL), A
+                RET
+
+.WNGROW         LD      A, (HL)
+                LD      C, A
+                LD      A, (WBRUN)
+                ADD     A, C
+                CP      TEXTCOLS + 1
+                JR      C, .WNSET
+                LD      A, TEXTCOLS
+.WNSET          LD      (HL), A
                 RET
 
 
@@ -1005,6 +1225,10 @@ EDNWLIN         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 ; NOT AT BOTTOM: CURY INCREMENTS
                 INC     A
                 LD      (CURY), A
+                LD      A, (RNDHOLD)
+                OR      A
+                JR      NZ, .NWDONE
+                LD      A, (CURY)
                 INC     A
                 LD      B, A            ; B = SCREEN ROW OF NEW LINE (2..24)
                 PUSH    BC
@@ -1021,10 +1245,16 @@ EDNWLIN         ; REFUSE IF THE LINE DIRECTORY IS FULL
                 CALL    DRWGUT
                 JR      .NWDONE
 
-.NWATBOT        ; AT BOTTOM OF SCREEN: SCROLL VIEWPORT DOWN
+.NWATBOT        ; AT BOTTOM OF SCREEN: THE VIEWPORT FOLLOWS THE NEW LINE. THE
+                ; MOVE ITSELF IS BOOKKEEPING AND HAPPENS EVEN WHEN PAINTING IS
+                ; HELD -- OTHERWISE THE DEFERRED REPAINT WOULD DRAW THE WRONG
+                ; PART OF THE DOCUMENT.
                 LD      HL, (TOPLINE)
                 INC     HL
                 LD      (TOPLINE), HL
+                LD      A, (RNDHOLD)
+                OR      A
+                JR      NZ, .NWDONE
                 CALL    SCROLLDN
 
                 ; RENDER SHORTENED HEAD (ROW 23)

@@ -1890,74 +1890,286 @@ ACTPAST         LD      HL, (CLIPLEN)
                 OR      L
                 RET     Z               ; CLIPBOARD EMPTY
 
-                ; IF ACTIVE SELECTION, DELETE IT FIRST
+                ; IF ACTIVE SELECTION, DELETE IT FIRST -- IT PAINTS ITSELF,
+                ; SO THE SNAPSHOT BELOW HAS TO COME AFTER IT
                 LD      A, (SELACT)
                 OR      A
                 JR      Z, .PSTINIT
                 CALL    ACTDLS
 
-.PSTINIT        LD      HL, (CLIPLEN)
+.PSTINIT        LD      A, (CURY)
+                LD      (PSTROW), A
+                LD      HL, (TOPLINE)
+                LD      (PSTTOP), HL
+                LD      HL, (TOTLINES)
+                LD      (PSTTOT), HL
+
+                LD      HL, (CLIPLEN)
                 LD      (CPYCNT), HL
                 LD      HL, CLIPBUF
                 LD      (CLIPRD), HL
 
+                LD      A, #FF
+                LD      (RNDHOLD), A    ; ONE REPAINT, AT THE END
+
 .PSTLP          LD      HL, (CPYCNT)
                 LD      A, H
                 OR      L
-                JR      Z, .PSTDONE
-                DEC     HL
-                LD      (CPYCNT), HL
+                JP      Z, .PSTDONE
 
                 LD      HL, (CLIPRD)
                 LD      A, (HL)
-                INC     HL
-                LD      (CLIPRD), HL
-
-                ; 1. CHECK IF CR (#0D)
                 CP      #0D
-                JR      NZ, .PSTNOCR
-                CALL    EDNWLIN
+                JR      Z, .PSTCR
+                CP      #0A
+                JR      Z, .PSTLF
+                CALL    PSTOK
+                JR      C, .PSTRUN
 
-                ; CHECK IF NEXT BYTE IS LF (#0A) AND CONSUME IT
+                ; IGNORED CONTROL BYTE: DROP IT AND CARRY ON
+                CALL    PSTADV
+                JR      .PSTLP
+
+.PSTCR          CALL    PSTADV
+                CALL    PSTNL
+                JP      C, .PSTDONE     ; NO ROOM FOR ANOTHER LINE: STOP HERE
+
+                ; A CRLF PAIR IS ONE BREAK: SWALLOW A FOLLOWING LF
                 LD      HL, (CPYCNT)
                 LD      A, H
                 OR      L
-                JR      Z, .PSTDONE
+                JP      Z, .PSTDONE
                 LD      HL, (CLIPRD)
                 LD      A, (HL)
                 CP      #0A
                 JR      NZ, .PSTLP
-                ; CONSUME LF
+                CALL    PSTADV
+                JR      .PSTLP
+
+.PSTLF          CALL    PSTADV
+                CALL    PSTNL
+                JR      C, .PSTDONE
+                JR      .PSTLP
+
+.PSTRUN         ; MEASURE THE RUN: CONSECUTIVE INSERTABLE BYTES, NEVER MORE
+                ; THAN ONE LINE'S WORTH
+                LD      HL, (CLIPRD)
+                LD      DE, (CPYCNT)
+                LD      B, 0
+.PSTSCAN        LD      A, D
+                OR      E
+                JR      Z, .PSTGOT      ; CLIPBOARD EXHAUSTED
+                LD      A, B
+                CP      TEXTCOLS
+                JR      Z, .PSTGOT
+                LD      A, (HL)
+                CALL    PSTOK
+                JR      NC, .PSTGOT
+                INC     HL
+                DEC     DE
+                INC     B
+                JR      .PSTSCAN
+
+.PSTGOT         LD      A, B
+                LD      (PSTRUN), A
+                LD      HL, (CLIPRD)
+                CALL    EDINSRUN
+                JR      C, .PSTSLOW     ; A NOW HOLDS THE ROOM, NOT THE RUN
+
+                ; THE WHOLE RUN WENT IN: CONSUME IT
+                LD      A, (PSTRUN)
+                LD      C, A
+                LD      B, 0
+                LD      HL, (CLIPRD)
+                ADD     HL, BC
+                LD      (CLIPRD), HL
+                LD      HL, (CPYCNT)
+                OR      A
+                SBC     HL, BC
+                LD      (CPYCNT), HL
+                JP      .PSTLP
+
+.PSTSLOW        ; THE RUN OVERFLOWS THE LINE, AND A HOLDS HOW MUCH OF IT WOULD
+                ; STILL GO IN. TAKE THAT MUCH AS A BATCH, THEN COME BACK ROUND
+                ; FOR THE CHARACTER THAT WILL NOT FIT.
+                OR      A
+                JR      Z, .PSTONE      ; THE LINE IS ALREADY FULL
+                LD      (PSTRUN), A
+                LD      B, A
+                LD      HL, (CLIPRD)
+                CALL    EDINSRUN
+                JR      C, .PSTONE      ; REFUSED AGAIN: FALL BACK
+                LD      A, (PSTRUN)
+                LD      C, A
+                LD      B, 0
+                LD      HL, (CLIPRD)
+                ADD     HL, BC
+                LD      (CLIPRD), HL
+                LD      HL, (CPYCNT)
+                OR      A
+                SBC     HL, BC
+                LD      (CPYCNT), HL
+                JP      .PSTLP
+
+.PSTONE         ; ONE CHARACTER THAT DOES NOT FIT. WHAT HAPPENS TO IT IS THE
+                ; WRAP MODE'S DECISION -- CLAMP IN WRAP_DEV, PUSH THE TRAILING
+                ; WORD DOWN IN WRAP_TXT -- AND ONLY EDINSCHR KNOWS THOSE RULES.
+                ; AFTER A PUSH WRAP THE NEXT PASS FINDS A NEARLY EMPTY LINE AND
+                ; USUALLY SWALLOWS THE REST OF THE RUN IN ONE GO.
+                LD      HL, (CLIPRD)
+                LD      A, (HL)
+                CP      #09
+                JR      NZ, .PSTSCHR
+                LD      A, ' '
+.PSTSCHR        CALL    EDINSCHR
+                CALL    PSTADV
+                JP      .PSTLP
+
+.PSTDONE        XOR     A
+                LD      (RNDHOLD), A
+                CALL    SETCURY         ; CURY = DOCLINE - TOPLINE, ALWAYS
+
+                ; DID THE VIEWPORT MOVE? THEN EVERY ROW SHOWS SOMETHING ELSE
+                LD      HL, (TOPLINE)
+                LD      DE, (PSTTOP)
+                OR      A
+                SBC     HL, DE
+                JR      NZ, .PSTALL
+
+                ; HOW MANY LINES APPEARED?
+                LD      HL, (TOTLINES)
+                LD      DE, (PSTTOT)
+                OR      A
+                SBC     HL, DE
+                LD      A, H
+                OR      A
+                JR      NZ, .PSTALL     ; MORE THAN 255: NOT WORTH BEING CLEVER
+                LD      A, L
+                OR      A
+                JR      NZ, .PSTMANY
+
+                ; NOTHING MOVED: EXACTLY ONE ROW CHANGED. THE LINE NUMBERS AND
+                ; THE SCROLLBAR THUMB CANNOT HAVE MOVED EITHER.
+                LD      A, (PSTROW)
+                INC     A
+                LD      B, A
+                CALL    RENDEROW
+                JP      DRWSTAT
+
+.PSTMANY        ; L = LINES ADDED. THE UNTOUCHED TAIL OF THE SCREEN SLIDES DOWN
+                ; BY THAT MANY ROWS IN ONE BLIT, THEN THE NEW ROWS ARE PAINTED.
+                LD      A, (PSTROW)
+                INC     A               ; A = FIRST ROW THAT CHANGED (1..24)
+                LD      B, A
+                LD      C, L            ; C = ROWS ADDED
+                ADD     A, C            ; A = LAST ROW TO PAINT
+                CP      TXRLAST
+                JR      NC, .PSTTAIL    ; REACHES THE BOTTOM: NOTHING SURVIVES
+
+                PUSH    AF              ; SAVE THE LAST ROW TO PAINT
+                INC     B               ; FIRST ROW THAT ONLY MOVES DOWN
+                CALL    SHIFTDNN
+                POP     AF
+                LD      C, A
+                LD      A, (PSTROW)
+                INC     A
+                LD      B, A
+                JR      .PSTPLP
+
+.PSTTAIL        LD      C, TXRLAST
+                LD      A, (PSTROW)
+                INC     A
+                LD      B, A
+
+.PSTPLP         PUSH    BC
+                CALL    RENDEROW
+                POP     BC
+                LD      A, B
+                CP      C
+                JR      NC, .PSTBARS
+                INC     B
+                JR      .PSTPLP
+
+.PSTALL         CALL    REDRAW
+
+.PSTBARS        CALL    DRWGUT
+                CALL    DRWSCRL
+                JP      DRWSTAT
+
+
+; --- PSTOK                     ----------------------------------------
+
+
+; - PSTOK ------------------------------
+; - IS THIS CLIPBOARD BYTE ONE THE EDITOR CAN INSERT?
+; - TAB COUNTS: WBINSN AND THE SLOW PATH BOTH TURN IT INTO A SPACE.
+; - IN:  A = BYTE
+; - OUT: CY = 1  INSERTABLE
+; - CLOBBERS: F
+; -
+
+PSTOK           CP      #09
+                JR      Z, .POYES       ; TAB
+                CP      #20
+                JR      C, .PONO        ; CONTROL CODE
+                CP      #7F
+                JR      Z, .PONO        ; DEL
+                CP      #FF
+                JR      Z, .PONO        ; SENTINEL
+.POYES          SCF
+                RET
+
+.PONO           OR      A               ; CY = 0
+                RET
+
+
+; --- PSTADV                    ----------------------------------------
+
+
+; - PSTADV -----------------------------
+; - STEP THE CLIPBOARD READ CURSOR ON BY ONE BYTE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: HL
+; -
+
+PSTADV          LD      HL, (CLIPRD)
                 INC     HL
                 LD      (CLIPRD), HL
                 LD      HL, (CPYCNT)
                 DEC     HL
                 LD      (CPYCNT), HL
-                JR      .PSTLP
+                RET
 
-.PSTNOCR        ; 2. CHECK IF LF (#0A)
-                CP      #0A
-                JR      NZ, .PSTNOLF
+
+; --- PSTNL                     ----------------------------------------
+
+
+; - PSTNL ------------------------------
+; - BREAK THE LINE DURING A PASTE
+; - EDNWLIN REFUSES SILENTLY WHEN THE DIRECTORY IS FULL OR THE MAPPER HAS
+; - NOTHING LEFT, SO CHECK THE LINE COUNT AND STOP THE PASTE RATHER THAN
+; - PILING THE REST OF THE CLIPBOARD ONTO ONE LINE.
+; - IN:  NONE
+; - OUT: CY = 1  THE BREAK DID NOT HAPPEN
+; - CLOBBERS: ALL
+; -
+
+PSTNL           LD      HL, (TOTLINES)
+                PUSH    HL
                 CALL    EDNWLIN
-                JR      .PSTLP
+                POP     DE
+                LD      HL, (TOTLINES)
+                LD      A, H
+                CP      D
+                JR      NZ, .PNOK
+                LD      A, L
+                CP      E
+                JR      NZ, .PNOK
+                SCF                     ; UNCHANGED: REFUSED
+                RET
 
-.PSTNOLF        ; 3. CHECK IF TAB (#09)
-                CP      #09
-                JR      NZ, .PSTCHAR
-                LD      A, ' '
-
-.PSTCHAR        ; 4. PRINTABLE CHARACTER (#20..#FE)
-                CP      #20
-                JR      C, .PSTLP       ; IGNORE NON-PRINTABLE CONTROL CODES
-                CP      #7F
-                JR      Z, .PSTLP       ; IGNORE DEL
-                CP      #FF
-                JR      Z, .PSTLP       ; IGNORE SENTINEL
-                CALL    EDINSCHR
-                JR      .PSTLP
-
-.PSTDONE        CALL    DRWSCRL
-                CALL    DRWSTAT
+.PNOK           OR      A               ; CY = 0
                 RET
 
 
