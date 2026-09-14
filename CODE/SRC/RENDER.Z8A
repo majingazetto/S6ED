@@ -20,138 +20,413 @@ REDRAW          LD      B, TXRFIRST
                 RET
 
 
-; --- RENDEROW                  ----------------------------------------
+; --- ROW PRIMITIVES            ----------------------------------------
 
-; - RENDEROW ---------
-; - RENDER A SINGLE ROW (1-24) TO VRAM
-; - B: ROW NUMBER (SCREEN SPACE)
+
+; - ROWSET -----------------------------
+; - PRESET THE COMMAND BLOCK FOR ONE TEXT ROW: DY = ROW * 8, NY = 8, NX = 6,
+; - ARG = 0. THE COMMAND ENGINE REWRITES SX, SY, DX AND DY AS IT RUNS BUT
+; - LEAVES NX, NY AND ARG ALONE (V9938 GUIDE §4.6), SO THE CELL PAINTERS
+; - BELOW ONLY REFRESH THOSE.
+; - IN:  B = SCREEN ROW (1..24)
+; - OUT: NONE
+; - CLOBBERS: AF, HL
 ; -
 
-RENDEROW        PUSH    BC
-                
-                ; 1. CALC DOC LINE: HL = TOPLINE + B - 1
-                LD      HL, (TOPLINE)
-                LD      A, B
-                SUB     TXRFIRST
-                LD      E, A
-                LD      D, 0
-                ADD     HL, DE
-                
-                ; CHECK IF HL < TOTLINES
-                LD      DE, (TOTLINES)
-                CALL    CMPHLDE
-                JR      C, .VALID
-                
-                ; IF NOT VALID (BEYOND EOF), CLEAR ROW
-                CALL    CLRROW
-                POP     BC
-                RET
-
-.VALID          CALL    LINEREAD        ; LOAD RECORD INTO WORKBUF
-                CALL    SCANMKUP        ; DYNAMICALLY HIGHLIGHT MARKUP ON LINE
-                POP     BC
-                PUSH    BC
-
-                ; 2. CALC SCREEN DY (ROW * 8)
-                LD      A, B
+ROWSET          LD      A, B
                 ADD     A, A
                 ADD     A, A
                 ADD     A, A
                 LD      L, A
                 LD      H, 0
                 LD      (VDP_DY), HL
+                LD      HL, CELLH
+                LD      (VDP_NY), HL
+                LD      HL, CELLW
+                LD      (VDP_NX), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                RET
 
-                ; 3. RENDER COLS 0-79
-                LD      C, 0            ; COL COUNTER (0..79)
-.COLLOOP        PUSH    BC              ; PRESERVE B=ROW, C=COL
-                
-                ; 4. CALC SCREEN DX (GUTL_PX + COL * 6)
-                LD      A, C
-                LD      L, A
-                LD      H, 0
-                ADD     HL, HL          ; * 2
-                LD      D, H
-                LD      E, L
-                ADD     HL, HL          ; * 4
-                ADD     HL, DE          ; * 6
-                LD      DE, GUTL_PX
-                ADD     HL, DE
-                LD      (VDP_DX), HL
 
-                ; 5. GET CHAR AND ATTR FROM WORKBUF
-                LD      E, C
-                LD      D, 0
-                LD      HL, WORKBUF + 1
-                ADD     HL, DE
-                LD      A, (HL)         ; A = CHARCODE
-                PUSH    AF
+; - CELLGLY ----------------------------
+; - PAINT ONE GLYPH CELL WITH LMMM FROM THE FONT SHEET OF ITS WEIGHT:
+; - SX = (CHAR AND 31) * 8, SY = WEIGHT BASE + (CHAR SHR 5) * 8.
+; - IN:  HL = POINTER TO THE CHARACTER IN WORKBUF (ATTRIBUTE AT HL + 80)
+; -      DE = DX  (ROW INVARIANTS SET, SEE ROWSET; NX MUST BE 6)
+; - OUT: NONE
+; - CLOBBERS: AF, DE
+; -
 
-                ; GET ATTRIBUTE & VARIANT BASE SY
+CELLGLY         PUSH    BC
+                PUSH    HL
+                LD      (VDP_DX), DE
+                LD      C, (HL)         ; C = CHAR
                 LD      DE, TEXTCOLS
-                ADD     HL, DE          ; HL = WORKBUF + 1 + TEXTCOLS + C
-                LD      A, (HL)
+                ADD     HL, DE
+                LD      A, (HL)         ; ATTRIBUTE
                 AND     ATRFMSK         ; 0=NORM, 1=BOLD, 2=ITAL, 3=BI
+                ADD     A, A
                 LD      L, A
                 LD      H, 0
-                ADD     HL, HL          ; * 2
-                LD      DE, .SYTBL
+                LD      DE, SYTBL
                 ADD     HL, DE
                 LD      E, (HL)
                 INC     HL
-                LD      D, (HL)         ; DE = BASE SY (256, 320, 384, 448)
-
-                ; 6. CALC FONT SX/SY
-                ; SX = (CHAR & 31) * 8
-                POP     AF              ; RESTORE CHARCODE
-                PUSH    AF
-                AND     %00011111       ; CHAR & 31
+                LD      D, (HL)         ; DE = WEIGHT BASE SY
+                LD      A, C
+                AND     %00011111
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; (CHAR AND 31) * 8 FITS IN A
                 LD      L, A
                 LD      H, 0
-                ADD     HL, HL          ; * 2
-                ADD     HL, HL          ; * 4
-                ADD     HL, HL          ; * 8
                 LD      (VDP_SX), HL
-
-                ; SY = BASE_SY + (CHAR >> 5) * 8
-                POP     AF
-                SRL     A
-                SRL     A
-                SRL     A
-                SRL     A
-                SRL     A               ; CHAR >> 5 (0..7)
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A            ; * 8
+                LD      A, C
+                AND     %11100000
+                RRCA
+                RRCA                    ; (CHAR SHR 5) * 8: LOW BITS ARE CLEAR
                 LD      L, A
                 LD      H, 0
-                ADD     HL, DE          ; + BASE SY
+                ADD     HL, DE
                 LD      (VDP_SY), HL
-
-                ; 7. ISSUE LMMM
-                LD      HL, 6           ; NX = 6 DOTS
-                LD      (VDP_NX), HL
-                LD      HL, 8           ; NY = 8 DOTS (16-BIT)
-                LD      (VDP_NY), HL
-                XOR     A
-                LD      (VDP_ARG), A
-                
                 LD      HL, VDPCMBLK
                 LD      A, VDP_LMMM | VDP_IMP
-                CALL    LMMM
-
-                POP     BC              ; RESTORE B=ROW, C=COL
-                INC     C
-                LD      A, C
-                CP      TEXTCOLS        ; 80
-                JR      NZ, .COLLOOP
-                
+                CALL    LMMM            ; CLOBBERS BC, DE
+                POP     HL
                 POP     BC
                 RET
 
-.SYTBL          DEFW    FNORM_SY        ; 256 (NORMAL)
+SYTBL           DEFW    FNORM_SY        ; 256 (NORMAL)
                 DEFW    FBOLD_SY        ; 320 (BOLD)
                 DEFW    FITAL_SY        ; 384 (ITALIC)
                 DEFW    FBI_SY          ; 448 (BOLD+ITALIC)
+
+
+; - CELLBLK ----------------------------
+; - PAINT ONE BLANK CELL: 6 X 8 DOTS OF BACKGROUND, DOT PRECISE, SO IT IS
+; - SAFE AT ANY COLUMN AND NEXT TO CELLS THAT ARE NOT REPAINTED.
+; - IN:  DE = DX  (ROW INVARIANTS SET; NX MUST BE 6)
+; - OUT: NONE
+; - CLOBBERS: AF, DE
+; -
+
+CELLBLK         PUSH    BC
+                PUSH    HL
+                LD      (VDP_DX), DE
+                LD      A, COL_BG
+                LD      (VDP_CLR), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+                POP     HL
+                POP     BC
+                RET
+
+
+; --- RENDEROW                  ----------------------------------------
+
+
+; - RENDEROW ---------------------------
+; - RENDER A SINGLE ROW (1-24) TO VRAM
+; - IN:  B = SCREEN ROW (1..24)
+; - OUT: NONE. WORKBUF HOLDS THE LINE AS PAINTED (SCANNED ATTRIBUTES).
+; - CLOBBERS: AF, DE, HL (BC PRESERVED)
+; -
+; - ONE LMMM PER GLYPH, BUT BLANKS GO IN RUNS: A RUN OF SPACES, AND THE TAIL
+; - FROM LEN TO COLUMN 80, IS ONE HMMV INSTEAD OF ONE LMMM PER CELL. A ROW
+; - COSTS WHAT ITS VDP COMMANDS COST, NOT ITS PIXELS (INFORME_OPTIMIZACION
+; - §2), SO A 40-CHARACTER LINE IS HALF THE PRICE AND AN INDENTED ONE LESS.
+; -
+; - HMMV WORKS ON BYTES, 4 DOTS IN G5. EVEN COLUMNS START ON A BYTE BOUNDARY
+; - (TXORG_X = 16, CELL = 6 PX) AND ODD ONES DO NOT, SO A RUN THAT STARTS ON
+; - AN ODD COLUMN PAINTS ITS FIRST CELL WITH LMMV AND FILLS FROM THE NEXT.
+; - NX IS ROUNDED UP TO A WHOLE BYTE: THE 0-2 SPARE DOTS LAND ON THE CELL
+; - AFTER THE RUN, WHICH IS PAINTED NEXT, OR ON THE BLANK RIGHT MARGIN.
+; -
+; - CLEARS PREVROW: WHATEVER RENDIFF HAD CACHED MAY NO LONGER BE ON SCREEN.
+; -
+
+RENDEROW        PUSH    BC
+                XOR     A
+                LD      (PREVROW), A
+
+                ; 1. DOC LINE = TOPLINE + B - 1; BEYOND EOF THE ROW IS BLANK
+                LD      HL, (TOPLINE)
+                LD      A, B
+                SUB     TXRFIRST
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JR      C, .VALID
+                CALL    CLRROW
+                POP     BC
+                RET
+
+.VALID          CALL    LINEREAD        ; LOAD RECORD INTO WORKBUF
+                CALL    SCANMKUP        ; SET MARKUP ATTRIBUTES ON THE LINE
+                POP     BC
+                PUSH    BC
+                CALL    ROWSET
+
+                ; 2. WALK THE COLUMNS. HL = TEXT, DE = DX, C = COLUMN, B = LEN
+                LD      A, (WORKBUF)
+                LD      B, A
+                LD      C, 0
+                LD      HL, WORKBUF + 1
+                LD      DE, TXORG_X
+
+.CELL           LD      A, C
+                CP      TEXTCOLS
+                JP      Z, .DONE
+                CP      B
+                JP      NC, .BLANK      ; PAST LEN: THE TAIL IS ONE FILL
+                LD      A, (HL)
+                CP      ' '
+                JP      Z, .BLANK
+
+                ; 3. GLYPH
+                CALL    CELLGLY
+                LD      DE, (VDP_DX)
+                INC     HL
+                INC     C
+                LD      A, E
+                ADD     A, CELLW
+                LD      E, A
+                JP      NC, .CELL
+                INC     D
+                JP      .CELL
+
+.BLANK          ; 4. RUN OF BLANKS. END = FIRST NON-SPACE BEFORE LEN, OR 80 WHEN THE
+                ; RUN REACHES LEN: TRAILING SPACES AND THE TAIL MERGE INTO ONE FILL.
+                PUSH    DE              ; DX OF COLUMN C
+                LD      D, C
+.SCAN           LD      A, D
+                CP      B
+                JR      NC, .TOEND
+                LD      A, (HL)
+                CP      ' '
+                JR      NZ, .SCANEND
+                INC     HL
+                INC     D
+                JR      .SCAN
+.TOEND          LD      D, TEXTCOLS
+.SCANEND        LD      A, D
+                LD      (RUNEND), A
+                POP     DE
+                PUSH    HL              ; TEXT POINTER AT THE END OF THE RUN
+
+                ; ODD COLUMN: THE FIRST CELL IS NOT BYTE ALIGNED, PAINT IT ALONE
+                LD      A, C
+                RRA
+                JR      NC, .EVEN
+                CALL    CELLBLK
+                LD      DE, (VDP_DX)
+                LD      A, E
+                ADD     A, CELLW
+                LD      E, A
+                JR      NC, .ODDNC
+                INC     D
+.ODDNC          INC     C
+                LD      A, (RUNEND)
+                CP      C
+                JR      Z, .RUNDONE     ; THE RUN WAS THAT ONE CELL
+
+.EVEN           ; HMMV FROM COLUMN C TO END: NX = CELLS * 6, ROUNDED UP TO 4 DOTS
+                LD      (VDP_DX), DE
+                LD      A, (RUNEND)
+                SUB     C
+                LD      L, A
+                LD      H, 0
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL
+                ADD     HL, DE          ; * 3
+                ADD     HL, HL          ; * 6
+                LD      DE, 3
+                ADD     HL, DE
+                LD      A, L
+                AND     %11111100
+                LD      L, A
+                LD      (VDP_NX), HL
+                LD      A, CLR_BG
+                LD      (VDP_CLR), A
+                PUSH    BC
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+                POP     BC
+                LD      HL, CELLW
+                LD      (VDP_NX), HL    ; BACK TO THE GLYPH WIDTH
+
+.RUNDONE        ; C = END, DX = TXORG_X + END * 6
+                LD      A, (RUNEND)
+                LD      C, A
+                LD      L, A
+                LD      H, 0
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, DE          ; * 5
+                ADD     HL, DE          ; * 6
+                LD      DE, TXORG_X
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DX
+                POP     HL              ; TEXT POINTER AT END
+                JP      .CELL
+
+.DONE           POP     BC
+                RET
+
+
+; --- RENDIFF                   ----------------------------------------
+
+
+; - RENDIFF ----------------------------
+; - RE-RENDER ONE ROW, PAINTING ONLY THE CELLS THAT CHANGED
+; - IN:  B = SCREEN ROW (1..24)
+; - OUT: NONE
+; - CLOBBERS: AF, DE, HL (BC PRESERVED)
+; -
+; - KEEPS THE LAST ROW IT PAINTED (PREVBUF: LENGTH, TEXT AND SCANNED
+; - ATTRIBUTES; PREVROW / PREVLIN SAY WHERE) AND COMPARES THE NEW RENDERED
+; - STATE CELL BY CELL. A CELL IS REPAINTED WHEN ITS CHARACTER CHANGED, OR
+; - WHEN IT IS NOT BLANK AND ITS WEIGHT CHANGED; PAST LEN A CELL IS A SPACE.
+; - A MISS -- ANOTHER ROW, ANOTHER LINE, OR ANYTHING PAINTED THROUGH
+; - RENDEROW SINCE, WHICH CLEARS PREVROW -- FALLS BACK TO RENDEROW AND FILLS
+; - THE CACHE FROM WHAT IT PAINTED. TYPING AT THE END OF A LINE IS THEREBY
+; - ONE COMMAND INSTEAD OF EIGHTY. BLANK CELLS ARE PAINTED DOT PRECISE
+; - (CELLBLK), NEVER WITH HMMV: THE NEIGHBOURS ARE NOT REPAINTED HERE.
+; -
+
+RENDIFF         PUSH    BC
+
+                ; DOC LINE = TOPLINE + B - 1; MUST EXIST AND MATCH THE CACHE
+                LD      HL, (TOPLINE)
+                LD      A, B
+                SUB     TXRFIRST
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JP      NC, .MISS       ; BEYOND EOF: RENDEROW CLEARS IT
+                LD      A, (PREVROW)
+                CP      B
+                JP      NZ, .MISS
+                LD      DE, (PREVLIN)
+                CALL    CMPHLDE
+                JP      NZ, .MISS
+
+                ; HIT: RENDER THE LINE INTO WORKBUF AND DIFF IT AGAINST PREVBUF
+                CALL    LINEREAD
+                CALL    SCANMKUP
+                POP     BC
+                PUSH    BC
+                CALL    ROWSET
+                LD      HL, WORKBUF + 1 ; NEW TEXT
+                LD      DE, PREVBUF + 1 ; OLD TEXT
+                LD      C, 0            ; COLUMN
+
+.DLOOP          LD      A, C
+                CP      TEXTCOLS
+                JR      Z, .DDONE
+
+                ; B = NEW CHARACTER, A SPACE PAST THE NEW LENGTH
+                LD      B, ' '
+                LD      A, (WORKBUF)
+                CP      C
+                JR      C, .NEWB
+                JR      Z, .NEWB
+                LD      B, (HL)
+.NEWB           ; A = OLD CHARACTER, A SPACE PAST THE OLD LENGTH
+                LD      A, (PREVBUF)
+                CP      C
+                LD      A, ' '
+                JR      C, .OLDB
+                JR      Z, .OLDB
+                LD      A, (DE)
+.OLDB           CP      B
+                JR      NZ, .PAINT      ; CHARACTER CHANGED
+                LD      A, B
+                CP      ' '
+                JR      Z, .NEXT        ; BLANK IN BOTH: NOTHING TO SEE
+
+                ; SAME GLYPH: REPAINT ONLY IF THE WEIGHT CHANGED
+                PUSH    BC
+                PUSH    DE
+                PUSH    HL
+                LD      BC, TEXTCOLS
+                ADD     HL, BC          ; NEW ATTRIBUTE
+                EX      DE, HL
+                ADD     HL, BC          ; OLD ATTRIBUTE
+                LD      A, (DE)
+                XOR     (HL)
+                AND     ATRFMSK
+                POP     HL
+                POP     DE
+                POP     BC
+                JR      Z, .NEXT
+
+.PAINT          ; DX = TXORG_X + C * 6, THEN GLYPH OR BLANK
+                PUSH    DE
+                PUSH    HL
+                LD      L, C
+                LD      H, 0
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL
+                ADD     HL, DE          ; * 3
+                ADD     HL, HL          ; * 6
+                LD      DE, TXORG_X
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DX
+                POP     HL
+                LD      A, B
+                CP      ' '
+                JR      Z, .PBLANK
+                CALL    CELLGLY
+                JR      .PDONE
+.PBLANK         CALL    CELLBLK
+.PDONE          POP     DE
+
+.NEXT           INC     HL
+                INC     DE
+                INC     C
+                JR      .DLOOP
+
+.DDONE          LD      HL, WORKBUF     ; THE CACHE IS NOW WHAT IS ON SCREEN
+                LD      DE, PREVBUF
+                LD      BC, WORKSIZ
+                LDIR
+                POP     BC
+                RET
+
+.MISS           POP     BC
+                PUSH    BC
+                CALL    RENDEROW        ; PAINTS THE ROW; WORKBUF = LINE AS PAINTED
+                POP     BC
+                PUSH    BC
+                LD      HL, (TOPLINE)
+                LD      A, B
+                SUB     TXRFIRST
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JR      NC, .NOCACHE    ; A CLEARED ROW BEYOND EOF: NOTHING TO CACHE
+                LD      (PREVLIN), HL
+                LD      A, B
+                LD      (PREVROW), A
+                LD      HL, WORKBUF
+                LD      DE, PREVBUF
+                LD      BC, WORKSIZ
+                LDIR
+.NOCACHE        POP     BC
+                RET
 
 
 ; --- CLRROW                    ----------------------------------------
@@ -176,7 +451,7 @@ CLRROW          LD      A, B
                 LD      (VDP_SX), HL
                 LD      (VDP_SY), HL
                 
-                LD      HL, GUTL_PX
+                LD      HL, TXORG_X
                 LD      (VDP_DX), HL
                 
                 LD      HL, TXAREAPX

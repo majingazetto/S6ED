@@ -140,6 +140,23 @@ HMMM            PUSH    AF
                 RET
 
 
+; - YMMM -------------
+; - COPY VRAM → VRAM, Y DIRECTION ONLY, FROM DX TO THE SCREEN EDGE
+; - HL: POINTER TO CMD BLOCK (DX, SY, DY, NY, ARG USED; SX AND NX IGNORED)
+; -
+
+YMMM            PUSH    AF
+                PUSH    HL
+                LD      DE, 14
+                ADD     HL, DE
+                LD      A, VDP_YMMM
+                LD      (HL), A
+                POP     HL
+                CALL    VDPCMD
+                POP     AF
+                RET
+
+
 ; - HMMC -------------
 ; - CPU → VRAM (BYTE-TRANSFER)
 ; - HL: POINTER TO CMD BLOCK

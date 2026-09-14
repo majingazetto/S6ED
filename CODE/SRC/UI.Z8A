@@ -3,35 +3,66 @@
 ;                                       ****************************************
 
 
-; --- DRWSTAT                ----------------------------------------
-
-; - DRWSTAT -------
-; - DRAW / REFRESH STATUS BAR (ROW 25)
-; - FORMAT: " LANG | INS | LN:NNNNN/NNNNN  COL:NNN | FILENAME"
-; -
-
-; --- DRWSTAT                ----------------------------------------
-
-
-; --- DRWSTAT                ----------------------------------------
+; --- DRWSTAT                   ----------------------------------------
 
 
 ; - DRWSTAT ----------------------------
-; - DRAW / REFRESH STATUS BAR (ROW 25)
+; - DRAW / REFRESH THE STATUS BAR (ROW 25)
+; - BUILDS THE TEXT (BLDSTAT) AND REPAINTS ONLY THE CELLS THAT DIFFER FROM
+; - WHAT IS ON SCREEN (STATPRV), TWO COMMANDS EACH. A CURSOR MOVE THAT
+; - CHANGES ONE DIGIT COSTS ~1 MS INSTEAD OF THE ~31 MS OF A FULL REBUILD,
+; - WHICH IS WHAT LETS MAINLOOP CALL THIS AFTER EVERY KEY.
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-DRWSTAT         LD      HL, 0
+DRWSTAT         CALL    BLDSTAT         ; STATBUF = THE TEXT THE BAR SHOULD SHOW
+                LD      A, (STATPRV)
+                OR      A
+                JR      Z, .FULL        ; NEVER PAINTED: FILL AND WRITE IT ALL
+
+                ; DIFF AGAINST STATPRV, CELL BY CELL. DE = NEW TEXT (ASCIIZ),
+                ; HL = OLD CELLS (80, SPACE PADDED), C = COLUMN, B = PAST THE END
+                LD      DE, STATBUF
+                LD      HL, STATPRV
+                LD      BC, 0
+.DLOOP          LD      A, B
+                OR      A
+                LD      A, ' '
+                JR      NZ, .HAVE       ; PAST THE TERMINATOR: SPACES
+                LD      A, (DE)
+                OR      A
+                JR      NZ, .HAVE
+                INC     B               ; THE TERMINATOR: SPACES FROM HERE ON
+                LD      A, ' '
+.HAVE           CP      (HL)
+                JR      Z, .SAME
+                LD      (HL), A         ; THE CACHE FOLLOWS THE SCREEN
+                PUSH    BC
+                PUSH    DE
+                PUSH    HL
+                CALL    STATCEL
+                POP     HL
+                POP     DE
+                POP     BC
+.SAME           INC     HL
+                INC     DE
+                INC     C
+                LD      A, C
+                CP      TEXTCOLS
+                JR      NZ, .DLOOP
+                RET
+
+.FULL           LD      HL, 0
                 LD      (VDP_SX), HL
                 LD      (VDP_SY), HL
                 LD      (VDP_DX), HL
-                LD      HL, 200         ; DY = ROW 25 * 8
+                LD      HL, STBROW * CELLH ; DY = 200
                 LD      (VDP_DY), HL
-                LD      HL, 512         ; NX
+                LD      HL, 512
                 LD      (VDP_NX), HL
-                LD      HL, 12          ; NY
+                LD      HL, 12
                 LD      (VDP_NY), HL
                 LD      A, CLR_UI
                 LD      (VDP_CLR), A
@@ -40,15 +71,69 @@ DRWSTAT         LD      HL, 0
                 LD      HL, VDPCMBLK
                 CALL    HMMV
 
-                ; FORMAT STATUS STRING IN STATBUF
-                CALL    BLDSTAT
-
-                ; PRINT STATUS TEXT
                 LD      HL, STATBUF
-                LD      DE, 6           ; DX = 6
-                LD      BC, 202         ; DY = 202
+                LD      DE, STBTX_X
+                LD      BC, STBTX_Y
                 CALL    BLTSTR
+
+                ; CACHE = STATBUF, SPACE PADDED TO 80 CELLS
+                LD      HL, STATBUF
+                LD      DE, STATPRV
+                LD      BC, TEXTCOLS * 256 ; B = 80, C = 0 (PAST THE END FLAG)
+.CLOOP          LD      A, C
+                OR      A
+                LD      A, ' '
+                JR      NZ, .CPUT
+                LD      A, (HL)
+                OR      A
+                JR      NZ, .CPUT
+                INC     C
+                LD      A, ' '
+.CPUT           LD      (DE), A
+                INC     HL
+                INC     DE
+                DJNZ    .CLOOP
                 RET
+
+
+; - STATCEL ----------------------------
+; - REPAINT ONE STATUS BAR CELL: UI BACKGROUND, THEN THE GLYPH ON TOP
+; - IN:  A = CHARACTER, C = COLUMN (0..79)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+STATCEL         PUSH    AF
+                LD      L, C
+                LD      H, 0
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL
+                ADD     HL, DE
+                ADD     HL, HL          ; COLUMN * 6
+                LD      DE, STBTX_X
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                PUSH    HL
+                LD      HL, STBTX_Y
+                LD      (VDP_DY), HL
+                LD      HL, CELLW
+                LD      (VDP_NX), HL
+                LD      HL, CELLH
+                LD      (VDP_NY), HL
+                LD      A, COL_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+                POP     HL              ; DX
+                POP     AF
+                CP      ' '
+                RET     Z
+                LD      DE, STBTX_Y
+                JP      BLTCHTR         ; A = CHAR, HL = DX, DE = DY
 
 
 ; - BLDSTAT ----------------------------
@@ -110,39 +195,37 @@ BLDSTAT         LD      DE, STATBUF
 .DONEINS        ; 4. TYPING STYLE INDICATOR
                 LD      A, (TYPATTR)
                 AND     ATRFMSK
-                JR      Z, .NOTSTYL
+                LD      HL, .STRNOST
+                JR      Z, .PUTSTYL
                 CP      1
-                JR      NZ, .NOTB
                 LD      HL, .STRBD
-                CALL    .CPYSTR
-                JR      .NOTSTYL
-.NOTB           CP      2
-                JR      NZ, .NOTIT
+                JR      Z, .PUTSTYL
+                CP      2
                 LD      HL, .STRIT
-                CALL    .CPYSTR
-                JR      .NOTSTYL
-.NOTIT          LD      HL, .STRBI
-                CALL    .CPYSTR
+                JR      Z, .PUTSTYL
+                LD      HL, .STRBI
+.PUTSTYL        CALL    .CPYSTR
 
-.NOTSTYL        ; 5. MARKUP MODE INDICATOR
+                ; 5. MARKUP MODE INDICATOR
                 LD      A, (MKUPMD)
                 OR      A
-                JR      Z, .NOTMKUP
+                LD      HL, .STRNOMK
+                JR      Z, .PUTMKUP
                 CP      MKUP_MD
-                JR      NZ, .ISLIT
                 LD      HL, .STRMD
-                CALL    .CPYSTR
-                JR      .NOTMKUP
-.ISLIT          LD      HL, .STRLIT
-                CALL    .CPYSTR
+                JR      Z, .PUTMKUP
+                LD      HL, .STRLIT
+.PUTMKUP        CALL    .CPYSTR
 
-.NOTMKUP        ; 6. SELECTION INDICATOR
+                ; 6. SELECTION INDICATOR
                 LD      A, (SELACT)
                 OR      A
-                JR      Z, .NOTSEL
+                LD      HL, .STRNOSL
+                JR      Z, .PUTSEL
                 LD      HL, .STRSEL
-                CALL    .CPYSTR
-.NOTSEL         ; 7. MODIFIED INDICATOR
+.PUTSEL         CALL    .CPYSTR
+
+                ; 7. MODIFIED INDICATOR
                 LD      A, (MODIFIED)
                 OR      A
                 JR      Z, .NOTMOD
@@ -159,27 +242,30 @@ BLDSTAT         LD      DE, STATBUF
                 LD      (DE), A
                 INC     DE
 
-.DONEMOD        ; 6. "Ln " + (DOCLINE + 1)
+.DONEMOD        ; 8. "Ln " LINE/TOTAL, 5 DIGITS EACH, " Col " COLUMN, 3 DIGITS.
+                ; EVERY FIELD OF THE BAR HAS A FIXED WIDTH SO THAT A FLAG THAT
+                ; APPEARS OR A NUMBER THAT GROWS A DIGIT DOES NOT SHIFT WHAT
+                ; FOLLOWS: DRWSTAT REPAINTS ONLY THE CELLS THAT CHANGE.
                 LD      HL, .STRLN
                 CALL    .CPYSTR
                 LD      HL, (DOCLINE)
                 INC     HL
-                PUSH    DE
-                CALL    B2D16
-                EX      DE, HL          ; HL = STRING
-                POP     DE
-                CALL    .CPYSTR
-
-                ; " Col " + (CURX + 1)
+                LD      B, 5
+                CALL    .CPYNUM
+                LD      A, '/'
+                LD      (DE), A
+                INC     DE
+                LD      HL, (TOTLINES)
+                LD      B, 5
+                CALL    .CPYNUM
                 LD      HL, .STRCOL
                 CALL    .CPYSTR
                 LD      A, (CURX)
                 INC     A
-                PUSH    DE
-                CALL    B2D8
-                EX      DE, HL
-                POP     DE
-                CALL    .CPYSTR
+                LD      L, A
+                LD      H, 0
+                LD      B, 3
+                CALL    .CPYNUM
 
                 ; " | "
                 LD      HL, .STRSEP
@@ -202,6 +288,29 @@ BLDSTAT         LD      DE, STATBUF
                 INC     DE
                 JR      .CPYSTR
 
+                ; HL = VALUE, B = WIDTH: APPEND THE LOW B DIGITS, ZERO PADDED.
+                ; B2D16 RIGHT-ALIGNS AT B2DEND WITH SPACES FOR LEADING ZEROS.
+.CPYNUM         PUSH    DE
+                PUSH    BC
+                CALL    B2D16
+                POP     BC
+                POP     DE
+                LD      HL, B2DEND
+                LD      A, L
+                SUB     B
+                LD      L, A
+                JR      NC, .CPYNUM2
+                DEC     H
+.CPYNUM2        LD      A, (HL)
+                CP      ' '
+                JR      NZ, .CPYNUM3
+                LD      A, '0'
+.CPYNUM3        LD      (DE), A
+                INC     HL
+                INC     DE
+                DJNZ    .CPYNUM2
+                RET
+
 .STRSTD         DEFM    "[STD] ", 0
 .STRWS          DEFM    "[WS]  ", 0
 .STREMC         DEFM    "[EMC] ", 0
@@ -211,11 +320,14 @@ BLDSTAT         LD      DE, STATBUF
 .STRWTXT        DEFM    " [TXT]", 0
 .STRINS         DEFM    " [INS] ", 0
 .STROVR         DEFM    " [OVR] ", 0
-.STRBD          DEFM    "[B] ", 0
-.STRIT          DEFM    "[I] ", 0
+.STRNOST        DEFM    "     ", 0
+.STRBD          DEFM    "[B]  ", 0
+.STRIT          DEFM    "[I]  ", 0
 .STRBI          DEFM    "[BI] ", 0
-.STRMD          DEFM    "[MD] ", 0
+.STRNOMK        DEFM    "      ", 0
+.STRMD          DEFM    "[MD]  ", 0
 .STRLIT         DEFM    "[LIT] ", 0
+.STRNOSL        DEFM    "      ", 0
 .STRSEL         DEFM    "[SEL] ", 0
 .STRLN          DEFM    "Ln ", 0
 .STRCOL         DEFM    " Col ", 0
@@ -258,243 +370,7 @@ DRWMENU         LD      HL, 0
 MNUTEXT         DEFM    "S6ED v0.1 | [F1] Help  [F2] Save  [ESC] Quit", 0
 
 
-; --- DRWGUT                ----------------------------------------
-
-
-; - DRWGUT -----------------------------
-; - REDRAW LEFT AND RIGHT GUTTERS
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-
-DRWGUT          ; LEFT GUTTER (LINE NUMBERS BACKGROUND)
-                LD      HL, 0
-                LD      (VDP_SX), HL
-                LD      (VDP_SY), HL
-                LD      (VDP_DX), HL    ; DX = 0
-                LD      HL, 8
-                LD      (VDP_DY), HL    ; DY = 8 (SKIP MENU ROW)
-                LD      HL, GUTL_PX     ; NX = 24
-                LD      (VDP_NX), HL
-                LD      HL, 192         ; NY = 24 ROWS * 8 = 192
-                LD      (VDP_NY), HL
-                LD      A, CLR_UI
-                LD      (VDP_CLR), A
-                XOR     A
-                LD      (VDP_ARG), A
-                LD      HL, VDPCMBLK
-                CALL    HMMV
-
-                ; RIGHT GUTTER (SCROLLBAR TRACK)
-                LD      HL, 512 - GUTR_PX ; DX = 504
-                LD      (VDP_DX), HL
-                LD      HL, 8
-                LD      (VDP_DY), HL    ; DY = 8
-                LD      HL, GUTR_PX     ; NX = 8
-                LD      (VDP_NX), HL
-                LD      HL, 192         ; NY = 192
-                LD      (VDP_NY), HL
-                LD      A, CLR_UI
-                LD      (VDP_CLR), A
-                XOR     A
-                LD      (VDP_ARG), A
-                LD      HL, VDPCMBLK
-                CALL    HMMV
-
-                CALL    DRWLNUM
-
-                ; THE FILL ABOVE WIPED THE THUMB, SO THE CACHE IS STALE
-                XOR     A
-                LD      (THMBY), A
-                CALL    DRWSCRL
-                RET
-
-
-
-; --- DRWLNUM               ----------------------------------------
-
-
-; - DRWLNUM ----------------------------
-; - DRAW LINE NUMBERS IN LEFT GUTTER
-; - IN:  NONE (USES TOPLINE, TOTLINES)
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-
-DRWLNUM         LD      B, TXRFIRST     ; ROW 1
-.LNUMLP         PUSH    BC
-                CALL    DRWLNRW
-                POP     BC
-                INC     B
-                LD      A, B
-                CP      TXRLAST + 1
-                JR      NZ, .LNUMLP
-                RET
-
-
-; - DRWLN1 -----------------------------
-; - CLEAR ONE GUTTER CELL AND DRAW ITS LINE NUMBER
-; - IN:  B = SCREEN ROW (1..24)
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-; - THE SCROLL PATH NEEDS THIS ONE AND ONLY THIS ONE: THE SCROLL HMMM CARRIES
-; - THE OTHER 23 NUMBERS WITH IT. THE CELL HAS TO BE CLEARED FIRST BECAUSE
-; - BLTCHTR BLITS TRANSPARENTLY AND WOULD OTHERWISE OVERPRINT THE OLD DIGITS.
-; - BEYOND EOF THE CLEARED CELL IS THE CORRECT RESULT, SO DRWLNRW DRAWS
-; - NOTHING AND THE CELL STAYS BLANK.
-; -
-
-DRWLN1          PUSH    BC
-                LD      A, B
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A            ; DY = ROW * 8
-                LD      L, A
-                LD      H, 0
-                LD      (VDP_DY), HL
-                LD      HL, 0
-                LD      (VDP_SX), HL
-                LD      (VDP_SY), HL
-                LD      (VDP_DX), HL    ; DX = 0
-                LD      HL, GUTL_PX     ; NX = 24
-                LD      (VDP_NX), HL
-                LD      HL, CELLH       ; NY = 8
-                LD      (VDP_NY), HL
-                LD      A, CLR_UI
-                LD      (VDP_CLR), A
-                XOR     A
-                LD      (VDP_ARG), A
-                LD      HL, VDPCMBLK
-                CALL    HMMV
-                POP     BC
-                JP      DRWLNRW         ; TAIL CALL
-
-
-; - DRWLNRW ----------------------------
-; - DRAW THE LINE NUMBER FOR ONE SCREEN ROW, WITHOUT CLEARING
-; - IN:  B = SCREEN ROW (1..24)
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-
-DRWLNRW         PUSH    BC
-                ; CALC LINE = TOPLINE + B - 1
-                LD      HL, (TOPLINE)
-                LD      A, B
-                SUB     TXRFIRST
-                LD      E, A
-                LD      D, 0
-                ADD     HL, DE          ; HL = DOCLINE (0-BASED)
-
-                LD      DE, (TOTLINES)
-                CALL    CMPHLDE
-                JR      NC, .DONE       ; BEYOND EOF: DO NOT DRAW
-
-                ; 1-BASED LINE NUMBER: HL = HL + 1
-                INC     HL
-                LD      DE, NUMBUF
-                CALL    NUM2STR4        ; FILLS NUMBUF WITH 4 CHARACTERS
-
-                ; BLIT DIGITS AT DX = 0, 6, 12, 18, DY = B * 8
-                POP     BC
-                PUSH    BC
-                LD      A, B
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A            ; B * 8
-                LD      E, A
-                LD      D, 0            ; DE = DY
-
-                LD      A, (NUMBUF + 0)
-                CP      ' '
-                JR      NZ, .F4DIG
-
-                ; 3 DIGITS OR LESS: DRAW AT DX = 0, 6, 12 LEAVING 18..23 AS BLUE MARGIN
-                LD      A, (NUMBUF + 1)
-                CP      ' '
-                JR      Z, .D2
-                LD      HL, 0
-                CALL    BLTCHTR
-.D2             LD      A, (NUMBUF + 2)
-                CP      ' '
-                JR      Z, .D3
-                LD      HL, 6
-                CALL    BLTCHTR
-.D3             LD      A, (NUMBUF + 3)
-                LD      HL, 12
-                CALL    BLTCHTR
-                JR      .DONE
-
-.F4DIG          LD      HL, 0
-                CALL    BLTCHTR
-                LD      A, (NUMBUF + 1)
-                LD      HL, 6
-                CALL    BLTCHTR
-                LD      A, (NUMBUF + 2)
-                LD      HL, 12
-                CALL    BLTCHTR
-                LD      A, (NUMBUF + 3)
-                LD      HL, 18
-                CALL    BLTCHTR
-
-.DONE           POP     BC
-                RET
-
-
-NUMBUF          DEFS    4
-
-
-; - NUM2STR4 ---------------------------
-; - CONVERT HL (0..9999) TO 4-CHAR RIGHT-ALIGNED STRING AT DE
-; - IN:  HL = NUMBER
-; -      DE = 4-BYTE BUFFER
-; - OUT: BUFFER AT DE FILLED
-; - CLOBBERS: AF, BC, DE, HL
-; -
-
-NUM2STR4        LD      BC, 1000
-                CALL    .DIVDIG
-                LD      BC, 100
-                CALL    .DIVDIG
-                LD      BC, 10
-                CALL    .DIVDIG
-                LD      A, L
-                ADD     A, '0'
-                LD      (DE), A
-                ; REPLACE LEADING '0' WITH ' ' (UP TO 3 DIGITS)
-                DEC     DE
-                DEC     DE
-                DEC     DE              ; DE -> DIGIT 0
-                LD      A, (DE)
-                CP      '0'
-                RET     NZ
-                LD      A, ' '
-                LD      (DE), A
-                INC     DE
-                LD      A, (DE)
-                CP      '0'
-                RET     NZ
-                LD      A, ' '
-                LD      (DE), A
-                INC     DE
-                LD      A, (DE)
-                CP      '0'
-                RET     NZ
-                LD      A, ' '
-                LD      (DE), A
-                RET
-
-.DIVDIG         LD      A, '0' - 1
-.SUBP           INC     A
-                OR      A
-                SBC     HL, BC
-                JR      NC, .SUBP
-                ADD     HL, BC
-                LD      (DE), A
-                INC     DE
-                RET
+; --- BLTCHTR                  ----------------------------------------
 
 
 ; - BLTCHTR ----------------------------
@@ -589,116 +465,6 @@ BLTSTR          LD      A, (HL)
                 JR      BLTSTR
 
 
-; --- DRWSCRL             ----------------------------------------
-
-
-; - SCRLPOS ----------------------------
-; - THUMB TOP Y FOR THE CURRENT VIEWPORT
-; - IN:  NONE (USES TOPLINE, TOTLINES)
-; - OUT: A = TOP Y IN PIXELS (THMTOP .. THMTOP + THMTRAV)
-; - CLOBBERS: AF, BC, DE, HL
-; -
-; - Y = THMTOP + TOPLINE * THMTRAV / (TOTLINES - SCRROWS). THE DIVISOR IS
-; - NORMALISED DOWN TO ONE BYTE FIRST, SHIFTING BOTH TERMS RIGHT TOGETHER:
-; - THAT KEEPS THMTRAV * R INSIDE 16 BITS FOR MULT12 AND KEEPS DIV16 INSIDE
-; - ITS SAFE RANGE. MEASURED COST OF THE SHIFT: AT MOST 2 PX OF THE 168 PX
-; - TRAVEL, A QUARTER OF A CHARACTER.
-; -
-
-SCRLPOS         LD      HL, (TOTLINES)
-                LD      DE, SCRROWS
-                OR      A
-                SBC     HL, DE
-                JR      Z, .TOP         ; DOCUMENT FITS EXACTLY
-                JR      C, .TOP         ; DOCUMENT IS SHORTER THAN THE VIEWPORT
-
-                EX      DE, HL          ; DE = DIVISOR
-                LD      HL, (TOPLINE)
-                CALL    CMPHLDE         ; CY IF TOPLINE < DIVISOR
-                JR      C, .NORM
-                LD      A, THMTOP + THMTRAV
-                RET                     ; AT OR PAST THE LAST PAGE: BOTTOM STOP
-
-.NORM           LD      A, D            ; NORMALISE WHILE THE DIVISOR > 255
-                OR      A
-                JR      Z, .SCALE
-                SRL     D
-                RR      E
-                SRL     H
-                RR      L
-                JR      .NORM
-
-.SCALE          PUSH    DE              ; KEEP THE DIVISOR
-                EX      DE, HL          ; DE = NUMERATOR
-                LD      A, THMTRAV
-                CALL    MULT12          ; HL = THMTRAV * NUMERATOR
-                POP     DE
-                CALL    DIV16           ; BC = QUOTIENT (0..THMTRAV)
-                LD      A, C
-                ADD     A, THMTOP
-                RET
-
-.TOP            LD      A, THMTOP
-                RET
-
-
-; - BARFILL ----------------------------
-; - FILL ONE THUMB-SIZED CELL OF THE SCROLLBAR TRACK
-; - IN:  A = TOP Y IN PIXELS
-; -      C = FILL BYTE (CLR_UI ERASES, CLR_HI PAINTS)
-; - OUT: NONE
-; - CLOBBERS: AF, BC, DE, HL
-; -
-
-BARFILL         LD      L, A
-                LD      H, 0
-                LD      (VDP_DY), HL
-                LD      HL, 0
-                LD      (VDP_SX), HL
-                LD      (VDP_SY), HL
-                LD      HL, 512 - GUTR_PX ; DX = 504
-                LD      (VDP_DX), HL
-                LD      HL, GUTR_PX     ; NX = 8
-                LD      (VDP_NX), HL
-                LD      HL, THMH        ; NY = 24
-                LD      (VDP_NY), HL
-                LD      A, C
-                LD      (VDP_CLR), A
-                XOR     A
-                LD      (VDP_ARG), A
-                LD      HL, VDPCMBLK
-                JP      HMMV            ; TAIL CALL
-
-
-; - DRWSCRL ----------------------------
-; - REFRESH THE SCROLLBAR THUMB IF IT HAS MOVED
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-; - COSTS NOTHING WHEN THE THUMB HAS NOT MOVED, WHICH IS THE COMMON CASE ON A
-; - ONE LINE SCROLL OF A LONG DOCUMENT. DRWGUT ZEROES THMBY BEFORE CALLING,
-; - BECAUSE ITS OWN GUTTER FILL ERASES THE THUMB.
-; -
-
-DRWSCRL         CALL    SCRLPOS         ; A = WANTED TOP Y
-                LD      HL, THMBY
-                CP      (HL)
-                RET     Z               ; UNCHANGED: NOTHING TO REPAINT
-
-                PUSH    AF              ; KEEP THE NEW POSITION
-                LD      A, (HL)
-                OR      A
-                JR      Z, .PAINT       ; NOTHING ON SCREEN YET
-                LD      C, CLR_UI       ; ERASE THE OLD THUMB
-                CALL    BARFILL
-
-.PAINT          POP     AF
-                LD      (THMBY), A
-                LD      C, CLR_HI
-                JP      BARFILL         ; TAIL CALL
-
-
 ; --- DRWCUR                ----------------------------------------
 
 
@@ -714,7 +480,7 @@ DRWCUR          PUSH    AF
                 PUSH    DE
                 PUSH    HL
 
-                ; DX = GUTL_PX + CURX * 6
+                ; DX = TXORG_X + CURX * 6
                 LD      A, (CURX)
                 LD      L, A
                 LD      H, 0
@@ -723,7 +489,7 @@ DRWCUR          PUSH    AF
                 LD      E, L
                 ADD     HL, HL          ; * 4
                 ADD     HL, DE          ; * 6
-                LD      DE, GUTL_PX
+                LD      DE, TXORG_X
                 ADD     HL, DE
                 LD      (VDP_DX), HL
 

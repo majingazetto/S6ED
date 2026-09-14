@@ -184,6 +184,30 @@ LINEREAD        CALL    DIRREAD         ; A=SEG, DE=OFFSET
                 RET
 
 
+; --- LINELEN                   ----------------------------------------
+
+
+; - LINELEN ----------------------------
+; - LENGTH OF A LINE WITHOUT COPYING ITS RECORD
+; - IN:  HL = LINE NUMBER (0-BASED)
+; - OUT: A = LENGTH (0..80)
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+LINELEN         CALL    DIRREAD         ; A = SEG, DE = OFFSET
+                LD      B, A
+                LD      A, (TXSEG)
+                CP      B
+                JR      Z, .SAME
+                LD      A, B
+                LD      (TXSEG), A
+                CALL    PUTP2
+.SAME           LD      HL, TXPAGE
+                ADD     HL, DE
+                LD      A, (HL)
+                RET
+
+
 ; --- LINEWRT                   ----------------------------------------
 
 ; - LINEWRT ----------

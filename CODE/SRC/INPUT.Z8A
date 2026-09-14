@@ -74,14 +74,21 @@ MAINLOOP        ; SUPPRESS BIOS KANA LOCK AND KANA LED
                 LD      IX, CHGET
                 CALL    BIOSCALL
 
-                ; FILTER OUT MSX 2-BYTE GRAPHIC SEQUENCE (#01 FOLLOWED BY CODE)
+                ; #01 IS BOTH CTRL+A AND THE HEADER OF THE MSX 2-BYTE
+                ; GRAPHIC SEQUENCE (#01 FOLLOWED BY CODE). ONLY THE PPI
+                ; TELLS THEM APART: CTRL HELD MEANS CTRL+A, ELSE DROP.
                 CP      #01
-                JR      Z, .DRPGRPH
+                JR      NZ, .DISPCH
+                CALL    READMOD         ; A = MODIFIER BITS
+                AND     MODCTRL
+                JR      Z, .DRPGRPH     ; NO CTRL: GRAPHIC HEADER
+                LD      A, #01          ; CTRL HELD: DISPATCH AS CTRL+A
 
-                ; DISPATCH KEYPRESS THROUGH ACTIVE KEYMAP AND ACTION CATALOG
+.DISPCH         ; DISPATCH KEYPRESS THROUGH ACTIVE KEYMAP AND ACTION CATALOG
                 CALL    DISPKEY
 
-.DRAWCUR        ; REDRAW CURSOR AT CURRENT POSITION & RESET BLINK
+.DRAWCUR        ; STATUS BAR FOLLOWS THE KEY (LN / COL / FLAGS), THEN THE CURSOR
+                CALL    DRWSTAT
                 CALL    DRWCUR
                 LD      A, 1
                 LD      (BLNKPH), A
@@ -96,6 +103,61 @@ MAINLOOP        ; SUPPRESS BIOS KANA LOCK AND KANA LED
                 LD      IX, CHGET
                 CALL    BIOSCALL
                 JR      .DRAWCUR
+
+
+; --- KEYRUN                    ----------------------------------------
+
+
+; - KEYRUN -----------------------------
+; - SWALLOW REPEATS OF ONE KEY WAITING IN THE BIOS KEYBOARD BUFFER
+; - A HELD CURSOR KEY QUEUES FASTER THAN A SCROLL CAN BE PAINTED, SO THE
+; - CURSOR KEPT MOVING AFTER THE KEY WAS RELEASED. THE CALLER TAKES THE
+; - QUEUED COPIES HERE AND MOVES ONCE BY THE WHOLE COUNT. ONLY AN IDENTICAL
+; - CODE IS TAKEN, AND ONLY WHILE THE MODIFIER ROW STILL READS AS IT DID WHEN
+; - THE FIRST ONE WAS DISPATCHED (MODKEYS): A KEY TYPED AFTER RELEASING
+; - SHIFT OR GRAPH IS LEFT FOR ITS OWN DISPATCH.
+; - IN:  C = KEY CODE, B = MAXIMUM TO TAKE
+; - OUT: A = NUMBER TAKEN (0..B)
+; - CLOBBERS: AF, BC, DE, HL, IX
+; -
+
+KEYRUN          LD      D, 0            ; TAKEN SO FAR
+.NEXT           LD      A, D
+                CP      B
+                JR      Z, .DONE
+
+                ; MODIFIERS STILL AS DISPATCHED?
+                LD      A, 6
+                CALL    READROW
+                CPL
+                AND     %00000111
+                LD      HL, MODKEYS
+                CP      (HL)
+                JR      NZ, .DONE
+
+                ; A KEY WAITING, AND IS IT OURS?
+                PUSH    BC
+                PUSH    DE
+                LD      IX, CHSNS
+                CALL    BIOSCALL
+                POP     DE
+                POP     BC
+                JR      Z, .DONE
+                LD      HL, (GETPNT)
+                LD      A, (HL)
+                CP      C
+                JR      NZ, .DONE
+                PUSH    BC
+                PUSH    DE
+                LD      IX, CHGET       ; TAKE IT
+                CALL    BIOSCALL
+                POP     DE
+                POP     BC
+                INC     D
+                JR      .NEXT
+
+.DONE           LD      A, D
+                RET
 
 
 ; --- CHKACNT                   ----------------------------------------

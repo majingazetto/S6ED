@@ -213,8 +213,6 @@ ACTTOP          CALL    CHKUNSEL
                 LD      (CURX), A
                 LD      (CURY), A
                 CALL    REDRAW
-                CALL    DRWGUT
-                CALL    DRWSCRL
                 RET
 
 
@@ -250,8 +248,6 @@ ACTBOT          CALL    CHKUNSEL
 .REDBOT         XOR     A
                 LD      (CURX), A
                 CALL    REDRAW
-                CALL    DRWGUT
-                CALL    DRWSCRL
                 RET
 
 
@@ -518,7 +514,13 @@ ACTDWLFT        LD      A, (CURX)
 ; -
 
 ACTPGUP         CALL    CHKUNSEL
-                LD      HL, (TOPLINE)
+                LD      B, 200
+                LD      C, CUP
+                CALL    KEYRUN          ; QUEUED REPEATS: ONE REDRAW FOR THEM ALL
+                INC     A
+                LD      C, A            ; C = PAGES
+                LD      B, 0            ; B = PAGES TURNED
+.PAGE           LD      HL, (TOPLINE)
                 LD      A, H
                 OR      L
                 JR      Z, .PGUTOP
@@ -534,16 +536,19 @@ ACTPGUP         CALL    CHKUNSEL
                 JR      NC, .PGUDOC
                 LD      HL, 0
 .PGUDOC         LD      (DOCLINE), HL
+                INC     B
+                DEC     C
+                JR      NZ, .PAGE
                 CALL    SETCURY
-                CALL    REDRAW
-                CALL    DRWGUT
-                CALL    DRWSCRL
-                RET
+                JP      REDRAW
 .PGUTOP         XOR     A
                 LD      (CURY), A
                 LD      HL, 0
                 LD      (DOCLINE), HL
-                RET
+                LD      A, B
+                OR      A
+                RET     Z               ; ALREADY ON THE FIRST PAGE: CURSOR ONLY
+                JP      REDRAW
 
 
 ; --- ACTPGDN                   ----------------------------------------
@@ -557,7 +562,12 @@ ACTPGUP         CALL    CHKUNSEL
 ; -
 
 ACTPGDN         CALL    CHKUNSEL
-                LD      HL, (TOPLINE)
+                LD      B, 200
+                LD      C, CDOWN
+                CALL    KEYRUN          ; QUEUED REPEATS: ONE REDRAW FOR THEM ALL
+                INC     A
+                LD      C, A            ; C = PAGES
+.PAGE           LD      HL, (TOPLINE)
                 LD      DE, SCRROWS
                 ADD     HL, DE
                 EX      DE, HL          ; DE = TARGET TOP
@@ -571,11 +581,17 @@ ACTPGDN         CALL    CHKUNSEL
                 LD      DE, SCRROWS
                 ADD     HL, DE
                 LD      (DOCLINE), HL
-                CALL    SETCURY
-                CALL    REDRAW
-                CALL    DRWGUT
-                CALL    DRWSCRL
-                RET
+                DEC     C
+                JR      NZ, .PAGE
+                ; THE CURSOR MAY HAVE PASSED THE LAST LINE WHILE THE TOP DID NOT
+                LD      HL, (TOTLINES)
+                DEC     HL
+                LD      DE, (DOCLINE)
+                CALL    CMPHLDE
+                JR      NC, .PGDCUR
+                LD      (DOCLINE), HL
+.PGDCUR         CALL    SETCURY
+                JP      REDRAW
 .PGDBOT         JP      ACTBOT
 
 
@@ -668,8 +684,6 @@ ACTDELLN        LD      HL, (TOTLINES)
                 XOR     A
                 LD      (CURX), A
                 CALL    REDRAW
-                CALL    DRWGUT
-                CALL    DRWSCRL
                 LD      A, #FF
                 LD      (MODIFIED), A
                 RET
@@ -942,22 +956,45 @@ SELPRE          LD      A, (SELDRAWN)
 ; -
 
 SELPOST         CALL    SELNORM
-                LD      HL, (SELSTRL)
-                LD      DE, (SELENDL)
-                CALL    CMPHLDE
-                JR      NZ, .PNTNEW
-                LD      A, (SELSTRX)
-                LD      HL, SELENDX
-                CP      (HL)
-                RET     Z               ; EMPTY: DO NOT PAINT
-.PNTNEW         CALL    SELPAIN         ; XOR INVERT
-                LD      HL, SELSTRL
+                LD      A, (SELDRAWN)
+                OR      A
+                JR      NZ, .UPDATE
+
+                ; NOTHING PAINTED: PAINT THE NEW RANGE, IF IT IS NOT EMPTY
+                CALL    SELEMPTY
+                RET     Z
+                CALL    SELPAIN
+                JR      .RECORD
+
+.UPDATE         ; SOMETHING PAINTED, AND STILL ON SCREEN: PAINT THE DIFFERENCE
+                CALL    SELDIFF
+
+.RECORD         LD      HL, SELSTRL
                 LD      DE, DRWSTRL
                 LD      BC, 6
                 LDIR
+                CALL    SELEMPTY
                 LD      A, 1
-                LD      (SELDRAWN), A
-                CALL    DRWSTAT
+                JR      NZ, .SETDRW
+                XOR     A
+.SETDRW         LD      (SELDRAWN), A
+                JP      DRWSTAT
+
+
+; - SELEMPTY ---------------------------
+; - IS THE NORMALIZED SELECTION EMPTY (START == END)?
+; - IN:  SELSTRL, SELSTRX, SELENDL, SELENDX
+; - OUT: Z = EMPTY
+; - CLOBBERS: AF, DE, HL
+; -
+
+SELEMPTY        LD      HL, (SELSTRL)
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                RET     NZ
+                LD      A, (SELSTRX)
+                LD      HL, SELENDX
+                CP      (HL)
                 RET
 
 
@@ -1001,150 +1038,244 @@ SELNORM         LD      HL, (DOCLINE)
                 RET
 
 
-; --- SELPAIN                   ----------------------------------------
+; --- SELECTION PAINT          ----------------------------------------
+
+
+; - SELEXT -----------------------------
+; - COLUMN EXTENT OF A SELECTION RANGE ON ONE DOCUMENT LINE
+; - IN:  HL = DOCUMENT LINE
+; -      IX = RANGE BLOCK: STRL (2), STRX (1), ENDL (2), ENDX (1).
+; -           SELSTRL.. AND DRWSTRL.. ARE BOTH LAID OUT THIS WAY.
+; - OUT: CY = 1  THE LINE HAS NO SELECTED CELLS
+; -      CY = 0  D = XA (FIRST COLUMN), E = XB (ONE PAST THE LAST), XB > XA.
+; -              ON A LINE THAT IS NOT THE END LINE XB = MIN(LEN + 1, 80), SO
+; -              THE LINE BREAK SHOWS AS ONE CELL AND AN EMPTY LINE AS ONE TOO.
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+SELEXT          LD      E, (IX + 0)
+                LD      D, (IX + 1)     ; DE = START LINE
+                CALL    CMPHLDE
+                RET     C               ; LINE < START
+                LD      E, (IX + 3)
+                LD      D, (IX + 4)     ; DE = END LINE
+                PUSH    HL
+                CALL    CMPHLDE
+                POP     HL
+                JR      Z, .INSIDE
+                JR      C, .INSIDE
+                SCF                     ; LINE > END
+                RET
+
+.INSIDE         ; XA = STRX ON THE START LINE, ELSE 0
+                LD      E, (IX + 0)
+                LD      D, (IX + 1)
+                PUSH    HL
+                CALL    CMPHLDE
+                POP     HL
+                LD      B, 0
+                JR      NZ, .XASET
+                LD      B, (IX + 2)
+.XASET          ; XB = ENDX ON THE END LINE, ELSE MIN(LEN + 1, 80)
+                LD      E, (IX + 3)
+                LD      D, (IX + 4)
+                PUSH    HL
+                CALL    CMPHLDE
+                POP     HL
+                JR      NZ, .XBLEN
+                LD      C, (IX + 5)
+                JR      .XBSET
+.XBLEN          PUSH    BC
+                CALL    LINELEN         ; A = LENGTH
+                POP     BC
+                INC     A
+                CP      TEXTCOLS
+                JR      C, .XBCAP
+                LD      A, TEXTCOLS
+.XBCAP          LD      C, A
+.XBSET          LD      A, C
+                CP      B
+                JR      Z, .NONE        ; XB == XA
+                RET     C               ; XB < XA
+                LD      D, B
+                LD      E, C
+                RET                     ; CY = 0 FROM THE CP
+.NONE           SCF
+                RET
+
+
+; - SELXOR -----------------------------
+; - XOR-INVERT COLUMNS XA..XB-1 OF ONE SCREEN ROW
+; - IN:  B = SCREEN ROW (0..23), D = XA, E = XB (XB > XA)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SELXOR          LD      A, E
+                SUB     D
+                LD      L, A
+                LD      H, 0
+                LD      C, D            ; C = XA
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL
+                ADD     HL, DE          ; * 3
+                ADD     HL, HL          ; NX = CELLS * 6
+                LD      (VDP_NX), HL
+                LD      L, C
+                LD      H, 0
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL
+                ADD     HL, DE
+                ADD     HL, HL          ; XA * 6
+                LD      DE, TXORG_X
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                LD      A, B
+                INC     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; DY = (ROW + 1) * 8
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_DY), HL
+                LD      HL, CELLH
+                LD      (VDP_NY), HL
+                LD      A, COL_HI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_XOR
+                JP      LMMV
 
 
 ; - SELPAIN ----------------------------
-; - XOR-INVERT VISIBLE ROWS IN SELSTRL..SELENDL
+; - XOR-INVERT THE VISIBLE PART OF THE SELECTION SELSTRL..SELENDL
 ; - IN:  SELSTRL, SELSTRX, SELENDL, SELENDX
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-SELPAIN         LD      B, 0            ; B = SCREEN ROW INDEX (0..23)
+SELPAIN         LD      IX, SELSTRL
+                LD      B, 0
 .ROWLP          PUSH    BC
-                ; CALC DOC LINE L = TOPLINE + B
                 LD      HL, (TOPLINE)
                 LD      E, B
                 LD      D, 0
-                ADD     HL, DE          ; HL = L
-                LD      (SELTMPL), HL
-
-                ; 1. CHECK IF L < SELSTRL
-                LD      DE, (SELSTRL)
-                CALL    CMPHLDE
-                JP      C, .NEXTROW     ; L < START: OUTSIDE
-
-                ; 2. CHECK IF L > SELENDL
-                LD      HL, (SELTMPL)
-                LD      DE, (SELENDL)
-                CALL    CMPHLDE
-                JR      NZ, .NOTEQ
-                JR      .CHKCOLS        ; L == END
-.NOTEQ          JP      NC, .DONPAIN    ; L > END: PAST SELECTION, STOP
-
-.CHKCOLS        ; L IS WITHIN SELECTION [SELSTRL, SELENDL]
-                ; DETERMINE XA
-                LD      HL, (SELTMPL)
-                LD      DE, (SELSTRL)
-                CALL    CMPHLDE
-                JR      NZ, .NOTSTRT
-                ; L == START: XA = SELSTRX
-                LD      A, (SELSTRX)
-                JR      .SETXA
-.NOTSTRT        ; L > START: XA = 0
-                XOR     A
-.SETXA          LD      (SELTMPXA), A
-
-                ; DETERMINE XB
-                LD      HL, (SELTMPL)
-                LD      DE, (SELENDL)
-                CALL    CMPHLDE
-                JR      NZ, .NOTEND
-                ; L == END: XB = SELENDX
-                LD      A, (SELENDX)
-                JR      .SETXB
-.NOTEND         ; L < END: XB = MIN(LINE_LEN + 1, 80)
-                LD      HL, (SELTMPL)
-                CALL    DIRREAD         ; A = SEG, DE = OFFSET
-                LD      C, A
-                LD      A, (TXSEG)
-                CP      C
-                JR      Z, .HAVSEG
-                LD      A, C
-                LD      (TXSEG), A
-                CALL    PUTP2
-.HAVSEG         LD      HL, TXPAGE
                 ADD     HL, DE
-                LD      A, (HL)         ; A = LINE LEN
-                OR      A
-                JR      NZ, .NONEMP
-                LD      A, 1            ; EMPTY LINE: 1 CHAR BLOCK
-                JR      .SETXB
-.NONEMP         INC     A               ; INCLUDE TRAILING CHAR
-                CP      TEXTCOLS
-                JR      C, .SETXB
-                LD      A, TEXTCOLS
-.SETXB          LD      (SELTMPXB), A
-
-                ; CHECK IF XA < XB
-                LD      A, (SELTMPXA)
-                LD      HL, SELTMPXB
-                CP      (HL)
-                JP      NC, .NEXTROW    ; XA >= XB: NOTHING ON THIS ROW
-
-                ; ISSUE LMMV | VDP_XOR
+                CALL    SELEXT
                 POP     BC
-                PUSH    BC              ; B = ROW (0..23)
-                LD      A, (SELTMPXA)
-                LD      L, A
-                LD      H, 0
-                ADD     HL, HL          ; * 2
-                LD      D, H
-                LD      E, L
-                ADD     HL, HL          ; * 4
-                ADD     HL, DE          ; * 6
-                LD      DE, GUTL_PX
-                ADD     HL, DE
-                LD      (VDP_DX), HL
-
-                ; DY = (B + 1) * 8
-                POP     BC
+                JR      C, .NEXT
                 PUSH    BC
+                CALL    SELXOR
+                POP     BC
+.NEXT           INC     B
                 LD      A, B
-                INC     A
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A
-                LD      L, A
-                LD      H, 0
-                LD      (VDP_DY), HL
-
-                ; NX = (XB - XA) * 6
-                LD      A, (SELTMPXB)
-                LD      HL, SELTMPXA
-                SUB     (HL)            ; A = XB - XA
-                LD      L, A
-                LD      H, 0
-                ADD     HL, HL
-                LD      D, H
-                LD      E, L
-                ADD     HL, HL
-                ADD     HL, DE
-                LD      (VDP_NX), HL
-
-                ; NY = 8
-                LD      HL, CELLH
-                LD      (VDP_NY), HL
-
-                ; CLR = COL_HI (3)
-                LD      A, COL_HI
-                LD      (VDP_CLR), A
-                XOR     A
-                LD      (VDP_ARG), A
-
-                LD      HL, VDPCMBLK
-                LD      A, VDP_LMMV | VDP_XOR
-                CALL    LMMV
-
-.NEXTROW        POP     BC
-                INC     B
-                LD      A, B
-                CP      SCRROWS         ; 24
-                JP      C, .ROWLP
+                CP      SCRROWS
+                JR      C, .ROWLP
                 RET
 
-.DONPAIN        POP     BC
+
+; - SELDIFF ----------------------------
+; - REPAINT ONLY WHAT CHANGED BETWEEN THE PAINTED RANGE (DRWSTRL..) AND THE
+; - NEW ONE (SELSTRL..). XOR IS ITS OWN INVERSE, SO A ROW WHOSE EXTENT IS THE
+; - SAME IN BOTH IS LEFT ALONE; A ROW WHOSE EXTENT MOVED AT ONE END ONLY GETS
+; - ONE XOR OVER THE DIFFERENCE; ANYTHING ELSE GETS THE OLD EXTENT UN-XORED
+; - AND THE NEW ONE XORED. EXTENDING BY A CHARACTER OR A ROW IS THEREBY ONE
+; - OR TWO COMMANDS INSTEAD OF TWICE THE WHOLE SELECTION.
+; - VALID ONLY WHILE THE PAINTED RANGE IS STILL ON SCREEN AS PAINTED: NO
+; - SCROLL, NO ROW REPAINTED SINCE. THE CALLERS THAT SKIP SELPRE GUARANTEE IT.
+; - IN:  DRWSTRL.., SELSTRL.., TOPLINE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SELDIFF         LD      B, 0
+.ROWLP          PUSH    BC
+                LD      HL, (TOPLINE)
+                LD      E, B
+                LD      D, 0
+                ADD     HL, DE
+                PUSH    HL
+
+                ; OLD EXTENT INTO SELTMPXA / SELTMPXB (0 / 0 WHEN NONE)
+                LD      IX, DRWSTRL
+                CALL    SELEXT
+                LD      A, 0
+                JR      C, .OLDSET
+                LD      A, E
+                LD      (SELTMPXB), A
+                LD      A, D
+.OLDSET         LD      (SELTMPXA), A
+                JR      NC, .NEWEXT
+                LD      (SELTMPXB), A
+
+.NEWEXT         ; NEW EXTENT INTO D / E (0 / 0 WHEN NONE)
+                POP     HL
+                LD      IX, SELSTRL
+                CALL    SELEXT
+                JR      NC, .COMPARE
+                LD      D, 0
+                LD      E, 0
+
+.COMPARE        POP     BC              ; B = SCREEN ROW
+                LD      A, (SELTMPXA)
+                CP      D
+                JR      NZ, .DIFFXA
+                LD      A, (SELTMPXB)
+                CP      E
+                JR      Z, .NEXT        ; IDENTICAL, OR NONE IN BOTH
+                ; SAME XA: ONE XOR OVER MIN(XB)..MAX(XB)
+                JR      C, .XBGREW
+                LD      D, E            ; OLD XB > NEW XB: NEW XB .. OLD XB
+                LD      E, A
+                JR      .ONEXOR
+.XBGREW         LD      D, A            ; OLD XB .. NEW XB
+                JR      .ONEXOR
+
+.DIFFXA         LD      A, (SELTMPXB)
+                CP      E
+                JR      NZ, .BOTH
+                ; SAME XB: ONE XOR OVER MIN(XA)..MAX(XA)
+                LD      A, (SELTMPXA)
+                CP      D
+                JR      C, .XASHRK
+                LD      E, A            ; OLD XA > NEW XA: NEW XA .. OLD XA
+                JR      .ONEXOR
+.XASHRK         LD      E, D            ; OLD XA .. NEW XA
+                LD      D, A
+.ONEXOR         PUSH    BC
+                CALL    SELXOR
+                POP     BC
+                JR      .NEXT
+
+.BOTH           ; UN-XOR THE OLD EXTENT, XOR THE NEW ONE, EACH IF IT EXISTS
+                PUSH    BC
+                PUSH    DE
+                LD      A, (SELTMPXA)
+                LD      D, A
+                LD      A, (SELTMPXB)
+                LD      E, A
+                CP      D
+                JR      Z, .NOOLD
+                JR      C, .NOOLD
+                CALL    SELXOR
+.NOOLD          POP     DE
+                POP     BC
+                LD      A, E
+                CP      D
+                JR      Z, .NEXT
+                JR      C, .NEXT
+                PUSH    BC
+                CALL    SELXOR
+                POP     BC
+
+.NEXT           INC     B
+                LD      A, B
+                CP      SCRROWS
+                JP      C, .ROWLP
                 RET
 
 
@@ -1197,8 +1328,6 @@ ACTSELAL        CALL    SELPRE          ; UN-XOR EXISTING IF DRAWN
 
                 CALL    SETCURY
                 CALL    REDRAW
-                CALL    DRWGUT
-                CALL    DRWSCRL
                 CALL    SELPOST
                 RET
 
@@ -1214,8 +1343,7 @@ ACTSELAL        CALL    SELPRE          ; UN-XOR EXISTING IF DRAWN
 ; -
 
 ACTSLML         CALL    SELBEG
-                CALL    SELPRE
-                CALL    ACTMVL
+                CALL    ACTMVL          ; NO SCROLL, NO REPAINT: SELPOST DIFFS
                 JP      SELPOST
 
 
@@ -1230,8 +1358,7 @@ ACTSLML         CALL    SELBEG
 ; -
 
 ACTSLMR         CALL    SELBEG
-                CALL    SELPRE
-                CALL    ACTMVR
+                CALL    ACTMVR          ; NO SCROLL, NO REPAINT: SELPOST DIFFS
                 JP      SELPOST
 
 
@@ -1246,7 +1373,9 @@ ACTSLMR         CALL    SELBEG
 ; -
 
 ACTSLMU         CALL    SELBEG
-                CALL    SELPRE
+                LD      A, (CURY)
+                OR      A
+                CALL    Z, SELPRE       ; TOP ROW: THE MOVE SCROLLS, UN-XOR FIRST
                 CALL    ACTMVU
                 JP      SELPOST
 
@@ -1262,7 +1391,9 @@ ACTSLMU         CALL    SELBEG
 ; -
 
 ACTSLMD         CALL    SELBEG
-                CALL    SELPRE
+                LD      A, (CURY)
+                CP      SCRROWS - 1
+                CALL    Z, SELPRE       ; BOTTOM ROW: THE MOVE SCROLLS, UN-XOR FIRST
                 CALL    ACTMVD
                 JP      SELPOST
 
@@ -1685,8 +1816,6 @@ ACTDLS          LD      A, (SELACT)
                 LD      (DOCLINE), HL
                 CALL    SETCURY
                 CALL    REDRAW
-                CALL    DRWGUT
-                CALL    DRWSCRL
 
 .DLSFIN         XOR     A
                 LD      (SELACT), A
@@ -2092,9 +2221,7 @@ ACTPAST         LD      HL, (CLIPLEN)
 
 .PSTALL         CALL    REDRAW
 
-.PSTBARS        CALL    DRWGUT
-                CALL    DRWSCRL
-                JP      DRWSTAT
+.PSTBARS        JP      DRWSTAT
 
 
 ; --- PSTOK                     ----------------------------------------

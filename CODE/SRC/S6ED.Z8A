@@ -162,8 +162,6 @@ INIT            DBG     "1: INIT START"
 .READY          ; DRAW CHROME AND INITIAL CURSOR
                 DBG     "10: CHROME"
                 CALL    DRWMENU
-                CALL    DRWGUT
-                CALL    DRWSCRL
                 CALL    DRWSTAT
                 CALL    DRWCUR
                 LD      A, 1
@@ -282,9 +280,10 @@ SCRINIT         LD      A, 6
                 XOR     A
                 LD      (CLIKSW), A
                 
-                ; ERASE FUNCTION KEYS
+                ; ERASE FUNCTION KEYS, THEN MAKE THEM DELIVER F1KEY.. TO THE KEYMAP
                 LD      IX, ERAFNK
                 CALL    BIOSCALL
+                CALL    SETFNKY
 
                 ; FLUSH KEYBOARD BUFFER
                 LD      IX, KILBUF

@@ -622,6 +622,7 @@ TERM            ; RESTORE MAPPER SEGMENTS IF INITIALIZED
                 CALL    BIOSCALL
                 LD      IX, ERAFNK
                 CALL    BIOSCALL
+                CALL    REFNKEY         ; GIVE DOS ITS FUNCTION KEY STRINGS BACK
                 LD      A, 1
                 LD      (CLIKSW), A
                 CALL    KANARST         ; RESET KANA STATUS AND TURN OFF LED

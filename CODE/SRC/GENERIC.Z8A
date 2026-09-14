@@ -440,8 +440,9 @@ MULT12          LD      HL,0
 ; -
 ; - RESTORING DIVISION, 16 ITERATIONS. THE PARTIAL REMAINDER IS SHIFTED WITH
 ; - ADC HL,HL, WHICH DROPS BIT 15, SO A DIVISOR ABOVE #8000 CAN LOSE THE TOP
-; - BIT OF THE REMAINDER AND RETURN GARBAGE. SCRLPOS, THE ONLY CALLER TODAY,
-; - NORMALISES ITS DIVISOR DOWN TO A SINGLE BYTE FIRST.
+; - BIT OF THE REMAINDER AND RETURN GARBAGE. NO CALLER TODAY: THE SCROLLBAR
+; - THAT USED IT IS GONE. KEPT FOR THE DOCUMENT PERCENTAGE OF THE STATUS
+; - BAR, WHICH NEEDS THE SAME DIVISION.
 ; -
 
 DIV16           LD      B, H
@@ -562,37 +563,60 @@ CALFUN          CALL ADDHLPNT
 ; --- FUNCTION KEYS             -----------------------------------------
 
 
-; - CLFNKEY ------------
-; - CLEAR FUNCTION KEYS
-; - 
+; - SETFNKY -----------------------------
+; - PROGRAM THE FUNCTION KEYS TO DELIVER ONE CODE EACH
+; - THE BIOS EXPANDS F1-F10 TO THE STRINGS IN FNKSTR, WHICH UNDER DOS ARE
+; - STILL BASIC'S ("goto " FOR F3), SO THE KEYMAP ENTRIES F1KEY.. COULD
+; - NEVER FIRE AND F3 TYPED "goto " INTO THE DOCUMENT. EACH 16-BYTE SLOT
+; - BECOMES [F1KEY + N, 0]; THE TWO BYTES OVERWRITTEN ARE SAVED IN FNKBUF
+; - FOR REFNKEY.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
 
-CLFNKEY         LD      HL,FNKSTR
-                LD      DE,FNKBUF
-                LD      B,#0A
-.LOOP           PUSH    BC
-                LD      A,(HL)
-                LD      (DE),A
+SETFNKY         LD      HL, FNKSTR
+                LD      DE, FNKBUF
+                LD      BC, 10 * 256 + F1KEY
+.LOOP           LD      A, (HL)
+                LD      (DE), A
                 INC     DE
-                LD      (HL),0
-                LD      BC,#10
-                ADD     HL,BC
+                INC     HL
+                LD      A, (HL)
+                LD      (DE), A
+                INC     DE
+                LD      (HL), 0
+                DEC     HL
+                LD      (HL), C
+                INC     C
+                PUSH    BC
+                LD      BC, 16
+                ADD     HL, BC
                 POP     BC
                 DJNZ    .LOOP
                 RET
 
-; - REFNKEY ------------
-; - RESTORE FUNCTION KEYS
-; - 
 
-REFNKEY         LD      HL,FNKSTR
-                LD      DE,FNKBUF
-                LD      B,#0A
-.LOOP           PUSH    BC
-                LD      A,(DE)
+; - REFNKEY ------------------------------
+; - RESTORE THE FUNCTION KEY STRINGS SAVED BY SETFNKY
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+REFNKEY         LD      HL, FNKSTR
+                LD      DE, FNKBUF
+                LD      B, 10
+.LOOP           LD      A, (DE)
                 INC     DE
-                LD      (HL),A
-                LD      BC,#10
-                ADD     HL,BC
+                LD      (HL), A
+                INC     HL
+                LD      A, (DE)
+                INC     DE
+                LD      (HL), A
+                PUSH    BC
+                LD      BC, 15
+                ADD     HL, BC
                 POP     BC
                 DJNZ    .LOOP
                 RET
