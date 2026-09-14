@@ -112,7 +112,7 @@ INIT            DBG     "1: INIT START"
                 XOR     A
                 LD      (KMAPID), A
                 CALL    KMAPSW          ; INITIALIZE KMAPPTR TO KMAPSTD
-
+                CALL    KANARST         ; ENSURE KANA LED IS OFF AT STARTUP
 
                 LD      (SAVESP), SP    ; PRESERVE ORIGINAL DOS STACK
 

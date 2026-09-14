@@ -18,7 +18,15 @@
 ; - CLOBBERS: ALL
 ; -
 
-MAINLOOP        ; CHECK MATRIX ACCENTS (GRAPH COMBOS & HARDWARE DEAD KEY)
+MAINLOOP        ; SUPPRESS BIOS KANA LOCK AND KANA LED
+                LD      A, (KANAST)
+                OR      A
+                CALL    NZ, KANARST
+                LD      A, (KANAMOD)
+                RRA
+                CALL    C, KANARST
+
+                ; CHECK MATRIX ACCENTS (GRAPH COMBOS & HARDWARE DEAD KEY)
                 CALL    CHKACNT
                 JR      C, .GOTACNT
 
@@ -102,13 +110,29 @@ MAINLOOP        ; CHECK MATRIX ACCENTS (GRAPH COMBOS & HARDWARE DEAD KEY)
 ; - CLOBBERS: ALL
 ; -
 
-CHKACNT         ; --- STEP 1: CHECK HARDWARE DEAD KEY (ROW 2, BIT 5) ---
+CHKACNT         ; --- STEP 1: CHECK DEAD KEY (ROW 2 BIT 5) OR KANA (ROW 6 BIT 4) ---
+                ; CHECK ROW 2, BIT 5 (EUROPEAN DEAD KEY)
                 LD      A, 2
                 CALL    READROW
                 BIT     5, A
-                JR      NZ, .NODED
+                JR      Z, .ISDEAD      ; 0 = PRESSED (ACTIVE LOW)
 
-                ; DEAD KEY IS PRESSED: CHECK EDGE DETECTION
+                ; CHECK ROW 6, BIT 4 (JAPANESE KANA / INTL CODE KEY)
+                LD      A, 6
+                CALL    READROW
+                BIT     4, A
+                JR      Z, .ISDEAD      ; 0 = PRESSED (ACTIVE LOW)
+
+                ; NEITHER KEY PRESSED: EDGE DETECTOR RELEASE
+                LD      A, (LASTDED)
+                OR      A
+                JR      Z, .CHKGRP      ; ALREADY RELEASED
+                XOR     A
+                LD      (LASTDED), A    ; CLEAR DEAD KEY HELD FLAG
+                CALL    KANARST         ; TURN OFF KANA LED ON RELEASE
+                JR      .CHKGRP
+
+.ISDEAD         ; DEAD KEY OR KANA PRESSED: CHECK EDGE DETECTION
                 LD      A, (LASTDED)
                 OR      A
                 JR      NZ, .CHKGRP     ; ALREADY HELD, SKIP TO GRAPH CHECK
@@ -125,14 +149,12 @@ CHKACNT         ; --- STEP 1: CHECK HARDWARE DEAD KEY (ROW 2, BIT 5) ---
                 JR      .DEDSET
 .DEDSHF         LD      A, DEDDIAR      ; 2 = DIAERESIS
 .DEDSET         LD      (DEADST), A
+                CALL    KANARST         ; TURN OFF KANA LED & RESET KANAST
 
                 ; PURGE BIOS KEYBOARD BUFFER
                 LD      IX, KILBUF
                 CALL    BIOSCALL
                 JR      .CHKGRP
-
-.NODED          XOR     A
-                LD      (LASTDED), A    ; CLEAR DEAD KEY HELD FLAG
 
 .CHKGRP         ; --- STEP 2: CHECK GRAPH KEY (ROW 6, BIT 2) ---
                 LD      A, 6
@@ -287,4 +309,28 @@ CHKACNT         ; --- STEP 1: CHECK HARDWARE DEAD KEY (ROW 2, BIT 5) ---
                 DEFB    #61, #A0, #65, #90, #69, #A1, #6F, #A2
                 DEFB    #75, #A3, #6E, #A5, #77, #9A, #31, #AD
                 DEFB    #3F, #A8, #00
+
+
+; --- KANARST                   ----------------------------------------
+
+
+; - KANARST ----------------------------
+; - RESET KANA STATUS AND TURN OFF KANA LED VIA PSG R#15
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+KANARST         PUSH    HL
+                XOR     A
+                LD      (KANAST), A     ; RESET KANAST TO 0 (ALPHANUMERIC)
+                LD      HL, KANAMOD
+                RES     0, (HL)         ; CLEAR SHIFT-KANA MODE BIT
+                LD      A, #0F          ; PSG REGISTER 15
+                OUT     (PSG_REG), A
+                IN      A, (PSG_RD)
+                OR      #80             ; BIT 7 = 1 -> KANA LED OFF
+                OUT     (PSG_WRT), A
+                POP     HL
+                RET
 

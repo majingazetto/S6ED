@@ -624,6 +624,7 @@ TERM            ; RESTORE MAPPER SEGMENTS IF INITIALIZED
                 CALL    BIOSCALL
                 LD      A, 1
                 LD      (CLIKSW), A
+                CALL    KANARST         ; RESET KANA STATUS AND TURN OFF LED
 
 .NOSCRRS        ; RESTORE ORIGINAL STACK POINTER
                 LD      HL, (SAVESP)
