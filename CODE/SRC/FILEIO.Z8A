@@ -61,10 +61,14 @@ FILELOAD        PUSH    HL
                 LD      (WASCR), A
                 POP     AF
                 
-                ; APPEND TO CURRENT LINE IN TXPAGE
+                ; APPEND TO CURRENT LINE IN TXPAGE. THE LOADER *IS* THE APPEND
+                ; CURSOR WHILE IT RUNS, SO IT BANKS APPSEG EXPLICITLY -- TXSEG
+                ; MAY HOLD DIRSEG AFTER ANY DIRECTORY WRITE (BUFRESET'S ENTRY 0
+                ; WRITE INCLUDED), AND BANKING THAT HERE WOULD LAND THE RECORD
+                ; INSIDE THE DIRECTORY.
                 LD      B, A
-                LD      A, (TXSEG)
-                CALL    PUTP2
+                LD      A, (APPSEG)
+                CALL    RECBANK
                 
                 LD      A, (CURLLEN)
                 CP      80
@@ -103,8 +107,8 @@ FILELOAD        PUSH    HL
                 CP      80
                 JR      NC, .SKIP       ; TRUNCATE AT 80 COLS
 
-                LD      A, (TXSEG)
-                CALL    PUTP2
+                LD      A, (APPSEG)
+                CALL    RECBANK
 
                 LD      HL, TXPAGE + 1
                 LD      BC, (LINEOFF)
@@ -212,9 +216,10 @@ STORLINE        ; REFUSE IF THE LINE DIRECTORY IS FULL. EDNWLIN AND EDPSHWR
                 SCF
                 RET
 
-.HAVROOM        LD      A, (TXSEG)
-                CALL    PUTP2
-                
+.HAVROOM        LD      A, (APPSEG)
+                CALL    RECBANK         ; THE RECORD GOES TO THE APPEND SEGMENT,
+                                        ; NOT WHATEVER TXSEG HOLDS (DIRSEG AFTER
+                                        ; ANY DIRECTORY WRITE)
                 LD      HL, TXPAGE
                 LD      DE, (LINEOFF)
                 ADD     HL, DE          ; HL = START OF RECORD
@@ -251,7 +256,7 @@ STORLINE        ; REFUSE IF THE LINE DIRECTORY IS FULL. EDNWLIN AND EDPSHWR
 
                 ; ADD TO DIRECTORY
                 LD      HL, (TOTLINES)
-                LD      A, (TXSEG)
+                LD      A, (APPSEG)     ; THE RECORD WAS JUST WRITTEN THERE
                 LD      DE, (LINEOFF)
                 CALL    DIRWRITE
                 
