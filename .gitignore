@@ -11,6 +11,9 @@ CODE/debug*.txt
 CODE/basic_screen6.txt
 CODE/screen*.png
 
+# --- TEST HARNESS OUTPUT ---
+TEST/out/
+
 # --- OS ---
 .DS_Store
 

@@ -3,7 +3,7 @@
 #	* (c) 2024 - 2025 Armando Pérez            						    	*
 #	*************************************************************************
 
-.PHONY: build run clean
+.PHONY: build run clean check gate test selftest
 
 # 	=========================================================================
 # 	CONSTANTS
@@ -104,3 +104,24 @@ debug:
 
 log:
 	@echo $(ALL_SOURCES_GEN)
+
+# -	 Test Targets ------------------------------------------------------------
+#
+# check    T0 only: static invariants, no emulator (~0.2 s)
+# gate     the runtime Gate: 11 headless openMSX sessions (~10 s)
+# test     both -- run this before calling an integration finished
+# selftest reintroduces each historical defect and proves the Gate goes red
+
+TESTDIR			= ../TEST
+
+check:
+	@$(TESTDIR)/runtests.py --static
+
+gate:
+	@$(TESTDIR)/runtests.py --gate
+
+test:
+	@$(TESTDIR)/runtests.py
+
+selftest:
+	@$(TESTDIR)/runtests.py --selftest

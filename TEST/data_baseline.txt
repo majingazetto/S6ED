@@ -1,0 +1,34 @@
+# Data defined outside VARS.Z8A that has been reviewed and is NOT mutable
+# state (read-only tables, string literals, emitted defaults).  A name that is
+# not here fails the gate: classify it, or move it to VARS.Z8A.
+
+ACTTBL
+CFGNAME
+CRLFSTR
+ENODOS2
+ENOMAP
+ENOMEM
+FNTNAME
+KEYALN
+KEYCBG
+KEYCFG
+KEYCHI
+KEYCHIS
+KEYCLK
+KEYCTX
+KEYCUI
+KEYEOL
+KEYMKUP
+KEYPROF
+KEYTAB
+KEYTHM
+KEYWRAP
+MNUTEXT
+PALDATA
+SYTBL
+THMAMBR
+THMDEFT
+THMGRN
+THMLGHT
+THMMONO
+THMMSX
