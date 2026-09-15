@@ -115,11 +115,32 @@ SELACT          DEFB    0               ; 0=INACTIVE, 1=SELECTION ACTIVE
 SELDRAWN        DEFB    0               ; 0=NOT PAINTED, 1=XOR OVERLAY PAINTED
 SELANCL         DEFW    0               ; ANCHOR DOCUMENT LINE
 SELANCX         DEFB    0               ; ANCHOR COLUMN
+                ; TWO SELECTION RANGE RECORDS, EACH SIX CONTIGUOUS BYTES IN
+                ; THIS EXACT ORDER: STRL (2), STRX (1), ENDL (2), ENDX (1).
+                ; SELEXT WALKS THEM BY IX + 0 .. IX + 5 AND SELPRE / SELPOST
+                ; COPY THEM WITH LDIR BC, 6, SO THE LAYOUT IS LOAD BEARING AND
+                ; THE ASSERTS BELOW FAIL THE BUILD IF ANYONE REORDERS IT.
+                ; NOTHING ELSE MAY LIVE INSIDE EITHER RECORD: DRWSTRL USED TO
+                ; BE A LONE DEFW AND THE FOUR BYTES BEHIND IT WERE SELTMPL /
+                ; SELTMPXA / SELTMPXB, WHICH SELDIFF WRITES INSIDE ITS OWN ROW
+                ; LOOP -- IT CORRUPTED THE PAINTED RANGE AS IT READ IT.
+
 SELSTRL         DEFW    0               ; NORMALIZED START LINE
 SELSTRX         DEFB    0               ; NORMALIZED START COL
 SELENDL         DEFW    0               ; NORMALIZED END LINE
 SELENDX         DEFB    0               ; NORMALIZED END COL
 DRWSTRL         DEFW    0               ; PAINTED START LINE
+DRWSTRX         DEFB    0               ; PAINTED START COL
+DRWENDL         DEFW    0               ; PAINTED END LINE
+DRWENDX         DEFB    0               ; PAINTED END COL
+
+                ASSERT  SELSTRX == SELSTRL + 2
+                ASSERT  SELENDL == SELSTRL + 3
+                ASSERT  SELENDX == SELSTRL + 5
+                ASSERT  DRWSTRX == DRWSTRL + 2
+                ASSERT  DRWENDL == DRWSTRL + 3
+                ASSERT  DRWENDX == DRWSTRL + 5
+
 SELTMPL         DEFW    0               ; TEMP LINE VAR
 SELTMPXA        DEFB    0               ; TEMP COL XA
 SELTMPXB        DEFB    0               ; TEMP COL XB
