@@ -527,13 +527,13 @@ PARSALN         LD      A, (HL)
                 JR      Z, .SETDEV
                 RET
 .SETOFF         XOR     A               ; ALGN_OFF = 0
-                LD      (AUTOALIGN), A
+                LD      (AUTOALGN), A
                 RET
 .SETON          LD      A, ALGN_ON
-                LD      (AUTOALIGN), A
+                LD      (AUTOALGN), A
                 RET
 .SETDEV         LD      A, ALGN_DEV
-                LD      (AUTOALIGN), A
+                LD      (AUTOALGN), A
                 RET
 
 
