@@ -6,7 +6,14 @@
 ; NEVER USE OUT (#0FE) DIRECTLY — ALWAYS GO THROUGH MPUTP2.
 ;
 ; INIT: CALL MAPINIT AT STARTUP. STORES ENTRY ADDRESSES IN VARS.
-; AFTER INIT: CALL ALLSEG, FRESEG, RDSEG, WRSEG, PUTP1, GETP1, PUTP2, GETP2.
+; AFTER INIT: CALL ALLSEG, FRESEG, PUTP1, GETP1, PUTP2, GETP2 -- OR SEGGET /
+; SEGFREE / SEGTRIM, WHICH TRACK WHAT THEY HAND OUT AND ARE WHAT THE EDITOR
+; ACTUALLY USES.
+;
+; RD_SEG / WR_SEG ARE NOT RESOLVED. THE WRAPPERS EXISTED AND WERE NEVER CALLED,
+; SO THEY WENT WITH THE REST OF THE DEAD CODE; MJRDSEG / MJWRSEG ARE STILL IN
+; HARD.Z8A AND EACH TABLE ENTRY IS COMPUTED INDEPENDENTLY FROM THE BASE, SO
+; BRINGING THEM BACK FOR THE .DAT LOADER IS FOUR LINES.
 
 
 ; --- MAPINIT                   ----------------------------------------
@@ -51,18 +58,6 @@ MAPINIT         DBG     "MAPINIT: ENTER"
                 LD      DE, MJFRESEG
                 ADD     HL, DE
                 LD      (MFRESEG), HL
-
-                POP     HL
-                PUSH    HL
-                LD      DE, MJRDSEG
-                ADD     HL, DE
-                LD      (MRDSEG), HL
-
-                POP     HL
-                PUSH    HL
-                LD      DE, MJWRSEG
-                ADD     HL, DE
-                LD      (MWRSEG), HL
 
                 POP     HL
                 PUSH    HL
@@ -121,39 +116,6 @@ ALLSEG          XOR     A               ; A=0: USER SEGMENT, B=0: PRIMARY MAPPER
 FRESEG          LD      B, 0            ; B=0: PRIMARY MAPPER
                 LD      HL, (MFRESEG)
                 CALL    CALHL
-                RET
-
-
-; --- RDSEG                     ----------------------------------------
-
-; - RDSEG ------------
-; - READ ONE BYTE FROM SEGMENT WITHOUT DISTURBING PAGE 2
-; - A:  SEGMENT NUMBER
-; - HL: ADDRESS WITHIN SEGMENT (TOP 2 BITS IGNORED)
-; - OUTPUT:
-; -     A: BYTE READ
-; - NOTE: RETURNS WITH INTERRUPTS DISABLED
-; -
-
-RDSEG           LD      HL, (MRDSEG)
-                CALL    CALHL
-                EI
-                RET
-
-
-; --- WRSEG                     ----------------------------------------
-
-; - WRSEG ------------
-; - WRITE ONE BYTE TO SEGMENT WITHOUT DISTURBING PAGE 2
-; - A:  SEGMENT NUMBER
-; - HL: ADDRESS WITHIN SEGMENT (TOP 2 BITS IGNORED)
-; - E:  BYTE TO WRITE
-; - NOTE: RETURNS WITH INTERRUPTS DISABLED
-; -
-
-WRSEG           LD      HL, (MWRSEG)
-                CALL    CALHL
-                EI
                 RET
 
 

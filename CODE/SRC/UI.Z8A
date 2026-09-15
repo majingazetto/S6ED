@@ -671,16 +671,3 @@ DRWCUR          PUSH    AF
                 POP     AF
                 RET
 
-
-; --- TIMI HOOK (BLINK)         ----------------------------------------
-
-
-; - BLNKTICK ---------------------------
-; - BLINK TIMER HOOK STUB
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: NONE
-; -
-
-BLNKTICK        RET
-

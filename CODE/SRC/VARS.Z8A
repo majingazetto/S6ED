@@ -17,14 +17,11 @@ DEFSEG1         DEFB    0               ; ORIGINAL PAGE 1 MAPPER SEGMENT
 DEFSEG2         DEFB    0               ; ORIGINAL PAGE 2 MAPPER SEGMENT
 
 
-
 ; --- MAPPER JUMP TABLE ENTRIES ----------------------------------------
 
                 ; FILLED AT INIT BY MAPINIT (EXTBIO → HOKVLD CHECK)
 MALLSEG      DEFW    0               ; ALL_SEG ENTRY ADDRESS
 MFRESEG      DEFW    0               ; FRE_SEG ENTRY ADDRESS
-MRDSEG       DEFW    0               ; RD_SEG  ENTRY ADDRESS
-MWRSEG       DEFW    0               ; WR_SEG  ENTRY ADDRESS
 MPUTP1       DEFW    0               ; PUT_P1  ENTRY ADDRESS (RESTORE ONLY)
 MGETP1       DEFW    0               ; GET_P1  ENTRY ADDRESS
 MPUTP2       DEFW    0               ; PUT_P2  ENTRY ADDRESS (PAGE 2: TEXT)
@@ -98,8 +95,6 @@ CLKBUF          DEFS    6               ; "HH:MM", 0
                 ; DOCLINE, TOPLINE, TOTLINES -- AND SKIP ONLY THE PAINTING,
                 ; WHICH THE CALLER DOES ONCE WHEN IT IS DONE.
 RNDHOLD         DEFB    0               ; FF = DEFER ALL PAINTING
-
-LANGMODE        DEFB    LGNONE          ; CURRENT LANGUAGE/TOKENIZER MODE
 BLNKPH          DEFB    0               ; CURSOR BLINK PHASE (POLLED FROM JIFFY)
 BLNKCNT         DEFB    0               ; BLINK TICK COUNTER
 
@@ -125,9 +120,6 @@ SELSTRX         DEFB    0               ; NORMALIZED START COL
 SELENDL         DEFW    0               ; NORMALIZED END LINE
 SELENDX         DEFB    0               ; NORMALIZED END COL
 DRWSTRL         DEFW    0               ; PAINTED START LINE
-DRWSTRX         DEFB    0               ; PAINTED START COL
-DRWENDL         DEFW    0               ; PAINTED END LINE
-DRWENDX         DEFB    0               ; PAINTED END COL
 SELTMPL         DEFW    0               ; TEMP LINE VAR
 SELTMPXA        DEFB    0               ; TEMP COL XA
 SELTMPXB        DEFB    0               ; TEMP COL XB
@@ -152,17 +144,18 @@ CLIPBUF         DEFS    CLIPMAX, 0      ; CLIPBOARD BUFFER IN PAGE 0 RAM
 
 FILENAME        DEFS    40, 0           ; CURRENT FILENAME (ASCIIZ)
 FILEHAND        DEFB    0               ; OPEN FILE HANDLE
+SAVHAND         DEFB    0               ; FILESAVE: HANDLE OF THE FILE BEING WRITTEN
 WASCR           DEFB    0               ; 1 = LAST CHAR PROCESSED WAS CR
 
-FSIZETMP        DEFS    4               ; TEMP FOR BDOS SIZE CALCULATIONS
+                ; APPEND CURSOR AND CURRENT LINE LENGTH, BOTH DRIVEN BY THE
+                ; LOADER AND BY BUFRESET. THEY LIVED INSIDE FILEIO.Z8A, WHICH
+                ; PUT MUTABLE STATE IN THE EMITTED IMAGE: IT WORKED ONLY
+                ; BECAUSE BEING BELOW OUTEND THEY CARRIED THEIR OWN DEFW / DEFB
+                ; INITIALISERS IN THE .COM, AND IT IS THE ONE SHAPE A MODULE
+                ; CANNOT KEEP WHEN IT MOVES INTO A PAGE-2 SEGMENT.
+LINEOFF         DEFW    0               ; OFFSET OF THE NEXT FREE LINE RECORD
+CURLLEN         DEFB    0               ; LENGTH OF THE LINE BEING BUILT
 FCB             DEFS    SIZEFCB         ; FCB FOR DOS1 I/O
-
-
-; --- PARAMS                    ----------------------------------------
-
-                ; COMMAND-LINE PARAMETER PARSING (PARAMS.Z8A / BDOS EXTPARM)
-PSIZE           DEFB    0               ; FNDPARAM: CURRENT PARAM STRING SIZE
-PPNT            DEFW    0               ; FNDPARAM: POINTER TO PARAM STRING
 PARMTMP         DEFS    40              ; CHKFILE: TEMP COPY OF ONE PARAM
 PARBUF          DEFS    128             ; EXTPARM RAW OUTPUT BUFFER
 
@@ -257,10 +250,6 @@ VDP_NY          EQU     VDPCMBLK + 10 ; WORD
 VDP_CLR         EQU     VDPCMBLK + 12 ; BYTE
 VDP_ARG         EQU     VDPCMBLK + 13 ; BYTE
 VDP_CMD         EQU     VDPCMBLK + 14 ; BYTE
-
-
-UNKNOWN         DEFM    "Unknown("
-.CODE           DEFS    5               ; ROOM FOR "NNN)$"
 
 ENDVARS
 
