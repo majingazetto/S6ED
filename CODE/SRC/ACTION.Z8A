@@ -699,13 +699,57 @@ ACTDELLN        LD      HL, (TOTLINES)
 
 
 ; - ACTNWLIN ---------------------------
-; - SPLIT LINE AND INSERT NEWLINE
+; - SPLIT LINE AND INSERT NEWLINE. WITH AUTOALIGN ACTIVE (CFG) AND THE
+; - CURSOR AT END OF LINE, THE CURSOR ON THE NEW LINE LANDS AT THE COLUMN
+; - CALCALN DERIVES FROM THE LINE BEING SPLIT (THE MNEMONIC COLUMN IN THE
+; - ASSEMBLY LAYOUT) INSTEAD OF COLUMN 0. MID-LINE ENTER, AN INACTIVE MODE
+; - AND A REFUSED SPLIT ALL FALL BACK TO THE CLASSIC BEHAVIOR.
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-ACTNWLIN        CALL    EDNWLIN
+ACTNWLIN        ; MODE CHECK: ALGN_ON ALWAYS, ALGN_DEV ONLY IN WRAP_DEV
+                LD      A, (AUTOALIGN)
+                CP      ALGN_ON
+                JR      Z, .ACTIVE
+                CP      ALGN_DEV
+                JR      NZ, .PLAIN
+                LD      A, (WRAPMODE)
+                OR      A               ; WRAP_DEV = 0
+                JR      NZ, .PLAIN
+
+.ACTIVE         ; LOAD THE LINE ABOUT TO BE SPLIT
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+
+                ; AUTO-ALIGN ONLY FROM END OF LINE: A MID-LINE ENTER IS A
+                ; CLASSIC SPLIT, SO THE TAIL AT COLUMN 0 NEVER MEETS A
+                ; CURSOR PARKED AT THE ALIGN COLUMN.
+                LD      A, (CURX)
+                LD      HL, WORKBUF
+                CP      (HL)            ; CURX VS LINE LENGTH
+                JR      NZ, .PLAIN
+
+                CALL    CALCALN
+                LD      (ALGNTMP), A
+
+                ; SPLIT. EDNWLIN REFUSES SILENTLY (DIRECTORY FULL OR NO
+                ; MAPPER MEMORY), DETECTED THROUGH TOTLINES NOT MOVING.
+                LD      HL, (TOTLINES)
+                PUSH    HL
+                CALL    EDNWLIN
+                POP     HL
+                LD      DE, (TOTLINES)
+                OR      A
+                SBC     HL, DE
+                RET     Z               ; REFUSED: LEAVE THE CURSOR ALONE
+
+                LD      A, (ALGNTMP)
+                LD      (CURX), A
+                RET
+
+.PLAIN          CALL    EDNWLIN
                 RET
 
 

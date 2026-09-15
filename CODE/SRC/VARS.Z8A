@@ -74,6 +74,8 @@ TOTLINES        DEFW    1               ; TOTAL LINES IN DOCUMENT
 MODIFIED        DEFB    0               ; FF = BUFFER MODIFIED SINCE LAST SAVE
 INSMODE         DEFB    INS_MODE        ; INSERT (FF) OR OVERWRITE (00)
 WRAPMODE        DEFB    0               ; 0 = WRAP_DEV, 1 = WRAP_TXT
+AUTOALIGN       DEFB    ALGN_OFF        ; ALGN_OFF / ALGN_ON / ALGN_DEV (CFG)
+ALGNTMP         DEFB    0               ; ACTNWLIN: TARGET COLUMN ACROSS EDNWLIN
 TYPATTR         DEFB    0               ; ACTIVE TYPING ATTRIBUTE (ATRBOLD, ATRITAL)
 MKUPMD          DEFB    0               ; 0=OFF, 1=MD, 2=LITE
 SHOWCLK         DEFB    1               ; 0=OFF, 1=SHOW CLOCK IN MENU ROW

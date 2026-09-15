@@ -131,6 +131,17 @@ CFGLOAD         LD      HL, CFGNAME
 
 .NOTEOL         POP     HL
                 PUSH    HL
+                LD      DE, KEYALN
+                CALL    STRPREF
+                JR      NC, .NOTALN
+                CALL    CFGVAL
+                JR      NC, .NOTALN
+                CALL    PARSALN
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JP      .SKPLIN
+
+.NOTALN         POP     HL
+                PUSH    HL
                 LD      DE, KEYTHM
                 CALL    STRPREF
                 JR      NC, .NOTTHM
@@ -491,6 +502,41 @@ PARSEOL         LD      A, (HL)
                 RET
 
 
+; --- PARSALN                   ----------------------------------------
+
+
+; - PARSALN ----------------------------
+; - PARSE AUTOALIGN VALUE (OFF, ON, DEV)
+; - IN:  HL = POINTER TO VALUE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+PARSALN         LD      A, (HL)
+                CP      'O'             ; ON
+                JR      Z, .SETON
+                CP      'o'
+                JR      Z, .SETON
+                CP      'F'             ; OFF
+                JR      Z, .SETOFF
+                CP      'f'
+                JR      Z, .SETOFF
+                CP      'D'             ; DEV
+                JR      Z, .SETDEV
+                CP      'd'
+                JR      Z, .SETDEV
+                RET
+.SETOFF         XOR     A               ; ALGN_OFF = 0
+                LD      (AUTOALIGN), A
+                RET
+.SETON          LD      A, ALGN_ON
+                LD      (AUTOALIGN), A
+                RET
+.SETDEV         LD      A, ALGN_DEV
+                LD      (AUTOALIGN), A
+                RET
+
+
 ; --- PARSTHM                   ----------------------------------------
 
 
@@ -675,6 +721,7 @@ KEYMKUP         DEFM    "MARKUP", 0
 KEYCLK          DEFM    "CLOCK", 0
 KEYTAB          DEFM    "TABWIDTH", 0
 KEYEOL          DEFM    "EOL", 0
+KEYALN          DEFM    "AUTOALIGN", 0
 KEYTHM          DEFM    "THEME", 0
 KEYCBG          DEFM    "COLOR_BG", 0
 KEYCTX          DEFM    "COLOR_TEXT", 0

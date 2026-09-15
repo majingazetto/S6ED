@@ -562,6 +562,37 @@ System:
 * Note: Ctrl+A is reserved strictly for "Select All" (Sprint 2).
 ```
 
+### Auto-align on Enter (`AUTOALIGN`)
+
+Assembly layout aid, configured in `S6ED.CFG`:
+
+```
+; AUTOALIGN: OFF, ON, or DEV (ON only when WRAP=DEV)
+AUTOALIGN=DEV
+```
+
+With the mode active and the cursor at **end of line**, Enter places the
+cursor on the new line at the column `CALCALN` (`EDIT.Z8A`) derives from
+the line being split, instead of column 0:
+
+```
+LABEL        LD       A,10
+             JP       SUBRT    <- cursor lands under the 'L' of LD, and
+                                  again under the 'J' of JP on the next Enter
+```
+
+Column rules: empty line, full-line `;` comment or label-only line -> 0;
+line starting with a space (already indented) -> its first token; a label at
+column 0 -> the token after it (the mnemonic). The heuristic cannot tell an
+unindented opcode (`LD A,1` at column 0) from a label -- with the classic
+assembly layout opcodes never start at column 0, so this matches practice.
+Only the cursor moves; no spaces are inserted into the document.
+
+The logic lives in `ACTNWLIN` (`ACTION.Z8A`), not in `EDNWLIN`: the latter
+also serves paste (`PSTNL`), push-wrap and space-at-margin breaks, which
+must keep landing at column 0. Mid-line Enter is a classic split. Vi
+`o`/`O` are unchanged.
+
 ### Dynamic Status Bar (`UI.Z8A`)
 
 ```
