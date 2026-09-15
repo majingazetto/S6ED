@@ -1,5 +1,7 @@
 ; **********************************************
 ; * CFG.Z8A - CONFIGURATION FILE (S6ED.CFG)    *
+; * ACCEPTS KEY=VALUE WITH OPTIONAL WHITESPACE *
+; * AROUND '=' (E.G. "TABWIDTH = 8").          *
 ; **********************************************
 
 
@@ -17,12 +19,14 @@ CFGLOAD         LD      HL, CFGNAME
                 CALL    DSKOPEN
                 RET     C               ; FILE NOT FOUND: USE DEFAULTS
 
-                LD      C, A            ; C = FILE HANDLE
+                PUSH    AF              ; SAVE FILE HANDLE (DSKREAD CLOBBERS BC)
                 LD      HL, 255         ; READ UP TO 255 BYTES
                 LD      DE, FILEBUF
                 CALL    DSKREAD         ; HL = BYTES READ
-                LD      A, C
-                PUSH    HL
+                LD      C, L
+                LD      B, H            ; BC = BYTES READ
+                POP     AF              ; A = FILE HANDLE
+                PUSH    BC              ; KEEP BYTE COUNT ACROSS CLOSE
                 CALL    DSKCLOSE
                 POP     BC              ; BC = BYTES READ
 
@@ -59,10 +63,12 @@ CFGLOAD         LD      HL, CFGNAME
 .NEXTCH         INC     HL
                 JR      .LINELP
 
-.PARSLN         ; CHECK "PROFILE="
+.PARSLN         ; CHECK "PROFILE"
                 PUSH    HL
                 LD      DE, KEYPROF
                 CALL    STRPREF
+                JR      NC, .NOTPRF
+                CALL    CFGVAL          ; "PROFILE = ..." ALSO ACCEPTED
                 JR      NC, .NOTPRF
                 CALL    PARSPRF
                 POP     HL              ; RESTORE HL TO START OF LINE
@@ -73,6 +79,8 @@ CFGLOAD         LD      HL, CFGNAME
                 LD      DE, KEYWRAP
                 CALL    STRPREF
                 JR      NC, .NOTWRP
+                CALL    CFGVAL
+                JR      NC, .NOTWRP
                 CALL    PARSWRP
                 POP     HL              ; RESTORE HL TO START OF LINE
                 JR      .SKPLIN
@@ -81,6 +89,8 @@ CFGLOAD         LD      HL, CFGNAME
                 PUSH    HL
                 LD      DE, KEYMKUP
                 CALL    STRPREF
+                JR      NC, .NOTMKP
+                CALL    CFGVAL
                 JR      NC, .NOTMKP
                 CALL    PARSMKP
                 POP     HL              ; RESTORE HL TO START OF LINE
@@ -91,6 +101,8 @@ CFGLOAD         LD      HL, CFGNAME
                 LD      DE, KEYCLK
                 CALL    STRPREF
                 JR      NC, .NOTCLK
+                CALL    CFGVAL
+                JR      NC, .NOTCLK
                 CALL    PARSCLK
                 POP     HL              ; RESTORE HL TO START OF LINE
                 JR      .SKPLIN
@@ -100,6 +112,8 @@ CFGLOAD         LD      HL, CFGNAME
                 LD      DE, KEYTAB
                 CALL    STRPREF
                 JR      NC, .NOTTAB
+                CALL    CFGVAL
+                JR      NC, .NOTTAB
                 CALL    PARSTAB
                 POP     HL              ; RESTORE HL TO START OF LINE
                 JR      .SKPLIN
@@ -108,6 +122,8 @@ CFGLOAD         LD      HL, CFGNAME
                 PUSH    HL
                 LD      DE, KEYEOL
                 CALL    STRPREF
+                JR      NC, .NOTEOL
+                CALL    CFGVAL
                 JR      NC, .NOTEOL
                 CALL    PARSEOL
                 POP     HL              ; RESTORE HL TO START OF LINE
@@ -161,6 +177,47 @@ STRPREF         LD      A, (DE)
 .MATCH          SCF
                 RET
 .NOMTCH         XOR     A
+                RET
+
+
+; --- CFGVAL                    ----------------------------------------
+
+
+; - CFGVAL -----------------------------
+; - AFTER A KEY PREFIX MATCH: SKIP
+; - WHITESPACE, REQUIRE '=', THEN SKIP
+; - WHITESPACE AGAIN
+; - IN:  HL = POSITION AFTER KEY
+; - OUT: CY = 1: HL = START OF VALUE
+; -      CY = 0: NOT A KEY ASSIGNMENT
+; - CLOBBERS: A, HL
+; -
+
+CFGVAL          ; SKIP WHITESPACE BEFORE '='
+.PRE            LD      A, (HL)
+                CP      ' '
+                JR      Z, .PRE1
+                CP      9               ; TAB
+                JR      NZ, .EQ
+.PRE1           INC     HL
+                JR      .PRE
+
+.EQ             CP      '='
+                JR      NZ, .NO
+                INC     HL
+
+.POST           ; SKIP WHITESPACE AFTER '='
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .POST1
+                CP      9               ; TAB
+                JR      NZ, .YES
+.POST1          INC     HL
+                JR      .POST
+
+.YES            SCF
+                RET
+.NO             XOR     A
                 RET
 
 
@@ -361,9 +418,9 @@ PARSEOL         LD      A, (HL)
 
 
 CFGNAME         DEFM    "S6ED.CFG", 0
-KEYPROF         DEFM    "PROFILE=", 0
-KEYWRAP         DEFM    "WRAP=", 0
-KEYMKUP         DEFM    "MARKUP=", 0
-KEYCLK          DEFM    "CLOCK=", 0
-KEYTAB          DEFM    "TABWIDTH=", 0
-KEYEOL          DEFM    "EOL=", 0
+KEYPROF         DEFM    "PROFILE", 0
+KEYWRAP         DEFM    "WRAP", 0
+KEYMKUP         DEFM    "MARKUP", 0
+KEYCLK          DEFM    "CLOCK", 0
+KEYTAB          DEFM    "TABWIDTH", 0
+KEYEOL          DEFM    "EOL", 0
