@@ -588,7 +588,6 @@ EDTGLWRP        LD      A, (WRAPMODE)
 ; --- EDOVRCHR                  ----------------------------------------
 
 
-
 ; - EDOVRCHR ---------------------------
 ; - OVERWRITE CHARACTER AT CURSOR
 ; - IN:  A = CHAR CODE
@@ -1830,18 +1829,4 @@ EDMOVROW        CP      CDOWN
                 JP      NC, REDRAW
                 LD      C, A
                 JP      SCRLDNN
-
-
-
-; --- EDQUIT                    ----------------------------------------
-
-
-; - EDQUIT -----------------------------
-; - EXIT EDITOR
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-
-EDQUIT          JP      TERM
 

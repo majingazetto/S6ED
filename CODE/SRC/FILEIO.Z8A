@@ -360,16 +360,9 @@ FILESAVE        LD      HL, FILENAME
                 LD      (MODIFIED), A
                 RET
 
+                ; CONSTANT, AND THE ONLY DATA THAT BELONGS IN THIS FILE: IT IS
+                ; READ, NEVER WRITTEN, SO THE EMITTED IMAGE IS THE RIGHT HOME.
+                ; SAVHAND, LINEOFF AND CURLLEN USED TO SIT HERE TOO AND DID NOT
+                ; BELONG -- THEY ARE MUTABLE STATE AND NOW LIVE IN VARS.Z8A.
+
 CRLFSTR         DEFB    CR, LF
-SAVHAND         DEFB    0
-
-
-; --- FSAVEAS                ----------------------------------------
-
-FSAVEAS      RET
-
-
-; --- TEMP VARS FOR LOADER      ----------------------------------------
-
-LINEOFF         DEFW    0               ; START OF CURRENT LINE RECORD
-CURLLEN         DEFB    0               ; CURRENT LINE LENGTH

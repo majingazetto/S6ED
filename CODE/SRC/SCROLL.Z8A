@@ -80,20 +80,6 @@ SCRLDNN         XOR     A
                 RET
 
 
-; --- SCROLLUP                  ----------------------------------------
-
-
-; - SCROLLUP ---------------------------
-; - SCROLL TEXT AREA DOWN ONE ROW (SHOW PREVIOUS LINE)
-; - THE ONE-ROW ENTRY POINT OF SCRLUPN, WHICH FOLLOWS IT.
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-
-SCROLLUP        LD      C, 1
-
-
 ; - SCRLUPN ----------------------------
 ; - SCROLL TEXT AREA DOWN BY C ROWS: ROWS 1..24-C MOVE ONTO C+1..24 IN ONE
 ; - YMMM (DY > SY, SO DIY=1 WITH BOTTOM SCANLINE ANCHORS), THEN ROWS 1..C

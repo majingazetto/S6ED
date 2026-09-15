@@ -3,7 +3,6 @@
 ;                                       ****************************************
 
 
-
 ; --- BDOS ENTRY  / VERSION             ----------------------------------------
 
 
@@ -23,7 +22,6 @@ BDOS            PUSH    AF
                 RET
                 
 
-
 ; - DOSVER -----------
 ; - GET DOS VERSION
 ; -     
@@ -40,8 +38,6 @@ DOSVER          XOR     A
                 RET
 
                 
-
-
 ; --- FILE (OPEN / READ / WRITE)        ----------------------------------------
 
 
@@ -138,18 +134,6 @@ FMAKE           LD      DE,FCB
                 LD      (IX + 36),A
                 RET     
 
-; - FSEEK ------------
-; - FILE SEEK FCB
-; - DEHL: OFFSET
-; - 
-
-FSEEK           LD      IX,FCB
-                LD      (IX + 33),L
-                LD      (IX + 34),H
-                LD      (IX + 35),E
-                LD      (IX + 36),D
-                RET
-
 
 ; - RDBLK ------------
 ; - READ FCB BLOCK BYTES
@@ -184,23 +168,12 @@ FCLOSE          LD      DE,FCB
                 JP      BDOS
 
 
-
-; - FDEL -------------
-; - FCB DELETE FILE
-; - 
-
-FDEL            LD      DE,FCB
-                LD      C,_FDEL
-                JP      BDOS
-
-
 ; - SETDMA -----------
 ; - DE: DMA
 ; -
 
 SETDMA          LD      C,_SETDTA
                 JP      BDOS
-
 
 
 ; - GETREM -----------
@@ -248,9 +221,6 @@ GETMAXSZ        PUSH    HL
                                                 ; RETURN CURRENT
                 EX      DE,HL                   ; ELSE RETURN SIZE                                                        
                 RET
-
-
-
 
 
                 ; -
@@ -301,7 +271,6 @@ DOPEN           EX      DE,HL
                 RET
                 
 
-
 ; - DCLOSE  ----------
 ; - DOS2 CLOSE #F
 ; - B: #F
@@ -309,7 +278,6 @@ DOPEN           EX      DE,HL
 
 DCLOSE          LD      C,_CLOSE
                 JP      BDOS
-
 
 
 ; - DREAD ------------
@@ -334,7 +302,6 @@ DWRITE          LD      C,_WRITE
                 JP      BDOS
 
 
-
 ; - DCREATE ----------
 ; - DOS2 CREATE FILE
 ; - HL: FILENAME ASCIIZ
@@ -351,73 +318,6 @@ DCREATE         EX      DE,HL
                 RET     C               ; IF ERROR, RETURN CY=1
                 LD      A,B             ; A = FILE HANDLE
                 RET     
-
-
-; - DDEL -------------
-; - DOS2 DELETE FILE
-; - HL: FILENAME ASCIIZ
-; -
-
-DDEL            EX      DE,HL
-                LD      C,_DELETE
-                JP      BDOS
-
-
-; - DGETREM ----------
-; - GET REMAINING SIZE
-; - B: OPENED #F
-; - OUTPUT: 
-; -     DE:HL REM. SIZE
-; - 
-
-DGETREM         LD      DE,0
-                LD      HL,0
-                LD      A,1
-                PUSH    BC
-                CALL    DSEEK.GEN
-                POP     BC
-
-                PUSH    HL
-                PUSH    DE
-                LD      DE,0
-                LD      HL,0
-                PUSH    BC
-                LD      A,2
-                CALL    DSEEK.GEN
-                POP     BC
-                LD      (FSIZETMP),HL
-                LD      (FSIZETMP + 2),DE
-                POP     DE
-                POP     HL
-
-                PUSH    DE
-                PUSH    HL
-                CALL    DSEEK
-                LD      HL,(FSIZETMP)
-                POP     DE
-                AND     A
-                SBC     HL,DE
-                EX      DE,HL
-                POP     BC
-                LD      HL,(FSIZETMP + 2)
-                SBC     HL,BC
-                EX      DE,HL
-                RET
-
-
-
-
-
-; - DGETMAX -----------
-; - B: #F
-; - HL: SIZE TO READ
-; - OUTPUT: 
-; -     HL: MAX SIZE
-; - 
-
-DGETMAX         PUSH    HL
-                CALL    DGETREM 
-                JP      GETMAXSZ.GEN
                 
 
                 ; -
@@ -445,7 +345,6 @@ DSKCREAT       LD      A,(DOS2)
                 RET
 
 
-
 ; - DSKOPEN ----------
 ; - OPEN FILE
 ; - HL: FILENAME (ASCIIZ)
@@ -467,7 +366,6 @@ DSKOPEN         LD      A,(DOS2)
                 RET
 
 
-
 ; - DSKCLOSE ---------
 ; - FCB/#F FILE CLOSE
 ; - A: #F
@@ -478,7 +376,6 @@ DSKCLOSE        LD      B,A
                 AND     A
                 JP      NZ,DCLOSE
                 JP      FCLOSE
-
 
 
 ; - DSKREAD -----------
@@ -518,65 +415,6 @@ DSKWRITE        LD      B,A
                 JP      WRBLK
 
 
-; - DSKSEEK ----------
-; - A: #F
-; - DEHL: POINTER
-; - 
-
-DSKSEEK         LD      B,A
-                LD      A,(DOS2)
-                AND     A
-                JP      NZ,DSEEK
-                JP      FSEEK
-
-
-
-; - DSKDEL -----------
-; - DELETE FILE
-; - HL: FILENAMEZ
-; - 
-
-DSKDEL          LD      A,(DOS2)
-                AND     A
-                JP      NZ,DDEL
-
-                ; DOS 1
-
-                CALL    BUILDFCB
-                JP      FDEL
-
-
-; - DSKGETRE ---------
-; - GET REMAINING SIZE
-; - OF OPENED FILE
-; - A: #F
-; - OUTPUT:
-; -     DEHL: REM. SIZE
-; - 
-
-DSKGETRE        LD      B,A
-                LD      A,(DOS2)
-                AND     A
-                JP      NZ,DGETREM
-                JP      GETREM
-
-
-; - DSKGETMA -------
-; - GET MAX SIZE
-; - HL: SIZE TO READ
-; - A: #F
-; - OUTPUT: MAX SIZE
-; - 
-
-DSKGETMA        LD      B,A
-                LD      A,(DOS2)
-                AND     A
-                JP      NZ,DGETMAX
-                JP      GETMAXSZ
-
-
-
-
 ; --- PRINT / OUTPUT                    ----------------------------------------
 
 
@@ -586,17 +424,6 @@ DSKGETMA        LD      B,A
 
 STROUT          LD      C,_STROUT
                 JP      DOS
-
-
-; --- ERROR / EXIT                      ---------------------------------------
-
-
-; - STREXIT ----------
-; - EXIT WITH MESSAGE
-; - DE: POINTER TO STRING
-; - 
-
-STREXIT         CALL    STROUT
 
 
 ; - TERM -------------
@@ -644,112 +471,8 @@ TERM            ; RESTORE MAPPER SEGMENTS IF INITIALIZED
 .TERM0          LD      C, _TERM0
                 JP      DOS
 
-                
-
-;                                       ****************************************
-;                                       * BDOS RELATED                         *
-;                                       ****************************************
-
-
-; --- FILENAME / PATH                   ---------------------------------------
-
-
-; - GETNDFN ---------
-; - GET NOT DIR FILENAME
-; - HL: FILENAMEZ PATH
-; - DE: FILENAMEZ WITHOUT PATH
-; - 
-
-GETNDFN         XOR     A
-                LD      (DE),A
-                CALL    STRTAIL
-                LD      A,B
-                OR      C
-                RET     Z
-                PUSH    DE
-.LOOP           LD      A,(HL)
-                CP      '\'
-                JR      Z,.END
-                CP      ':'
-                JR      Z,.END
-                CP      '/'
-                JR      Z,.END
-                DEC     HL
-                DEC     BC
-                LD      A,B
-                OR      C
-                JR      NZ,.LOOP
-.END            INC     HL
-                POP     DE
-.COPY           LD      A,(HL)
-                LD      (DE),A
-                INC     HL
-                INC     DE
-                AND     A
-                JR      NZ,.COPY
-                RET
-               
-              
-; - TODOSFN ----------
-; - CONVERTS FILENAME
-; - TO DOS (8.3) FILENAME
-; - HL: FILENAME
-; - DE: OUTPUT BUFFER (ASCIIZ)
-; - 
-; - 
-
-
-TODOSFN         CALL    .GEN
-                XOR     A
-                LD      (DE),A
-                RET
-
-
-.GEN            LD      B,8
-
-                ; GET NAME
-                
-.NAME           LD      A,(HL)
-                INC     HL
-                LD      (DE),A
-                INC     DE
-                AND     A
-                RET     Z
-                CP      '.'
-                JP      Z,.EXT
-                DJNZ    .NAME
-
-                ; CHECK IF . IS PRESENT
-
-.PERIOD         LD      A,(HL)
-                INC     HL
-                AND     A
-                RET     Z
-                CP      '.'
-                JR      NZ,.PERIOD
-
-                ; STORE PERIOD
-
-                LD      (DE),A
-                INC     DE
-
-                ; GETS EXTENSION 
-
-.EXT            LD      B,3       
-.EXTLOOP        LD      A,(HL)
-                INC     HL
-                LD      (DE),A
-                INC     DE
-                AND     A
-                RET     Z
-                DJNZ    .EXTLOOP
-                RET
-
-
-
 
 ; --- PARAMS                            ---------------------------------------
-
 
 
 ; - EXTPARM ----------

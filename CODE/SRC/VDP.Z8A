@@ -29,25 +29,6 @@ VDPWAIT         PUSH    AF
                 RET
 
 
-; --- REGISTER WRITE            ----------------------------------------
-
-; - SETVR -----------
-; - SET VDP REGISTER
-; - A: REGISTER NUMBER
-; - E: VALUE
-; -
-
-SETVR           PUSH    AF
-                DI
-                LD      A, E
-                OUT     (VDPCT), A      ; WRITE VALUE BYTE FIRST
-                POP     AF
-                OR      #80             ; REG NUMBER | #80 = REGISTER SELECT
-                OUT     (VDPCT), A
-                EI
-                RET
-
-
 ; - SETWRT -----------------------------
 ; - SET VDP VRAM WRITE ADDRESS POINTER
 ; - IN:  HL = VRAM ADDRESS (0..65535)
@@ -123,23 +104,6 @@ HMMV            PUSH    AF
                 RET
 
 
-; - HMMM -------------
-; - COPY VRAM → VRAM (BYTE MODE)
-; - HL: POINTER TO CMD BLOCK
-; -
-
-HMMM            PUSH    AF
-                PUSH    HL
-                LD      DE, 14
-                ADD     HL, DE
-                LD      A, VDP_HMMM
-                LD      (HL), A
-                POP     HL
-                CALL    VDPCMD
-                POP     AF
-                RET
-
-
 ; - YMMM -------------
 ; - COPY VRAM → VRAM, Y DIRECTION ONLY, FROM DX TO THE SCREEN EDGE
 ; - HL: POINTER TO CMD BLOCK (DX, SY, DY, NY, ARG USED; SX AND NX IGNORED)
@@ -155,24 +119,6 @@ YMMM            PUSH    AF
                 CALL    VDPCMD
                 POP     AF
                 RET
-
-
-; - HMMC -------------
-; - CPU → VRAM (BYTE-TRANSFER)
-; - HL: POINTER TO CMD BLOCK
-; -
-
-HMMC            PUSH    AF
-                PUSH    HL
-                LD      DE, 14
-                ADD     HL, DE
-                LD      A, VDP_HMMC
-                LD      (HL), A
-                POP     HL
-                CALL    VDPCMD
-                POP     AF
-                RET
-
 
 
 ; - LMMM -------------
