@@ -180,6 +180,14 @@ WRAP_DEV        EQU     0               ; DEVELOPER MODE: CLAMP AT COL 79 (NO AU
 WRAP_TXT        EQU     1               ; TEXT MODE: SMART WORD-WRAP
 
 
+; --- AUTOALIGN MODES           ----------------------------------------
+
+
+ALGN_OFF        EQU     0               ; ENTER ALWAYS LANDS AT COLUMN 0
+ALGN_ON         EQU     1               ; AUTO-ALIGN ON ENTER, ANY WRAP MODE
+ALGN_DEV        EQU     2               ; AUTO-ALIGN ONLY IN WRAP_DEV
+
+
 ; --- MODIFIERS BITMASK         ----------------------------------------
 
 

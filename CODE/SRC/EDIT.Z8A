@@ -1314,6 +1314,91 @@ EDDELCHR        LD      HL, (DOCLINE)
                 JP      REDRAW          ; TAIL CALL
 
 
+; --- CALCALN                   ----------------------------------------
+
+
+; - CALCALN ----------------------------
+; - COMPUTE THE AUTO-ALIGN COLUMN FOR A LINE RECORD IN WORKBUF.
+; - ASSEMBLY LAYOUT RULES:
+; -   EMPTY LINE                       -> 0
+; -   FIRST CHAR ';' (FULL COMMENT)    -> 0
+; -   FIRST CHAR SPACE (NO LABEL,      -> COLUMN OF THE FIRST TOKEN
+; -     LINE ALREADY INDENTED)
+; -   OTHERWISE (LABEL AT COLUMN 0)    -> COLUMN OF THE TOKEN AFTER THE
+; -                                       LABEL, OR 0 ON A LABEL-ONLY LINE
+; - IN:  WORKBUF = LINE RECORD
+; - OUT: A = TARGET COLUMN (0-79)
+; - CLOBBERS: ALL
+; -
+
+CALCALN         LD      A, (WORKBUF)
+                OR      A
+                RET     Z               ; EMPTY LINE -> 0
+                LD      C, A            ; C = LENGTH
+
+                LD      A, (WORKBUF + 1)
+                CP      ';'
+                JR      NZ, .NOTCMT
+                XOR     A
+                RET                     ; FULL-LINE COMMENT -> 0
+
+.NOTCMT         CP      ' '
+                JR      Z, .FIRTOK      ; INDENTED LINE: OPCODE IS FIRST TOKEN
+
+                LD      B, 0            ; SKIP THE LABEL TOKEN AT COLUMN 0
+.LBLLP          LD      A, B
+                CP      C
+                JR      NC, .EOL        ; LABEL ONLY -> 0
+                LD      E, B
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .GAP         ; END OF LABEL
+                CP      9               ; TAB: LOADED FILES MAY HOLD RAW ONES
+                JR      Z, .GAP
+                INC     B
+                JR      .LBLLP
+
+.GAP            LD      A, B            ; SKIP WHITESPACE BETWEEN LABEL AND MNEMONIC
+                CP      C
+                JR      NC, .EOL
+                LD      E, B
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .GAPSKP
+                CP      9
+                JR      NZ, .GOT
+.GAPSKP         INC     B
+                JR      .GAP
+
+.FIRTOK         LD      B, 0            ; SKIP LEADING SPACES
+.FSKLP          LD      A, B
+                CP      C
+                JR      NC, .EOL        ; ALL-SPACES LINE -> 0
+                LD      E, B
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .FSSKP
+                CP      9
+                JR      NZ, .GOT
+.FSSKP          INC     B
+                JR      .FSKLP
+
+.GOT            LD      A, B            ; A = TARGET COLUMN
+                RET
+
+.EOL            XOR     A
+                RET
+
+
 ; --- EDNWLIN                 ----------------------------------------
 
 
