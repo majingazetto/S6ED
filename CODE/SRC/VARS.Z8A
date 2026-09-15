@@ -81,6 +81,7 @@ TABWIDTH        DEFB    4               ; TAB WIDTH (2, 4, 8)
 SAVEEOL         DEFB    0               ; 0=DOS (CRLF), 1=UNIX (LF)
 AUTOLOD         DEFB    1               ; 1=AUTO-DETECT EOL ON LOAD, 0=FIXED BY CFG
 EOLARED         DEFB    0               ; 1=EOL FORMAT ALREADY DETECTED ON LOAD
+PALDIRT         DEFB    0               ; FF = PALETTE MODIFIED BY CFG
 CLKHZ           DEFB    60              ; VDP INTERRUPT FREQUENCY (50 OR 60)
 CLKJIF          DEFW    0               ; JIFFY STAMP OF THE LAST COLON TOGGLE
 CLKPH           DEFB    0               ; COLON BLINK PHASE (0=VISIBLE, 1=INVISIBLE)

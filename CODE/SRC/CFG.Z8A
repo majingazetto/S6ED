@@ -20,8 +20,8 @@ CFGLOAD         LD      HL, CFGNAME
                 RET     C               ; FILE NOT FOUND: USE DEFAULTS
 
                 PUSH    AF              ; SAVE FILE HANDLE (DSKREAD CLOBBERS BC)
-                LD      HL, 255         ; READ UP TO 255 BYTES
-                LD      DE, FILEBUF
+                LD      HL, 1024        ; READ UP TO 1024 BYTES INTO CLIPBUF
+                LD      DE, CLIPBUF
                 CALL    DSKREAD         ; HL = BYTES READ
                 LD      C, L
                 LD      B, H            ; BC = BYTES READ
@@ -35,15 +35,15 @@ CFGLOAD         LD      HL, CFGNAME
                 RET     Z               ; EMPTY FILE
 
                 ; NULL-TERMINATE BUFFER
-                LD      HL, FILEBUF
+                LD      HL, CLIPBUF
                 ADD     HL, BC
                 LD      (HL), 0
 
-                ; PARSE LINES FROM FILEBUF
-                LD      HL, FILEBUF
+                ; PARSE LINES FROM CLIPBUF
+                LD      HL, CLIPBUF
 .LINELP         LD      A, (HL)
                 OR      A
-                RET     Z               ; END OF BUFFER
+                JP      Z, .CFGDON      ; END OF BUFFER: APPLY PALETTE IF DIRTY
 
                 ; SKIP LEADING WHITESPACE / EMPTY LINES
                 CP      ' '
@@ -72,7 +72,7 @@ CFGLOAD         LD      HL, CFGNAME
                 JR      NC, .NOTPRF
                 CALL    PARSPRF
                 POP     HL              ; RESTORE HL TO START OF LINE
-                JR      .SKPLIN
+                JP      .SKPLIN
 
 .NOTPRF         POP     HL
                 PUSH    HL
@@ -83,7 +83,7 @@ CFGLOAD         LD      HL, CFGNAME
                 JR      NC, .NOTWRP
                 CALL    PARSWRP
                 POP     HL              ; RESTORE HL TO START OF LINE
-                JR      .SKPLIN
+                JP      .SKPLIN
 
 .NOTWRP         POP     HL
                 PUSH    HL
@@ -94,7 +94,7 @@ CFGLOAD         LD      HL, CFGNAME
                 JR      NC, .NOTMKP
                 CALL    PARSMKP
                 POP     HL              ; RESTORE HL TO START OF LINE
-                JR      .SKPLIN
+                JP      .SKPLIN
 
 .NOTMKP         POP     HL
                 PUSH    HL
@@ -105,7 +105,7 @@ CFGLOAD         LD      HL, CFGNAME
                 JR      NC, .NOTCLK
                 CALL    PARSCLK
                 POP     HL              ; RESTORE HL TO START OF LINE
-                JR      .SKPLIN
+                JP      .SKPLIN
 
 .NOTCLK         POP     HL
                 PUSH    HL
@@ -116,7 +116,7 @@ CFGLOAD         LD      HL, CFGNAME
                 JR      NC, .NOTTAB
                 CALL    PARSTAB
                 POP     HL              ; RESTORE HL TO START OF LINE
-                JR      .SKPLIN
+                JP      .SKPLIN
 
 .NOTTAB         POP     HL
                 PUSH    HL
@@ -127,14 +127,85 @@ CFGLOAD         LD      HL, CFGNAME
                 JR      NC, .NOTEOL
                 CALL    PARSEOL
                 POP     HL              ; RESTORE HL TO START OF LINE
-                JR      .SKPLIN
+                JP      .SKPLIN
 
 .NOTEOL         POP     HL
+                PUSH    HL
+                LD      DE, KEYTHM
+                CALL    STRPREF
+                JR      NC, .NOTTHM
+                CALL    CFGVAL
+                JR      NC, .NOTTHM
+                CALL    PARSTHM
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JP      .SKPLIN
+
+.NOTTHM         POP     HL
+                PUSH    HL
+                LD      DE, KEYCBG
+                CALL    STRPREF
+                JR      NC, .NOTCBG
+                CALL    CFGVAL
+                JR      NC, .NOTCBG
+                LD      C, 0            ; COLOR 0 = BG
+                CALL    PARSCOL
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JP      .SKPLIN
+
+.NOTCBG         POP     HL
+                PUSH    HL
+                LD      DE, KEYCTX
+                CALL    STRPREF
+                JR      C, .ISCTX
+                ; TRY ALIAS "COLOR_FG"
+                POP     HL
+                PUSH    HL
+                LD      DE, KEYCFG
+                CALL    STRPREF
+                JR      NC, .NOTCTX
+.ISCTX          CALL    CFGVAL
+                JR      NC, .NOTCTX
+                LD      C, 1            ; COLOR 1 = FG / TEXT
+                CALL    PARSCOL
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JP      .SKPLIN
+
+.NOTCTX         POP     HL
+                PUSH    HL
+                LD      DE, KEYCUI
+                CALL    STRPREF
+                JR      NC, .NOTCUI
+                CALL    CFGVAL
+                JR      NC, .NOTCUI
+                LD      C, 2            ; COLOR 2 = UI
+                CALL    PARSCOL
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JP      .SKPLIN
+
+.NOTCUI         POP     HL
+                PUSH    HL
+                LD      DE, KEYCHI
+                CALL    STRPREF
+                JR      C, .ISCHI
+                ; TRY ALIAS "COLOR_HI"
+                POP     HL
+                PUSH    HL
+                LD      DE, KEYCHIS
+                CALL    STRPREF
+                JR      NC, .NOTCHI
+.ISCHI          CALL    CFGVAL
+                JR      NC, .NOTCHI
+                LD      C, 3            ; COLOR 3 = HIGHLIGHT
+                CALL    PARSCOL
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JP      .SKPLIN
+
+.NOTCHI         POP     HL
 
 .SKPLIN         ; ADVANCE HL TO END OF CURRENT LINE (CR, LF, OR 0)
                 LD      A, (HL)
                 OR      A
-                RET     Z
+                JR      Z, .CFGDON
                 CP      13
                 JR      Z, .EOLS
                 CP      10
@@ -150,6 +221,12 @@ CFGLOAD         LD      HL, CFGNAME
                 CP      13
                 JR      Z, .EOLS
                 JP      .LINELP
+
+.CFGDON         LD      A, (PALDIRT)
+                OR      A
+                RET     Z
+                LD      HL, PALDATA
+                JP      SETPAL
 
 
 ; --- STRPREF                   ----------------------------------------
@@ -414,6 +491,180 @@ PARSEOL         LD      A, (HL)
                 RET
 
 
+; --- PARSTHM                   ----------------------------------------
+
+
+; - PARSTHM ----------------------------
+; - PARSE THEME NAME AND LOAD PALDATA
+; - IN:  HL = POINTER TO VALUE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+PARSTHM         LD      A, (HL)
+                CP      'D'             ; DEFAULT
+                JR      Z, .THMDEF
+                CP      'd'
+                JR      Z, .THMDEF
+                CP      'A'             ; AMBER
+                JR      Z, .THMAMB
+                CP      'a'
+                JR      Z, .THMAMB
+                CP      'G'             ; GREEN
+                JR      Z, .THMGRN
+                CP      'g'
+                JR      Z, .THMGRN
+                CP      'L'             ; LIGHT
+                JR      Z, .THMLGT
+                CP      'l'
+                JR      Z, .THMLGT
+                CP      'M'             ; MSX OR MONO
+                JR      Z, .CHKM
+                CP      'm'
+                JR      Z, .CHKM
+                RET
+
+.CHKM           INC     HL
+                LD      A, (HL)
+                CP      'O'             ; MONO
+                JR      Z, .THMMON
+                CP      'o'
+                JR      Z, .THMMON
+                JR      .THMMSX         ; DEFAULT 'M' TO MSX
+
+.THMDEF         LD      HL, THMDEFT
+                JR      .CPYTHM
+.THMAMB         LD      HL, THMAMBR
+                JR      .CPYTHM
+.THMGRN         LD      HL, THMGRN
+                JR      .CPYTHM
+.THMLGT         LD      HL, THMLGHT
+                JR      .CPYTHM
+.THMMON         LD      HL, THMMONO
+                JR      .CPYTHM
+.THMMSX         LD      HL, THMMSX
+
+.CPYTHM         LD      DE, PALDATA
+                LD      BC, 8
+                LDIR
+                LD      A, #FF
+                LD      (PALDIRT), A
+                RET
+
+
+; --- PARSCOL                   ----------------------------------------
+
+
+; - PARSCOL ----------------------------
+; - PARSE R,G,B (0-7) AND STORE IN PALDATA
+; - IN:  HL = POINTER TO "R,G,B" VALUE
+; -      C  = COLOR INDEX (0-3)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+PARSCOL         PUSH    BC              ; SAVE COLOR INDEX IN C
+                CALL    GETNUM          ; GET R (0-7)
+                JR      NC, .POPABT
+                LD      D, A            ; D = R
+                CALL    SKPCOM          ; SKIP COMMA
+                JR      NC, .POPABT
+                CALL    GETNUM          ; GET G (0-7)
+                JR      NC, .POPABT
+                LD      E, A            ; E = G
+                CALL    SKPCOM          ; SKIP COMMA
+                JR      NC, .POPABT
+                CALL    GETNUM          ; GET B (0-7)
+                JR      NC, .POPABT
+                ; D = R, E = G, A = B
+                ; VDP FORMAT: BYTE 1 = (R << 4) | B, BYTE 2 = G
+                SLA     D
+                SLA     D
+                SLA     D
+                SLA     D               ; D = R << 4
+                OR      D               ; A = (R << 4) | B
+                POP     BC              ; C = COLOR INDEX
+                PUSH    AF              ; SAVE BYTE 1
+                LD      B, 0
+                SLA     C               ; C = COLOR * 2
+                LD      HL, PALDATA
+                ADD     HL, BC          ; HL = PALDATA + COLOR * 2
+                POP     AF              ; RESTORE BYTE 1
+                LD      (HL), A         ; WRITE BYTE 1
+                INC     HL
+                LD      (HL), E         ; WRITE BYTE 2 (G)
+                LD      A, #FF
+                LD      (PALDIRT), A
+                RET
+
+.POPABT         POP     BC              ; RESTORE STACK ON ERROR
+                RET
+
+
+; --- GETNUM                    ----------------------------------------
+
+
+; - GETNUM -----------------------------
+; - SKIP SPACES, READ DIGIT 0-7, ADVANCE HL
+; - IN:  HL = STRING POINTER
+; - OUT: CY = 1: A = VALUE (0-7), HL ADVANCED PAST DIGIT
+; -      CY = 0: INVALID
+; - CLOBBERS: AF, HL
+; -
+
+GETNUM          LD      A, (HL)
+                CP      ' '
+                JR      Z, .SKP
+                CP      9               ; TAB
+                JR      NZ, .CHK
+.SKP            INC     HL
+                JR      GETNUM
+.CHK            CP      '0'
+                JR      C, .ERR
+                CP      '8'
+                JR      NC, .ERR
+                SUB     '0'             ; A = 0..7
+                INC     HL              ; ADVANCE PAST DIGIT
+                SCF                     ; SUCCESS
+                RET
+.ERR            XOR     A               ; CY = 0 -> ERROR
+                RET
+
+
+; --- SKPCOM                    ----------------------------------------
+
+
+; - SKPCOM -----------------------------
+; - SKIP SPACES, EXPECT ',', SKIP SPACES
+; - IN:  HL = STRING POINTER
+; - OUT: CY = 1: SUCCESS, HL PAST COMMA AND SPACES
+; -      CY = 0: COMMA NOT FOUND
+; - CLOBBERS: AF, HL
+; -
+
+SKPCOM          LD      A, (HL)
+                CP      ' '
+                JR      Z, .S1
+                CP      9               ; TAB
+                JR      NZ, .CHK
+.S1             INC     HL
+                JR      SKPCOM
+.CHK            CP      ','
+                JR      NZ, .NOCOM
+                INC     HL              ; PAST COMMA
+.S2             LD      A, (HL)
+                CP      ' '
+                JR      Z, .S3
+                CP      9               ; TAB
+                JR      NZ, .OK
+.S3             INC     HL
+                JR      .S2
+.OK             SCF
+                RET
+.NOCOM          XOR     A               ; CY = 0 -> NOT FOUND
+                RET
+
+
 ; --- CFG DATA                  ----------------------------------------
 
 
@@ -424,3 +675,22 @@ KEYMKUP         DEFM    "MARKUP", 0
 KEYCLK          DEFM    "CLOCK", 0
 KEYTAB          DEFM    "TABWIDTH", 0
 KEYEOL          DEFM    "EOL", 0
+KEYTHM          DEFM    "THEME", 0
+KEYCBG          DEFM    "COLOR_BG", 0
+KEYCTX          DEFM    "COLOR_TEXT", 0
+KEYCFG          DEFM    "COLOR_FG", 0
+KEYCUI          DEFM    "COLOR_UI", 0
+KEYCHI          DEFM    "COLOR_HIGHLIGHT", 0
+KEYCHIS         DEFM    "COLOR_HI", 0
+
+
+; --- THEMES                    ----------------------------------------
+
+                ; 8 BYTES EACH: 4 COLORS * 2 BYTES (V9938 FORMAT)
+                ; BYTE 1: (R << 4) | B,  BYTE 2: G
+THMDEFT         DEFB    #00, #00, #77, #07, #17, #02, #70, #07
+THMAMBR         DEFB    #00, #00, #70, #04, #20, #01, #70, #06
+THMGRN          DEFB    #00, #00, #11, #07, #00, #02, #40, #07
+THMMSX          DEFB    #15, #01, #77, #07, #27, #04, #70, #07
+THMLGHT         DEFB    #77, #07, #00, #00, #55, #05, #06, #02
+THMMONO         DEFB    #00, #00, #77, #07, #44, #04, #77, #07

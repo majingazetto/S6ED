@@ -234,7 +234,29 @@ ERRMEM          LD      A, (SCRRDY)
                 JP      TERM
 
 
-; --- SCRINIT                ----------------------------------------
+; --- SETPAL                    ----------------------------------------
+
+
+; - SETPAL -----------------------------
+; - UPLOAD 4-COLOR PALETTE TO V9938
+; - IN:  HL = POINTER TO 8-BYTE PALETTE TABLE
+; - OUT: NONE
+; - CLOBBERS: A, BC, HL
+; -
+
+SETPAL          DI
+                XOR     A
+                OUT     (VDPCT), A      ; PALETTE 0
+                LD      A, #90          ; REG 16 | #80
+                OUT     (VDPCT), A
+                LD      B, 8            ; 4 COLORS * 2 BYTES
+                LD      C, VDPPAL       ; PORT #9A
+                OTIR
+                EI
+                RET
+
+
+; --- SCRINIT                   ----------------------------------------
 
 
 ; - SCRINIT ----------------------------
@@ -266,16 +288,9 @@ SCRINIT         LD      A, 6
                 LD      IX, WRTVDP_B
                 CALL    BIOSCALL
 
-                ; SET PALETTE (R#16 = 0, THEN 8 BYTES TO PORT #9A)
-                XOR     A
-                OUT     (VDPCT), A      ; PALETTE 0
-                LD      A, #90          ; REG 16 | #80
-                OUT     (VDPCT), A
+                ; SET PALETTE
                 LD      HL, PALDATA
-                LD      B, 8            ; 4 COLORS * 2 BYTES
-                LD      C, VDPPAL       ; PORT #9A
-                OTIR
-                EI
+                CALL    SETPAL
 
                 ; CLEAR VRAM (HMMV 512x256 = #00000-#07FFF)
                 ; 256 LINES, NOT 212: LINES 212-255 ARE #06A00-#07FFF, WHICH AN
@@ -314,10 +329,7 @@ SCRINIT         LD      A, 6
                 CALL    BIOSCALL
                 RET
 
-PALDATA         DEFB    #00, #00        ; 0: BLACK
-                DEFB    #77, #07        ; 1: WHITE FG
-                DEFB    #17, #02        ; 2: BLUE UI (R=1, B=7, G=2)
-                DEFB    #70, #07        ; 3: YELLOW HI (R=7, B=0, G=7)
+PALDATA         DEFB    #00, #00, #77, #07, #17, #02, #70, #07  ; 0:BG, 1:FG, 2:UI, 3:HI
 
 
 ; --- VARS                      ----------------------------------------

@@ -1148,7 +1148,7 @@ SELXOR          LD      A, E
                 LD      (VDP_DY), HL
                 LD      HL, CELLH
                 LD      (VDP_NY), HL
-                LD      A, COL_HI
+                LD      A, COL_FG       ; CLR = 1 (INVERSE VIDEO)
                 LD      (VDP_CLR), A
                 XOR     A
                 LD      (VDP_ARG), A
