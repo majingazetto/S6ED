@@ -2,12 +2,12 @@
 ;                                       * TEXT BUFFER                          *
 ;                                       ****************************************
 ;
-; LINE DIRECTORY: FLAT ARRAY IN PLAIN TPA RAM AT DIRBASE, JUST ABOVE THE
-;   PROGRAM'S VARIABLE BLOCK AND BELOW THE PAGE 2 WINDOW. NOT A MAPPER SEGMENT
-;   AND NEVER BANKED -- SEE THE PLACEMENT NOTE IN CONST.Z8A.
-;   DIRECT ACCESS: ENTRY N IS AT DIRBASE + N * DIRSIZ.
+; LINE DIRECTORY: FLAT ARRAY IN ITS OWN MAPPER SEGMENT (DIRSEG), BANKED INTO
+;   THE PAGE 2 WINDOW (DIRWIN = TXPAGE) ON DEMAND -- SEE DIRBANK BELOW.
+;   WINDOW ACCESS: ENTRY N IS AT DIRWIN + N * DIRSIZ, AND THE ADDRESS IS ONLY
+;   VALID WHILE DIRSEG IS BANKED -- EVERY READER AND WRITER BANKS FIRST.
 ;   ENTRY LAYOUT: [1: SEG][2: WORD OFFSET WITHIN THAT TEXT SEGMENT]
-;   CAPACITY: MAXLINES ENTRIES, DERIVED FROM ENDVARS AT ASSEMBLY TIME.
+;   CAPACITY: MAXLINES ENTRIES = ONE FULL SEGMENT, INDEPENDENT OF IMAGE SIZE.
 ;
 ; TEXT SEGMENTS: ACCESSED VIA PAGE 2 WINDOW (TXPAGE = #8000).
 ;   PUTP2 TO SWITCH SEGMENT IN; COPY DATA; PUTP2 TO SWITCH NEXT AS NEEDED.
@@ -27,7 +27,10 @@
 ; - CALL AFTER MAPINIT
 ; -
 
-BUFINIT         LD      A, (DEFSEG2)
+BUFINIT         CALL    SEGGET          ; CLAIM THE DIRECTORY SEGMENT (MANDATORY:
+                JP      C, ERRMEM       ;   WITHOUT IT THERE IS NO EDITOR AT ALL)
+                LD      (DIRSEG), A
+                LD      A, (DEFSEG2)
                 LD      (TXSEG0), A     ; USE TPA PAGE 2 SEGMENT FOR FIRST 101 LINES
                 ; FALL THROUGH INTO BUFRESET
 
@@ -107,15 +110,16 @@ RECBLNK         PUSH    HL
 ; - DIRADR -----------
 ; - ADDRESS OF A LINE DIRECTORY ENTRY
 ; - IN:  HL = LINE NUMBER (0-BASED)
-; - OUT: HL = DIRBASE + LINE * DIRSIZ
+; - OUT: HL = DIRWIN + LINE * DIRSIZ
 ; - CLOBBERS: AF, DE
+; - NOTE: RETURNS A WINDOW ADDRESS, ONLY VALID WHILE DIRSEG IS BANKED
 ; -
 
 DIRADR          PUSH    HL
                 ADD     HL, HL          ; * 2
                 POP     DE
                 ADD     HL, DE          ; * 3
-                LD      DE, DIRBASE
+                LD      DE, DIRWIN
                 ADD     HL, DE
                 RET
 
@@ -123,16 +127,18 @@ DIRADR          PUSH    HL
 ; --- DIRREAD                   ----------------------------------------
 
 ; - DIRREAD ----------
-; - READ LINE DIRECTORY ENTRY (DIRECT — PAGE 1 ALWAYS MAPPED)
+; - READ LINE DIRECTORY ENTRY
 ; - HL: LINE NUMBER (0-BASED)
 ; - OUTPUT:
 ; -     A:  SEGMENT NUMBER
 ; -     DE: BYTE OFFSET WITHIN SEGMENT
+; -     PAGE 2 IS LEFT BANKED ON DIRSEG
 ; -
 ; - USES: HL (ENTRY ADDRESS), DE (OFFSET), A (SEG)
 ; -
 
-DIRREAD         CALL    DIRADR
+DIRREAD         CALL    DIRBANK
+                CALL    DIRADR
                 LD      A, (HL)         ; SEGMENT
                 INC     HL
                 LD      E, (HL)
@@ -144,14 +150,16 @@ DIRREAD         CALL    DIRADR
 ; --- DIRWRITE                  ----------------------------------------
 
 ; - DIRWRITE ---------
-; - WRITE LINE DIRECTORY ENTRY (DIRECT — PAGE 1 ALWAYS MAPPED)
+; - WRITE LINE DIRECTORY ENTRY
 ; - HL: LINE NUMBER
 ; - A:  SEGMENT
 ; - DE: BYTE OFFSET WITHIN SEGMENT
+; -     PAGE 2 IS LEFT BANKED ON DIRSEG
 ; -
 
 DIRWRITE        PUSH    AF
                 PUSH    DE
+                CALL    DIRBANK
                 CALL    DIRADR
                 POP     DE              ; DE = OFFSET
                 POP     AF              ; A = SEGMENT
@@ -164,6 +172,30 @@ DIRWRITE        PUSH    AF
                 RET
 
 
+; --- DIRBANK                   ----------------------------------------
+
+; - DIRBANK ----------------------------
+; - BANK THE DIRECTORY SEGMENT INTO PAGE 2
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF ONLY (HL IS PRESERVED -- PUTP2'S WRAPPER DESTROYS HL WITH
+; - THE MAPPER ROUTINE ADDRESS, AND EVERY CALLER HERE CARRIES THE LINE NUMBER
+; - IN HL FOR DIRADR)
+; -
+; - TXSEG FOLLOWS THE BANK, SO THE .SAME SHORT-CIRCUIT IN LINEREAD / LINEWRT /
+; - LINELEN CAN NEVER CONFUSE THE DIRECTORY WITH A TEXT SEGMENT: NO LINE
+; - RECORD EVER LIVES IN DIRSEG, THE CHECK ALWAYS MISSES, AND THE NEXT TEXT
+; - ACCESS RE-BANKS WHERE IT NEEDS TO GO.
+; -
+
+DIRBANK         PUSH    HL
+                LD      A, (DIRSEG)
+                LD      (TXSEG), A
+                CALL    PUTP2
+                POP     HL
+                RET
+
+
 ; --- LINEREAD                  ----------------------------------------
 
 ; - LINEREAD ---------
@@ -171,15 +203,10 @@ DIRWRITE        PUSH    AF
 ; - HL: LINE NUMBER (0-BASED)
 ; -
 
-LINEREAD        CALL    DIRREAD         ; A=SEG, DE=OFFSET
-                LD      B, A
-                LD      A, (TXSEG)
-                CP      B
-                JR      Z, .SAME
-                LD      A, B
+LINEREAD        CALL    DIRREAD         ; A=SEG, DE=OFFSET (PAGE 2 = DIRSEG)
                 LD      (TXSEG), A
-                CALL    PUTP2
-.SAME           LD      HL, TXPAGE
+                CALL    PUTP2           ; UNCONDITIONAL: A RECORD NEVER LIVES IN
+                LD      HL, TXPAGE      ; DIRSEG, SO .SAME WOULD ALWAYS MISS
                 ADD     HL, DE          ; HL = SOURCE
                 LD      DE, WORKBUF
                 LD      BC, WORKSIZ
@@ -197,15 +224,10 @@ LINEREAD        CALL    DIRREAD         ; A=SEG, DE=OFFSET
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
 
-LINELEN         CALL    DIRREAD         ; A = SEG, DE = OFFSET
-                LD      B, A
-                LD      A, (TXSEG)
-                CP      B
-                JR      Z, .SAME
-                LD      A, B
+LINELEN         CALL    DIRREAD         ; A = SEG, DE = OFFSET (PAGE 2 = DIRSEG)
                 LD      (TXSEG), A
-                CALL    PUTP2
-.SAME           LD      HL, TXPAGE
+                CALL    PUTP2           ; UNCONDITIONAL, SAME REASON AS LINEREAD
+                LD      HL, TXPAGE
                 ADD     HL, DE
                 LD      A, (HL)
                 RET
@@ -220,15 +242,10 @@ LINELEN         CALL    DIRREAD         ; A = SEG, DE = OFFSET
 
 LINEWRT         ; TODO: IMPLEMENT REPACKING IF SIZE CHANGES
                 ; FOR NOW, ASSUME FIXED SIZE OR SUFFICIENT SPACE
-                CALL    DIRREAD
-                LD      B, A
-                LD      A, (TXSEG)
-                CP      B
-                JR      Z, .SAME
-                LD      A, B
+                CALL    DIRREAD         ; PAGE 2 = DIRSEG ON RETURN
                 LD      (TXSEG), A
-                CALL    PUTP2
-.SAME           EX      DE, HL
+                CALL    PUTP2           ; UNCONDITIONAL, SAME REASON AS LINEREAD
+                EX      DE, HL
                 LD      DE, TXPAGE
                 ADD     HL, DE          ; HL = DEST
                 EX      DE, HL
@@ -364,11 +381,10 @@ FREEPOP         LD      A, (FREEHD)
 ; - MACHINE THE MAPPER RUNS OUT AT 303 LINES, SO A SINGLE RETURN KEY THREW
 ; - THE WHOLE DOCUMENT AWAY. MEASURED ON PHILIPS NMS 8250.
 ; -
-; - THAT WAS ERRMEM'S ONLY CALLER, SO ERRMEM NOW HAS NONE. IT IS KEPT
-; - DELIBERATELY: IT IS THE RIGHT ANSWER FOR A FAILURE BEFORE THE DOCUMENT
-; - EXISTS, AND BUFINIT MAY NEED IT AGAIN. THE EDIT PATHS REFUSE SILENTLY
-; - FOR NOW, THE SAME WAY THEY ALREADY DO WHEN THE DIRECTORY IS FULL --
-; - TELLING THE USER WHY IS A STATUS BAR JOB AND IS NOT WIRED UP YET.
+; - ERRMEM'S CALLER TODAY IS BUFINIT (THE DIRECTORY SEGMENT IS MANDATORY),
+; - WHERE REFUSING TO START IS THE ONLY HONEST MOVE. THE EDIT PATHS REFUSE
+; - SILENTLY FOR NOW, THE SAME WAY THEY ALREADY DO WHEN THE DIRECTORY IS
+; - FULL -- TELLING THE USER WHY IS A STATUS BAR JOB AND IS NOT WIRED UP YET.
 ; -
 
 NEWREC          CALL    FREEPOP         ; REUSE A DELETED RECORD IF THERE IS ONE
@@ -423,6 +439,7 @@ LINEINS         LD      DE, (TOTLINES)
                 LD      B, H
                 LD      C, L            ; BC = BYTES TO MOVE
 
+                CALL    DIRBANK         ; THE SHIFT RUNS INSIDE THE DIRECTORY WINDOW
                 LD      HL, (TOTLINES)
                 CALL    DIRADR
                 DEC     HL              ; HL = LAST BYTE OF THE LAST ENTRY
@@ -451,6 +468,10 @@ LINEDEL         PUSH    HL              ; SAVE N
                 CALL    FREEPSH         ; HAND THE RECORD BACK BEFORE IT IS LOST
                 POP     HL
                 PUSH    HL              ; SAVE N
+
+                ; FREEPSH LEFT PAGE 2 ON THE FREED RECORD'S SEGMENT; THE
+                ; CLOSE-UP BELOW RUNS IN THE DIRECTORY WINDOW INSTEAD.
+                CALL    DIRBANK
 
                 LD      DE, (TOTLINES)
                 EX      DE, HL          ; HL = TOTLINES, DE = N
