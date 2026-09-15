@@ -725,7 +725,7 @@ ACTDELLN        LD      HL, (TOTLINES)
 ; -
 
 ACTNWLIN        ; MODE CHECK: ALGN_ON ALWAYS, ALGN_DEV ONLY IN WRAP_DEV
-                LD      A, (AUTOALIGN)
+                LD      A, (AUTOALGN)
                 CP      ALGN_ON
                 JR      Z, .ACTIVE
                 CP      ALGN_DEV
