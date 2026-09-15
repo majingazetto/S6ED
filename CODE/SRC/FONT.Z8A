@@ -2,117 +2,124 @@
 ;                                       * FONT                                 *
 ;                                       ****************************************
 ;
-; 6X8 CHARSET (256 GLYPHS X 8 BYTES, 1BPP, INK IN BITS 7-2).
-; EXPANDS INTO THE VRAM FONT TABLE AT VR_FNORM (FNORM_SY = 256).
-; GLYPH N: SX = (N & 31) * 8, SY = FNORM_SY + (N >> 5) * 8.
+; 6X8 CHARSET (256 GLYPHS X 8 BYTES, 1BPP, INK IN BITS 7-2), EXPANDED INTO THE
+; FOUR VRAM FONT TABLES. GLYPH N OF A VARIANT: SX = (N & 31) * 8,
+; SY = <VARIANT>_SY + (N >> 5) * 8.
 ;
-; SOURCE: THE MSX ROM CHARSET, PULLED OUT OF THE MAIN BIOS AT STARTUP. IT IS
-; THE NATIVE 6PX TEXT FACE -- NO GLYPH TOUCHES COLUMN 5, SO CHARACTERS KEEP A
-; ONE PIXEL GAP AND THE BOLD TRANSFORM HAS ROOM TO GROW INTO.
+; SOURCE: S6ED.FNT, READ FROM DISK AT STARTUP -- FOUR VARIANTS OF FONTSIZ BYTES
+; (NORMAL, BOLD, ITALIC, BOLD+ITALIC) IN THAT ORDER, EXACTLY FNTFSIZ BYTES.
+; THE ASSET MUST FOLLOW THE COLUMN RULE PER VARIANT: NORMAL LEAVES COLUMN 5
+; EMPTY BECAUSE THERE IT IS THE LETTER SPACING, THE OTHER THREE OWN IT.
+; COLUMNS 6-7 ARE NEVER BLITTED.
 ;
-; DEFINE _FONTBIN_ TO USE THE BUNDLED RES/FONT.BIN ASSET INSTEAD. THAT ASSET
-; MUST FOLLOW THE SAME RULE: INK ONLY IN COLUMNS 0-4, COLUMN 5 ALWAYS EMPTY.
-
-
-                IFNDEF  _FONTBIN_
-
-; --- FONTROM                   ----------------------------------------
-
-
-; - FONTROM ----------------------------
-; - COPY THE MSX ROM 6X8 CHARSET INTO FONTRAM
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-; - THE CHARSET ADDRESS LIVES AT CGTABL (#0004) IN THE MAIN BIOS ROM. UNDER
-; - MSX-DOS PAGE 0 IS RAM, SO BOTH THE POINTER AND THE GLYPH DATA HAVE TO BE
-; - FETCHED THROUGH RDSLT. 2050 READS, ONCE, AT STARTUP.
-; -
-
-FONTROM         DI
-
-                ; READ THE CHARSET POINTER OUT OF THE BIOS SLOT
-                LD      HL, CGTABL
-                CALL    RDBIOS
-                LD      E, A
-                LD      HL, CGTABL + 1
-                CALL    RDBIOS
-                LD      D, A            ; DE = CHARSET ADDRESS
-
-                ; COPY THE GLYPH DATA INTO RAM
-                EX      DE, HL          ; HL = SOURCE IN BIOS ROM
-                LD      DE, FONTRAM
-                LD      BC, FONTSIZ
-.COPYLP         CALL    RDBIOS
-                LD      (DE), A
-                INC     HL
-                INC     DE
-                DEC     BC
-                LD      A, B
-                OR      C
-                JR      NZ, .COPYLP
-                EI
-                RET
-
-
-; - RDBIOS -----------------------------
-; - READ ONE BYTE FROM THE MAIN BIOS SLOT
-; - IN:  HL = ADDRESS
-; - OUT: A  = BYTE READ
-; - CLOBBERS: AF
-; - NOTE: CALLER MUST HAVE INTERRUPTS DISABLED
-; -
-
-RDBIOS          PUSH    BC
-                PUSH    DE
-                PUSH    HL
-                LD      A, (EXPTBL)     ; MAIN BIOS SLOT ID
-                CALL    RDSLT
-                POP     HL
-                POP     DE
-                POP     BC
-                RET
-
-                ENDIF
+; IT USED TO BE AN INCBIN. 8,192 BYTES OF BITMAP SAT IN THE IMAGE FOR THE WHOLE
+; SESSION TO BE READ EXACTLY ONCE, WHICH IS A THIRD OF EVERYTHING THE .COM
+; LOADS AND MORE THAN THE FREE TPA BELOW THE PAGE 2 WINDOW.
+;
+; FALLBACK: NO S6ED.FNT, OR ONE OF THE WRONG SIZE, AND THE MSX ROM CHARSET IS
+; USED INSTEAD -- THE NATIVE 6PX TEXT FACE, WHICH ALSO LEAVES COLUMN 5 EMPTY.
+; IT HAS ONE WEIGHT, SO IT IS LOADED INTO ALL FOUR TABLES AND BOLD AND ITALIC
+; SIMPLY RENDER AS NORMAL. DERIVING THE OTHER THREE WEIGHTS AT 6X8 WAS MEASURED
+; AND REJECTED ON 2026-09-12: BOLD BY OR-SHIFT CLOSES THE COUNTERS, ITALIC CAN
+; ONLY LEAN ONE PIXEL, AND BOLD+ITALIC CANNOT BE DERIVED AT ALL (427 PIXELS
+; LOST ACROSS 91 OF THE 95 PRINTABLE GLYPHS).
+;
+; BOTH SOURCES FEED THE SAME UPLOAD LOOP THROUGH CLIPBUF, ONE VARIANT AT A
+; TIME, AND IT COSTS NOT ONE BYTE OF RAM: THE CLIPBOARD IS NECESSARILY EMPTY
+; DURING INIT AND CLIPMAX IS EXACTLY FONTSIZ. THE OLD ROM PATH STAGED THE
+; CHARSET IN A DEDICATED 2,048-BYTE FONTRAM; THAT BUFFER IS GONE.
+;
+; THE STAGING UNIT WAS MEASURED ON A 128 KB NMS 8250, BECAUSE IT IS ALL DISK
+; LATENCY AND THE ANSWER WAS NOT THE OBVIOUS ONE:
+;
+;   256-BYTE GLYPH ROW, 32 READS, NEEDS ONLY FILEBUF       3,570.9 MS
+;   2 KB VARIANT, 4 READS, NEEDS CLIPBUF                   1,290.3 MS
+;   8 KB IN ONE READ, STAGED AT TXPAGE                     1,369.8 MS
+;
+; SO THE COST COLLAPSES BETWEEN 256 BYTES AND 2 KB AND THEN FLATTENS: PAST THAT
+; IT IS PER BYTE, NOT PER CALL. THE SINGLE READ IS THE ONE DESIGN THAT NEEDS NO
+; BUFFER AT ALL -- AT FONTINIT TIME PAGE 2 STILL HOLDS DEFSEG2 AND ITS 16 KB
+; ARE UNCLAIMED -- BUT IT MEASURED SLOWER AND IT WOULD PIN FONTINIT AHEAD OF
+; BUFINIT FOREVER. A COUPLING THAT BUYS NOTHING IS NOT WORTH HAVING.
 
 
 ; --- FONTINIT                  ----------------------------------------
 
 
 ; - FONTINIT ---------------------------
-; - EXPAND THE 1BPP CHARSET INTO THE NORMAL FONT TABLE IN VRAM
+; - EXPAND THE 1BPP CHARSET INTO THE FOUR FONT TABLES IN VRAM
 ; - IN:  NONE
-; - OUT: NONE
+; - OUT: FNTOK = #FF IF S6ED.FNT WAS USED, 0 IF THE ROM CHARSET WAS
 ; - CLOBBERS: ALL
 ; -
-; - THE TABLE IS WALKED BY VRAM LINE, NOT BY GLYPH. ONE VRAM LINE HOLDS THE
+; - THE TABLES ARE WALKED BY VRAM LINE, NOT BY GLYPH. ONE VRAM LINE HOLDS THE
 ; - SAME SCANLINE OF 32 CONSECUTIVE GLYPHS (32 X 2 BYTES = 64 SEQUENTIAL
-; - BYTES), SO THE WHOLE TABLE COSTS 64 SETWRT INSTEAD OF ONE PER GLYPH LINE.
-; - SOURCE STRIDE INSIDE A LINE IS 8: GLYPH N ROW L LIVES AT FONTSRC + N*8 + L.
+; - BYTES), SO A TABLE COSTS 64 SETWRT INSTEAD OF ONE PER GLYPH LINE. THE FOUR
+; - TABLES ARE CONTIGUOUS IN VRAM, SO ONE RUNNING ADDRESS COVERS ALL OF THEM
+; - AND THE OUTER LOOP IS SIMPLY 4 VARIANTS X 8 GLYPH ROWS.
+; -
+; - EACH OF THOSE 32 PASSES STAYS INSIDE ONE CONTIGUOUS 256-BYTE GLYPH ROW, AND
+; - EIGHT CONSECUTIVE PASSES STAY INSIDE ONE VARIANT -- WHICH IS WHY THE SOURCE
+; - CAN BE STAGED A VARIANT AT A TIME INSTEAD OF HELD WHOLE. SOURCE STRIDE
+; - INSIDE A LINE IS 8: GLYPH N ROW L LIVES AT <ROW BASE> + N*8 + L.
 ; -
 ; - THE SCREEN IS BLANKED FOR THE UPLOAD. VRAM TIMING IN GRAPHIC 5 DEMANDS A
 ; - WIDE GAP BETWEEN ACCESSES WHILE THE DISPLAY IS ACTIVE, AND THIS LOOP IS
 ; - TIGHTER THAN THAT.
 ; -
 
-FONTINIT
-                IFNDEF  _FONTBIN_
-                CALL    FONTROM         ; PULL THE CHARSET OUT OF THE BIOS
-                ENDIF
+FONTINIT        XOR     A
+                LD      (FNTROMD), A
+                LD      (FNTOK), A      ; THE ROM UNTIL THE FILE EARNS IT
 
-                LD      IX, DISSCR_B
+                LD      HL, FNTNAME
+                CALL    DSKOPEN
+                JR      C, .USEROM      ; NOT THERE
+                LD      (FNTHAND), A
+
+                ; IT MUST BE EXACTLY FOUR VARIANTS. A SHORT FILE WOULD LEAVE
+                ; WHOLE TABLES HOLDING WHATEVER DOS LEFT IN VRAM, AND THE
+                ; RENDERER PICKS ITS TABLE FROM THE ATTRIBUTE BITS WITHOUT
+                ; ASKING, SO THAT HAS TO BE CAUGHT HERE AND NOT LATER.
+                LD      A, D
+                OR      E
+                JR      NZ, .BADSIZ     ; BIGGER THAN 64 KB
+                LD      DE, FNTFSIZ
+                OR      A
+                SBC     HL, DE
+                JR      NZ, .BADSIZ
+
+                LD      A, #FF
+                LD      (FNTOK), A
+                JR      .UPLOAD
+
+.BADSIZ         LD      A, (FNTHAND)
+                CALL    DSKCLOSE
+                XOR     A
+                LD      (FNTOK), A
+
+.USEROM         CALL    FNTROMI
+
+.UPLOAD         LD      IX, DISSCR_B
                 CALL    BIOSCALL
 
                 LD      HL, VR_FNORM    ; RUNNING VRAM LINE ADDRESS
-                LD      DE, FONTSRC     ; BASE OF THE CURRENT GLYPH ROW
-                IFDEF   _FONTBIN_
-                LD      C, 32           ; 4 VARIANTS X 8 GLYPH ROWS = 32
-                ELSE
-                LD      C, 8            ; 1 VARIANT (BIOS CHARSET)
-                ENDIF
+                LD      C, 32           ; 4 VARIANTS X 8 GLYPH ROWS
 
-.ROWLP          PUSH    DE              ; KEEP THE GLYPH ROW BASE
+                ; C COUNTS DOWN 32..1, SO THE FIRST ROW OF A VARIANT IS EXACTLY
+                ; WHERE C IS A MULTIPLE OF 8. THAT IS WHERE THE NEXT VARIANT IS
+                ; STAGED; THE SEVEN ROWS AFTER IT WALK THE BUFFER WITH INC D.
+.ROWLP          LD      A, C
+                AND     7
+                JR      NZ, .NOLOAD
+                PUSH    BC              ; ROW COUNTER
+                PUSH    HL              ; VRAM LINE ADDRESS
+                CALL    FNTLOAD         ; NEXT VARIANT INTO CLIPBUF
+                POP     HL
+                POP     BC
+                LD      DE, CLIPBUF
+
+.NOLOAD         PUSH    DE              ; GLYPH ROW BASE
                 LD      B, 8            ; 8 SCANLINES PER GLYPH ROW
 
 .LINELP         PUSH    BC
@@ -147,8 +154,115 @@ FONTINIT
                 DEC     C
                 JR      NZ, .ROWLP
 
-                LD      IX, ENASCR_B
+                LD      A, (FNTOK)
+                OR      A
+                JR      Z, .SHOW
+                LD      A, (FNTHAND)
+                CALL    DSKCLOSE
+
+.SHOW           LD      IX, ENASCR_B
                 CALL    BIOSCALL
+                RET
+
+
+; --- FNTLOAD                   ----------------------------------------
+
+
+; - FNTLOAD ----------------------------
+; - STAGE THE NEXT FONT VARIANT IN CLIPBUF
+; - IN:  NONE (FNTOK SELECTS THE SOURCE)
+; - OUT: CLIPBUF HOLDS FONTSIZ BYTES
+; - CLOBBERS: ALL
+; -
+; - CLIPBUF IS NECESSARILY IDLE HERE: FONTINIT RUNS DURING INIT, BEFORE ANY KEY
+; - CAN BE PRESSED, AND CLIPMAX IS EXACTLY FONTSIZ.
+; -
+; - THE ROM PATH STAGES ONCE AND THEN DOES NOTHING. THE CHARSET HAS ONE WEIGHT,
+; - SO THE SAME BUFFER FEEDS ALL FOUR TABLES: BOLD AND ITALIC COME OUT AS
+; - NORMAL AND EVERY ATTRIBUTE THE RENDERER ASKS FOR LANDS ON READABLE TEXT.
+; - RE-EXTRACTING PER VARIANT WOULD COST 8,192 RDSLT CALLS AGAINST 2,048,
+; - MEASURED AT 2,181.8 MS AGAINST 547.
+; -
+
+                ASSERT  CLIPMAX >= FONTSIZ
+
+FNTLOAD         LD      A, (FNTOK)
+                OR      A
+                JR      Z, .FROMROM
+
+                LD      A, (FNTHAND)
+                LD      HL, FONTSIZ
+                LD      DE, CLIPBUF
+                CALL    DSKREAD
+                RET
+
+.FROMROM        LD      A, (FNTROMD)
+                OR      A
+                RET     NZ              ; ALREADY STAGED, ALL FOUR SHARE IT
+                DEC     A               ; #FF
+                LD      (FNTROMD), A
+
+                LD      HL, (FNTCGA)    ; SOURCE IN THE BIOS ROM
+                LD      DE, CLIPBUF
+                LD      BC, FONTSIZ
+                DI
+.ROMLP          CALL    RDBIOS
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                DEC     BC
+                LD      A, B
+                OR      C
+                JR      NZ, .ROMLP
+                EI
+                RET
+
+
+; --- FNTROMI                   ----------------------------------------
+
+
+; - FNTROMI ----------------------------
+; - RESOLVE THE ROM CHARSET ADDRESS INTO FNTCGA
+; - IN:  NONE
+; - OUT: FNTCGA = CHARSET BASE IN THE MAIN BIOS SLOT
+; - CLOBBERS: AF, DE, HL
+; -
+; - THE ADDRESS LIVES AT CGTABL (#0004) IN THE MAIN BIOS ROM. UNDER MSX-DOS
+; - PAGE 0 IS RAM, SO BOTH THE POINTER AND THE GLYPH DATA HAVE TO BE FETCHED
+; - THROUGH RDSLT.
+; -
+
+FNTROMI         DI
+                LD      HL, CGTABL
+                CALL    RDBIOS
+                LD      E, A
+                LD      HL, CGTABL + 1
+                CALL    RDBIOS
+                LD      D, A            ; DE = CHARSET ADDRESS
+                LD      (FNTCGA), DE
+                EI
+                RET
+
+
+; --- RDBIOS                    ----------------------------------------
+
+
+; - RDBIOS -----------------------------
+; - READ ONE BYTE FROM THE MAIN BIOS SLOT
+; - IN:  HL = ADDRESS
+; - OUT: A  = BYTE READ
+; - CLOBBERS: AF
+; - NOTE: CALLER MUST HAVE INTERRUPTS DISABLED
+; -
+
+RDBIOS          PUSH    BC
+                PUSH    DE
+                PUSH    HL
+                LD      A, (EXPTBL)     ; MAIN BIOS SLOT ID
+                CALL    RDSLT
+                POP     HL
+                POP     DE
+                POP     BC
                 RET
 
 
@@ -192,10 +306,5 @@ EXPNORM         LD      HL, 0
 
 ; --- ASSETS                    ----------------------------------------
 
-                IFDEF   _FONTBIN_
-FONTSRC         INCBIN  "FONTS.BIN"
-                ELSE
-FONTSRC         EQU     FONTRAM         ; FILLED AT STARTUP BY FONTROM
-                ENDIF
 
-
+FNTNAME         DEFM    "S6ED.FNT", 0

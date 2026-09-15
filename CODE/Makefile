@@ -40,11 +40,11 @@ ifeq ($(DEBUG),1)
 DEFINES			+= -DDEBUG
 endif
 
-# FONTBIN=1 uses the bundled RES/FONTS.BIN instead of the MSX ROM charset (default: 1).
-FONTBIN			?= 1
-ifeq ($(FONTBIN),1)
-DEFINES			+= -D_FONTBIN_
-endif
+# The font is no longer built into the image. FONTINIT reads S6ED.FNT from the
+# disk at startup and falls back to the MSX ROM charset when it is missing, so
+# there is one binary and no FONTBIN switch: the choice is made at run time by
+# whether the file is there.
+FNTFILE			= S6ED.FNT
 
 DSKFILE			= S6ED.DSK
 DSKTOOL			= ../../msxtools/bin/dsktool
@@ -57,18 +57,25 @@ all: build dsk
 # -	 Clean Target ------------------------------------------------------------
 
 clean:
-	@$(RM) -R $(OUTPUT) $(LSTFILE) $(SYMFILE) $(DSKFILE)
+	@$(RM) -R $(OUTPUT) $(LSTFILE) $(SYMFILE) $(DSKFILE) $(FNTFILE)
 
-build: $(OUTPUT)
+build: $(OUTPUT) $(FNTFILE)
 
 dsk: $(DSKFILE)
 
-$(DSKFILE): $(OUTPUT) TEST.TXT AUTOEXEC.BAT S6ED.CFG
+DSKCONT			= $(OUTPUT) $(FNTFILE) TEST.TXT AUTOEXEC.BAT S6ED.CFG
+
+$(DSKFILE): $(DSKCONT)
 	@cp $(DSKBASE) $(DSKFILE)
-	@$(DSKTOOL) D $(DSKFILE) $(OUTPUT) TEST.TXT AUTOEXEC.BAT S6ED.CFG
-	@$(DSKTOOL) A $(DSKFILE) $(OUTPUT) TEST.TXT AUTOEXEC.BAT S6ED.CFG
+	@$(DSKTOOL) D $(DSKFILE) $(DSKCONT)
+	@$(DSKTOOL) A $(DSKFILE) $(DSKCONT)
 
 # -	 Build Target ------------------------------------------------------------
+
+# The asset ships next to the .COM under its run-time name, so anyone with the
+# format can drop in their own face.
+$(FNTFILE): $(RES_DIR)/FONTS.BIN
+	@cp $< $@
 
 $(RES_DIR)/FONTS.BIN: $(RES_DIR)/FONT.PNG $(RES_DIR)/fontcheck.py
 	python3 $(RES_DIR)/fontcheck.py $< --variant normal --out $(RES_DIR)/FONT_NORM.BIN
@@ -78,7 +85,7 @@ $(RES_DIR)/FONTS.BIN: $(RES_DIR)/FONT.PNG $(RES_DIR)/fontcheck.py
 	cat $(RES_DIR)/FONT_NORM.BIN $(RES_DIR)/FONT_BOLD.BIN $(RES_DIR)/FONT_ITAL.BIN $(RES_DIR)/FONT_BI.BIN > $@
 	@$(RM) $(RES_DIR)/FONT_NORM.BIN $(RES_DIR)/FONT_BOLD.BIN $(RES_DIR)/FONT_ITAL.BIN $(RES_DIR)/FONT_BI.BIN
 
-$(OUTPUT): $(ALL_SOURCES_GEN) $(RES_DIR)/FONTS.BIN
+$(OUTPUT): $(ALL_SOURCES_GEN)
 	@$(ASM) --lst=$(LSTFILE) --sym=$(SYMFILE) $(INCLUDES) $(DEFINES) $(MAIN)
 
 # -	 Run Targets -------------------------------------------------------------

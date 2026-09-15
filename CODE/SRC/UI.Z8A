@@ -194,6 +194,18 @@ BLDSTAT         LD      DE, STATBUF
                 LD      HL, .STRSEL
 .PUTSEL         CALL    .CPYSTR
 
+                ; 6B. FALLBACK FONT INDICATOR. S6ED.FNT WAS MISSING OR THE
+                ; WRONG SIZE AND THE ROM CHARSET IS STANDING IN, SO BOLD AND
+                ; ITALIC RENDER AS NORMAL. NEVER DEGRADE SILENTLY: THE BAR
+                ; SAYS SO FOR AS LONG AS IT IS TRUE, WHICH A MESSAGE AT BOOT
+                ; WOULD NOT.
+                LD      A, (FNTOK)
+                OR      A
+                LD      HL, .STRROM
+                JR      Z, .PUTFNT
+                LD      HL, .STRNOFN
+.PUTFNT         CALL    .CPYSTR
+
                 ; 7. MODIFIED INDICATOR
                 LD      A, (MODIFIED)
                 OR      A
@@ -292,6 +304,8 @@ BLDSTAT         LD      DE, STATBUF
 .STRLIT         DEFM    "[LIT] ", 0
 .STRNOSL        DEFM    "      ", 0
 .STRSEL         DEFM    "[SEL] ", 0
+.STRNOFN        DEFM    "      ", 0
+.STRROM         DEFM    "[ROM] ", 0
 .STRLN          DEFM    "Ln ", 0
 .STRCOL         DEFM    " Col ", 0
 .STRSEP         DEFM    " | ", 0
