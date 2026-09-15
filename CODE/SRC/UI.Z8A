@@ -655,7 +655,7 @@ DRWCUR          PUSH    AF
                 LD      HL, CELLH       ; NY = 8
                 LD      (VDP_NY), HL
 
-                LD      A, COL_HI       ; CLR = 3
+                LD      A, COL_FG       ; CLR = 1 (INVERSE VIDEO)
                 LD      (VDP_CLR), A
 
                 XOR     A

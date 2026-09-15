@@ -83,9 +83,9 @@ FBI_SY          EQU     (VR_FBI   - VR_DISP) / 128     ; = 448
 
                 ; COLOR INDICES (SCREEN 6, 4 COLORS)
 COL_BG          EQU     0               ; BACKGROUND
-COL_FG          EQU     1               ; NORMAL TEXT / FOREGROUND
+COL_FG          EQU     1               ; NORMAL TEXT (AND INVERSE CURSOR/SELECT)
 COL_UI          EQU     2               ; UI CHROME (GUTTERS, MENU, STATUS)
-COL_HI          EQU     3               ; CURSOR / HIGHLIGHT / ACCENT
+COL_HI          EQU     3               ; HIGHLIGHT / ACCENT / SYNTAX
 
                 ; BYTE PATTERNS (SCREEN 6, 4 PIXELS PER BYTE FOR HMMV)
 CLR_BG          EQU     #00             ; 4 PIXELS OF COLOR 0 (%00000000)
