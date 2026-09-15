@@ -208,13 +208,15 @@ FILEBUF         DEFS    256             ; TEMPORARY BUFFER FOR DISK READS
 
 ; --- FONT SOURCE               ----------------------------------------
 
-                ; 1BPP CHARSET STAGED IN RAM BY FONTROM (FONT.Z8A) BEFORE
-                ; FONTINIT EXPANDS IT TO 2BPP IN VRAM. NOT ASSEMBLED WHEN
-                ; _FONTBIN_ SELECTS THE BUNDLED ASSET INSTEAD.
+                ; FONTINIT STREAMS THE CHARSET A GLYPH ROW AT A TIME THROUGH
+                ; FILEBUF, FROM S6ED.FNT OR FROM THE BIOS ROM, SO NOTHING HERE
+                ; STAGES IT. THE 2,048-BYTE FONTRAM THE ROM PATH USED TO NEED
+                ; IS GONE WITH IT.
 
-                IFNDEF  _FONTBIN_
-FONTRAM         DEFS    FONTSIZ
-                ENDIF
+FNTOK           DEFB    0               ; #FF = S6ED.FNT IN USE, 0 = ROM CHARSET
+FNTHAND         DEFB    0               ; HANDLE OF S6ED.FNT WHILE IT IS OPEN
+FNTROMD         DEFB    0               ; #FF ONCE THE ROM CHARSET IS STAGED
+FNTCGA          DEFW    0               ; ROM CHARSET BASE, RESOLVED BY FNTROMI
 
 
 ; --- GENERIC / UTIL            ----------------------------------------
