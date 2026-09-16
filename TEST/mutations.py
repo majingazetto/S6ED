@@ -218,6 +218,124 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'D6',
         'expect': ['D6/content'],
     },
+    {
+        'name': 'e1-cut',
+        'why': 'ACTCUT copies to clipboard but skips deleting selection from document',
+        'file': 'ACTION.Z8A',
+        'old': """ACTCUT          CALL    ACTCOPY
+                LD      HL, (CLIPLEN)
+                LD      A, H
+                OR      L
+                RET     Z               ; NOTHING COPIED
+                JP      ACTDLS          ; DELETE SELECTION FROM DOCUMENT""",
+        'new': """ACTCUT          CALL    ACTCOPY
+                LD      HL, (CLIPLEN)
+                LD      A, H
+                OR      L
+                RET                     ; MUTATION: SKIP ACTDLS DELETION
+                JP      ACTDLS          ; DELETE SELECTION FROM DOCUMENT""",
+        'filter': 'E1',
+        'expect': ['E1/totlines', 'E1/content'],
+    },
+    {
+        'name': 'e2-paste',
+        'why': 'PSTNL does not create new lines during multi-line paste',
+        'file': 'ACTION.Z8A',
+        'old': """PSTNL           LD      HL, (TOTLINES)
+                PUSH    HL
+                CALL    EDNWLIN""",
+        'new': """PSTNL           LD      HL, (TOTLINES)
+                PUSH    HL
+                NOP                     ; MUTATION: NO NEWLINES ON PASTE
+                NOP
+                NOP""",
+        'filter': 'E2',
+        'expect': ['E2/totlines', 'E2/content'],
+    },
+    {
+        'name': 'e3-sel-scroll',
+        'why': 'ACTSLMD does not advance row on selection',
+        'file': 'ACTION.Z8A',
+        'old': """ACTSLMD         CALL    SELBEG
+                LD      A, (CURY)""",
+        'new': """ACTSLMD         RET                     ; MUTATION: ACTSLMD NO-OP
+                LD      A, (CURY)""",
+        'filter': 'E3',
+        'expect': ['E3/docline-advanced', 'E3/viewport-scrolled'],
+    },
+    {
+        'name': 'e4-selall-del',
+        'why': 'ACTSELAL fails to set SELACT to 1',
+        'file': 'ACTION.Z8A',
+        'old': """                XOR     A
+                LD      (SELANCX), A
+                LD      A, 1
+                LD      (SELACT), A""",
+        'new': """                XOR     A
+                LD      (SELANCX), A
+                XOR     A               ; MUTATION: DO NOT ACTIVATE SELECTION
+                LD      (SELACT), A""",
+        'filter': 'E4',
+        'expect': ['E4/sel-active'],
+    },
+    {
+        'name': 'e5-replace',
+        'why': '.DOPRINT does not call ACTDLS when typing over active selection',
+        'file': 'DISP.Z8A',
+        'old': """                LD      A, (SELACT)
+                OR      A
+                JR      Z, .NOSELDL""",
+        'new': """                LD      A, (SELACT)
+                OR      A
+                JR      .NOSELDL        ; MUTATION: DO NOT DELETE SELECTION ON TYPING""",
+        'filter': 'E5',
+        'expect': ['E5/content'],
+    },
+    {
+        'name': 'e6-sel-word-page',
+        'why': 'ACTSLWRT does not advance to next word',
+        'file': 'ACTION.Z8A',
+        'old': """ACTSLWRT        CALL    SELBEG
+                CALL    SELPRE
+                CALL    ACTWRGT""",
+        'new': """ACTSLWRT        CALL    SELBEG
+                CALL    SELPRE
+                NOP                     ; MUTATION: DO NOT ADVANCE TO NEXT WORD
+                NOP
+                NOP""",
+        'filter': 'E6',
+        'expect': ['E6/word-curx'],
+    },
+    {
+        'name': 'e7-clip-limit',
+        'why': 'ACTCOPY does not clamp copy bytes to CLIPMAX',
+        'file': 'ACTION.Z8A',
+        'old': """.CPYLINE        ; CHECK IF TOTAL BYTES EXCEEDS CLIPMAX
+                LD      HL, (CPYCNT)
+                LD      DE, CLIPMAX
+                CALL    CMPHLDE
+                JP      NC, .CPYEXIT    ; CLIPBOARD FULL""",
+        'new': """.CPYLINE        ; CHECK IF TOTAL BYTES EXCEEDS CLIPMAX
+                LD      HL, (CPYCNT)
+                LD      DE, 4096        ; MUTATION: DO NOT CLAMP TO CLIPMAX
+                CALL    CMPHLDE
+                NOP
+                NOP
+                NOP""",
+        'also': [('ACTION.Z8A',
+                  """                ; CLAMP K TO REMAINING CLIPBOARD SPACE (CLIPMAX - CPYCNT)
+                LD      HL, CLIPMAX
+                LD      DE, (CPYCNT)
+                OR      A
+                SBC     HL, DE          ; HL = REMAINING""",
+                  """                ; CLAMP K TO REMAINING CLIPBOARD SPACE (CLIPMAX - CPYCNT)
+                LD      HL, 4096        ; MUTATION: EXPAND CAPACITY PAST BUFFER
+                LD      DE, (CPYCNT)
+                OR      A
+                SBC     HL, DE          ; HL = REMAINING""")],
+        'filter': 'E7',
+        'expect': ['E7/cliplen'],
+    },
 ]
 
 
