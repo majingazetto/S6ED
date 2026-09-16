@@ -92,6 +92,60 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'G10',
         'expect': ['G10/no-trailing-spaces'],
     },
+    {
+        'name': 'b2-font',
+        'why': 'EXPNORM fails to expand high bit of ink color 1',
+        'file': 'FONT.Z8A',
+        'old': """                SET     6, H
+.P1             ADD     A, A""",
+        'new': """                RES     6, H            ; MUTATION: PIXEL 0 LOST
+.P1             ADD     A, A""",
+        'filter': 'B2',
+        'expect': ['B2/vram-tables'],
+    },
+    {
+        'name': 'b3-rom',
+        'why': 'UI does not show [ROM] indicator when S6ED.FNT is missing',
+        'file': 'UI.Z8A',
+        'old': """                LD      HL, .STRROM
+                JR      Z, .PUTFNT
+                LD      HL, .STRNOFN""",
+        'new': """                LD      HL, .STRNOFN    ; MUTATION: SILENT FALLBACK
+                JR      Z, .PUTFNT
+                LD      HL, .STRNOFN""",
+        'filter': 'B3',
+        'expect': ['B3/status-bar-rom'],
+    },
+    {
+        'name': 'f1-scroll',
+        'why': 'SCRLDNN scrolls to the wrong destination scanline',
+        'file': 'SCROLL.Z8A',
+        'old': """                LD      HL, TXORG_Y     ; DY = TOP OF ROW 1
+                LD      (VDP_DY), HL""",
+        'new': """                LD      HL, TXORG_Y + 8 ; MUTATION: DESTINATION SHIFTED BY ONE ROW
+                LD      (VDP_DY), HL""",
+        'filter': 'F1',
+        'expect': ['F1/render-pure'],
+    },
+    {
+        'name': 'f2-keyrun',
+        'why': 'bottom-row scroll does not advance viewport TOPLINE',
+        'file': 'EDIT.Z8A',
+        'old': """                LD      HL, (TOPLINE)
+                ADD     HL, DE
+                LD      (TOPLINE), HL
+                LD      A, E
+                CP      SCRROWS""",
+        'new': """                LD      HL, (TOPLINE)
+                ADD     HL, DE
+                NOP                     ; MUTATION: TOPLINE NOT ADVANCED
+                NOP
+                NOP
+                LD      A, E
+                CP      SCRROWS""",
+        'filter': 'F2',
+        'expect': ['F2/burst-collapsed'],
+    },
 ]
 
 

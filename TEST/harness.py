@@ -35,6 +35,7 @@ DEFAULT_VARS = [
     ('TABWIDTH', 1), ('AUTOALGN', 1), ('KMAPID', 1), ('MKUPMD', 1),
     ('SAVEEOL', 1), ('CLKPH', 1), ('CLKHZ', 1), ('SCRRDY', 1),
     ('SHOWCLK', 1), ('CLKMIN', 1), ('KMAPID', 1), ('VIMODE', 1),
+    ('FNTOK', 1), ('FNTROMD', 1),
 ]
 
 # Byte ranges worth having whole.  The selection records are here because a
@@ -42,6 +43,7 @@ DEFAULT_VARS = [
 # what tells a corrupted painted range from an honest one.
 BYTE_VARS = [
     ('SELSTRL', 6), ('DRWSTRL', 6), ('CLKBUF', 6), ('PALDATA', 8),
+    ('STATBUF', 80),
 ]
 
 HOOK_ADDR = 0xFD9F      # H.TIMI: nothing of ours may ever live behind it
@@ -279,6 +281,8 @@ class Session(object):
             # so let a couple of milliseconds of emulated time pass first.
             if spec['vram'] == 'menu':
                 addr, length, kind = 0, 8 * 128, 'menu'
+            elif spec['vram'] == 'font':
+                addr, length, kind = 0x8000, 32768, 'font'
             else:
                 addr, length, kind = TEXT_VRAM_ADDR, TEXT_VRAM_LEN, 'vram'
             a('    after time 0.002 {')
@@ -338,7 +342,7 @@ class Session(object):
                 run.snaps.setdefault(label, {})[name] = [
                     int(v) for v in value.split()]
         for (_, label, spec) in timeline.snaps:
-            for kind in ('vram', 'menu', 'dir', 'image', 'pal'):
+            for kind in ('vram', 'menu', 'dir', 'image', 'pal', 'font'):
                 path = os.path.join(self.dir, '%s.%s' % (label, kind))
                 if os.path.exists(path):
                     run.files[(label, kind)] = path
