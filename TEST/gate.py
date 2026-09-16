@@ -1831,13 +1831,188 @@ class E7ClipLimit(Case):
         return checks
 
 
+# --- I1  UNIX EOL AUTO-DETECTION & PRESERVATION -----------------------
+
+
+class I1UnixAuto(Case):
+    name = 'I1-eol-unix-auto'
+    desc = 'auto-detect UNIX LF on load and preserve pure LF on save'
+    origin = ('FILELOAD inspects the first line delimiter: standalone LF sets '
+              'SAVEEOL = 1 (UNIX); FILESAVE writes LF only for every line')
+    cfg = DEFAULT_CFG
+
+    FIXTURE = b'FIRST UNIX LINE\nSECOND UNIX LINE\nTHIRD UNIX LINE\n'
+
+    def fixture(self, ctx, variant=None):
+        return self.FIXTURE
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('loaded')
+        t.press('DOWN')
+        t.text('ADDED ')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = b'FIRST UNIX LINE\nADDED SECOND UNIX LINE\nTHIRD UNIX LINE\n'
+        saveeol_loaded = run.var('loaded', 'SAVEEOL')
+        saveeol_saved = run.var('saved', 'SAVEEOL')
+        checks = [
+            Check('I1/saveeol', saveeol_loaded == 1 and saveeol_saved == 1,
+                  'SAVEEOL: loaded=%s, saved=%s (expected 1)' % (saveeol_loaded, saveeol_saved)),
+            Check('I1/no-cr', b'\r' not in got if got else False,
+                  'saved file contains zero CR (0x0D) bytes' if (got and b'\r' not in got) else
+                  'CR found in UNIX file'),
+            Check('I1/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r, want %r' % (got, want)),
+            Check('I1/totlines', run.var('saved', 'TOTLINES') == 3,
+                  'TOTLINES = %s (expected 3)' % run.var('saved', 'TOTLINES')),
+        ]
+        return checks
+
+
+# --- I2  DOS EOL AUTO-DETECTION & PRESERVATION ------------------------
+
+
+class I2DosAuto(Case):
+    name = 'I2-eol-dos-auto'
+    desc = 'auto-detect DOS CRLF on load and preserve CRLF on save'
+    origin = ('FILELOAD inspects the first line delimiter: CRLF sets '
+              'SAVEEOL = 0 (DOS); FILESAVE writes CR+LF for every line')
+    cfg = DEFAULT_CFG
+
+    FIXTURE = b'FIRST DOS LINE\r\nSECOND DOS LINE\r\n'
+
+    def fixture(self, ctx, variant=None):
+        return self.FIXTURE
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('loaded')
+        t.press('DOWN')
+        t.text('INSERTED ')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = b'FIRST DOS LINE\r\nINSERTED SECOND DOS LINE\r\n'
+        saveeol_loaded = run.var('loaded', 'SAVEEOL')
+        saveeol_saved = run.var('saved', 'SAVEEOL')
+        checks = [
+            Check('I2/saveeol', saveeol_loaded == 0 and saveeol_saved == 0,
+                  'SAVEEOL: loaded=%s, saved=%s (expected 0)' % (saveeol_loaded, saveeol_saved)),
+            Check('I2/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r, want %r' % (got, want)),
+            Check('I2/totlines', run.var('saved', 'TOTLINES') == 2,
+                  'TOTLINES = %s (expected 2)' % run.var('saved', 'TOTLINES')),
+        ]
+        return checks
+
+
+# --- I3  CONVERT DOS TO UNIX VIA CFG ----------------------------------
+
+
+class I3ConvertDosToUnix(Case):
+    name = 'I3-eol-convert-dos2unix'
+    desc = 'load DOS CRLF document under EOL=UNIX and save converted with LF only'
+    origin = ('CFG with EOL=UNIX disables AUTOLOD and forces SAVEEOL = 1; '
+              'FILESAVE converts all line endings from CRLF to LF')
+    cfg = ("; EOL=UNIX configuration\r\n"
+           "EOL = UNIX\r\n"
+           "PROFILE = STD\r\n")
+
+    FIXTURE = b'ALPHA\r\nBETA\r\nGAMMA\r\n'
+
+    def fixture(self, ctx, variant=None):
+        return self.FIXTURE
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('loaded')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = b'ALPHA\nBETA\nGAMMA\n'
+        checks = [
+            Check('I3/saveeol', run.var('loaded', 'SAVEEOL') == 1,
+                  'SAVEEOL = %s (expected 1)' % run.var('loaded', 'SAVEEOL')),
+            Check('I3/no-cr', b'\r' not in got if got else False,
+                  'converted document contains zero CR bytes' if (got and b'\r' not in got) else
+                  'CR byte found after conversion'),
+            Check('I3/content', got == want,
+                  'document converted to UNIX byte for byte' if got == want else
+                  'got %r, want %r' % (got, want)),
+            Check('I3/totlines', run.var('saved', 'TOTLINES') == 3,
+                  'TOTLINES = %s (expected 3)' % run.var('saved', 'TOTLINES')),
+        ]
+        return checks
+
+
+# --- I4  CONVERT UNIX TO DOS VIA CFG ----------------------------------
+
+
+class I4ConvertUnixToDos(Case):
+    name = 'I4-eol-convert-unix2dos'
+    desc = 'load UNIX LF document under EOL=DOS and save converted with CRLF'
+    origin = ('CFG with EOL=DOS disables AUTOLOD and forces SAVEEOL = 0; '
+              'FILESAVE converts all line endings from LF to CRLF')
+    cfg = ("; EOL=DOS configuration\r\n"
+           "EOL = DOS\r\n"
+           "PROFILE = STD\r\n")
+
+    FIXTURE = b'ALPHA\nBETA\nGAMMA\n'
+
+    def fixture(self, ctx, variant=None):
+        return self.FIXTURE
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('loaded')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = b'ALPHA\r\nBETA\r\nGAMMA\r\n'
+        checks = [
+            Check('I4/saveeol', run.var('loaded', 'SAVEEOL') == 0,
+                  'SAVEEOL = %s (expected 0)' % run.var('loaded', 'SAVEEOL')),
+            Check('I4/content', got == want,
+                  'document converted to DOS byte for byte' if got == want else
+                  'got %r, want %r' % (got, want)),
+            Check('I4/totlines', run.var('saved', 'TOTLINES') == 3,
+                  'TOTLINES = %s (expected 3)' % run.var('saved', 'TOTLINES')),
+        ]
+        return checks
+
+
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),
-         E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit()]
+         E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit(),
+         I1UnixAuto(), I2DosAuto(), I3ConvertDosToUnix(), I4ConvertUnixToDos()]
 
 
 def run(ctx, cases):

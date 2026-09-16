@@ -389,6 +389,30 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'G12',
         'expect': ['G12/vdp-palette'],
     },
+    {
+        'name': 'i1-unix-save',
+        'why': 'FILESAVE always writes CRLF ignoring SAVEEOL = 1',
+        'file': 'FILEIO.Z8A',
+        'old': """                LD      A, (SAVEEOL)
+                OR      A
+                JR      Z, .WREOL2""",
+        'new': """                JR      .WREOL2         ; MUTATION: ALWAYS WRITE CRLF
+                LD      A, (SAVEEOL)
+                OR      A""",
+        'filter': 'I1',
+        'expect': ['I1/no-cr', 'I1/content'],
+    },
+    {
+        'name': 'i2-autolod-lf',
+        'why': 'FILELOAD does not auto-detect standalone LF as UNIX EOL',
+        'file': 'FILEIO.Z8A',
+        'old': """                LD      A, 1
+                LD      (SAVEEOL), A    ; DETECTED UNIX (LF)""",
+        'new': """                XOR     A               ; MUTATION: DO NOT DETECT UNIX
+                LD      (SAVEEOL), A    ; DETECTED UNIX (LF)""",
+        'filter': 'I1',
+        'expect': ['I1/saveeol', 'I1/content'],
+    },
 ]
 
 
