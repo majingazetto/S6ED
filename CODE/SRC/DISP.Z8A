@@ -41,6 +41,7 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
                 POP     AF              ; RESTORE KEYCODE
                 LD      C, A            ; C = KEYCODE
                 CALL    TRNGRPH         ; TRANSLATE GRAPH ACCENTS IF GRAPH HELD
+                RET     C               ; CHKACNT ALREADY DELIVERED THIS PRESS
                 CALL    TRNDEAD         ; TRANSLATE DEAD KEY IF PENDING
 
                 ; NORMALIZE BIOS GRAVE ACCENT (#85 = à) TO SPANISH ACUTE (#A0 = á)
@@ -201,9 +202,18 @@ KMAPSW          LD      A, (KMAPID)
 
 
 ; - TRNGRPH ----------------------------
-; - TRANSLATE GRAPH COMBINATIONS TO SPANISH ACCENTED CHARACTERS
-; - IN:  C = KEYCODE
-; - OUT: C = TRANSLATED KEYCODE (OR UNCHANGED)
+; - TRANSLATE A GRAPH COMBINATION THE BIOS QUEUED, ONCE PER KEYPRESS
+; - CHKACNT SCANS THESE SAME COMBINATIONS OFF THE MATRIX, SO ONE KEYPRESS
+; - HAS TWO DELIVERY PATHS. THE BIOS KEYBOARD ISR CAN QUEUE ITS OWN GRAPH
+; - CODE IN THE WINDOW BETWEEN THE CHKACNT POLL AND THE CHSNS POLL OF THE
+; - SAME MAINLOOP PASS, WHERE NO KILBUF EVER RUNS, AND ON AN INTERNATIONAL
+; - BIOS THAT CODE TRANSLATES TO THE SAME ACCENT: MEASURED ON A PHILIPS NMS
+; - 8250, ONE ACCENT IN NINE CAME OUT TWICE. WHICHEVER PATH ARRIVES FIRST
+; - NOW CLAIMS THE KEY IN (LASTGRP) / (GRPTIM) -- CHKACNT'S OWN REPEAT
+; - STATE -- AND THE OTHER STAYS QUIET UNTIL THE KEY IS RELEASED.
+; - IN:  C = KEYCODE, (MODKEYS) = MODIFIER BITS
+; - OUT: CARRY RESET: C = TRANSLATED KEYCODE (OR UNCHANGED)
+; -      CARRY SET:   DROP THE KEYSTROKE, THE MATRIX ALREADY DELIVERED IT
 ; - CLOBBERS: AF, HL
 ; -
 
@@ -219,22 +229,52 @@ TRNGRPH         LD      A, (MODKEYS)
                 JR      Z, .GRFND
                 INC     HL
                 INC     HL
+                INC     HL
                 JR      .GRLOOP
 
 .GRFND          INC     HL
-                LD      A, (HL)
+                LD      A, (HL)         ; A = TRANSLATED ACCENTED CHAR
+                INC     HL
+                PUSH    AF
+                LD      A, (HL)         ; A = KEY CHKACNT SCANS FOR
+                LD      HL, LASTGRP
+                CP      (HL)
+                JR      Z, .GRDROP      ; THIS PRESS IS ALREADY DELIVERED
+
+                LD      (HL), A         ; CLAIM IT SO CHKACNT STAYS QUIET
+                LD      A, (JIFFY)
+                ADD     A, 25           ; SAME INITIAL DELAY AS .GRPINIT
+                LD      (GRPTIM), A
+                POP     AF
                 LD      C, A            ; C = TRANSLATED ACCENTED CHAR
+                OR      A               ; RESET CARRY: KEEP THE KEYSTROKE
                 RET
 
-.GRPTBL         ; PAIRS: [INPUT KEYCODE, OUTPUT ACCENTED CODE]
-                ; SUPPORTS BOTH RAW ASCII AND MSX BIOS GRAPH CODES
-                DEFB    #61, #A0, #C4, #A0, #41, #A0, #65, #82
-                DEFB    #CD, #82, #45, #90, #69, #A1, #DC, #A1
-                DEFB    #49, #A1, #6F, #A2, #C2, #A2, #4F, #A2
-                DEFB    #75, #A3, #C0, #A3, #55, #A3, #6E, #A4
-                DEFB    #5B, #A4, #4E, #A5, #D3, #A5, #3F, #A8
-                DEFB    #2F, #A8, #F6, #A8, #21, #AD, #31, #AD
-                DEFB    #AC, #AD, #77, #81, #57, #9A, #00
+.GRDROP         POP     AF
+                SCF                     ; SET CARRY: DROP THE KEYSTROKE
+                RET
+
+.GRPTBL         ; TRIPLES: [INPUT KEYCODE, OUTPUT ACCENTED CODE, MATRIX KEY]
+                ; SUPPORTS BOTH RAW ASCII AND MSX BIOS GRAPH CODES. THE THIRD
+                ; BYTE IS WHAT CHKACNT KEEPS IN (LASTGRP) FOR THAT PHYSICAL
+                ; KEY, SHIFTED OR NOT, SO A CLAIM HERE SILENCES THE MATRIX.
+                ; #CF IS GRAPH+W ON THE NMS 8250: IT WAS MISSING FROM THE
+                ; TABLE AND THE BIOS REPEAT TYPED IT RAW ON A HELD KEY.
+                DEFB    #61, #A0, #61, #C4, #A0, #61
+                DEFB    #41, #A0, #61, #65, #82, #65
+                DEFB    #CD, #82, #65, #45, #90, #65
+                DEFB    #69, #A1, #69, #DC, #A1, #69
+                DEFB    #49, #A1, #69, #6F, #A2, #6F
+                DEFB    #C2, #A2, #6F, #4F, #A2, #6F
+                DEFB    #75, #A3, #75, #C0, #A3, #75
+                DEFB    #55, #A3, #75, #6E, #A4, #6E
+                DEFB    #5B, #A4, #6E, #4E, #A5, #6E
+                DEFB    #D3, #A5, #6E, #3F, #A8, #3F
+                DEFB    #2F, #A8, #3F, #F6, #A8, #3F
+                DEFB    #21, #AD, #31, #31, #AD, #31
+                DEFB    #AC, #AD, #31, #77, #81, #77
+                DEFB    #CF, #81, #77, #57, #9A, #77
+                DEFB    #00
 
 
 ; --- TRNDEAD                   ----------------------------------------
