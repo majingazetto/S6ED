@@ -15,6 +15,12 @@ SCRRDY          DEFB    0               ; FF = SCREEN 6 INITIALIZED
 SAVESP          DEFW    0               ; ORIGINAL STACK POINTER
 DEFSEG1         DEFB    0               ; ORIGINAL PAGE 1 MAPPER SEGMENT
 DEFSEG2         DEFB    0               ; ORIGINAL PAGE 2 MAPPER SEGMENT
+SAVSCRMD        DEFB    0               ; ORIGINAL SCREEN MODE (SCRMOD)
+SAVL40          DEFB    0               ; ORIGINAL SCREEN 0 WIDTH (LINL40)
+SAVLLEN         DEFB    0               ; ORIGINAL CURRENT WIDTH (LINLEN)
+SAVFORC         DEFB    0               ; ORIGINAL FOREGROUND COLOR (FORCLR)
+SAVBAKC         DEFB    0               ; ORIGINAL BACKGROUND COLOR (BAKCLR)
+SAVBDRC         DEFB    0               ; ORIGINAL BORDER COLOR (BDRCLR)
 
 
 ; --- MAPPER JUMP TABLE ENTRIES ----------------------------------------

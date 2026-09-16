@@ -681,6 +681,89 @@ class G11Paste(Case):
         return checks
 
 
+# --- G12 SCREEN RESTORATION ON EXIT ----------------------------------
+
+
+class G12ScreenRestore(Case):
+    name = 'G12-screen-restore'
+    desc = 'screen mode, width, text colors and VDP palette match pre-entry state upon exit'
+    origin = ('exit to DOS left Screen 6 palette active, corrupting text colors 0-3, '
+              'and did not formally restore screen mode, line width or text colors')
+
+    DEFPLT = [
+        0x00, 0x00, 0x00, 0x00, 0x11, 0x06, 0x33, 0x07,
+        0x17, 0x01, 0x27, 0x03, 0x51, 0x01, 0x27, 0x06,
+        0x71, 0x01, 0x73, 0x03, 0x61, 0x06, 0x64, 0x06,
+        0x11, 0x04, 0x65, 0x02, 0x55, 0x05, 0x77, 0x07,
+    ]
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        # 1. Capture running state inside S6ED (Screen 6 active, modified palette 0..3)
+        t.snap('boot', palette=True)
+        # 2. Arm exit snap at TERM.TERMDON so breakpoint is active when TERM runs
+        t.snap('exit', palette=True, at='TERM.TERMDON')
+        # 3. Press Ctrl+Q to exit S6ED via ACTQUIT -> TERM
+        t.press('Q', mods=['CTRL'])
+        t.wait(1.0)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        checks = []
+
+        # S6ED must have changed screen mode to 6 while active
+        active_mode = run.var('boot', 'SCRMOD')
+        checks.append(Check('G12/active-mode', active_mode == 6,
+                            'SCRMOD = 6 inside editor' if active_mode == 6 else
+                            'SCRMOD = %s (expected 6)' % active_mode))
+
+        # Restored screen mode at exit must match pre-entry saved mode (Screen 0)
+        exit_mode = run.var('exit', 'SCRMOD')
+        saved_mode = run.var('exit', 'SAVSCRMD')
+        checks.append(Check('G12/restored-mode',
+                            exit_mode == saved_mode == 0,
+                            'SCRMOD = %s matches saved mode %s (Screen 0)'
+                            % (exit_mode, saved_mode)))
+
+        # Restored width at exit must match pre-entry saved width
+        exit_width = run.var('exit', 'LINLEN')
+        saved_width = run.var('exit', 'SAVLLEN')
+        checks.append(Check('G12/restored-width',
+                            exit_width == saved_width,
+                            'LINLEN = %s matches saved width %s'
+                            % (exit_width, saved_width)))
+
+        # Restored colors (FORCLR, BAKCLR, BDRCLR) must match saved values
+        colors_match = (run.var('exit', 'FORCLR') == run.var('exit', 'SAVFORC') and
+                        run.var('exit', 'BAKCLR') == run.var('exit', 'SAVBAKC') and
+                        run.var('exit', 'BDRCLR') == run.var('exit', 'SAVBDRC'))
+        checks.append(Check('G12/restored-colors', colors_match,
+                            'FORCLR/BAKCLR/BDRCLR match saved entry colors (%s/%s/%s)'
+                            % (run.var('exit', 'FORCLR'),
+                               run.var('exit', 'BAKCLR'),
+                               run.var('exit', 'BDRCLR'))))
+
+        # VDP palette must have differed inside the editor (guarantees test is non-vacuous)
+        boot_pal = list(run.blob('boot', 'pal') or [])
+        exit_pal = list(run.blob('exit', 'pal') or [])
+        checks.append(Check('G12/palette-changed',
+                            boot_pal != exit_pal,
+                            'VDP palette was altered during editing'))
+
+        # VDP palette at exit must match standard MSX2 palette byte-for-byte across all 32 bytes
+        checks.append(Check('G12/vdp-palette',
+                            exit_pal == self.DEFPLT,
+                            'VDP palette restored to standard MSX2 palette (32 bytes)'
+                            if exit_pal == self.DEFPLT else
+                            'VDP palette mismatch at exit: %r' % exit_pal[:8]))
+
+        return checks
+
+
 # --- B2  EXTERNAL FONT ASSET IN VRAM ----------------------------------
 
 
@@ -1539,6 +1622,7 @@ class E7ClipLimit(Case):
 
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
+         G12ScreenRestore(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit()]

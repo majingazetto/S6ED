@@ -444,15 +444,42 @@ TERM            ; RESTORE MAPPER SEGMENTS IF INITIALIZED
                 LD      A, (SCRRDY)
                 AND     A
                 JR      Z, .NOSCRRS
-                XOR     A
+
+                ; 1. RESTORE ORIGINAL SCREEN COLORS
+                LD      A, (SAVFORC)
+                LD      (FORCLR), A
+                LD      A, (SAVBAKC)
+                LD      (BAKCLR), A
+                LD      A, (SAVBDRC)
+                LD      (BDRCLR), A
+
+                ; 2. RESTORE ORIGINAL SCREEN WIDTH
+                LD      A, (SAVL40)
+                LD      (LINL40), A
+                LD      A, (SAVLLEN)
+                LD      (LINLEN), A
+
+                ; 3. RESTORE ORIGINAL SCREEN MODE
+                LD      A, (SAVSCRMD)
                 LD      IX, CHGMOD
                 CALL    BIOSCALL
+
+                ; 4. APPLY RESTORED COLORS TO VDP
+                LD      IX, CHGCLR
+                CALL    BIOSCALL
+
+                ; 5. RESTORE VDP PALETTE (ALL 16 REGISTERS)
+                CALL    RSTPAL
+
+                ; 6. RESTORE FUNCTION KEYS, KEY CLICK, KANA
                 LD      IX, ERAFNK
                 CALL    BIOSCALL
                 CALL    REFNKEY         ; GIVE DOS ITS FUNCTION KEY STRINGS BACK
                 LD      A, 1
                 LD      (CLIKSW), A
                 CALL    KANARST         ; RESET KANA STATUS AND TURN OFF LED
+
+.TERMDON        ; HOOK/BREAKPOINT LABEL FOR VERIFICATION HARNESS
 
 .NOSCRRS        ; RESTORE ORIGINAL STACK POINTER
                 LD      HL, (SAVESP)
