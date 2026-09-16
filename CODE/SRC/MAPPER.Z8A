@@ -257,19 +257,20 @@ SEGFREE         LD      A, (SEGCNT)
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL
-; - FREES ALL SEGMENTS IN SEGTBL ABOVE ENTRY 0 (INITIAL SEGMENTS ARE IN TPA)
+; - FREES ALL SEGMENTS IN SEGTBL ABOVE ENTRY 1 (INITIAL SEGMENTS ARE IN TPA)
 ; -
-; - THE FLOOR OF ONE IS DIRSEG: BUFINIT CLAIMS IT FIRST, SO SEGTBL[0] IS THE
-; - DIRECTORY SEGMENT AND MUST SURVIVE EVERY BUFRESET -- FREEING IT WOULD HAND
-; - THE LIVE DIRECTORY BACK TO DOS MID-SESSION. SEGFREE (EXIT PATH) STILL
-; - FREES IT, BECAUSE THERE THE WHOLE EDITOR IS GOING AWAY.
+; - THE FLOOR OF TWO IS DIRSEG + FTRSEG: SEGRESV CLAIMS THEM FIRST, SO
+; - SEGTBL[0] IS THE DIRECTORY SEGMENT AND SEGTBL[1] THE FEATURE SEGMENT,
+; - AND BOTH MUST SURVIVE EVERY BUFRESET -- FREEING THEM WOULD HAND THE LIVE
+; - DIRECTORY AND THE RESIDENT FEATURE CODE BACK TO DOS MID-SESSION.
+; - SEGFREE (EXIT PATH) STILL FREES THEM, BECAUSE THERE THE WHOLE EDITOR IS
+; - GOING AWAY.
 ; -
 
 SEGTRIM         LD      A, (SEGCNT)
-                CP      1
-                RET     Z               ; SEGTBL[0] IS DIRSEG -- NEVER TRIMMED
-                AND     A
-                RET     Z               ; DEFENSIVE: NOTHING TRACKED
+                CP      2
+                RET     C               ; DEFENSIVE: NEVER BELOW THE FLOOR
+                RET     Z               ; SEGTBL[0..1] = DIRSEG, FTRSEG
                 DEC     A
                 LD      (SEGCNT), A
                 LD      C, A
@@ -279,3 +280,153 @@ SEGTRIM         LD      A, (SEGCNT)
                 LD      A, (HL)
                 CALL    FRESEG
                 JR      SEGTRIM
+
+
+; --- SEGRESV                   ----------------------------------------
+
+; - SEGRESV ----------------------------
+; - CLAIM THE TWO MANDATORY SEGMENTS AND REPORT THE TEXT CEILING
+; - IN:  NONE (CALL AFTER MAPINIT, BEFORE SCRINIT: RUNS IN TEXT MODE)
+; - OUT: NEVER RETURNS ON FAILURE (ERRMEM / ERRMSG)
+; - CLOBBERS: ALL
+; -
+; - MINIMUM CONFIGURATION (DIRECTIVE 2026-09-16): 2 FREE MAPPER SEGMENTS
+; - OR THE EDITOR DOES NOT START. DIRSEG HOLDS THE LINE DIRECTORY, FTRSEG
+; - THE RESIDENT FEATURE CODE (FASE 1B). TEXT NEEDS NO CLAIM HERE: TXSEG0
+; - = DEFSEG2 HOLDS THE FIRST LINEPSEG LINES AND GROWTH IS ON DEMAND VIA
+; - NEWREC. THE PROBE BELOW KNOWS, IT DOES NOT HOLD: EVERY SPARE SEGMENT
+; - IT COUNTS IS HANDED STRAIGHT BACK.
+; -
+; - MEASURED 2026-09-16 (PROBE.COM, VALIDATED AGAINST REAL HARDWARE):
+; - DOS 2 RESERVES 6 SEGMENTS, NEXTOR 7 (112KB), CONSTANT ACROSS MAPPER
+; - SIZES. A STOCK 128KB MACHINE THEREFORE HAS 2 FREE UNDER DOS 2 AND 1
+; - UNDER NEXTOR -- THE MINIMUM MAKES 128KB+NEXTOR UNSUPPORTED, AND ON
+; - 128KB+DOS2 THE TEXT CEILING IS DEFSEG2 ALONE (101 LINES).
+; -
+
+SEGRESV         CALL    SEGGET          ; 1: DIRECTORY SEGMENT
+                JP      C, ERRMEM
+                LD      (DIRSEG), A
+                CALL    SEGGET          ; 2: FEATURE SEGMENT
+                JP      C, .NOFTR
+                LD      (FTRSEG), A
+
+                ; COUNT WHAT WOULD BE LEFT. EVERY SPARE IS CLAIMED FIRST AND
+                ; FREED AFTERWARDS, NEVER INTERLEAVED: A FREED SEGMENT IS THE
+                ; NEXT ONE ALL_SEG HANDS OUT, SO ALLOC/FREE/ALLOC LOOPS ON THE
+                ; SAME SEGMENT FOREVER (MEASURED 2026-09-16 ON A 2MB MACHINE:
+                ; SEGAVL PAST 200 AND COUNTING). CLIPBUF IS FREE DURING INIT.
+                XOR     A
+                LD      (SEGAVL), A
+.PROBE          CALL    ALLSEG
+                JR      C, .PROBED
+                LD      E, A            ; E = ALLOCATED SEGMENT NUMBER
+                LD      A, (SEGAVL)
+                LD      C, A
+                LD      B, 0
+                LD      HL, CLIPBUF
+                ADD     HL, BC
+                LD      (HL), E
+                INC     A
+                LD      (SEGAVL), A
+                JR      .PROBE
+
+.PROBED         LD      A, (SEGAVL)     ; HAND THEM ALL BACK
+                LD      B, A
+                OR      A
+                JR      Z, .COUNTED
+                LD      HL, CLIPBUF
+.RELEASE        LD      A, (HL)
+                PUSH    HL
+                PUSH    BC
+                CALL    FRESEG
+                POP     BC
+                POP     HL
+                INC     HL
+                DJNZ    .RELEASE
+.COUNTED         ; TEXT CEILING = (SEGAVL + 1) * LINEPSEG -- DEFSEG2 JOINS
+                ; THE TEXT POOL WITHOUT BEING CLAIMED
+                LD      A, (SEGAVL)
+                INC     A
+                LD      B, A
+                LD      HL, 0
+                LD      DE, LINEPSEG
+.CEIL           ADD     HL, DE
+                DJNZ    .CEIL
+                LD      (SEGLNS), HL
+
+                ; COMPOSE "S6ED: NN SEGMENTS FREE, TEXT UP TO NNNNN LINES"
+                LD      DE, SEGMSG
+                LD      HL, TXTSEG1
+                CALL    .APPZ
+                PUSH    DE
+                LD      A, (SEGAVL)
+                ADD     A, 2            ; THE TWO RESERVED ARE FREE TOO
+                CALL    B2D8            ; HL -> DIGITS, C = COUNT
+                POP     DE
+                CALL    .APPB
+                LD      HL, TXTSEG2
+                CALL    .APPZ
+                PUSH    DE
+                LD      HL, (SEGLNS)
+                CALL    B2D16
+                POP     DE
+                CALL    .APPB
+                LD      HL, TXTSEG3
+                CALL    .APPZ
+                LD      A, '$'
+                LD      (DE), A
+                LD      DE, SEGMSG
+                CALL    STROUT
+
+                ; LOW CEILING: WARN AND GIVE THE USER A MOMENT TO READ IT.
+                ; THE WAIT HAS A 3 SECOND TIMEOUT, NOT JUST A KEYPRESS: THE
+                ; WARNING ALWAYS FIRES ON THE 128KB MACHINE THE GATE RUNS
+                ; ON, AND AN UNATTENDED BOOT MUST NOT HANG.
+                LD      HL, (SEGLNS)
+                LD      DE, WARNLNS
+                CALL    CMPHLDE
+                RET     NC
+                LD      DE, TXTWARN
+                CALL    STROUT
+                LD      HL, (JIFFY)
+.WAIT           PUSH    HL
+                LD      IX, CHSNS
+                CALL    BIOSCALL
+                POP     HL
+                RET     NZ              ; A KEY IS WAITING: MAINLOOP EATS IT
+                PUSH    HL
+                LD      DE, (JIFFY)
+                EX      DE, HL          ; HL = NOW, DE = START
+                OR      A
+                SBC     HL, DE
+                LD      DE, 180         ; 3S AT 60HZ (3.6S AT 50HZ)
+                CALL    CMPHLDE
+                POP     HL
+                JR      C, .WAIT
+                RET
+
+.NOFTR          LD      DE, ENO2SEG
+                JP      ERRMSG
+
+.APPZ           LD      A, (HL)         ; APPEND NUL-TERMINATED STRING AT DE
+                AND     A
+                RET     Z
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                JR      .APPZ
+
+.APPB           LD      A, (HL)         ; APPEND C BYTES FROM HL AT DE
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                DEC     C
+                JR      NZ, .APPB
+                RET
+
+TXTSEG1         DEFM    "S6ED: ", 0
+TXTSEG2         DEFM    " SEGMENTS FREE, TEXT UP TO ", 0
+TXTSEG3         DEFM    " LINES", 13, 10, 0
+TXTWARN         DEFM    "WARNING: LOW MAPPER MEMORY, TEXT TRUNCATES AT THE CEILING.", 13, 10
+                DEFM    "PRESS ANY KEY TO CONTINUE", 13, 10, "$"

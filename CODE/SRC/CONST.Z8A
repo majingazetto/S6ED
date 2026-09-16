@@ -143,7 +143,9 @@ SEG_USER        EQU     0               ; A=0: ALLOCATE USER SEGMENT
 SEG_SYS         EQU     1               ; A=1: ALLOCATE SYSTEM SEGMENT
 
 MAXSEGS         EQU     32              ; SEGMENTS THE EDITOR WILL TRACK
-                                        ;   1 DIRECTORY + 31 TEXT = 496KB
+                                        ;   1 DIRECTORY + 1 FEATURE + 30 TEXT = 496KB
+WARNLNS         EQU     500             ; BOOT WARNS WHEN THE TEXT CEILING FALLS
+                                        ;   BELOW THIS (IN LINES)
 FREENIL         EQU     #FF             ; FREEHD VALUE MEANING "NO FREE RECORD"
                                         ;   NO REAL MAPPER SEGMENT EVER TAKES IT
 LINEPSEG        EQU     16384 / LINEREC ; 101 LINE RECORDS PER SEGMENT
