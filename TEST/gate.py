@@ -923,9 +923,261 @@ class F2Keyrun(Case):
         return checks
 
 
+# --- D1  INSERTION AT START, MIDDLE AND BOUNDARY -----------------------
+
+
+class D1Insert(Case):
+    name = 'D1-insert'
+    desc = 'insertion at start (col 0), mid-line, and col 79 boundary'
+    origin = ('EDINSCHR shifts tail text/attributes right and updates line length: '
+              'typing at col 0, middle and column 79 boundary retains all characters')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['12345678'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.text('A')                       # col 0 -> 'A12345678'
+        t.press('RIGHT', repeat=4)        # cursor at col 5 (between '4' and '5')
+        t.text('B')                       # -> 'A1234B5678' (len 10)
+        t.press('RIGHT', mods=['CTRL'])   # EOL (col 10)
+        t.text('C' * 69)                  # len 79, curx 79
+        t.text('D')                       # col 79 -> len 80, curx 80
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want_line = 'A1234B5678' + ('C' * 69) + 'D'
+        want = crlf([want_line])
+        first_line = got.split(b'\r\n')[0] if got else b''
+        checks = [
+            Check('D1/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r' % (got[:60] if got else None)),
+            Check('D1/length', len(first_line) == 80,
+                  'line length 80' if len(first_line) == 80 else
+                  'line length %d' % len(first_line)),
+            Check('D1/curx', run.var('saved', 'CURX') == 79,
+                  'CURX = %s (expected 79)' % run.var('saved', 'CURX')),
+        ]
+        return checks
+
+
+# --- D2  ENTER LINE SPLITTING -----------------------------------------
+
+
+class D2Enter(Case):
+    name = 'D2-enter'
+    desc = 'line splitting on Enter at start, middle, and EOL'
+    origin = ('EDNWLIN splits line into head/tail records and updates line directory: '
+              'Enter at col 0, mid-line and EOL produces exact multiline split')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['HEADTAIL'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('RETURN')                 # Enter at col 0 -> line 0 '', line 1 'HEADTAIL'
+        t.press('RIGHT', repeat=4)        # col 4 (between HEAD and TAIL)
+        t.press('RETURN')                 # -> line 1 'HEAD', line 2 'TAIL'
+        t.press('RIGHT', mods=['CTRL'])   # col 4 of 'TAIL'
+        t.press('RETURN')                 # -> line 3 ''
+        t.press('RETURN')                 # -> line 4 ''
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['', 'HEAD', 'TAIL', '', ''])
+        checks = [
+            Check('D2/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r' % (got if got else None)),
+            Check('D2/totlines', run.var('saved', 'TOTLINES') == 5,
+                  'TOTLINES = %s (expected 5)' % run.var('saved', 'TOTLINES')),
+        ]
+        return checks
+
+
+# --- D3  BACKSPACE AND LINE JOIN --------------------------------------
+
+
+class D3Backspace(Case):
+    name = 'D3-backspace'
+    desc = 'backspace in mid-line, at col 0 line join (WRAP_DEV), and doc start'
+    origin = ('EDDELBK in-line deletion and EDJNDEV joining current line into previous line')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['AAA', 'BBB', 'CCC'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('BS')                     # line 0, col 0: no-op
+        t.press('RIGHT', repeat=2)        # col 2 (after 'AA')
+        t.press('BS')                     # line 0 becomes 'AA', cursor at col 1
+        t.press('DOWN')
+        t.press('LEFT', mods=['CTRL'])    # line 1, col 0
+        t.press('BS')                     # joins line 1 ('BBB') into line 0 -> 'AABBB'
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['AABBB', 'CCC'])
+        checks = [
+            Check('D3/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r' % (got if got else None)),
+            Check('D3/totlines', run.var('saved', 'TOTLINES') == 2,
+                  'TOTLINES = %s (expected 2)' % run.var('saved', 'TOTLINES')),
+            Check('D3/curx', run.var('saved', 'CURX') == 2,
+                  'CURX = %s at seam (expected 2)' % run.var('saved', 'CURX')),
+        ]
+        return checks
+
+
+# --- D4  DELETE AND LINE PULL -----------------------------------------
+
+
+class D4Delete(Case):
+    name = 'D4-delete'
+    desc = 'delete in mid-line, at EOL line pull (WRAP_DEV), and EOF'
+    origin = ('EDDELCHR in-line deletion and EDDELDV pulling next line up at EOL')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['123', '456', '789'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('RIGHT')                  # col 1 (on '2')
+        t.press('DEL')                    # line 0 becomes '13', cursor on '3'
+        t.press('RIGHT', mods=['CTRL'])   # col 2 (EOL after '3')
+        t.press('DEL')                    # pulls line 1 ('456') into line 0 -> '13456'
+        t.press('DOWN')
+        t.press('RIGHT', mods=['CTRL'])   # line 1 ('789'), col 3 (EOF)
+        t.press('DEL')                    # EOF: no-op
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['13456', '789'])
+        checks = [
+            Check('D4/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r' % (got if got else None)),
+            Check('D4/totlines', run.var('saved', 'TOTLINES') == 2,
+                  'TOTLINES = %s (expected 2)' % run.var('saved', 'TOTLINES')),
+        ]
+        return checks
+
+
+# --- D5  WORD DELETE LEFT AND WHOLE LINE DELETE -----------------------
+
+
+class D5WordLineDel(Case):
+    name = 'D5-wordline-del'
+    desc = 'word delete left (GRAPH+BS) and whole line delete (Ctrl+Y)'
+    origin = ('ACTDWLFT deletes backward word/spaces and ACTDLS recycles line record')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['ALPHA BETA GAMMA', 'DELETE ME', 'DELTA EPSILON'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('RIGHT', repeat=10)       # after 'BETA' (col 10)
+        t.press('BS', mods=['GRAPH'])     # deletes 'BETA' -> 'ALPHA GAMMA'
+        t.press('DOWN')                   # line 1 ('DELETE ME')
+        t.press('Y', mods=['CTRL'])       # deletes line 1
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['ALPHA  GAMMA', 'DELTA EPSILON'])
+        checks = [
+            Check('D5/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r' % (got if got else None)),
+            Check('D5/totlines', run.var('saved', 'TOTLINES') == 2,
+                  'TOTLINES = %s (expected 2)' % run.var('saved', 'TOTLINES')),
+        ]
+        return checks
+
+
+# --- D6  CASCADE PARAGRAPH REFLOW (WRAP_TXT) --------------------------
+
+
+class D6Reflow(Case):
+    name = 'D6-reflow'
+    desc = 'cascade paragraph reflow across lines in WRAP_TXT mode'
+    origin = ('REFLOW pulls complete words upwards to fill up to 80 columns, '
+              'deleting consumed intermediate lines, stopping at empty line boundary')
+    cfg = ("; WRAP_TXT configuration\r\n"
+           "WRAP = TXT\r\n"
+           "PROFILE = STD\r\n")
+
+    LINES = [
+        'First short line of text',
+        'Second short line of text',
+        'Third short line of text',
+        'Fourth short line of text',
+        'Fifth short line of text',
+        'Sixth short line of text',
+        '',
+        'Guard line after paragraph',
+    ]
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('RIGHT', mods=['CTRL'])   # EOL of line 0 (col 24)
+        t.press('DEL')                    # In WRAP_TXT at EOL: triggers REFLOW!
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want_p1 = ('First short line of text Second short line of text '
+                   'Third short line of text')
+        want = crlf([want_p1, 'Fourth short line of text',
+                     'Fifth short line of text', 'Sixth short line of text',
+                     '', 'Guard line after paragraph'])
+        checks = [
+            Check('D6/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r' % (got[:80] if got else None)),
+            Check('D6/totlines', run.var('saved', 'TOTLINES') == 6,
+                  'TOTLINES = %s (expected 6)' % run.var('saved', 'TOTLINES')),
+        ]
+        return checks
+
+
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
-         B2Font(), B3Rom(), F1Scroll(), F2Keyrun()]
+         B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
+         D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow()]
 
 
 def run(ctx, cases):

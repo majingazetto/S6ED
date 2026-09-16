@@ -146,6 +146,78 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'F2',
         'expect': ['F2/burst-collapsed'],
     },
+    {
+        'name': 'd1-insert',
+        'why': 'EDINSCHR fails to shift and insert characters',
+        'file': 'EDIT.Z8A',
+        'old': """                LD      A, (CURX)
+                CALL    WBINS           ; TEXT + ATTRS SHIFTED, LENGTH UPDATED""",
+        'new': """                LD      A, (CURX)
+                NOP                     ; MUTATION: TEXT NOT INSERTED
+                NOP
+                NOP""",
+        'filter': 'D1',
+        'expect': ['D1/content'],
+    },
+    {
+        'name': 'd2-enter',
+        'why': 'EDNWLIN always splits at column 0',
+        'file': 'EDIT.Z8A',
+        'old': """SPLITL          LD      A, (CURX)""",
+        'new': """SPLITL          XOR     A               ; MUTATION: ALWAYS SPLIT AT COL 0""",
+        'filter': 'D2',
+        'expect': ['D2/content'],
+    },
+    {
+        'name': 'd3-backspace',
+        'why': 'EDDELBK does not join line in WRAP_DEV mode',
+        'file': 'EDIT.Z8A',
+        'old': """                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JP      NZ, EDJNDEV     ; IN WRAP_DEV: DEV LINE JOIN / LINE DELETE""",
+        'new': """                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                RET     NZ              ; MUTATION: NO DEV LINE JOIN""",
+        'filter': 'D3',
+        'expect': ['D3/content'],
+    },
+    {
+        'name': 'd4-delete',
+        'why': 'EDDELCHR does not pull next line up at EOL in WRAP_DEV mode',
+        'file': 'EDIT.Z8A',
+        'old': """                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JP      NZ, EDDELDV     ; IN WRAP_DEV: DEV LINE JOIN / LINE DELETE BELOW""",
+        'new': """                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                RET     NZ              ; MUTATION: NO DEV LINE PULL""",
+        'filter': 'D4',
+        'expect': ['D4/content'],
+    },
+    {
+        'name': 'd5-wordline-del',
+        'why': 'ACTDWLFT word delete left is disabled',
+        'file': 'ACTION.Z8A',
+        'old': """ACTDWLFT        LD      A, (CURX)
+                OR      A
+                RET     Z""",
+        'new': """ACTDWLFT        RET                     ; MUTATION: WORD DELETE NO-OP
+                LD      A, (CURX)
+                OR      A
+                RET     Z""",
+        'filter': 'D5',
+        'expect': ['D5/content'],
+    },
+    {
+        'name': 'd6-reflow',
+        'why': 'REFLOW cascade reflow is disabled',
+        'file': 'EDIT.Z8A',
+        'old': """REFLOW          LD      (RFLINE), HL""",
+        'new': """REFLOW          RET                     ; MUTATION: REFLOW NO-OP
+                LD      (RFLINE), HL""",
+        'filter': 'D6',
+        'expect': ['D6/content'],
+    },
 ]
 
 
