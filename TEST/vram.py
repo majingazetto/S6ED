@@ -92,3 +92,21 @@ def render_text(buf, rows=24, cols=80, font=None, first_line=TEXT_FIRST_LINE):
             line.append(table.get(key, '?'))
         out.append(''.join(line).rstrip())
     return out
+
+
+def expected_font_line(fonts_bin, variant, row, line):
+    """Expected 64 bytes for scanline `line` of glyph row `row` in `variant`."""
+    out = bytearray(64)
+    for g in range(32):
+        src = fonts_bin[variant * 2048 + row * 256 + g * 8 + line]
+        h = 0
+        if src & 0x80: h |= 0x40
+        if src & 0x40: h |= 0x10
+        if src & 0x20: h |= 0x04
+        if src & 0x10: h |= 0x01
+        l = 0
+        if src & 0x08: l |= 0x40
+        if src & 0x04: l |= 0x10
+        out[g * 2] = h
+        out[g * 2 + 1] = l
+    return bytes(out)

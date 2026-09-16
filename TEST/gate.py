@@ -681,8 +681,251 @@ class G11Paste(Case):
         return checks
 
 
+# --- B2  EXTERNAL FONT ASSET IN VRAM ----------------------------------
+
+
+class B2Font(Case):
+    name = 'B2-font'
+    desc = 'the four VRAM font tables match the expansion of RES/FONTS.BIN'
+    origin = ('VRAM font map moved to #8000/#A000/#C000/#E000 and font loaded '
+              'from S6ED.FNT: 16,384 bytes across all 32 scanline rows of 4 variants')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram='font')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        font_res = font_of(ctx)
+        buf = run.blob('boot', 'font')
+        checks = [
+            Check('B2/fntok', run.var('boot', 'FNTOK') == 0xFF,
+                  'FNTOK = %s (expected 0xFF)' % run.var('boot', 'FNTOK')),
+            Check('B2/rom-not-used', run.var('boot', 'FNTROMD') == 0,
+                  'FNTROMD = %s (expected 0)' % run.var('boot', 'FNTROMD')),
+        ]
+        if buf is None or len(buf) < 32768:
+            checks.append(Check('B2/font-dump', False, 'no 32KB font VRAM dump'))
+            return checks
+
+        mismatches = []
+        for var in range(4):
+            for row in range(8):
+                for line in range(8):
+                    line_idx = (var * 8 + row) * 8 + line
+                    off = line_idx * 128
+                    got = buf[off:off + 64]
+                    want = vram.expected_font_line(font_res, var, row, line)
+                    if got != want:
+                        mismatches.append('var %d row %d line %d (line %d)'
+                                          % (var, row, line, line_idx))
+
+        checks.append(Check('B2/vram-tables', not mismatches,
+                            '16,384 font bytes verified, 0 mismatches'
+                            if not mismatches else
+                            '%d line mismatches: first at %s'
+                            % (len(mismatches), mismatches[0])))
+        return checks
+
+
+# --- B3  FALLBACK TO BIOS ROM CHARSET ---------------------------------
+
+
+class B3Rom(Case):
+    name = 'B3-rom'
+    desc = 'fallback to MSX BIOS ROM charset when S6ED.FNT is missing'
+    origin = ('no S6ED.FNT or wrong size: ROM charset feeds all four tables and '
+              '[ROM] is shown in the status bar')
+    with_font = False                   # Omit S6ED.FNT from fixture disk
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram='font')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        buf = run.blob('boot', 'font')
+        stat_raw = run.snaps.get('boot', {}).get('STATBUF', [])
+        stat_str = ''.join(chr(c) for c in stat_raw) if stat_raw else ''
+        checks = [
+            Check('B3/fntok-zero', run.var('boot', 'FNTOK') == 0,
+                  'FNTOK = %s (expected 0)' % run.var('boot', 'FNTOK')),
+            Check('B3/rom-staged', run.var('boot', 'FNTROMD') == 0xFF,
+                  'FNTROMD = %s (expected 0xFF)' % run.var('boot', 'FNTROMD')),
+            Check('B3/status-bar-rom', '[ROM]' in stat_str,
+                  '[ROM] shown in status bar' if '[ROM]' in stat_str else
+                  'status: %r' % stat_str[:40]),
+        ]
+        if buf is None or len(buf) < 32768:
+            checks.append(Check('B3/font-dump', False, 'no font VRAM dump'))
+            return checks
+
+        # All four tables in VRAM must be identical to table 0 (Normal)
+        diff_tables = []
+        tbl0 = [buf[l * 128:l * 128 + 64] for l in range(64)]
+        for var in range(1, 4):
+            tbl = [buf[(var * 64 + l) * 128:(var * 64 + l) * 128 + 64]
+                   for l in range(64)]
+            if tbl != tbl0:
+                diff_tables.append('variant %d differs from normal' % var)
+
+        checks.append(Check('B3/tables-identical', not diff_tables,
+                            'all 4 tables identical to ROM normal face'
+                            if not diff_tables else '; '.join(diff_tables)))
+        non_zero = sum(1 for line in tbl0 for b in line if b != 0)
+        checks.append(Check('B3/glyphs-present', non_zero > 1000,
+                            '%d non-zero bytes in ROM font table' % non_zero))
+        return checks
+
+
+# --- F1  VERTICAL SCROLL LIMITS & RENDER PURITY -----------------------
+
+
+class F1Scroll(Case):
+    name = 'F1-scroll'
+    desc = 'vertical scroll up/down across bounds and render purity'
+    origin = ('YMMM scroll blit and bounds: rows move cleanly, stops at top/bottom '
+              'and matches full REDRAW')
+    LINES = 60
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(self.LINES))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram=True)
+        t.press('DOWN', repeat=23)        # row 23
+        t.press('DOWN', repeat=10)        # scroll down 10
+        t.snap('scrolled_down', vram=True)
+        t.press('UP', repeat=23)          # row 0
+        t.press('UP', repeat=10)          # scroll up 10
+        t.snap('scrolled_up', vram=True)
+        t.press('UP', repeat=5)           # top bound
+        t.snap('top_limit', vram=True)
+        t.press('DOWN', mods=['GRAPH'])   # PgDn
+        t.press('UP', mods=['GRAPH'])     # PgUp -> clean REDRAW
+        t.snap('redrawn', vram=True)
+        t.press('DOWN', repeat=65)        # bottom bound
+        t.snap('bottom_limit', vram=True)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        checks = [
+            Check('F1/scrolled-down-topline',
+                  run.var('scrolled_down', 'TOPLINE') == 10,
+                  'TOPLINE = %s after 10 scroll downs (expected 10)'
+                  % run.var('scrolled_down', 'TOPLINE')),
+            Check('F1/scrolled-down-docline',
+                  run.var('scrolled_down', 'DOCLINE') == 33,
+                  'DOCLINE = %s (expected 33)'
+                  % run.var('scrolled_down', 'DOCLINE')),
+            Check('F1/scrolled-up-topline',
+                  run.var('scrolled_up', 'TOPLINE') == 0,
+                  'TOPLINE = %s after 10 scroll ups (expected 0)'
+                  % run.var('scrolled_up', 'TOPLINE')),
+            Check('F1/top-limit',
+                  run.var('top_limit', 'TOPLINE') == 0 and
+                  run.var('top_limit', 'DOCLINE') == 0,
+                  'TOPLINE %s / DOCLINE %s at top bound'
+                  % (run.var('top_limit', 'TOPLINE'),
+                     run.var('top_limit', 'DOCLINE'))),
+            Check('F1/bottom-limit-docline',
+                  run.var('bottom_limit', 'DOCLINE') == self.LINES - 1,
+                  'DOCLINE = %s at bottom bound (expected %d)'
+                  % (run.var('bottom_limit', 'DOCLINE'), self.LINES - 1)),
+            Check('F1/bottom-limit-topline',
+                  run.var('bottom_limit', 'TOPLINE') == self.LINES - 24,
+                  'TOPLINE = %s at bottom bound (expected %d)'
+                  % (run.var('bottom_limit', 'TOPLINE'), self.LINES - 24)),
+        ]
+        cursor = [(run.var('top_limit', 'CURX') or 0,
+                   run.var('top_limit', 'CURY') or 0),
+                  (run.var('redrawn', 'CURX') or 0,
+                   run.var('redrawn', 'CURY') or 0)]
+        d = vram.diff(run.blob('top_limit', 'vram'),
+                      run.blob('redrawn', 'vram'), ignore_cells=cursor)
+        checks.append(Check('F1/render-pure', not d,
+                            'scrolled screen identical to full REDRAW'
+                            if not d else
+                            '%d differing pixels, first at (%d,%d)'
+                            % (len(d), d[0][0], d[0][1])))
+        return checks
+
+
+# --- F2  KEY REPEAT COALESCING VIA KEYRUN -----------------------------
+
+
+class F2Keyrun(Case):
+    name = 'F2-keyrun'
+    desc = 'held cursor key collapses queued repeats into one multi-row blit'
+    origin = ('KEYRUN drains BIOS keyboard buffer repeats: held DOWN key moves '
+              'by multiple rows in one YMMM blit rather than queuing separate moves')
+    LINES = 60
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(self.LINES))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('DOWN', repeat=23)        # reach bottom of viewport (CURY=23)
+        t.snap('at_bottom')
+        # Hold DOWN key (Row 8, Bit 6 = 0x40) for 1.2s: BIOS queues multiple DOWNs
+        t.at('keymatrixdown 8 0x40')
+        t.t += 1.2
+        t.at('keymatrixup 8 0x40')
+        t.t += 0.5
+        t.snap('burst', vram=True)
+        # Ctrl+UP returns to top with clean REDRAW
+        t.press('UP', mods=['CTRL'])
+        t.snap('top', vram=True)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        top = run.var('burst', 'TOPLINE') or 0
+        doc = run.var('burst', 'DOCLINE') or 0
+        cury = run.var('burst', 'CURY') or 0
+        checks = [
+            Check('F2/burst-collapsed', top >= 4,
+                  'TOPLINE jumped to %s (expected >= 4 rows in single burst)' % top),
+            Check('F2/docline-advanced', doc == 23 + top,
+                  'DOCLINE %s matches 23 + TOPLINE (%d)' % (doc, 23 + top)),
+            Check('F2/cury-clamped', cury == 23,
+                  'CURY clamped at 23 (got %s)' % cury),
+            Check('F2/return-top',
+                  run.var('top', 'TOPLINE') == 0 and run.var('top', 'DOCLINE') == 0,
+                  'TOPLINE %s / DOCLINE %s after Ctrl+UP'
+                  % (run.var('top', 'TOPLINE'), run.var('top', 'DOCLINE'))),
+        ]
+        font = font_of(ctx)
+        lines = vram.render_text(run.blob('burst', 'vram'), font=font)
+        if lines:
+            expected = numbered(self.LINES)[top:top + 24]
+            mismatch = next((i for i in range(min(len(lines), len(expected)))
+                             if lines[i] != expected[i]), None)
+            checks.append(Check('F2/viewport-text', mismatch is None,
+                                'all 24 rows match document lines %d..%d'
+                                % (top + 1, top + 24) if mismatch is None else
+                                'row %d mismatch: got %r, want %r'
+                                % (mismatch, lines[mismatch], expected[mismatch])))
+        else:
+            checks.append(Check('F2/viewport-text', False, 'no OCR output'))
+        return checks
+
+
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
-         G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste()]
+         G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
+         B2Font(), B3Rom(), F1Scroll(), F2Keyrun()]
 
 
 def run(ctx, cases):
