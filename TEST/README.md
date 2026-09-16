@@ -29,6 +29,16 @@ that was then thrown away, so the project accumulated knowledge and no detection
 The Gate is that detection. It is not coverage: it is a fixed set of invariants
 that runs at the end of **every** integration, whatever was touched.
 
+## The Four Anti-Regression Rules
+
+Every new test or code change must satisfy the four rules documented in [`AGENTS.md`](file:///Users/armandoperezabad/Code/brew/S6ED/AGENTS.md):
+
+1. **Mandatory Green Baseline:** A mutation test in `selftest.py` only proves a catch if all expected checks are 100% green on the clean build first. A mutation caught by a check that was already failing is reported as a self-test failure (`BASELINE NOT GREEN`).
+2. **Deterministic Race & Timing Tests:** Race conditions between the keyboard matrix and BIOS ISRs must be tested deterministically. Turn off host-clock dependencies (`CLOCK=0`) and use multi-pass bursts (e.g. 4 passes across the key row) to sweep the CPU/ISR phase window. Never rely on an isolated single keypress.
+3. **Dual-Path Arbitration (First-Come, First-Served):** Whenever direct hardware polling (`CHKACNT`) and BIOS buffered ISR input (`TRNGRPH`) coexist for multi-region compatibility, whichever path triggers first must claim state ownership (`LASTGRP`) and actively suppress the secondary path.
+4. **Full Lifecycle Verification:** Test initialisation fallbacks (e.g. missing assets in `B3`), steady-state editing, and clean exit teardown back to MSX-DOS (`G12`, checking screen mode, palette, and colors).
+
+
 ## Layout
 
 | File | What it is |
