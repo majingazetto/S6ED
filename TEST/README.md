@@ -54,6 +54,16 @@ Every case names the defect it was derived from in its `origin` field.
 | G9 | insert and join round-trip through `DIRBANK` | `DIRBANK` destroying `HL` |
 | G10 | Enter under AUTOALIGN writes no trailing spaces | `.TRUNC` stretching the head |
 | G11 | batch insert and per-character insert agree | `EDINSRUN` rewrite |
+| B2 | four VRAM font tables match `RES/FONTS.BIN` | font loading from `S6ED.FNT` |
+| B3 | fallback to BIOS ROM charset when `S6ED.FNT` missing | missing font asset degradation |
+| F1 | vertical scroll limits and render purity | `YMMM` scroll blit vs `REDRAW` |
+| F2 | held cursor key collapses queued repeats | repeat coalescing via `KEYRUN` |
+| D1 | insertion at start, mid-line, and col 79 boundary | `EDINSCHR` shift and boundary clamping |
+| D2 | line splitting on Enter at start, middle, and EOL | `EDNWLIN` record reservation and split |
+| D3 | backspace in mid-line, at col 0 join (WRAP_DEV), and doc start | `EDDELBK` deletion and `EDJNDEV` join |
+| D4 | delete in mid-line, at EOL pull (WRAP_DEV), and EOF | `EDDELCHR` deletion and `EDDELDV` pull |
+| D5 | word delete left (GRAPH+BS) and line delete (Ctrl+Y) | `ACTDWLFT` scanner and `ACTDLS` recycling |
+| D6 | cascade paragraph reflow across lines in WRAP_TXT | `REFLOW` word pull up to 80 cols |
 
 **G7 is the general one.** A full `REDRAW` repaints from the document alone, so
 comparing the screen before and after one is a test of every differential painter
@@ -94,10 +104,11 @@ observed is not yet a test.
 
 ## Known limits
 
-- The Gate is not the catalogue. Suites B (fonts, themes), D (editing semantics,
-  accents, tabs, markup), E (the rest of clipboard), F (scroll, status bar), G
-  (EOL round-trips, exit to DOS) and H (keymap profiles) are specified but not
-  built.
+- The Gate covers core invariants, fonts, vertical scroll and core editing
+  semantics (D1-D6). Suites B (themes, bad asset fallback), D (accents, tabs,
+  markup), E (the rest of clipboard), F (status bar, clamping), G (EOL
+  round-trips, exit to DOS) and H (keymap profiles) are specified in
+  `informe_test_plan_s6ed.md`.
 - Everything runs on the 128 kB `Philips_NMS_8250`. Cases that need the 2 MB
   machine set `machine = MACH_2MB` explicitly.
 - `type` goes through the BIOS buffer, so it cannot produce modifiers or cursor
