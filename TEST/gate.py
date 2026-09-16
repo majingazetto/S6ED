@@ -1309,23 +1309,41 @@ class D7Tabs(Case):
 class D8Accents(Case):
     name = 'D8-accents'
     desc = 'Spanish characters via GRAPH matrix combos and dead-key state machine'
-    origin = ('CHKACNT reads keyboard matrix for GRAPH combos (á é í ó ú ñ Ñ ü ¡ ¿) '
-              'bypassing regional BIOS, and TRNDEAD translates acute and diaeresis dead keys')
-    cfg = DEFAULT_CFG
+    origin = ('CHKACNT reads the keyboard matrix for GRAPH combos '
+              '(á é í ó ú ñ Ñ ü ¡ ¿) bypassing the regional BIOS, and TRNDEAD '
+              'translates the acute and diaeresis dead keys.  It also covers '
+              'the double: the BIOS keyboard ISR queues its own GRAPH code in '
+              'the window between the CHKACNT poll and the CHSNS poll of one '
+              'MAINLOOP pass, TRNGRPH turned it into the same accent, and the '
+              'character was typed twice')
+    # The clock is off on purpose: CHKCLK blits the colon once a second and
+    # the minute box once a minute, both timed off the host RTC, which moves
+    # MAINLOOP's phase from run to run and with it whether the race below is
+    # entered at all.
+    cfg = DEFAULT_CFG.replace('CLOCK=1', 'CLOCK=0')
     autoexec = 'S6ED DOC.TXT'
+
+    # The two delivery paths race inside one MAINLOOP pass, so the double is
+    # not reproduced by pressing a key once and hoping: whether a key-down
+    # lands in the window depends on where MAINLOOP is when the BIOS queues
+    # its code, i.e. on the phase between the keystroke and the interrupt.
+    # With the clock off that phase is fixed, so the run is deterministic and
+    # what decides it is how many presses are made and how fast.  Measured
+    # against the defect put back (mutation d8-double): the row typed twice at
+    # the default gap never reproduced it, and at 50 ms it depended on the gap
+    # to the millisecond.  Typed FOUR times with 50 ms between presses it goes
+    # red at every gap tried from 20 to 120 ms -- 36 presses drift far enough
+    # through the phase that one of them always lands in the window.  The
+    # fixed build is byte for byte correct at every one of those gaps.
+    GRAPH_ROW = 'AEIOUNW1/'
+    GRAPH_PASSES = 4
+    GRAPH_GAP = 0.05
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
-        # Line 0: unshifted GRAPH combinations (á é í ó ú ñ ü ¡ ¿)
-        t.press('A', mods=['GRAPH'])
-        t.press('E', mods=['GRAPH'])
-        t.press('I', mods=['GRAPH'])
-        t.press('O', mods=['GRAPH'])
-        t.press('U', mods=['GRAPH'])
-        t.press('N', mods=['GRAPH'])
-        t.press('W', mods=['GRAPH'])
-        t.press('1', mods=['GRAPH'])
-        t.press('/', mods=['GRAPH'])
+        # Line 0: unshifted GRAPH combinations (á é í ó ú ñ ü ¡ ¿), four times
+        for key in self.GRAPH_PASSES * self.GRAPH_ROW:
+            t.press(key, mods=['GRAPH'], tail=self.GRAPH_GAP)
         t.press('RETURN')
         # Line 1: shifted GRAPH combination (Ñ)
         t.press('N', mods=['GRAPH', 'SHIFT'])
@@ -1346,7 +1364,8 @@ class D8Accents(Case):
     def verify(self, ctx, runs):
         run = one(runs)
         got = run.session.extract(run.dsk, 'DOC.TXT')
-        line0 = bytes([0xA0, 0x82, 0xA1, 0xA2, 0xA3, 0xA4, 0x81, 0xAD, 0xA8])
+        line0 = self.GRAPH_PASSES * bytes([0xA0, 0x82, 0xA1, 0xA2, 0xA3, 0xA4,
+                                           0x81, 0xAD, 0xA8])
         line1 = bytes([0xA5])
         line2 = bytes([0xA0, 0xA2, 0x81])
         want = line0 + b'\r\n' + line1 + b'\r\n' + line2 + b'\r\n'

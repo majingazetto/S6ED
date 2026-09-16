@@ -2,12 +2,20 @@
 
 ```
 make check       # T0 only: static invariants, no emulator          ~0.2 s
-make gate        # the Gate: 11 headless openMSX sessions            ~10 s
-make test        # both -- run before calling an integration done    ~10 s
-make selftest    # put each historical defect back, prove it is caught ~5 s
+make gate        # the Gate: the headless openMSX sessions           ~30 s
+make test        # both -- run before calling an integration done    ~30 s
+make selftest    # put each historical defect back, prove it is caught ~35 s
+make testall     # all three in one run, every check printed         ~75 s
 ```
 
-All of them from `CODE/`. Or directly: `TEST/runtests.py [--static|--gate|--selftest] [-k NAME]`. Exit code is 0 only when every check passes.
+All of them from `CODE/`. Or directly:
+`TEST/runtests.py [--all|--static|--gate|--selftest] [-k NAME]`. Exit code is 0
+only when every check passes.
+
+Nothing short-circuits: every section asked for runs to the end and every check
+is printed, pass or fail, so one `make testall` shows the whole picture. The
+only exception is a build that does not assemble, which leaves nothing to test.
+`-k` filters cases by name and mutations by name or by the cases they hit.
 
 ## Why this exists
 
@@ -66,7 +74,7 @@ Every case names the defect it was derived from in its `origin` field.
 | D5 | word delete left (GRAPH+BS) and line delete (Ctrl+Y) | `ACTDWLFT` scanner and `ACTDLS` recycling |
 | D6 | cascade paragraph reflow across lines in WRAP_TXT | `REFLOW` word pull up to 80 cols |
 | D7 | soft tabs: dynamic tab stops and raw tab expansion on load | `ACTTAB` space formula and `FILEIO` tab parser |
-| D8 | Spanish characters via GRAPH matrix combos and dead-key state machine | `CHKACNT` matrix scanner and `TRNDEAD` |
+| D8 | Spanish characters via GRAPH matrix combos and dead-key state machine, each accent delivered exactly once | `CHKACNT` matrix scanner, `TRNGRPH` claim and `TRNDEAD` |
 | D9 | suppress KANA mode and force physical LED off in Boosted_MSX2+_JP | `MAINLOOP` / `KANARST` PSG R15 bit 7 control |
 | D10 | markdown and lite markup: cycling, delimiters, selection wrapping | `ACTCYCMK`, `INSDELIM` and `WRAPSEL` |
 | E1 | multi-line cut removes lines with clean screen | `ACTCUT` and `ACTDLS` multi-line deletion |
@@ -112,19 +120,37 @@ banking), and from VRAM.
 Subclass `Case` in `gate.py`: give it `name`, `desc`, `origin`, a `fixture`, a
 `timeline` and a `verify`. The timeline is a small DSL -- `press('DOWN',
 mods=['SHIFT'])`, `text('ABC')`, `snap('label', vram=True)`. Key holds are
-0.25 s down / 0.35 s gap; shorter holds drop keystrokes silently.
+0.25 s down / 0.35 s gap; shorter holds drop keystrokes silently. `press`
+takes a `tail=` override for the pause after the modifier comes back up, which
+is how D8 walks a keystroke into a window only a few microseconds wide.
 
 Then **add a mutation** to `mutations.py` that breaks what the case protects, and
 check `make selftest` goes red without it. A case whose failure has never been
 observed is not yet a test.
 
+The self-test establishes the **baseline** first: every check a mutation expects
+to redden must be green on the clean build, otherwise the mutation is reported
+as a failure rather than as a catch. `mut/d8-accents` spent a while passing
+through a `D8/content` that was already red, which proves nothing. When the
+Gate has just run, its verdicts are reused as that baseline, so `make testall`
+does not pay for the same sessions twice.
+
+A case whose defect is a **race** needs more care, because the emulator is
+deterministic but the host clock is not: with `CLOCK=1` the colon blit moves
+MAINLOOP's phase from run to run and the same timeline reproduces the defect
+only sometimes. Turn the clock off in the case's `cfg` and tune the timeline
+until the mutation is caught on every run -- D8 does both, and the comment on
+the case records what was measured. If a later change to MAINLOOP moves the
+phase, `make selftest` will say NOT CAUGHT: that is the signal to re-tune the
+timeline, not to delete the case.
+
 ## Known limits
 
 - The Gate covers core invariants, fonts, vertical scroll, core editing
-  semantics (D1-D6), and the full selection & clipboard subsystem (E1-E7).
-  Suites B (themes, bad asset fallback), D (accents, tabs, markup), F (status
-  bar, clamping), G (EOL round-trips, exit to DOS) and H (keymap profiles) are
-  specified in `informe_test_plan_s6ed.md`.
+  semantics (D1-D6), accents, tabs and markup (D7-D10), the full selection &
+  clipboard subsystem (E1-E7) and the EOL round-trips (I1-I4). Suites B
+  (themes, bad asset fallback), F (status bar, clamping) and H (keymap
+  profiles) are specified in `informe_test_plan_s6ed.md`.
 - Everything runs on the 128 kB `Philips_NMS_8250`. Cases that need the 2 MB
   machine set `machine = MACH_2MB` explicitly.
 - `type` goes through the BIOS buffer, so it cannot produce modifiers or cursor

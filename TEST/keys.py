@@ -66,8 +66,14 @@ class Timeline(object):
 
     # - input ----------------------------------------------------------
 
-    def press(self, key, mods=(), repeat=1):
-        """One keystroke, optionally under SHIFT / CTRL / GRAPH."""
+    def press(self, key, mods=(), repeat=1, tail=None):
+        """One keystroke, optionally under SHIFT / CTRL / GRAPH.
+
+        `tail` overrides the pause after the modifier comes back up.  A short
+        one lands the next key-down inside the work MAINLOOP does after a
+        keystroke, which is where the window between its CHKACNT poll and its
+        CHSNS poll is widest -- D8 needs that to provoke the GRAPH double.
+        """
         for _ in range(repeat):
             for m in mods:
                 self.at('keymatrixdown %d 0x%02X' % KEY[m])
@@ -80,7 +86,10 @@ class Timeline(object):
             self.t += MODLEAD if mods else 0.0
             for m in mods:
                 self.at('keymatrixup %d 0x%02X' % KEY[m])
-            self.t += MODTAIL if mods else GAP
+            if mods:
+                self.t += MODTAIL if tail is None else tail
+            else:
+                self.t += GAP if tail is None else tail
         return self
 
     def text(self, s):
