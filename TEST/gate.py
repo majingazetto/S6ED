@@ -45,7 +45,10 @@ class G1Image(Case):
               'keystroke left the editor')
 
     def fixture(self, ctx, variant=None):
-        return crlf(numbered(120))
+        # Below the 128 kB capacity (101 lines since Fase 1a reserved FTRSEG),
+        # so the Enter/Backspace pairs and the multi-line paste have room to
+        # land -- at capacity they are refused and the stress passes vacuously.
+        return crlf(numbered(80))
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
@@ -148,7 +151,9 @@ class G3Oom(Case):
               'JP C, ERRMEM, which threw the whole document away')
     machine = MACH_128K
     FIXTURE_LINES = 400
-    FLOOR = 180                 # capacity below this is a regression, not noise
+    # 128 kB DOS 2: 2 free segments, both reserved (DIRSEG + FTRSEG), so the
+    # text pool is DEFSEG2 alone = LINEPSEG lines. Was 202 before FTRSEG.
+    CAPACITY = 101
 
     def fixture(self, ctx, variant=None):
         return crlf(numbered(self.FIXTURE_LINES))
@@ -169,10 +174,9 @@ class G3Oom(Case):
         run = one(runs)
         tot = run.var('loaded', 'TOTLINES')
         checks = [
-            Check('G3/truncated', tot is not None and
-                  self.FLOOR <= tot < self.FIXTURE_LINES,
-                  'loaded %s of %d lines (floor %d)'
-                  % (tot, self.FIXTURE_LINES, self.FLOOR)),
+            Check('G3/truncated', tot == self.CAPACITY,
+                  'loaded %s of %d lines (capacity %d)'
+                  % (tot, self.FIXTURE_LINES, self.CAPACITY)),
             Check('G3/alive', run.var('refused', 'SCRRDY') == 0xFF,
                   'editor still running after the refusal'),
         ]
@@ -265,7 +269,9 @@ class G5Clock(Case):
     # (1,2) (3,4) (8,9) (9,0), whose longest consecutive run is two (8->9->0).
     # THREE minute changes therefore always contain at least one revealing
     # transition.  Nine samples 31 s apart span ~4.1 minutes: at least four.
-    SAMPLES = [3.0 + 31.0 * i for i in range(9)]
+    # Sampling at half-seconds (3.5s, 34.5s...) avoids sampling on the exact
+    # 1.0s JIFFY toggle boundary where the variable and VDP blit race.
+    SAMPLES = [3.5 + 31.0 * i for i in range(9)]
     MIN_MINUTES = 4             # 4 distinct minutes = 3 transitions
 
     def fixture(self, ctx, variant=None):

@@ -302,9 +302,23 @@ class Session(object):
         target = spec.get('at')
         if target:
             target_addr = sym[target]
+            sig = self._signature(target_addr)
+            # An at= breakpoint fires on the ADDRESS, not on our code: with the
+            # image below #4000 the address is squarely inside the range the
+            # DOS 2 kernel and COMMAND2 occupy, and the keyboard ISR banks the
+            # BIOS ROM over page 0 -- an ungated bp at TERMDON fired mid-ISR
+            # and read a SEGTBL full of Z80 opcodes (2026-09-16, Fase 1a).
+            # Gate on the target's own opcodes from the built image: they only
+            # match when the TPA is really there.
+            a('set ::SIGAT%d {%s}' % (i, ' '.join(str(b) for b in sig)))
             a('proc arm_snap%d {} {' % i)
             a('    incr ::pending')
             a('    set ::sbp%d [debug set_bp %d {} {' % (i, target_addr))
+            a('        set i 0')
+            a('        foreach b $::SIGAT%d {' % i)
+            a('            if {[rb [expr {%d + $i}]] != $b} return' % target_addr)
+            a('            incr i')
+            a('        }')
             a('        debug remove_bp $::sbp%d' % i)
             a('        take_snap%d' % i)
             a('    }]')

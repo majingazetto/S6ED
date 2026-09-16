@@ -56,6 +56,7 @@
 ENODOS2      DEFM    "Requires MSX-DOS 2 or Nextor.$"
 ENOMAP       DEFM    "No mapper manager found.$"
 ENOMEM       DEFM    "Out of mapper memory.$"
+ENO2SEG      DEFM    "S6ED requires 2 free mapper segments.$"
 
 
 ; --- MODULE INCLUDES           ----------------------------------------
@@ -153,6 +154,13 @@ INIT            DBG     "1: INIT START"
                 CALL    GETP2
                 LD      (DEFSEG2), A
 
+                ; CLAIM THE TWO MANDATORY SEGMENTS (DIRECTORY + FEATURES),
+                ; PROBE THE REST AND REPORT THE TEXT CEILING. FATAL IF THE
+                ; MINIMUM OF 2 FREE SEGMENTS IS NOT THERE. RUNS IN TEXT MODE
+                ; SO ITS MESSAGES ARE VISIBLE.
+                DBG     "4b: SEGRESV"
+                CALL    SEGRESV
+
                 ; PRESERVE ORIGINAL SCREEN CONFIGURATION
                 LD      A, (SCRMOD)
                 LD      (SAVSCRMD), A
@@ -223,20 +231,22 @@ INIT            DBG     "1: INIT START"
 ; --- ERRMEM                    ----------------------------------------
 
 
-; - ERRMEM -----------------------------
-; - ABORT: THE MAPPER MANAGER HAS NO FREE SEGMENTS LEFT
-; - IN:  NONE
+; - ERRMEM / ERRMSG --------------------
+; - ABORT: FATAL BOOT ERROR WITH A MESSAGE
+; - IN:  ERRMSG: DE = '$'-TERMINATED MESSAGE
 ; - OUT: DOES NOT RETURN
 ; - CLOBBERS: ALL
 ; -
-; - REACHED FROM BUFINIT WHEN THE DIRECTORY SEGMENT CANNOT BE CLAIMED: THE
-; - MAPPER EXISTS BUT HAS NO FREE SEGMENT, AND WITHOUT A DIRECTORY THERE IS NO
-; - EDITOR. DROPS BACK TO TEXT MODE FIRST -- OTHERWISE THE MESSAGE WOULD BE
-; - WRITTEN INTO THE SCREEN 6 BITMAP AND NEVER SEEN. TERM THEN RETURNS THE
-; - SEGMENTS AND THE ORIGINAL STACK TO DOS.
+; - ERRMEM IS THE ERRMEM ENTRY (DE = ENOMEM): REACHED FROM SEGRESV WHEN THE
+; - DIRECTORY SEGMENT CANNOT BE CLAIMED -- WITHOUT IT THERE IS NO EDITOR.
+; - ERRMSG IS THE GENERIC ENTRY (SEGRESV USES IT WITH ENO2SEG WHEN THE
+; - FEATURE SEGMENT IS MISSING). DROPS BACK TO TEXT MODE FIRST -- OTHERWISE
+; - THE MESSAGE WOULD BE WRITTEN INTO THE SCREEN 6 BITMAP AND NEVER SEEN.
+; - TERM THEN RETURNS THE SEGMENTS AND THE ORIGINAL STACK TO DOS.
 ; -
 
-ERRMEM          LD      A, (SCRRDY)
+ERRMEM          LD      DE, ENOMEM
+ERRMSG          LD      A, (SCRRDY)
                 AND     A
                 JR      Z, .SAY
                 CALL    RSTPAL
@@ -246,8 +256,7 @@ ERRMEM          LD      A, (SCRRDY)
                 XOR     A
                 LD      (SCRRDY), A     ; TELL TERM THE SCREEN IS ALREADY BACK
 
-.SAY            LD      DE, ENOMEM
-                CALL    STROUT
+.SAY            CALL    STROUT
                 JP      TERM
 
 

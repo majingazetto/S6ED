@@ -84,6 +84,19 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['G9/round-trip'],
     },
     {
+        'name': 'f1a-noftr',
+        'why': 'SEGRESV skips the mandatory FTRSEG claim, so the text pool '
+               'keeps the segment and the 128 kB ceiling goes back to 202',
+        'file': 'MAPPER.Z8A',
+        'old': """                CALL    SEGGET          ; 2: FEATURE SEGMENT
+                JP      C, .NOFTR
+                LD      (FTRSEG), A""",
+        'new': """                XOR     A               ; MUTATION: NO FEATURE RESERVATION
+                LD      (FTRSEG), A""",
+        'filter': 'G3',
+        'expect': ['G3/truncated'],
+    },
+    {
         'name': 'g10-align',
         'why': 'the align gate tests CURX == length instead of CURX >= length',
         'file': 'ACTION.Z8A',
