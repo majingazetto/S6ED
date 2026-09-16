@@ -36,6 +36,10 @@ DEFAULT_VARS = [
     ('SAVEEOL', 1), ('CLKPH', 1), ('CLKHZ', 1), ('SCRRDY', 1),
     ('SHOWCLK', 1), ('CLKMIN', 1), ('KMAPID', 1), ('VIMODE', 1),
     ('FNTOK', 1), ('FNTROMD', 1),
+    ('SAVSCRMD', 1), ('SAVL40', 1), ('SAVLLEN', 1),
+    ('SAVFORC', 1), ('SAVBAKC', 1), ('SAVBDRC', 1),
+    ('SCRMOD', 1), ('LINLEN', 1), ('LINL40', 1),
+    ('FORCLR', 1), ('BAKCLR', 1), ('BDRCLR', 1),
 ]
 
 # Byte ranges worth having whole.  The selection records are here because a
@@ -292,14 +296,25 @@ class Session(object):
         else:
             a('    incr ::pending -1')
         a('}')
-        a('proc arm_snap%d {} {' % i)
-        a('    incr ::pending')
-        a('    set ::sbp%d [debug set_bp $::MAIN {} {' % i)
-        a('        if {![ready]} return')
-        a('        debug remove_bp $::sbp%d' % i)
-        a('        take_snap%d' % i)
-        a('    }]')
-        a('}')
+        target = spec.get('at')
+        if target:
+            target_addr = sym[target]
+            a('proc arm_snap%d {} {' % i)
+            a('    incr ::pending')
+            a('    set ::sbp%d [debug set_bp %d {} {' % (i, target_addr))
+            a('        debug remove_bp $::sbp%d' % i)
+            a('        take_snap%d' % i)
+            a('    }]')
+            a('}')
+        else:
+            a('proc arm_snap%d {} {' % i)
+            a('    incr ::pending')
+            a('    set ::sbp%d [debug set_bp $::MAIN {} {' % i)
+            a('        if {![ready]} return')
+            a('        debug remove_bp $::sbp%d' % i)
+            a('        take_snap%d' % i)
+            a('    }]')
+            a('}')
         return '\n'.join(L) + '\n'
 
     # - run ------------------------------------------------------------

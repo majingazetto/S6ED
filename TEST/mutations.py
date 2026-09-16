@@ -336,6 +336,19 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'E7',
         'expect': ['E7/cliplen'],
     },
+    {
+        'name': 'g12-screen-restore',
+        'why': 'TERM does not call RSTPAL to restore standard VDP palette',
+        'file': 'BDOS.Z8A',
+        'old': """                ; 5. RESTORE VDP PALETTE (ALL 16 REGISTERS)
+                CALL    RSTPAL""",
+        'new': """                ; 5. RESTORE VDP PALETTE (ALL 16 REGISTERS)
+                NOP                     ; MUTATION: DO NOT RESTORE PALETTE
+                NOP
+                NOP""",
+        'filter': 'G12',
+        'expect': ['G12/vdp-palette'],
+    },
 ]
 
 

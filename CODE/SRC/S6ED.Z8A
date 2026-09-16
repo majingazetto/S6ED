@@ -153,6 +153,20 @@ INIT            DBG     "1: INIT START"
                 CALL    GETP2
                 LD      (DEFSEG2), A
 
+                ; PRESERVE ORIGINAL SCREEN CONFIGURATION
+                LD      A, (SCRMOD)
+                LD      (SAVSCRMD), A
+                LD      A, (LINL40)
+                LD      (SAVL40), A
+                LD      A, (LINLEN)
+                LD      (SAVLLEN), A
+                LD      A, (FORCLR)
+                LD      (SAVFORC), A
+                LD      A, (BAKCLR)
+                LD      (SAVBAKC), A
+                LD      A, (BDRCLR)
+                LD      (SAVBDRC), A
+
                 ; INITIALIZE SCREEN
                 DBG     "5: SCRINIT"
                 CALL    SCRINIT
@@ -225,6 +239,7 @@ INIT            DBG     "1: INIT START"
 ERRMEM          LD      A, (SCRRDY)
                 AND     A
                 JR      Z, .SAY
+                CALL    RSTPAL
                 XOR     A               ; SCREEN 0
                 LD      IX, CHGMOD
                 CALL    BIOSCALL
@@ -253,6 +268,29 @@ SETPAL          DI
                 OUT     (VDPCT), A
                 LD      B, 8            ; 4 COLORS * 2 BYTES
                 LD      C, VDPPAL       ; PORT #9A
+                OTIR
+                EI
+                RET
+
+
+; --- RSTPAL                    ----------------------------------------
+
+
+; - RSTPAL -----------------------------
+; - RESTORE STANDARD 16-COLOR V9938 PALETTE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: A, BC, HL
+; -
+
+RSTPAL          DI
+                XOR     A
+                OUT     (VDPCT), A      ; PALETTE 0
+                LD      A, #90          ; REG 16 | #80
+                OUT     (VDPCT), A
+                LD      B, 32           ; 16 COLORS * 2 BYTES
+                LD      C, VDPPAL       ; PORT #9A
+                LD      HL, DEFPLT
                 OTIR
                 EI
                 RET
@@ -331,6 +369,10 @@ SCRINIT         LD      A, 6
                 JP      BIOSCALL
 
 PALDATA         DEFB    #00, #00, #77, #07, #17, #02, #70, #07  ; 0:BG, 1:FG, 2:UI, 3:HI
+DEFPLT          DEFB    #00, #00, #00, #00, #11, #06, #33, #07  ; 0:TRANSP, 1:BLK, 2:MDGRN, 3:LTGRN
+                DEFB    #17, #01, #27, #03, #51, #01, #27, #06  ; 4:DKBLU, 5:LTBLU, 6:DKRED, 7:CYAN
+                DEFB    #71, #01, #73, #03, #61, #06, #64, #06  ; 8:MDRED, 9:LTRED, 10:DKYEL, 11:LTYEL
+                DEFB    #11, #04, #65, #02, #55, #05, #77, #07  ; 12:DKGRN, 13:MAG, 14:GRAY, 15:WHITE
 
 
 ; --- VARS                      ----------------------------------------

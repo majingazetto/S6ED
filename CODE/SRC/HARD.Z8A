@@ -23,6 +23,7 @@ FILVRM_B        EQU     #56
 LDIRVM_B        EQU     #5C
 LDIRMV_B        EQU     #59
 CHGMOD          EQU     #5F
+CHGCLR          EQU     #62
 SNSMAT          EQU     #141
 ENASLT          EQU     #24
 RSLREG          EQU     #138
@@ -51,6 +52,11 @@ HTIMI           EQU     #FD9F
 HKEYI           EQU     #FD9A
 CLIKSW          EQU     #F3DB
 SCRMOD          EQU     #FCAF
+LINL40          EQU     #F3AE
+LINLEN          EQU     #F3B0
+FORCLR          EQU     #F3E9
+BAKCLR          EQU     #F3EA
+BDRCLR          EQU     #F3EB
 KANAST          EQU     #FCAC
 KANAMOD         EQU     #FAFC
 RG0SAV          EQU     #F3DF
