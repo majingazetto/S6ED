@@ -12,7 +12,7 @@ lost every CTRL combination.  0.25 s down / 0.35 s gap is the measured floor.
 # (row, bit mask) from the standard QWERTY matrix.
 KEY = {
     'SHIFT': (6, 0x01), 'CTRL': (6, 0x02), 'GRAPH': (6, 0x04),
-    'CAPS': (6, 0x08), 'CODE': (6, 0x10),
+    'CAPS': (6, 0x08), 'CODE': (6, 0x10), 'KANA': (6, 0x10),
     'F1': (6, 0x20), 'F2': (6, 0x40), 'F3': (6, 0x80),
     'F4': (7, 0x01), 'F5': (7, 0x02), 'ESC': (7, 0x04), 'TAB': (7, 0x08),
     'STOP': (7, 0x10), 'BS': (7, 0x20), 'SELECT': (7, 0x40),
@@ -25,7 +25,7 @@ for _i, _c in enumerate('01234567'):
 for _i, _c in enumerate("89-=\\[];"):
     KEY[_c] = (1, 1 << _i)
 KEY.update({"'": (2, 0x01), '`': (2, 0x02), ',': (2, 0x04), '.': (2, 0x08),
-            '/': (2, 0x10), 'ACCENT': (2, 0x20), 'A': (2, 0x40),
+            '/': (2, 0x10), '?': (2, 0x10), 'ACCENT': (2, 0x20), 'A': (2, 0x40),
             'B': (2, 0x80)})
 for _i, _c in enumerate('CDEFGHIJ'):
     KEY[_c] = (3, 1 << _i)

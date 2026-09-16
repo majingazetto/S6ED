@@ -12,7 +12,7 @@ import os
 
 import vram
 from cases import Case, DEFAULT_CFG, crlf, numbered
-from harness import MACH_128K
+from harness import MACH_128K, MACH_JP
 from keys import Timeline
 from result import Check
 
@@ -1257,7 +1257,218 @@ class D6Reflow(Case):
         return checks
 
 
+# --- D7  SOFT TABS & EXPANSION ----------------------------------------
 
+
+class D7Tabs(Case):
+    name = 'D7-tabs'
+    desc = 'soft tabs: dynamic tab stops and raw tab expansion on load'
+    origin = ('ACTTAB calculates B = TABWIDTH - (CURX % TABWIDTH) and inserts spaces; '
+              'FILELOAD expands raw #09 on load up to 80 columns based on TABWIDTH')
+    cfg = DEFAULT_CFG
+
+    FIXTURE = b'A\tB\r\nC\r\n'
+
+    def fixture(self, ctx, variant=None):
+        return self.FIXTURE
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        # Line 0 is 'A   B'
+        # Move to line 1 (which has 'C')
+        t.press('DOWN')
+        t.press('RIGHT')  # col 1 (after 'C')
+        t.press('TAB')    # At col 1: 4 - (1 % 4) = 3 spaces -> col 4
+        t.text('X')       # col 4 -> col 5
+        t.press('TAB')    # At col 5: 4 - (5 % 4) = 3 spaces -> col 8
+        t.snap('tabbed')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['A   B', 'C   X   '])
+        checks = [
+            Check('D7/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r, want %r' % (got, want)),
+            Check('D7/curx', run.var('tabbed', 'CURX') == 8,
+                  'CURX = %s (expected 8)' % run.var('tabbed', 'CURX')),
+            Check('D7/totlines', run.var('saved', 'TOTLINES') == 2,
+                  'TOTLINES = %s (expected 2)' % run.var('saved', 'TOTLINES')),
+        ]
+        return checks
+
+
+# --- D8  ACCENTS & DEAD KEYS ------------------------------------------
+
+
+class D8Accents(Case):
+    name = 'D8-accents'
+    desc = 'Spanish characters via GRAPH matrix combos and dead-key state machine'
+    origin = ('CHKACNT reads keyboard matrix for GRAPH combos (á é í ó ú ñ Ñ ü ¡ ¿) '
+              'bypassing regional BIOS, and TRNDEAD translates acute and diaeresis dead keys')
+    cfg = DEFAULT_CFG
+    autoexec = 'S6ED DOC.TXT'
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        # Line 0: unshifted GRAPH combinations (á é í ó ú ñ ü ¡ ¿)
+        t.press('A', mods=['GRAPH'])
+        t.press('E', mods=['GRAPH'])
+        t.press('I', mods=['GRAPH'])
+        t.press('O', mods=['GRAPH'])
+        t.press('U', mods=['GRAPH'])
+        t.press('N', mods=['GRAPH'])
+        t.press('W', mods=['GRAPH'])
+        t.press('1', mods=['GRAPH'])
+        t.press('/', mods=['GRAPH'])
+        t.press('RETURN')
+        # Line 1: shifted GRAPH combination (Ñ)
+        t.press('N', mods=['GRAPH', 'SHIFT'])
+        t.press('RETURN')
+        # Line 2: Dead keys (acute and diaeresis)
+        t.press('ACCENT')
+        t.press('A')
+        t.press('ACCENT')
+        t.press('O')
+        t.press('ACCENT', mods=['SHIFT'])
+        t.press('U')
+        t.snap('typed')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        line0 = bytes([0xA0, 0x82, 0xA1, 0xA2, 0xA3, 0xA4, 0x81, 0xAD, 0xA8])
+        line1 = bytes([0xA5])
+        line2 = bytes([0xA0, 0xA2, 0x81])
+        want = line0 + b'\r\n' + line1 + b'\r\n' + line2 + b'\r\n'
+        checks = [
+            Check('D8/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r, want %r' % (got, want)),
+            Check('D8/totlines', run.var('saved', 'TOTLINES') == 3,
+                  'TOTLINES = %s (expected 3)' % run.var('saved', 'TOTLINES')),
+        ]
+        return checks
+
+
+# --- D9  JAPANESE MSX2+ KANA SUPPRESSION -----------------------------
+
+
+class D9Kana(Case):
+    name = 'D9-kana'
+    desc = 'suppress KANA mode and force physical LED off in Boosted_MSX2+_JP'
+    origin = ('On Japanese MSX machines, MAINLOOP and CHKACNT continuously reset '
+              'KANAST and KANAMOD, and KANARST sets PSG R15 bit 7 to extinguish the KANA LED')
+    machine = MACH_JP
+    cfg = DEFAULT_CFG
+    autoexec = 'S6ED DOC.TXT'
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('CODE')   # KANA key on Japanese keyboard (row 6 bit 4)
+        t.snap('after_kana')
+        t.text('JP-TEST')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = b'JP-TEST\r\n'
+        b_kana = run.var('boot', 'KANAST')
+        b_kmod = run.var('boot', 'KANAMOD')
+        b_psg = run.var('boot', 'PSG15')
+        a_kana = run.var('after_kana', 'KANAST')
+        a_kmod = run.var('after_kana', 'KANAMOD')
+        a_psg = run.var('after_kana', 'PSG15')
+        checks = [
+            Check('D9/kanast', b_kana == 0 and a_kana == 0,
+                  'KANAST: boot=%s, after_kana=%s (expected 0)' % (b_kana, a_kana)),
+            Check('D9/kanamod', (b_kmod & 1) == 0 and (a_kmod & 1) == 0,
+                  'KANAMOD bit 0: boot=%s, after_kana=%s (expected 0)' % (b_kmod & 1, a_kmod & 1)),
+            Check('D9/led-off', (b_psg & 0x80) == 0x80 and (a_psg & 0x80) == 0x80,
+                  'PSG R15 bit 7: boot=0x%02X, after_kana=0x%02X (expected bit 7=1)' % (b_psg, a_psg)),
+            Check('D9/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r, want %r' % (got, want)),
+        ]
+        return checks
+
+
+# --- D10 MARKUP ENGINE ------------------------------------------------
+
+
+class D10Markup(Case):
+    name = 'D10-markup'
+    desc = 'markdown and lite markup: mode cycling, delimiter insertion, and selection wrapping'
+    origin = ('ACTCYCMK cycles MKUPMD (OFF->MD->LITE->OFF), INSDELIM inserts delimiter pairs '
+              'with centered cursor, and WRAPSEL wraps single-line selection in delimiters')
+    cfg = ("; MARKUP test configuration\r\n"
+           "MARKUP = OFF\r\n"
+           "WRAP = DEV\r\n"
+           "PROFILE = STD\r\n")
+    autoexec = 'S6ED DOC.TXT'
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('m0')
+        t.press('T', mods=['CTRL'])    # OFF -> MD (1)
+        t.snap('m1')
+        t.press('B', mods=['CTRL'])    # INSDELIM: inserts '****', cursor in middle
+        t.text('BOLD')                 # text is '**BOLD**', cursor at col 6 (before closing '**')
+        t.press('RIGHT', repeat=2)     # move past closing '**' to EOL (col 8)
+        t.press('RETURN')              # line 1
+        t.press('I', mods=['CTRL'])    # INSDELIM: inserts '**', cursor in middle
+        t.text('ITAL')                 # text is '*ITAL*', cursor at col 5 (before closing '*')
+        t.press('RIGHT')               # move past closing '*' to EOL (col 6)
+        t.press('RETURN')              # line 2
+        t.text('TARGET')               # len 6
+        t.press('LEFT', mods=['SHIFT'], repeat=6)  # select 'TARGET'
+        t.press('B', mods=['CTRL'])    # WRAPSEL: wraps with '**' -> '**TARGET**' (len 10)
+        t.press('RIGHT', mods=['CTRL'])            # move to EOL of line 2 (col 10)
+        t.press('T', mods=['CTRL'])    # MD -> LITE (2)
+        t.snap('m2')
+        t.press('RETURN')              # line 3
+        t.text('LITETEST')             # len 8
+        t.press('LEFT', mods=['SHIFT'], repeat=8)  # select 'LITETEST'
+        t.press('B', mods=['CTRL'])    # WRAPSEL: in LITE wraps with '*' -> '*LITETEST*' (len 10)
+        t.press('T', mods=['CTRL'])    # LITE -> OFF (0)
+        t.snap('m3')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['**BOLD**', '*ITAL*', '**TARGET**', '*LITETEST*'])
+        m0 = run.var('m0', 'MKUPMD')
+        m1 = run.var('m1', 'MKUPMD')
+        m2 = run.var('m2', 'MKUPMD')
+        m3 = run.var('m3', 'MKUPMD')
+        checks = [
+            Check('D10/mode-cycle', m0 == 0 and m1 == 1 and m2 == 2 and m3 == 0,
+                  'MKUPMD: %d -> %d -> %d -> %d' % (m0, m1, m2, m3)),
+            Check('D10/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r, want %r' % (got, want)),
+            Check('D10/totlines', run.var('saved', 'TOTLINES') == 4,
+                  'TOTLINES = %s (expected 4)' % run.var('saved', 'TOTLINES')),
+        ]
+        return checks
 
 
 # --- E1  MULTI-LINE CUT -----------------------------------------------
@@ -1625,6 +1836,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G12ScreenRestore(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
+         D7Tabs(), D8Accents(), D9Kana(), D10Markup(),
          E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit()]
 
 

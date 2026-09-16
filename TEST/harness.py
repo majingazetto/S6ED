@@ -24,6 +24,7 @@ SEGSIZE = 16384
 
 MACH_128K = ('Philips_NMS_8250', 'msxdos2')
 MACH_2MB = ('Boosted_MSX2_EN', 'msxdos2')
+MACH_JP = ('Boosted_MSX2+_JP', 'msxdos2')
 
 # Variables every snapshot carries.  Cheap, and having them on a failing run is
 # the difference between a diagnosis and another session.
@@ -40,6 +41,7 @@ DEFAULT_VARS = [
     ('SAVFORC', 1), ('SAVBAKC', 1), ('SAVBDRC', 1),
     ('SCRMOD', 1), ('LINLEN', 1), ('LINL40', 1),
     ('FORCLR', 1), ('BAKCLR', 1), ('BDRCLR', 1),
+    ('KANAST', 1), ('KANAMOD', 1),
 ]
 
 # Byte ranges worth having whole.  The selection records are here because a
@@ -253,6 +255,7 @@ class Session(object):
             a('    p "KB %s %s $t"' % (label, name))
         # The stack, and the interrupt hook that must never point into page 1.
         a('    p "KV %s SP [reg SP]"' % label)
+        a('    p "KV %s PSG15 [debug read {PSG regs} 15]"' % label)
         a('    set t ""')
         a('    for {set i 0} {$i < 5} {incr i} {'
           ' append t "[rb [expr {%d + $i}]] " }' % HOOK_ADDR)

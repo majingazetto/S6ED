@@ -219,6 +219,46 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['D6/content'],
     },
     {
+        'name': 'd7-tabs',
+        'why': 'ACTTAB fails to insert spaces up to next tab stop',
+        'file': 'ACTION.Z8A',
+        'old': """ACTTAB          LD      A, (SELACT)""",
+        'new': """ACTTAB          RET                     ; MUTATION: ACTTAB NO-OP
+                LD      A, (SELACT)""",
+        'filter': 'D7',
+        'expect': ['D7/content', 'D7/curx'],
+    },
+    {
+        'name': 'd8-accents',
+        'why': 'CHKACNT fails to scan matrix for GRAPH accent combinations',
+        'file': 'INPUT.Z8A',
+        'old': """CHKACNT         ; --- STEP 1: CHECK DEAD KEY (ROW 2 BIT 5) OR KANA (ROW 6 BIT 4) ---""",
+        'new': """CHKACNT         OR      A               ; MUTATION: CHKACNT NO-OP
+                RET
+                ; --- STEP 1: CHECK DEAD KEY (ROW 2 BIT 5) OR KANA (ROW 6 BIT 4) ---""",
+        'filter': 'D8',
+        'expect': ['D8/content'],
+    },
+    {
+        'name': 'd9-kana',
+        'why': 'KANARST fails to extinguish physical KANA LED via PSG R15 bit 7',
+        'file': 'INPUT.Z8A',
+        'old': """                OR      #80             ; BIT 7 = 1 -> KANA LED OFF""",
+        'new': """                AND     #7F             ; MUTATION: FORCE KANA LED ON (BIT 7 = 0)""",
+        'filter': 'D9',
+        'expect': ['D9/led-off'],
+    },
+    {
+        'name': 'd10-markup',
+        'why': 'ACTCYCMK markup mode cycling is disabled',
+        'file': 'MARKUP.Z8A',
+        'old': """ACTCYCMK        LD      A, (MKUPMD)""",
+        'new': """ACTCYCMK        RET                     ; MUTATION: ACTCYCMK NO-OP
+                LD      A, (MKUPMD)""",
+        'filter': 'D10',
+        'expect': ['D10/mode-cycle', 'D10/content'],
+    },
+    {
         'name': 'e1-cut',
         'why': 'ACTCUT copies to clipboard but skips deleting selection from document',
         'file': 'ACTION.Z8A',
