@@ -54,6 +54,7 @@ Every case names the defect it was derived from in its `origin` field.
 | G9 | insert and join round-trip through `DIRBANK` | `DIRBANK` destroying `HL` |
 | G10 | Enter under AUTOALIGN writes no trailing spaces | `.TRUNC` stretching the head |
 | G11 | batch insert and per-character insert agree | `EDINSRUN` rewrite |
+| G12 | screen mode, width, colors and VDP palette restored at exit | palette and text mode corruption in DOS |
 | B2 | four VRAM font tables match `RES/FONTS.BIN` | font loading from `S6ED.FNT` |
 | B3 | fallback to BIOS ROM charset when `S6ED.FNT` missing | missing font asset degradation |
 | F1 | vertical scroll limits and render purity | `YMMM` scroll blit vs `REDRAW` |
@@ -64,6 +65,10 @@ Every case names the defect it was derived from in its `origin` field.
 | D4 | delete in mid-line, at EOL pull (WRAP_DEV), and EOF | `EDDELCHR` deletion and `EDDELDV` pull |
 | D5 | word delete left (GRAPH+BS) and line delete (Ctrl+Y) | `ACTDWLFT` scanner and `ACTDLS` recycling |
 | D6 | cascade paragraph reflow across lines in WRAP_TXT | `REFLOW` word pull up to 80 cols |
+| D7 | soft tabs: dynamic tab stops and raw tab expansion on load | `ACTTAB` space formula and `FILEIO` tab parser |
+| D8 | Spanish characters via GRAPH matrix combos and dead-key state machine | `CHKACNT` matrix scanner and `TRNDEAD` |
+| D9 | suppress KANA mode and force physical LED off in Boosted_MSX2+_JP | `MAINLOOP` / `KANARST` PSG R15 bit 7 control |
+| D10 | markdown and lite markup: cycling, delimiters, selection wrapping | `ACTCYCMK`, `INSDELIM` and `WRAPSEL` |
 | E1 | multi-line cut removes lines with clean screen | `ACTCUT` and `ACTDLS` multi-line deletion |
 | E2 | multi-line paste with CRLF splits host line | `ACTPAST` run inserter and `PSTNL` break |
 | E3 | extending selection across viewport edge scrolls cleanly | `ACTSLMD` motion and scrolling diffs |
@@ -71,6 +76,10 @@ Every case names the defect it was derived from in its `origin` field.
 | E5 | typing printable character replaces active selection | `DISP.Z8A` `ACTDLS` call before insertion |
 | E6 | word selection (Shift+Graph+Right) and page selection | `ACTSLWRT` word bounds and `ACTSLPGD` page |
 | E7 | clipboard limit clamps copy to CLIPMAX (2048 bytes) | `ACTCOPY` buffer bound and memory isolation |
+| I1 | auto-detect UNIX LF on load and preserve pure LF on save | `FILELOAD` standalone LF and `FILESAVE` LF |
+| I2 | auto-detect DOS CRLF on load and preserve CRLF on save | `FILELOAD` CRLF delimiter and `FILESAVE` CRLF |
+| I3 | convert DOS document to UNIX on save via EOL=UNIX | `PARSEOL` `AUTOLOD=0` and `SAVEEOL=1` |
+| I4 | convert UNIX document to DOS on save via EOL=DOS | `PARSEOL` `AUTOLOD=0` and `SAVEEOL=0` |
 
 **G7 is the general one.** A full `REDRAW` repaints from the document alone, so
 comparing the screen before and after one is a test of every differential painter
