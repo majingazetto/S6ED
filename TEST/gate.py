@@ -1174,10 +1174,374 @@ class D6Reflow(Case):
         return checks
 
 
+
+
+
+# --- E1  MULTI-LINE CUT -----------------------------------------------
+
+
+class E1Cut(Case):
+    name = 'E1-cut'
+    desc = 'multi-line cut removes lines, preserves remainder, zero visual residue'
+    origin = ('ACTCUT copies active selection to CLIPBUF and executes ACTDLS: '
+              'multi-line deletion must splice remaining lines, adjust TOTLINES, '
+              'and leave zero XOR residue on screen')
+    LINES = ['LINE ZERO 000', 'LINE ONE 111', 'LINE TWO 222',
+             'LINE THREE 333', 'LINE FOUR 444', 'LINE FIVE 555']
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('DOWN', mods=['SHIFT'], repeat=3)  # select lines 0..2 to line 3 col 0
+        t.snap('selected')
+        t.press('X', mods=['CTRL'])                 # ACTCUT
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('cut', vram=True)
+        # Full redraw: in a 3-line document, PG_DOWN hits bottom, PG_UP hits top (line 0)
+        t.press('DOWN', mods=['GRAPH'])
+        t.press('UP', mods=['GRAPH'])
+        t.snap('redrawn', vram=True)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['LINE THREE 333', 'LINE FOUR 444', 'LINE FIVE 555'])
+        checks = [
+            Check('E1/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r' % got),
+            Check('E1/totlines', run.var('cut', 'TOTLINES') == 3,
+                  'TOTLINES = %s (expected 3)' % run.var('cut', 'TOTLINES')),
+            Check('E1/clipboard', run.var('cut', 'CLIPLEN') > 0,
+                  'CLIPLEN = %s (> 0)' % run.var('cut', 'CLIPLEN')),
+        ]
+        cut_snap, redrawn = run.snaps.get('cut', {}), run.snaps.get('redrawn', {})
+        same_state = all(cut_snap.get(k) == redrawn.get(k) for k in
+                         ('TOPLINE', 'DOCLINE', 'CURX', 'CURY', 'TOTLINES'))
+        if same_state:
+            cursor = [(cut_snap.get('CURX', 0), cut_snap.get('CURY', 0))]
+            d = vram.diff(run.blob('cut', 'vram'), run.blob('redrawn', 'vram'),
+                          ignore_cells=cursor)
+            checks.append(Check('E1/render-pure', not d,
+                                'screen identical to a full REDRAW' if not d else
+                                '%d stray pixels' % len(d)))
+        else:
+            checks.append(Check('E1/render-pure', False, 'state mismatch before diff'))
+        return checks
+
+
+# --- E2  MULTI-LINE PASTE ---------------------------------------------
+
+
+class E2Paste(Case):
+    name = 'E2-paste'
+    desc = 'multi-line paste splits line and inserts CRLF blocks correctly'
+    origin = ('ACTPAST inserts runs and handles CR/LF breaks: pasting a '
+              'multi-line clipboard in the middle of a line must split the '
+              'host line and insert all lines without dropping characters')
+    LINES = ['FIRST LINE', 'SECOND LINE', 'TARGET--LINE', 'LAST LINE']
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        # Copy first two lines
+        t.press('DOWN', mods=['SHIFT'], repeat=2) # select lines 0 and 1
+        t.press('C', mods=['CTRL'])               # ACTCOPY (copies 2 lines with CRLF)
+        # Cursor is at line 2 col 0. Plain RIGHT deselects and moves to col 6
+        t.press('RIGHT', repeat=6)
+        t.snap('before-paste')
+        t.press('V', mods=['CTRL'])               # ACTPAST
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf([
+            'FIRST LINE',
+            'SECOND LINE',
+            'TARGETFIRST LINE',
+            'SECOND LINE',
+            '--LINE',
+            'LAST LINE',
+        ])
+        checks = [
+            Check('E2/content', got == want,
+                  'document matches byte for byte' if got == want else
+                  'got %r' % got),
+            Check('E2/totlines', run.var('saved', 'TOTLINES') == 6,
+                  'TOTLINES = %s (expected 6)' % run.var('saved', 'TOTLINES')),
+        ]
+        return checks
+
+
+# --- E3  SELECTION CROSSING SCROLL EDGE --------------------------------
+
+
+class E3SelScroll(Case):
+    name = 'E3-sel-scroll'
+    desc = 'extending selection across viewport edge scrolls cleanly without residue'
+    origin = ('SELDIFF optimizes row diffs, but when the selection extends past '
+              'the viewport edge (CURY == 23) hardware scroll occurs: ACTSLMD must '
+              'call SELPRE before ACTMVD scrolls, or inverted pixels will be blitted '
+              'and left as ghost artifacts')
+
+    def fixture(self, ctx, variant=None):
+        lines = []
+        for i in range(80):
+            if i % 2 == 0:
+                lines.append('LINE %02d SHORT' % i)
+            else:
+                lines.append(('LINE %02d LONG ' % i) + ('X' * 55))
+        return crlf(lines)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('DOWN', repeat=20)                 # line 20, col 0
+        t.press('DOWN', mods=['SHIFT'], repeat=5)  # select across row 23 to line 25
+        t.snap('scrolled_sel')
+        t.press('RIGHT')                           # deselects (CHKUNSEL) and moves col 0 -> 1
+        t.press('LEFT')                            # moves col 1 -> 0
+        t.snap('deselected', vram=True)
+        t.press('DOWN', mods=['GRAPH'])            # ACTPGDN: DOCLINE 25 + 24 = 49 (no bottom clamp)
+        t.press('UP', mods=['GRAPH'])              # ACTPGUP: DOCLINE 49 - 24 = 25 (pure return)
+        t.snap('redrawn', vram=True)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        sel = run.snaps.get('scrolled_sel', {})
+        checks = [
+            Check('E3/selection-active', sel.get('SELACT') == 1,
+                  'SELACT = %s' % sel.get('SELACT')),
+            Check('E3/viewport-scrolled', sel.get('TOPLINE', 0) > 0,
+                  'TOPLINE = %s (> 0)' % sel.get('TOPLINE')),
+            Check('E3/docline-advanced', sel.get('DOCLINE') == 25,
+                  'DOCLINE = %s (expected 25)' % sel.get('DOCLINE')),
+        ]
+        desel, redrawn = run.snaps.get('deselected', {}), run.snaps.get('redrawn', {})
+        same_state = all(desel.get(k) == redrawn.get(k) for k in
+                         ('TOPLINE', 'DOCLINE', 'CURX', 'CURY', 'TOTLINES'))
+        if same_state:
+            cursor = [(desel.get('CURX', 0), desel.get('CURY', 0))]
+            d = vram.diff(run.blob('deselected', 'vram'),
+                          run.blob('redrawn', 'vram'), ignore_cells=cursor)
+            checks.append(Check('E3/render-pure', not d,
+                                'screen identical to a full REDRAW' if not d else
+                                '%d stray pixels' % len(d)))
+        else:
+            checks.append(Check('E3/render-pure', False, 'state mismatch before diff'))
+        return checks
+
+
+# --- E4  SELECT ALL AND DELETE ----------------------------------------
+
+
+class E4SelAllDel(Case):
+    name = 'E4-selall-del'
+    desc = 'Ctrl+A selects entire document and DEL leaves an empty single line'
+    origin = ('ACTSELAL anchors at (0,0) and selects to end of document: '
+              'deleting the full selection via ACTDLS must reduce TOTLINES to 1, '
+              'empty line 0, and repaint a clean screen')
+    LINES = ['FIRST LINE 111', 'SECOND LINE 222', 'THIRD LINE 333',
+             'FOURTH LINE 444', 'FIFTH LINE 555']
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('A', mods=['CTRL'])         # ACTSELAL
+        t.snap('all_sel')
+        t.press('DEL')                      # ACTDELFW -> ACTDLS
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('deleted', vram=True)
+        t.press('DOWN', mods=['GRAPH'])
+        t.press('UP', mods=['GRAPH'])
+        t.snap('redrawn', vram=True)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        sel = run.snaps.get('all_sel', {})
+        checks = [
+            Check('E4/sel-active', sel.get('SELACT') == 1,
+                  'SELACT = %s' % sel.get('SELACT')),
+            Check('E4/totlines', run.var('deleted', 'TOTLINES') == 1,
+                  'TOTLINES = %s (expected 1)' % run.var('deleted', 'TOTLINES')),
+            Check('E4/curx', run.var('deleted', 'CURX') == 0,
+                  'CURX = %s (expected 0)' % run.var('deleted', 'CURX')),
+            Check('E4/docline', run.var('deleted', 'DOCLINE') == 0,
+                  'DOCLINE = %s (expected 0)' % run.var('deleted', 'DOCLINE')),
+        ]
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        empty_ok = got in (b'\r\n', b'', b'\n')
+        checks.append(Check('E4/content', empty_ok,
+                            'document empty on disk' if empty_ok else
+                            'got %r' % got))
+        del_snap, redrawn = run.snaps.get('deleted', {}), run.snaps.get('redrawn', {})
+        same_state = all(del_snap.get(k) == redrawn.get(k) for k in
+                         ('TOPLINE', 'DOCLINE', 'CURX', 'CURY', 'TOTLINES'))
+        if same_state:
+            cursor = [(del_snap.get('CURX', 0), del_snap.get('CURY', 0))]
+            d = vram.diff(run.blob('deleted', 'vram'), run.blob('redrawn', 'vram'),
+                          ignore_cells=cursor)
+            checks.append(Check('E4/render-pure', not d,
+                                'screen identical to a full REDRAW' if not d else
+                                '%d stray pixels' % len(d)))
+        else:
+            checks.append(Check('E4/render-pure', False, 'state mismatch before diff'))
+        return checks
+
+
+# --- E5  REPLACE ON TYPING --------------------------------------------
+
+
+class E5Replace(Case):
+    name = 'E5-replace'
+    desc = 'typing printable character over active selection replaces it'
+    origin = ('.DOPRINT checks SELACT: if active, ACTDLS must delete the '
+              'selection before the character is inserted/overwritten')
+    LINES = ['HELLO WORLD', 'SECOND LINE']
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('RIGHT', repeat=6)                 # col 6 ("WORLD")
+        t.press('RIGHT', mods=['SHIFT'], repeat=5) # select cols 6..11
+        t.snap('selected')
+        t.text('EARTH')                            # replaces "WORLD" with "EARTH"
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        sel = run.snaps.get('selected', {})
+        selstrl = sel.get('SELSTRL', [0, 0, 0, 0, 0, 0])
+        checks = [
+            Check('E5/sel-active', sel.get('SELACT') == 1,
+                  'SELACT = %s' % sel.get('SELACT')),
+            Check('E5/sel-range',
+                  selstrl[2] == 6 and selstrl[5] == 11,
+                  'range cols %s..%s' % (selstrl[2], selstrl[5])),
+            Check('E5/totlines', run.var('saved', 'TOTLINES') == 2,
+                  'TOTLINES = %s (expected 2)' % run.var('saved', 'TOTLINES')),
+            Check('E5/curx', run.var('saved', 'CURX') == 11,
+                  'CURX = %s (expected 11)' % run.var('saved', 'CURX')),
+        ]
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['HELLO EARTH', 'SECOND LINE'])
+        checks.append(Check('E5/content', got == want,
+                            'document matches byte for byte' if got == want else
+                            'got %r' % got))
+        return checks
+
+
+# --- E6  SELECTION BY WORD AND BY PAGE --------------------------------
+
+
+class E6SelWordPage(Case):
+    name = 'E6-sel-word-page'
+    desc = 'Shift+Graph+Right selects words, Shift+Graph+Down selects pages'
+    origin = ('ACSLWRT (Shift+Graph+Right) extends selection to next word '
+              'boundaries, ACSLPGD (Shift+Graph+Down) extends selection by 24 rows')
+    LINES = ['ALPHA BETA GAMMA DELTA'] + ['LINE %02d' % i for i in range(1, 35)]
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('RIGHT', mods=['SHIFT', 'GRAPH'], repeat=2)
+        t.snap('word_sel')
+        t.press('DOWN', mods=['SHIFT', 'GRAPH'], repeat=1)
+        t.snap('page_sel')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        w = run.snaps.get('word_sel', {})
+        p = run.snaps.get('page_sel', {})
+        w_rec = w.get('SELSTRL', [0, 0, 0, 0, 0, 0])
+        p_endl = p.get('SELSTRL', [0, 0, 0, 0, 0, 0])[3] + 256 * p.get('SELSTRL', [0, 0, 0, 0, 0, 0])[4]
+        checks = [
+            Check('E6/word-active', w.get('SELACT') == 1,
+                  'SELACT = %s' % w.get('SELACT')),
+            Check('E6/word-curx', w.get('CURX') == 11,
+                  'CURX = %s (expected 11 at GAMMA)' % w.get('CURX')),
+            Check('E6/word-selendx', w_rec[5] == 11,
+                  'SELENDX = %s (expected 11)' % w_rec[5]),
+            Check('E6/word-strx', w_rec[2] == 0,
+                  'SELSTRX = %s (expected 0)' % w_rec[2]),
+            Check('E6/page-active', p.get('SELACT') == 1,
+                  'SELACT = %s' % p.get('SELACT')),
+            Check('E6/page-docline', p.get('DOCLINE') == 24,
+                  'DOCLINE = %s (expected 24)' % p.get('DOCLINE')),
+            Check('E6/page-selendl', p_endl == 24,
+                  'SELENDL = %s (expected 24)' % p_endl),
+        ]
+        return checks
+
+
+# --- E7  CLIPBOARD CAPACITY LIMIT (CLIPMAX = 2048) -------------------
+
+
+class E7ClipLimit(Case):
+    name = 'E7-clip-limit'
+    desc = 'copying beyond CLIPMAX (2048 bytes) clamps without buffer overrun'
+    origin = ('CLIPBUF capacity is CLIPMAX (2048 bytes) in page 0 RAM: '
+              'ACTCOPY must clamp copied bytes and CRLF breaks to prevent '
+              'overrunning into adjacent variables (FILENAME, FILEHAND)')
+    # 35 lines of 75 characters = 2,625 characters (> 2048)
+    LINES = ['%02d-%s' % (i, 'X' * 70) for i in range(35)]
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('A', mods=['CTRL'])         # select all 35 lines (~2625 B)
+        t.press('C', mods=['CTRL'])         # ACTCOPY
+        t.snap('copied')
+        t.press('S', mods=['CTRL'])         # save: verifies FILENAME and I/O intact
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        checks = [
+            Check('E7/cliplen', run.var('copied', 'CLIPLEN') == 2048,
+                  'CLIPLEN = %s (expected 2048)' % run.var('copied', 'CLIPLEN')),
+        ]
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(self.LINES)
+        checks.append(Check('E7/content-intact', got == want,
+                            'document saved intact after copy' if got == want else
+                            'save corrupted'))
+        checks.append(Check('E7/alive', run.var('saved', 'TOTLINES') == 35,
+                            'TOTLINES = %s (expected 35)' % run.var('saved', 'TOTLINES')))
+        return checks
+
+
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
-         D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow()]
+         D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
+         E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit()]
 
 
 def run(ctx, cases):

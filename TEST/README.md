@@ -64,6 +64,13 @@ Every case names the defect it was derived from in its `origin` field.
 | D4 | delete in mid-line, at EOL pull (WRAP_DEV), and EOF | `EDDELCHR` deletion and `EDDELDV` pull |
 | D5 | word delete left (GRAPH+BS) and line delete (Ctrl+Y) | `ACTDWLFT` scanner and `ACTDLS` recycling |
 | D6 | cascade paragraph reflow across lines in WRAP_TXT | `REFLOW` word pull up to 80 cols |
+| E1 | multi-line cut removes lines with clean screen | `ACTCUT` and `ACTDLS` multi-line deletion |
+| E2 | multi-line paste with CRLF splits host line | `ACTPAST` run inserter and `PSTNL` break |
+| E3 | extending selection across viewport edge scrolls cleanly | `ACTSLMD` motion and scrolling diffs |
+| E4 | Ctrl+A select-all and DEL leaves single clean empty line | `ACTSELAL` full document select and delete |
+| E5 | typing printable character replaces active selection | `DISP.Z8A` `ACTDLS` call before insertion |
+| E6 | word selection (Shift+Graph+Right) and page selection | `ACTSLWRT` word bounds and `ACTSLPGD` page |
+| E7 | clipboard limit clamps copy to CLIPMAX (2048 bytes) | `ACTCOPY` buffer bound and memory isolation |
 
 **G7 is the general one.** A full `REDRAW` repaints from the document alone, so
 comparing the screen before and after one is a test of every differential painter
@@ -104,11 +111,11 @@ observed is not yet a test.
 
 ## Known limits
 
-- The Gate covers core invariants, fonts, vertical scroll and core editing
-  semantics (D1-D6). Suites B (themes, bad asset fallback), D (accents, tabs,
-  markup), E (the rest of clipboard), F (status bar, clamping), G (EOL
-  round-trips, exit to DOS) and H (keymap profiles) are specified in
-  `informe_test_plan_s6ed.md`.
+- The Gate covers core invariants, fonts, vertical scroll, core editing
+  semantics (D1-D6), and the full selection & clipboard subsystem (E1-E7).
+  Suites B (themes, bad asset fallback), D (accents, tabs, markup), F (status
+  bar, clamping), G (EOL round-trips, exit to DOS) and H (keymap profiles) are
+  specified in `informe_test_plan_s6ed.md`.
 - Everything runs on the 128 kB `Philips_NMS_8250`. Cases that need the 2 MB
   machine set `machine = MACH_2MB` explicitly.
 - `type` goes through the BIOS buffer, so it cannot produce modifiers or cursor
