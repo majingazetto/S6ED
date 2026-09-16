@@ -3,7 +3,7 @@
 #	* (c) 2024 - 2025 Armando Pérez            						    	*
 #	*************************************************************************
 
-.PHONY: build run clean check gate test selftest
+.PHONY: build run clean check gate test selftest testall
 
 # 	=========================================================================
 # 	CONSTANTS
@@ -108,9 +108,12 @@ log:
 # -	 Test Targets ------------------------------------------------------------
 #
 # check    T0 only: static invariants, no emulator (~0.2 s)
-# gate     the runtime Gate: 11 headless openMSX sessions (~10 s)
+# gate     the runtime Gate: the headless openMSX sessions (~30 s)
 # test     both -- run this before calling an integration finished
 # selftest reintroduces each historical defect and proves the Gate goes red
+# testall  every one of the three, in one run, printing every check (~1 min).
+#          Nothing short-circuits: a failure in one section does not stop the
+#          next, so one command shows the whole picture.
 
 TESTDIR			= ../TEST
 
@@ -125,3 +128,6 @@ test:
 
 selftest:
 	@$(TESTDIR)/runtests.py --selftest
+
+testall:
+	@$(TESTDIR)/runtests.py --all

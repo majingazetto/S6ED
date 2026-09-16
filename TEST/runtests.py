@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """S6ED regression suite.
 
-    ./runtests.py            # everything: T0 static + the Gate
+    ./runtests.py            # T0 static + the Gate
+    ./runtests.py --all      # the lot: T0 + Gate + mutation self-test
     ./runtests.py --static   # T0 only, no emulator (wired into `make build`)
     ./runtests.py --gate     # the Gate only
-    ./runtests.py -k G4      # one case, or any name substring
+    ./runtests.py --selftest # the mutation self-test only
+    ./runtests.py -k G4      # one case, or any name substring (also filters
+                             # the mutations, by name or by the cases they hit)
+
+Nothing short-circuits: every section that was asked for runs and every check
+is printed, pass or fail, so one run shows the whole picture.  The single
+exception is a build that does not assemble, which leaves nothing to test.
 
 Exit code is 0 only when every check passes.  See README.md for what each case
 protects and which historical defect it was derived from.
@@ -31,10 +38,14 @@ def main():
     ap.add_argument('--selftest', action='store_true',
                     help='put each historical defect back and prove the Gate '
                          'still goes red')
+    ap.add_argument('--all', action='store_true',
+                    help='everything: T0 static, the Gate and the self-test')
     args = ap.parse_args()
 
-    run_static = args.static or not (args.gate or args.selftest)
-    run_gate = args.gate or not (args.static or args.selftest)
+    picked = args.static or args.gate or args.selftest
+    run_static = args.all or args.static or not picked
+    run_gate = args.all or args.gate or not picked
+    run_selftest = args.all or args.selftest
     color = not args.no_color and sys.stdout.isatty()
 
     # out/ always holds the last run of every case: its disk, generated .tcl,
@@ -60,16 +71,20 @@ def main():
         if ctx.sym is None:
             ctx.reload_symbols()
         cases = [c for c in gate.CASES if args.filter.upper() in c.name.upper()]
-        if not cases:
+        if not cases and not run_selftest:
             print('no case matches %r' % args.filter)
             return 2
-        checks = gate.run(ctx, cases)
+        checks = gate.run(ctx, cases) if cases else []
         all_checks += checks
         failed += result.report('T1/T2  GATE', checks, color)
 
-    if args.selftest:
+    if run_selftest:
         import selftest
-        checks = selftest.run(ctx)
+        # The Gate has just run on the clean build: reuse its verdicts as the
+        # baseline instead of paying for the same sessions twice.
+        baseline = {c.name: not c.counts_as_failure
+                    for c in checks} if run_gate else None
+        checks = selftest.run(ctx, args.filter, baseline)
         all_checks += checks
         failed += result.report('SELFTEST  MUTATIONS', checks, color)
 
