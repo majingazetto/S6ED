@@ -328,8 +328,7 @@ SCRINIT         LD      A, 6
 
                 ; FLUSH KEYBOARD BUFFER
                 LD      IX, KILBUF
-                CALL    BIOSCALL
-                RET
+                JP      BIOSCALL
 
 PALDATA         DEFB    #00, #00, #77, #07, #17, #02, #70, #07  ; 0:BG, 1:FG, 2:UI, 3:HI
 

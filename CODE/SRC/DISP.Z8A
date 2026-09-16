@@ -82,8 +82,7 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
 
 .KMATCH         INC     HL
                 LD      A, (HL)         ; A = ACTION ID
-                CALL    EXECACT
-                RET
+                JP      EXECACT
 
 .NOTMAPP        ; UNMAPPED: CHECK PRINTABLE RANGE (#20..#FE)
                 LD      A, (KMAPID)
@@ -137,8 +136,7 @@ EXECACT         CP      ACMAX
                 INC     HL
                 LD      D, (HL)
                 EX      DE, HL
-                CALL    CALHL
-                RET
+                JP      CALHL
 
 
 ; --- KMAPCYC                   ----------------------------------------
@@ -158,8 +156,7 @@ KMAPCYC         LD      A, (KMAPID)
                 XOR     A
 .KCYCOK         LD      (KMAPID), A
                 CALL    KMAPSW
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 
 
 ; --- KMAPSW                    ----------------------------------------

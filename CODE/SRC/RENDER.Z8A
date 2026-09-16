@@ -467,6 +467,5 @@ CLRROW          LD      A, B
                 LD      (VDP_ARG), A
                 
                 LD      HL, VDPCMBLK
-                CALL    HMMV
-                RET
+                JP      HMMV
 

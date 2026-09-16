@@ -100,8 +100,7 @@ MAPINIT         DBG     "MAPINIT: ENTER"
 ALLSEG          XOR     A               ; A=0: USER SEGMENT, B=0: PRIMARY MAPPER
                 LD      B, A
                 LD      HL, (MALLSEG)
-                CALL    CALHL
-                RET
+                JP      CALHL
 
 
 ; --- FRESEG                    ----------------------------------------
@@ -115,8 +114,7 @@ ALLSEG          XOR     A               ; A=0: USER SEGMENT, B=0: PRIMARY MAPPER
 
 FRESEG          LD      B, 0            ; B=0: PRIMARY MAPPER
                 LD      HL, (MFRESEG)
-                CALL    CALHL
-                RET
+                JP      CALHL
 
 
 ; --- PUTP1                     ----------------------------------------
@@ -134,8 +132,7 @@ FRESEG          LD      B, 0            ; B=0: PRIMARY MAPPER
 ; - 3 TIMES IN 2174 CALLS ON AN IDLE EDITOR.
 
 PUTP1           LD      HL, (MPUTP1)
-                CALL    CALHL
-                RET
+                JP      CALHL
 
 
 ; --- GETP1                     ----------------------------------------
@@ -148,8 +145,7 @@ PUTP1           LD      HL, (MPUTP1)
 ; -
 
 GETP1           LD      HL, (MGETP1)
-                CALL    CALHL
-                RET
+                JP      CALHL
 
 
 ; --- PUTP2                     ----------------------------------------
@@ -169,8 +165,7 @@ GETP1           LD      HL, (MGETP1)
 ; -
 
 PUTP2           LD      HL, (MPUTP2)
-                CALL    CALHL
-                RET
+                JP      CALHL
 
 
 ; --- GETP2                     ----------------------------------------
@@ -183,8 +178,7 @@ PUTP2           LD      HL, (MPUTP2)
 ; -
 
 GETP2           LD      HL, (MGETP2)
-                CALL    CALHL
-                RET
+                JP      CALHL
 
 
 ; --- TRACKED ALLOCATION        ----------------------------------------

@@ -107,8 +107,7 @@ CHKUNSEL        LD      A, (MODKEYS)
 
 ACTMVL          CALL    CHKUNSEL
                 LD      A, CLEFT
-                CALL    EDMOVCHR
-                RET
+                JP      EDMOVCHR
 
 
 ; --- ACTMVR                    ----------------------------------------
@@ -123,8 +122,7 @@ ACTMVL          CALL    CHKUNSEL
 
 ACTMVR          CALL    CHKUNSEL
                 LD      A, CRIGHT
-                CALL    EDMOVCHR
-                RET
+                JP      EDMOVCHR
 
 
 ; --- ACTMVU                    ----------------------------------------
@@ -140,8 +138,7 @@ ACTMVR          CALL    CHKUNSEL
 ACTMVU          CALL    CHKUNSEL
                 LD      A, CUP
                 CALL    EDMOVROW
-                CALL    EDCLMPX
-                RET
+                JP      EDCLMPX
 
 
 ; --- ACTMVD                    ----------------------------------------
@@ -157,8 +154,7 @@ ACTMVU          CALL    CHKUNSEL
 ACTMVD          CALL    CHKUNSEL
                 LD      A, CDOWN
                 CALL    EDMOVROW
-                CALL    EDCLMPX
-                RET
+                JP      EDCLMPX
 
 
 ; --- ACTBOL                    ----------------------------------------
@@ -215,8 +211,7 @@ ACTTOP          CALL    CHKUNSEL
                 XOR     A
                 LD      (CURX), A
                 LD      (CURY), A
-                CALL    REDRAW
-                RET
+                JP      REDRAW
 
 
 ; --- ACTBOT                    ----------------------------------------
@@ -250,8 +245,7 @@ ACTBOT          CALL    CHKUNSEL
                 LD      (CURY), A
 .REDBOT         XOR     A
                 LD      (CURX), A
-                CALL    REDRAW
-                RET
+                JP      REDRAW
 
 
 ; --- ACTWLFT                   ----------------------------------------
@@ -502,8 +496,7 @@ ACTDWLFT        LD      A, (CURX)
 
                 LD      A, #FF
                 LD      (MODIFIED), A
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 
 
 ; --- ACTPGUP                   ----------------------------------------
@@ -615,8 +608,7 @@ ACTDELBK        LD      A, (SELACT)
                 OR      A
                 JP      NZ, ACTDLS
                 CALL    EDDELBK
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 
 
 ; --- ACTDELFW                  ----------------------------------------
@@ -633,8 +625,7 @@ ACTDELFW        LD      A, (SELACT)
                 OR      A
                 JP      NZ, ACTDLS
                 CALL    EDDELCHR
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 
 
 ; --- ACTDELLN                  ----------------------------------------
@@ -798,8 +789,7 @@ ACTNWLIN        ; MODE CHECK: ALGN_ON ALWAYS, ALGN_DEV ONLY IN WRAP_DEV
 
 ACTOPNBL        CALL    ACTEOL
                 CALL    EDNWLIN
-                CALL    ACTVIINS
-                RET
+                JP      ACTVIINS
 
 
 ; --- ACTOPNAB                  ----------------------------------------
@@ -816,8 +806,7 @@ ACTOPNAB        CALL    ACTBOL
                 CALL    EDNWLIN
                 LD      A, CUP
                 CALL    EDMOVROW
-                CALL    ACTVIINS
-                RET
+                JP      ACTVIINS
 
 
 ; --- ACTTGLIN                  ----------------------------------------
@@ -833,8 +822,7 @@ ACTOPNAB        CALL    ACTBOL
 ACTTGLIN        LD      A, (INSMODE)
                 XOR     INS_MODE
                 LD      (INSMODE), A
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 
 
 ; --- ACTTGLWR                  ----------------------------------------
@@ -848,8 +836,7 @@ ACTTGLIN        LD      A, (INSMODE)
 ; -
 
 ACTTGLWR        CALL    EDTGLWRP
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 
 
 ; --- ACTSAVE                   ----------------------------------------
@@ -863,8 +850,7 @@ ACTTGLWR        CALL    EDTGLWRP
 ; -
 
 ACTSAVE         CALL    FILESAVE
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 
 
 ; --- ACTQUIT                   ----------------------------------------
@@ -925,8 +911,7 @@ ACTVIINS        LD      A, VIMINS
                 LD      (VIMODE), A
                 LD      HL, KMAPVII
                 LD      (KMAPPTR), HL
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 
 
 ; --- ACTVIAPP                  ----------------------------------------
@@ -941,8 +926,7 @@ ACTVIINS        LD      A, VIMINS
 
 ACTVIAPP        LD      A, CRIGHT
                 CALL    EDMOVCHR
-                CALL    ACTVIINS
-                RET
+                JP      ACTVIINS
 
 
 ; --- ACTVINRM                  ----------------------------------------
@@ -1379,8 +1363,7 @@ ACTDSEL         LD      A, (SELACT)
                 XOR     A
                 LD      (SELACT), A
                 LD      (SELDRAWN), A
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 
 
 ; --- ACTSELAL                  ----------------------------------------
@@ -1411,8 +1394,7 @@ ACTSELAL        CALL    SELPRE          ; UN-XOR EXISTING IF DRAWN
 
                 CALL    SETCURY
                 CALL    REDRAW
-                CALL    SELPOST
-                RET
+                JP      SELPOST
 
 
 ; --- ACTSLML                   ----------------------------------------
@@ -1905,14 +1887,12 @@ ACTDLS          LD      A, (SELACT)
                 LD      (SELDRAWN), A
                 LD      A, #FF
                 LD      (MODIFIED), A
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 
 .DLSCLR         XOR     A
                 LD      (SELACT), A
                 LD      (SELDRAWN), A
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 
 
 ; --- ACTCOPY                   ----------------------------------------
@@ -2415,11 +2395,9 @@ ACTTGLBD        LD      A, (MKUPMD)
                 LD      A, (TYPATTR)
                 XOR     ATRBOLD
                 LD      (TYPATTR), A
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 .SELBD          LD      A, ATRBOLD
-                CALL    APPLSEL
-                RET
+                JP      APPLSEL
 
 
 ; --- ACTTGLIT                  ----------------------------------------
@@ -2451,11 +2429,9 @@ ACTTGLIT        LD      A, (MKUPMD)
                 LD      A, (TYPATTR)
                 XOR     ATRITAL
                 LD      (TYPATTR), A
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 .SELIT          LD      A, ATRITAL
-                CALL    APPLSEL
-                RET
+                JP      APPLSEL
 
 
 ; --- APPLSEL                   ----------------------------------------
@@ -2575,8 +2551,7 @@ APPLSEL         LD      (STYLMASK), A
                 CALL    SELPOST
                 LD      A, #FF
                 LD      (MODIFIED), A
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 
 
 ; --- ACTTAB                    ----------------------------------------

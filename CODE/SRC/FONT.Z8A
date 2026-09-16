@@ -161,8 +161,7 @@ FONTINIT        XOR     A
                 CALL    DSKCLOSE
 
 .SHOW           LD      IX, ENASCR_B
-                CALL    BIOSCALL
-                RET
+                JP      BIOSCALL
 
 
 ; --- FNTLOAD                   ----------------------------------------
@@ -193,8 +192,7 @@ FNTLOAD         LD      A, (FNTOK)
                 LD      A, (FNTHAND)
                 LD      HL, FONTSIZ
                 LD      DE, CLIPBUF
-                CALL    DSKREAD
-                RET
+                JP      DSKREAD
 
 .FROMROM        LD      A, (FNTROMD)
                 OR      A
