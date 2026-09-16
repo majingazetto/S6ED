@@ -1,0 +1,399 @@
+; ========================================================
+; PROBE2.Z8A — DOS2 PAGE-2 BDOS CALL VERIFICATION PROBE
+; ========================================================
+;
+; TESTS WHETHER CODE RUNNING IN A MAPPER SEGMENT BANKED
+; INTO PAGE 2 (#8000) CAN SUCCESSFULLY CALL BDOS FILE
+; FUNCTIONS WITH:
+;   T1: FILENAME STRING IN PAGE 2, DMA IN PAGE 1
+;   T2: FILENAME STRING IN PAGE 1, DMA IN PAGE 1 (CONTROL)
+;
+; THE PROBE READS ITS OWN FIRST 16 BYTES AND VERIFIES
+; BYTE 0 = #C3 (THE JP OPCODE AT THE START OF THIS .COM).
+;
+; BUILD:  sjasmplus PROBE2.Z8A
+; RUN:    ON ANY DOS2 MACHINE WITH PROBE2.COM ON DISK
+; ========================================================
+
+        OUTPUT  PROBE2.COM
+        ORG     #0100
+
+BDOS    EQU     #0005
+EXTBIO  EQU     #FFCA
+HOKVLD  EQU     #FB20
+
+; --- ENTRY POINT ---
+
+        JP      MAIN
+
+
+; --- MESSAGES (PAGE 1, ALWAYS ACCESSIBLE) ---
+
+MT1PASS DEFM    "T1 P2CODE+P2NAME+P1DMA: PASS", 13, 10, "$"
+MT1FOPN DEFM    "T1 P2CODE+P2NAME+P1DMA: FAIL OPEN", 13, 10, "$"
+MT1FRD  DEFM    "T1 P2CODE+P2NAME+P1DMA: FAIL READ", 13, 10, "$"
+MT1FDAT DEFM    "T1 P2CODE+P2NAME+P1DMA: FAIL DATA!=C3", 13, 10, "$"
+MT2PASS DEFM    "T2 P1CODE+P1NAME+P1DMA: PASS", 13, 10, "$"
+MT2FOPN DEFM    "T2 P1CODE+P1NAME+P1DMA: FAIL OPEN", 13, 10, "$"
+MT2FRD  DEFM    "T2 P1CODE+P1NAME+P1DMA: FAIL READ", 13, 10, "$"
+MT2FDAT DEFM    "T2 P1CODE+P1NAME+P1DMA: FAIL DATA!=C3", 13, 10, "$"
+MHEX    DEFM    "  BYTES: $"
+MNL     DEFM    13, 10, "$"
+MNOMAP  DEFM    "FATAL: NO MAPPER MANAGER", 13, 10, "$"
+MNOSEG  DEFM    "FATAL: NO FREE SEGMENT", 13, 10, "$"
+
+; --- PAGE-1 FILENAME (T2 CONTROL) ---
+
+P1NAME  DEFM    "PROBE2.COM", 0
+
+; --- VARIABLES (PAGE 1) ---
+
+JALL    DEFW    0               ; ALL_SEG JUMP TABLE ENTRY
+JFRE    DEFW    0               ; FRE_SEG
+JPUT2   DEFW    0               ; PUT_P2
+JGET2   DEFW    0               ; GET_P2
+MYSEG   DEFB    0               ; ALLOCATED SEGMENT NUMBER
+OLDSEG  DEFB    0               ; ORIGINAL PAGE-2 SEGMENT
+RDBUF   DEFS    16, 0           ; READ BUFFER (DMA TARGET, PAGE 1)
+
+
+; =============================================================
+; MAIN (PAGE 1)
+; =============================================================
+
+MAIN:
+        ; ---- 1. INIT MAPPER MANAGER VIA EXTBIO ----
+        LD      A, (HOKVLD)
+        RRA
+        JP      NC, .NOMAP
+        XOR     A
+        LD      D, 4            ; MAPPER DEVICE
+        LD      E, 2            ; FUNCTION TABLE (E=2)
+        CALL    EXTBIO
+        OR      A
+        JP      Z, .NOMAP
+        ; HL = JUMP TABLE BASE
+
+        ; RESOLVE ADDRESSES
+        LD      (JALL), HL      ; OFFSET 0: ALL_SEG
+        PUSH    HL
+        LD      DE, 3           ; OFFSET 3: FRE_SEG
+        ADD     HL, DE
+        LD      (JFRE), HL
+        POP     HL
+        PUSH    HL
+        LD      DE, 36          ; OFFSET 36: PUT_P2
+        ADD     HL, DE
+        LD      (JPUT2), HL
+        POP     HL
+        LD      DE, 39          ; OFFSET 39: GET_P2
+        ADD     HL, DE
+        LD      (JGET2), HL
+
+        ; ---- 2. SAVE CURRENT PAGE-2 SEGMENT ----
+        LD      HL, (JGET2)
+        CALL    CALHL
+        LD      (OLDSEG), A
+
+        ; ---- 3. ALLOCATE A USER SEGMENT ----
+        XOR     A               ; A=0: USER SEGMENT
+        LD      B, A            ; B=0: PRIMARY MAPPER
+        LD      HL, (JALL)
+        CALL    CALHL
+        JP      C, .NOSEG
+        LD      (MYSEG), A
+
+        ; ---- 4. BANK IT AND COPY THE FEATURE BLOB ----
+        LD      HL, (JPUT2)
+        CALL    CALHL           ; A STILL HAS MYSEG
+
+        LD      HL, BLOB
+        LD      DE, #8000
+        LD      BC, BLOBEND - BLOB
+        LDIR
+
+        ; ============= T1: CALL FEATURE AT #8000 =============
+        CALL    #8000
+        ; A = 0: OK, 1: OPEN FAIL, 2: READ FAIL, 3: DATA MISMATCH
+        PUSH    AF
+
+        ; RESTORE ORIGINAL PAGE-2 SEGMENT FIRST
+        LD      A, (OLDSEG)
+        LD      HL, (JPUT2)
+        CALL    CALHL
+
+        ; PRINT T1 RESULT
+        POP     AF
+        OR      A
+        JR      NZ, .T1ERR
+
+        ; PASS — SHOW THE BYTES
+        LD      DE, MHEX
+        CALL    OUTSTR
+        LD      DE, MHEX
+        LD      C, #09
+        CALL    BDOS
+        CALL    HEXDUMP
+        LD      DE, MT1PASS
+        JR      .T1SAY
+
+.T1ERR: CP      1
+        JR      NZ, .T1E2
+        LD      DE, MT1FOPN
+        JR      .T1SAY
+.T1E2:  CP      2
+        JR      NZ, .T1E3
+        LD      DE, MT1FRD
+        JR      .T1SAY
+.T1E3:  LD      DE, MT1FDAT
+
+.T1SAY: PUSH    DE
+        CALL    OUTSTR
+        POP     DE
+        LD      C, #09
+        CALL    BDOS
+
+
+        ; ============= T2: CONTROL (ALL FROM PAGE 1) =============
+
+        ; CLEAR READ BUFFER
+        LD      HL, RDBUF
+        LD      DE, RDBUF + 1
+        LD      BC, 15
+        LD      (HL), 0
+        LDIR
+
+        ; OPEN (FILENAME IN PAGE 1)
+        LD      DE, P1NAME
+        XOR     A               ; READ-ONLY
+        LD      C, #43          ; _OPEN
+        CALL    BDOS
+        JR      C, .T2FO
+
+        ; READ (B = HANDLE FROM _OPEN)
+        LD      C, #48          ; _READ
+        LD      DE, RDBUF       ; DMA IN PAGE 1
+        LD      HL, 16          ; 16 BYTES
+        PUSH    BC              ; SAVE HANDLE (B)
+        CALL    BDOS
+        POP     BC              ; RESTORE B = HANDLE
+
+        ; CLOSE
+        PUSH    AF              ; SAVE READ RESULT
+        PUSH    HL              ; SAVE BYTES READ
+        LD      C, #45          ; _CLOSE
+        CALL    BDOS
+        POP     HL
+        POP     AF
+        JR      C, .T2FR
+
+        ; CHECK BYTES READ > 0
+        LD      A, H
+        OR      L
+        JR      Z, .T2FR
+
+        ; CHECK FIRST BYTE = #C3
+        LD      A, (RDBUF)
+        CP      #C3
+        JR      NZ, .T2FD
+
+        ; PASS
+        LD      DE, MHEX
+        CALL    OUTSTR
+        LD      DE, MHEX
+        LD      C, #09
+        CALL    BDOS
+        CALL    HEXDUMP
+        LD      DE, MT2PASS
+        JR      .T2SAY
+
+.T2FO:  LD      DE, MT2FOPN
+        JR      .T2SAY
+.T2FR:  LD      DE, MT2FRD
+        JR      .T2SAY
+.T2FD:  LD      DE, MT2FDAT
+
+.T2SAY: PUSH    DE
+        CALL    OUTSTR
+        POP     DE
+        LD      C, #09
+        CALL    BDOS
+
+
+        ; ============= CLEANUP =============
+
+        LD      A, (MYSEG)
+        LD      B, 0
+        LD      HL, (JFRE)
+        CALL    CALHL
+
+        LD      C, #62          ; _TERM0
+        JP      BDOS
+
+
+        ; ---- ERROR EXITS ----
+
+.NOMAP: CALL    OUTSTR
+        LD      DE, MNOMAP
+        LD      C, #09
+        CALL    BDOS
+        LD      C, #62
+        JP      BDOS
+
+.NOSEG: LD      A, (OLDSEG)
+        LD      HL, (JPUT2)
+        CALL    CALHL
+        LD      DE, MNOSEG
+        CALL    OUTSTR
+        LD      DE, MNOSEG
+        LD      C, #09
+        CALL    BDOS
+        LD      C, #62
+        JP      BDOS
+
+
+; --- OUTSTR: WRITE $-TERMINATED STRING AT DE TO DEBUGDEVICE ---
+
+OUTSTR: PUSH    AF
+        PUSH    DE
+        LD      A, #63
+        OUT     (#2E), A
+.OLP:   LD      A, (DE)
+        CP      '$'
+        JR      Z, .ODON
+        OR      A
+        JR      Z, .ODON
+        OUT     (#2F), A
+        INC     DE
+        JR      .OLP
+.ODON:  POP     DE
+        POP     AF
+        RET
+
+
+; --- CALHL ---
+
+CALHL:  JP      (HL)
+
+
+; --- HEXDUMP: PRINT 8 BYTES FROM RDBUF AS HEX ---
+
+HEXDUMP:
+        LD      HL, RDBUF
+        LD      B, 8
+.LP:    LD      A, (HL)
+        PUSH    HL
+        PUSH    BC
+        CALL    PRHEX
+        POP     BC
+        POP     HL
+        INC     HL
+        DJNZ    .LP
+        LD      DE, MNL
+        CALL    OUTSTR
+        LD      DE, MNL
+        LD      C, #09
+        JP      BDOS
+
+
+; --- PRHEX: PRINT A AS 2 HEX DIGITS + SPACE ---
+
+PRHEX:  PUSH    AF
+        RRCA
+        RRCA
+        RRCA
+        RRCA
+        AND     #0F
+        CALL    .NIB
+        POP     AF
+        AND     #0F
+        CALL    .NIB
+        LD      E, ' '
+        CALL    OUTCH
+        LD      C, #02          ; _CONOUT
+        JP      BDOS
+.NIB:   CP      10
+        JR      C, .DG
+        ADD     A, 'A' - 10
+        JR      .OUT
+.DG:    ADD     A, '0'
+.OUT:   LD      E, A
+        CALL    OUTCH
+        LD      C, #02
+        JP      BDOS
+
+OUTCH:  PUSH    AF
+        LD      A, #63
+        OUT     (#2E), A
+        LD      A, E
+        OUT     (#2F), A
+        POP     AF
+        RET
+
+
+; =============================================================
+; FEATURE BLOB — ASSEMBLED AT PHASE #8000
+; RUNS ENTIRELY FROM PAGE 2 (MAPPER SEGMENT)
+;
+; OPENS PROBE2.COM WITH FILENAME STRING IN PAGE 2,
+; READS 16 BYTES INTO RDBUF (PAGE 1),
+; VERIFIES BYTE 0 = #C3.
+;
+; IN:  NONE
+; OUT: A = 0 (PASS), 1 (OPEN FAIL), 2 (READ FAIL),
+;          3 (DATA MISMATCH)
+; =============================================================
+
+BLOB:
+        PHASE   #8000
+
+P2ENTRY:
+        ; OPEN — FILENAME IS HERE, IN PAGE 2!
+        LD      DE, P2NAME      ; #80xx ADDRESS
+        XOR     A               ; READ-ONLY
+        LD      C, #43          ; _OPEN
+        CALL    BDOS
+        JR      NC, .OPOK
+        LD      A, 1            ; FAIL: OPEN
+        RET
+
+.OPOK:  ; B = FILE HANDLE
+        ; READ 16 BYTES INTO RDBUF (PAGE 1)
+        LD      C, #48          ; _READ
+        LD      DE, RDBUF       ; DMA TARGET IN PAGE 1
+        LD      HL, 16          ; BYTE COUNT
+        PUSH    BC              ; SAVE HANDLE ON STACK (PAGE 3)
+        CALL    BDOS
+        POP     BC              ; RESTORE B = HANDLE
+        JR      C, .RDFAIL
+
+        ; CHECK BYTES READ > 0
+        LD      A, H
+        OR      L
+        JR      Z, .RDFAIL
+
+        ; CLOSE
+        LD      C, #45          ; _CLOSE
+        CALL    BDOS
+
+        ; VERIFY FIRST BYTE = #C3 (JP OPCODE)
+        LD      A, (RDBUF)      ; RDBUF IS IN PAGE 1
+        CP      #C3
+        JR      NZ, .BAD
+        XOR     A               ; A = 0: PASS
+        RET
+
+.RDFAIL:
+        ; CLOSE BEFORE RETURNING
+        LD      C, #45          ; _CLOSE
+        CALL    BDOS
+        LD      A, 2            ; FAIL: READ
+        RET
+
+.BAD:   LD      A, 3            ; FAIL: DATA MISMATCH
+        RET
+
+P2NAME: DEFM    "PROBE2.COM", 0
+
+        DEPHASE
+BLOBEND:

@@ -121,31 +121,61 @@ irrelevant against any paint path.
 
 ### 4.5 How code reaches the segment in Fase 1 (no loader yet)
 
-The passenger is assembled inside the `.COM`, wrapped in `PHASE #8000` / `DEPHASE`
-(labels logical at `#8000+`, bytes contiguous in the image — sjasmplus v1.22.0
-behaviour verified in `informe_directorio_segmento_s6ed.md` Appendix A). At boot,
-`F1COPY` LDIRs the blob into `FTRSEG` through the page-2 window. Fase 2 replaces
-this copy with the `S6ED.DAT` loader without touching anything else.
+The feature modules are assembled inside the `.COM` image wrapped in a
+**single global `PHASE #8000` / `DEPHASE` container block** (`FTRBLOB`):
+
+```z80
+FTRBLOB:
+        PHASE   #8000
+FTRSTART:
+        INCLUDE CFG.Z8A
+        ; Future passengers appended here sequentially:
+        ; INCLUDE TOKEN.Z8A
+        ; INCLUDE MENU.Z8A
+        ; INCLUDE VI.Z8A
+FTREND:
+        DEPHASE
+FTRBLEN EQU     FTREND - FTRSTART
+        ASSERT  FTRBLEN <= 16384        ; Total feature segment budget
+```
+
+**Critical architecture rule (agreed 2026-09-16):** Do **not** use per-module
+`PHASE #8000` / `DEPHASE` wrappers. A per-module wrapper would reset the logical
+assembly counter to `#8000` for each file, causing multiple modules in `FTRSEG`
+to collide and overwrite each other's addresses. A single container block ensures
+all feature modules assemble sequentially into the `#8000`–`#BFFF` address space.
+
+At boot, a single routine `F1COPY` LDIRs the entire container blob (`FTRBLEN` bytes)
+into `FTRSEG` through the page-2 window. Fase 2 replaces this copy with the
+`S6ED.DAT` loader without touching the modules themselves.
 
 ## 5. First passenger: `CFG.Z8A` (resident in `FTRSEG`)
 
-Why CFG: cold path (runs once at boot), self-contained, and its entire core
-surface is four routines — `DSKOPEN`, `DSKREAD`, `DSKCLOSE`, `SETPAL` — so the stub
-list is minimal and auditable. Its data (`CLIPBUF`, config vars, `PALDIRT`) lives
-in pages 0/1, always mapped.
+Why CFG: cold path (runs once at boot), self-contained (~1,082 bytes).
 
-Changes to the module:
+### 5.1 Empirical Verification: BDOS file I/O from Page 2 (2026-09-16)
 
-- Wrapped in `PHASE #8000` / `DEPHASE`, blob placed at the end of the image before
-  `OUTEND`; `ASSERT blob size <= 16384`.
-- The tail `JP SETPAL` at `.CFGDON` becomes `CALL STB_SETPAL ; RET`.
-- `DSKOPEN` / `DSKREAD` / `DSKCLOSE` calls become `STB_DSKOPN` / `STB_DSKRD` /
-  `STB_DSKCLS`.
-- `DBG` invocations are safe as-is (in DEBUG builds they `CALL DBGMSG` in core,
-  which never touches page 2).
+Before restructuring, the hypothesis that MSX-DOS 2 supports BDOS file operations
+from page 2 was **verified empirically** with `TEST/PROBE2.Z8A` on both
+`Boosted_MSX2_EN` (2 MB) and the reference stock 128 kB `Philips_NMS_8250`:
+- Code running at `#8000` (in a mapper segment).
+- Filename string located at `#80xx` (inside the page-2 mapper segment).
+- DMA target located in page 1 (`#0277`).
+- Operations: `_OPEN` (#43), `_READ` (#48), `_CLOSE` (#45) — read self and
+  verified byte 0 = `#C3` (JP).
+- **Result: 100% PASS** on both machines.
 
-`INIT` change: `CALL CFGLOAD` → `CALL CFGRUN` (core wrapper: `F1COPY` + `FCALL
-CFGLOAD`). `FTRSEG` stays resident — no `SEGPOP`, no skip-on-failure (§1).
+### 5.2 Module Relocation without Stubs
+
+Because page 1 code is always mapped, any routine in `FTRSEG` (`#8000+`) can
+call core routines in page 1 (`DSKOPEN`, `DSKREAD`, `DSKCLOSE`, `SETPAL`,
+`KMAPSW`) via standard direct Z80 `CALL` / `JP`. Intermediate core stubs
+are not required for the first passenger.
+
+Changes:
+- `CFG.Z8A` included inside the global `FTRBLOB` (`PHASE #8000` block).
+- `INIT` change: `CALL CFGLOAD` → `CALL CFGRUN` (core wrapper in `XSEG.Z8A`:
+  `F1COPY` + `FCALL CFGLOAD`). `FTRSEG` stays resident (§1).
 
 ## 6. Tests (per AGENTS.md rules)
 
@@ -192,3 +222,9 @@ CFGLOAD`). `FTRSEG` stays resident — no `SEGPOP`, no skip-on-failure (§1).
   booting Nextor 2.1.1 from the SPI-emulated SD in `msx_dma_sw/openmsx/`.
 - `PROBE.COM` source lives at `/tmp/probe/PROBE.Z8A`; if it proves useful again,
   promote it into `TEST/` rather than rediscovering it.
+- `PROBE2.Z8A` (page-2 BDOS caller probe) saved to `TEST/PROBE2.Z8A`.
+  - openMSX stdout pipes stall before machine boot without redirection (`> out 2> err`).
+  - MSX-DOS 2 requires ~12.25 emulated seconds to complete boot and execute `AUTOEXEC.BAT` (`set throttle off` completes this in ~40ms wall clock).
+  - `AUTOEXEC.BAT` strictly requires DOS CRLF (`\r\n`).
+  - Gated breakpoints must verify opcode byte signatures after entry (`0x0100`) to avoid premature hits by COMMAND2/kernel code.
+
