@@ -309,6 +309,24 @@ CFGVAL          ; SKIP WHITESPACE BEFORE '='
                 RET
 
 
+; --- UPCASE                    ----------------------------------------
+
+
+; - UPCASE -----------------------------
+; - CONVERT ASCII LOWERCASE TO UPPERCASE
+; - IN:  A = CHARACTER
+; - OUT: A = UPPERCASE CHARACTER (UNCHANGED IF NOT LOWERCASE)
+; - CLOBBERS: F
+; -
+
+UPCASE          CP      #61             ; 'a'
+                RET     C
+                CP      #7B             ; 'z' + 1
+                RET     NC
+                SUB     #20             ; ASCII CASE DISTANCE
+                RET
+
+
 ; --- PARSPRF                   ----------------------------------------
 
 
@@ -316,35 +334,25 @@ CFGVAL          ; SKIP WHITESPACE BEFORE '='
 ; - PARSE PROFILE VALUE (STD, WS, EMC, VI)
 ; - IN:  HL = POINTER TO VALUE
 ; - OUT: NONE
-; - CLOBBERS: AF
+; - CLOBBERS: AF, DE
 ; -
 
 PARSPRF         LD      A, (HL)
-                CP      'S'             ; STD
-                JR      Z, .SETSTD
-                CP      's'
-                JR      Z, .SETSTD
-                CP      'W'             ; WS
-                JR      Z, .SETWS
-                CP      'w'
-                JR      Z, .SETWS
-                CP      'E'             ; EMC
-                JR      Z, .SETEMC
-                CP      'e'
-                JR      Z, .SETEMC
-                CP      'V'             ; VI
-                JR      Z, .SETVI
-                CP      'v'
-                JR      Z, .SETVI
-                RET
-.SETSTD         XOR     A
-                JR      .SETPRF
-.SETWS          LD      A, 1
-                JR      .SETPRF
-.SETEMC         LD      A, 2
-                JR      .SETPRF
-.SETVI          LD      A, 3
-.SETPRF         LD      (KMAPID), A
+                CALL    UPCASE
+                SUB     #45             ; 'E'
+                RET     C
+                CP      #13             ; 19 ENTRIES
+                RET     NC
+                LD      DE, PRFTBL
+                ADD     A, E
+                LD      E, A
+                ADC     A, D
+                SUB     E
+                LD      D, A
+                LD      A, (DE)
+                CP      #FF
+                RET     Z
+                LD      (KMAPID), A
                 JP      KMAPSW
 
 
@@ -359,13 +367,10 @@ PARSPRF         LD      A, (HL)
 ; -
 
 PARSWRP         LD      A, (HL)
-                CP      'D'             ; DEV
+                CALL    UPCASE
+                CP      #44             ; 'D'
                 JR      Z, .SETDEV
-                CP      'd'
-                JR      Z, .SETDEV
-                CP      'T'             ; TXT
-                JR      Z, .SETTXT
-                CP      't'
+                CP      #54             ; 'T'
                 JR      Z, .SETTXT
                 RET
 .SETDEV         XOR     A
@@ -383,30 +388,24 @@ PARSWRP         LD      A, (HL)
 ; - PARSE MARKUP VALUE (OFF, MD, LIT)
 ; - IN:  HL = POINTER TO VALUE
 ; - OUT: NONE
-; - CLOBBERS: AF
+; - CLOBBERS: AF, DE
 ; -
 
 PARSMKP         LD      A, (HL)
-                CP      'O'             ; OFF
-                JR      Z, .SETOFF
-                CP      'o'
-                JR      Z, .SETOFF
-                CP      'M'             ; MD
-                JR      Z, .SETMD
-                CP      'm'
-                JR      Z, .SETMD
-                CP      'L'             ; LIT
-                JR      Z, .SETLIT
-                CP      'l'
-                JR      Z, .SETLIT
-                RET
-.SETOFF         XOR     A
-                LD      (MKUPMD), A
-                RET
-.SETMD          LD      A, 1
-                LD      (MKUPMD), A
-                RET
-.SETLIT         LD      A, 2
+                CALL    UPCASE
+                SUB     #4C             ; 'L'
+                RET     C
+                CP      #04
+                RET     NC
+                LD      DE, MKPTBL
+                ADD     A, E
+                LD      E, A
+                ADC     A, D
+                SUB     E
+                LD      D, A
+                LD      A, (DE)
+                CP      #FF
+                RET     Z
                 LD      (MKUPMD), A
                 RET
 
@@ -418,19 +417,21 @@ PARSMKP         LD      A, (HL)
 ; - PARSE CLOCK VALUE (0, 1)
 ; - IN:  HL = POINTER TO VALUE
 ; - OUT: NONE
-; - CLOBBERS: AF
+; - CLOBBERS: AF, DE
 ; -
 
 PARSCLK         LD      A, (HL)
-                CP      '1'
-                JR      Z, .CLKON
-                CP      '0'
-                JR      Z, .CLKOFF
-                RET
-.CLKON          LD      A, 1
-                LD      (SHOWCLK), A
-                RET
-.CLKOFF         XOR     A
+                SUB     #30             ; '0'
+                RET     C
+                CP      #02
+                RET     NC
+                LD      DE, CLKTBL
+                ADD     A, E
+                LD      E, A
+                ADC     A, D
+                SUB     E
+                LD      D, A
+                LD      A, (DE)
                 LD      (SHOWCLK), A
                 RET
 
@@ -442,24 +443,23 @@ PARSCLK         LD      A, (HL)
 ; - PARSE TABWIDTH VALUE (2, 4, 8)
 ; - IN:  HL = POINTER TO VALUE
 ; - OUT: NONE
-; - CLOBBERS: AF
+; - CLOBBERS: AF, DE
 ; -
 
 PARSTAB         LD      A, (HL)
-                CP      '2'
-                JR      Z, .TAB2
-                CP      '4'
-                JR      Z, .TAB4
-                CP      '8'
-                JR      Z, .TAB8
-                RET
-.TAB2           LD      A, 2
-                LD      (TABWIDTH), A
-                RET
-.TAB4           LD      A, 4
-                LD      (TABWIDTH), A
-                RET
-.TAB8           LD      A, 8
+                SUB     #30             ; '0'
+                RET     C
+                CP      #0A             ; 10 ENTRIES
+                RET     NC
+                LD      DE, TABTBL
+                ADD     A, E
+                LD      E, A
+                ADC     A, D
+                SUB     E
+                LD      D, A
+                LD      A, (DE)
+                CP      #FF
+                RET     Z
                 LD      (TABWIDTH), A
                 RET
 
@@ -475,17 +475,12 @@ PARSTAB         LD      A, (HL)
 ; -
 
 PARSEOL         LD      A, (HL)
-                CP      'A'             ; AUTO
+                CALL    UPCASE
+                CP      #41             ; 'A'
                 JR      Z, .EOLAUT
-                CP      'a'
-                JR      Z, .EOLAUT
-                CP      'D'             ; DOS
+                CP      #44             ; 'D'
                 JR      Z, .EOLDOS
-                CP      'd'
-                JR      Z, .EOLDOS
-                CP      'U'             ; UNIX
-                JR      Z, .EOLUNX
-                CP      'u'
+                CP      #55             ; 'U'
                 JR      Z, .EOLUNX
                 RET
 .EOLAUT         LD      A, 1
@@ -493,12 +488,12 @@ PARSEOL         LD      A, (HL)
                 RET
 .EOLDOS         XOR     A
                 LD      (SAVEEOL), A
-                LD      (AUTOLOD), A    ; FIXED DOS
+                LD      (AUTOLOD), A
                 RET
 .EOLUNX         LD      A, 1
                 LD      (SAVEEOL), A
                 XOR     A
-                LD      (AUTOLOD), A    ; FIXED UNIX
+                LD      (AUTOLOD), A
                 RET
 
 
@@ -509,30 +504,24 @@ PARSEOL         LD      A, (HL)
 ; - PARSE AUTOALIGN VALUE (OFF, ON, DEV)
 ; - IN:  HL = POINTER TO VALUE
 ; - OUT: NONE
-; - CLOBBERS: AF
+; - CLOBBERS: AF, DE
 ; -
 
 PARSALN         LD      A, (HL)
-                CP      'O'             ; ON
-                JR      Z, .SETON
-                CP      'o'
-                JR      Z, .SETON
-                CP      'F'             ; OFF
-                JR      Z, .SETOFF
-                CP      'f'
-                JR      Z, .SETOFF
-                CP      'D'             ; DEV
-                JR      Z, .SETDEV
-                CP      'd'
-                JR      Z, .SETDEV
-                RET
-.SETOFF         XOR     A               ; ALGN_OFF = 0
-                LD      (AUTOALGN), A
-                RET
-.SETON          LD      A, ALGN_ON
-                LD      (AUTOALGN), A
-                RET
-.SETDEV         LD      A, ALGN_DEV
+                CALL    UPCASE
+                SUB     #44             ; 'D'
+                RET     C
+                CP      #0C             ; 12 ENTRIES
+                RET     NC
+                LD      DE, ALNTBL
+                ADD     A, E
+                LD      E, A
+                ADC     A, D
+                SUB     E
+                LD      D, A
+                LD      A, (DE)
+                CP      #FF
+                RET     Z
                 LD      (AUTOALGN), A
                 RET
 
@@ -548,54 +537,68 @@ PARSALN         LD      A, (HL)
 ; -
 
 PARSTHM         LD      A, (HL)
-                CP      'D'             ; DEFAULT
-                JR      Z, .THMDEF
-                CP      'd'
-                JR      Z, .THMDEF
-                CP      'A'             ; AMBER
-                JR      Z, .THMAMB
-                CP      'a'
-                JR      Z, .THMAMB
-                CP      'G'             ; GREEN
-                JR      Z, .THMGRN
-                CP      'g'
-                JR      Z, .THMGRN
-                CP      'L'             ; LIGHT
-                JR      Z, .THMLGT
-                CP      'l'
-                JR      Z, .THMLGT
-                CP      'M'             ; MSX OR MONO
-                JR      Z, .CHKM
-                CP      'm'
-                JR      Z, .CHKM
-                RET
-
-.CHKM           INC     HL
+                CALL    UPCASE
+                SUB     #41             ; 'A'
+                RET     C
+                CP      #0D             ; 13 ENTRIES
+                RET     NC
+                LD      DE, THMIDX
+                ADD     A, E
+                LD      E, A
+                ADC     A, D
+                SUB     E
+                LD      D, A
+                LD      A, (DE)
+                CP      #FF
+                RET     Z
+                CP      #04             ; 'M'?
+                JR      NZ, .LOADPTR
+                INC     HL
                 LD      A, (HL)
-                CP      'O'             ; MONO
-                JR      Z, .THMMON
-                CP      'o'
-                JR      Z, .THMMON
-                JR      .THMMSX         ; DEFAULT 'M' TO MSX
-
-.THMDEF         LD      HL, THMDEFT
-                JR      .CPYTHM
-.THMAMB         LD      HL, THMAMBR
-                JR      .CPYTHM
-.THMGRN         LD      HL, THMGRN
-                JR      .CPYTHM
-.THMLGT         LD      HL, THMLGHT
-                JR      .CPYTHM
-.THMMON         LD      HL, THMMONO
-                JR      .CPYTHM
-.THMMSX         LD      HL, THMMSX
-
+                CALL    UPCASE
+                CP      #4F             ; 'O'
+                LD      A, #05          ; MONO
+                JR      Z, .LOADPTR
+                LD      A, #04          ; MSX
+.LOADPTR        ADD     A, A
+                LD      E, A
+                LD      D, #00
+                LD      HL, THMPTR
+                ADD     HL, DE
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)
+                EX      DE, HL
+                ; FALL THROUGH TO .CPYTHM
 .CPYTHM         LD      DE, PALDATA
                 LD      BC, 8
                 LDIR
                 LD      A, #FF
                 LD      (PALDIRT), A
                 RET
+
+
+; --- CFG PARSER TABLES         ----------------------------------------
+
+
+PRFTBL          DEFB    #02, #FF, #FF, #FF, #FF, #FF, #FF, #FF
+                DEFB    #FF, #FF, #FF, #FF, #FF, #FF, #00, #FF
+                DEFB    #FF, #03, #01
+
+MKPTBL          DEFB    #02, #01, #FF, #00
+
+ALNTBL          DEFB    ALGN_DEV, #FF, ALGN_OFF, #FF, #FF, #FF, #FF, #FF
+                DEFB    #FF, #FF, #FF, ALGN_ON
+
+THMIDX          DEFB    #01, #FF, #FF, #00, #FF, #FF, #02, #FF
+                DEFB    #FF, #FF, #FF, #03, #04
+
+THMPTR          DEFW    THMDEFT, THMAMBR, THMGRN, THMLGHT, THMMSX, THMMONO
+
+CLKTBL          DEFB    #00, #01
+
+TABTBL          DEFB    #FF, #FF, #02, #FF, #04, #FF, #FF, #FF
+                DEFB    #08, #FF
 
 
 ; --- PARSCOL                   ----------------------------------------
