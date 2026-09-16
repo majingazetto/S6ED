@@ -342,8 +342,7 @@ DRWMENU         LD      HL, 0
                 LD      DE, 6           ; DX = 6
                 LD      BC, 0           ; DY = 0
                 CALL    BLTSTR
-                CALL    UPDMCLK
-                RET
+                JP      UPDMCLK
 
 MNUTEXT         DEFM    "S6ED | File  Edit  View  Options  Help", 0
 
@@ -437,8 +436,7 @@ UPDMCLK         LD      A, (SHOWCLK)
                 LD      A, ':'
                 LD      HL, 488
                 LD      DE, 0
-                CALL    BLTCHTR
-                RET
+                JP      BLTCHTR
 
 .MINCHG         ; MINUTE CHANGED: FULL REDRAW OF "HH:MM"
                 LD      A, L
@@ -502,8 +500,7 @@ UPDMCLK         LD      A, (SHOWCLK)
                 LD      HL, CLKBUF
                 LD      DE, 476
                 LD      BC, 0
-                CALL    BLTSTR
-                RET
+                JP      BLTSTR
 
 
 ; --- DECDIG2                   ----------------------------------------

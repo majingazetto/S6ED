@@ -1639,8 +1639,7 @@ EDMOVCHR        CP      CRIGHT
                 CALL    GETMAXC
                 LD      (CURX), A
                 LD      A, CUP
-                CALL    EDMOVROW
-                RET
+                JP      EDMOVROW
                 
 .RIGHT          LD      HL, (DOCLINE)
                 CALL    LINELEN         ; A = LINE LENGTH (0..80)
@@ -1667,8 +1666,7 @@ EDMOVCHR        CP      CRIGHT
                 XOR     A
                 LD      (CURX), A
                 LD      A, CDOWN
-                CALL    EDMOVROW
-                RET
+                JP      EDMOVROW
 
 
 ; --- GETMAXC                   ----------------------------------------

@@ -414,8 +414,7 @@ ACTCYCMK        LD      A, (MKUPMD)
                 XOR     A
 .SETMD          LD      (MKUPMD), A
                 CALL    REDRAW
-                CALL    DRWSTAT
-                RET
+                JP      DRWSTAT
 
 
 ; --- INSDELIM                  ----------------------------------------
@@ -585,8 +584,7 @@ WRAPSEL         PUSH    AF              ; SAVE STYLE (1=BOLD, 2=ITALIC)
                 LD      HL, (SELSTRL)
                 CALL    LINEWRT
                 CALL    ACTDSEL
-                CALL    REDRAW
-                RET
+                JP      REDRAW
 
 .WRPMUL         POP     AF              ; MULTI-LINE: CLEANUP STACK
                 RET

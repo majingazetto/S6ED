@@ -26,8 +26,7 @@ PARAMS          LD      HL, PARBUF
 
                 ; --- CHECK #EAC PARAM FOR A BARE FILENAME (NOT STARTING '/')
 
-                CALL    CHKFILE
-                RET                     ; CY FROM CHKFILE PROPAGATES
+                JP      CHKFILE         ; CY FROM CHKFILE PROPAGATES
 
 
 ; --- CHKFILE                   ----------------------------------------

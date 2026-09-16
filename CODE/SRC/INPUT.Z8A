@@ -281,7 +281,7 @@ CHKACNT         ; --- STEP 1: CHECK DEAD KEY (ROW 2 BIT 5) OR KANA (ROW 6 BIT 4)
                 JR      Z, .GRPFND
 
                 ; ROW 0: BIT 1 = '1'
-                LD      A, 0
+                XOR     A
                 CALL    READROW
                 BIT     1, A
                 LD      C, #31          ; '1'
