@@ -266,7 +266,7 @@ def check_feature_discipline(ctx):
     The feature blob must fit inside a single 16 KB mapper segment.
     """
     forbidden = {'PUTP2', 'RECBANK', 'DIRBANK', 'GETP2', 'SEGGET', 'FRESEG'}
-    feature_files = ['CFG.Z8A']
+    feature_files = ['CFG.Z8A', 'WINDOW.Z8A']
     bad = []
     for fname in feature_files:
         path = os.path.join(ctx.src_dir, fname)

@@ -452,6 +452,7 @@ BLK0OFF         EQU     $ - DATHDRS
 
 BLK0STR:
                 INCLUDE CFG.Z8A
+                INCLUDE WINDOW.Z8A
                 ; FUTURE PASSENGERS APPENDED HERE SEQUENTIALLY:
                 ; INCLUDE MENU.Z8A
                 ; INCLUDE VI.Z8A

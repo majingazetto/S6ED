@@ -282,6 +282,15 @@ STATPRV         DEFS    80
 RUNEND          DEFS    1
 
 
+; --- WINDOW SYSTEM             ----------------------------------------
+
+
+WINX            DEFW    0               ; WINDOW X IN PIXELS
+WINY            DEFW    0               ; WINDOW Y IN PIXELS
+WINW            DEFW    0               ; WINDOW WIDTH IN PIXELS
+WINH            DEFW    0               ; WINDOW HEIGHT IN PIXELS
+
+
 ; --- VDP COMMAND BLOCK          ----------------------------------------
 
                 ; STANDARD 15-BYTE BLOCK FOR R#32 TO R#46

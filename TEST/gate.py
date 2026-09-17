@@ -1012,6 +1012,69 @@ class H6DatMissing(Case):
         ]
 
 
+class H7AboutDialog(Case):
+    name = 'H7-about-dialog'
+    desc = 'F1 opens About S6ED dialog, Enter closes it and restores VRAM byte-identical'
+    origin = ('Fase 3a window engine: off-screen VRAM buffer at Y=512..1023 '
+              'saves and restores screen background via hardware HMMM')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(10))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram=True)
+        # 1. Open with F1, close with RETURN
+        t.press('F1')
+        t.snap('dialog1', vram=True, at='WINPOLL')
+        t.press('RETURN')
+        t.snap('after_ret', vram=True)
+        # 2. Open with F1, close with SPACE
+        t.press('F1')
+        t.snap('dialog2', vram=True, at='WINPOLL')
+        t.press('SPACE')
+        t.snap('after_spc', vram=True)
+        # 3. Open with F1, close with ESC
+        t.press('F1')
+        t.snap('dialog3', vram=True, at='WINPOLL')
+        t.press('ESC')
+        t.snap('after_esc', vram=True)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        v_boot = run.blob('boot', 'vram')
+        v_d1 = run.blob('dialog1', 'vram')
+        v_ret = run.blob('after_ret', 'vram')
+        v_spc = run.blob('after_spc', 'vram')
+        v_esc = run.blob('after_esc', 'vram')
+
+        checks = []
+        checks.append(Check('H7/dialog-displayed',
+                            v_d1 != v_boot,
+                            'VRAM modified while dialog is open'))
+
+        cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]
+        d_ret = vram.diff(v_boot, v_ret, ignore_cells=cursor)
+        checks.append(Check('H7/restore-return', not d_ret,
+                            'restored byte-for-byte on RETURN'
+                            if not d_ret else
+                            '%d stray pixels after RETURN' % len(d_ret)))
+
+        d_spc = vram.diff(v_boot, v_spc, ignore_cells=cursor)
+        checks.append(Check('H7/restore-space', not d_spc,
+                            'restored byte-for-byte on SPACE'
+                            if not d_spc else
+                            '%d stray pixels after SPACE' % len(d_spc)))
+
+        d_esc = vram.diff(v_boot, v_esc, ignore_cells=cursor)
+        checks.append(Check('H7/restore-escape', not d_esc,
+                            'restored byte-for-byte on ESCAPE'
+                            if not d_esc else
+                            '%d stray pixels after ESCAPE' % len(d_esc)))
+        return checks
+
+
 # --- B2  EXTERNAL FONT ASSET IN VRAM ----------------------------------
 
 
@@ -2274,7 +2337,7 @@ class I4ConvertUnixToDos(Case):
 
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
-         G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(),
+         G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),

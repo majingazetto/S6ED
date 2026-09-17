@@ -874,13 +874,15 @@ ACTQUIT         LD      A, (SELACT)
 
 
 ; - ACTHELP ----------------------------
-; - DISPLAY HELP SCREEN STUB
+; - DISPLAY ABOUT DIALOG (F1)
 ; - IN:  NONE
 ; - OUT: NONE
-; - CLOBBERS: NONE
+; - CLOBBERS: ALL
 ; -
 
-ACTHELP         RET
+ACTHELP         LD      A, (FTRSEG)
+                LD      HL, DOABT
+                JP      FCALL
 
 
 ; --- ACTCYCKM                  ----------------------------------------

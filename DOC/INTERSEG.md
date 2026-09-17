@@ -225,9 +225,9 @@ The container is emitted directly by `sjasmplus` using rotating `OUTPUT` directi
   - `mut/d8-double`: Drops repeat claim in `TRNGRPH` (caught by `D8/content`).
 - **Suite Metrics (2026-09-17):**
   - **T0 Static:** 13/13 PASS.
-  - **Gate T1/T2:** 182/182 checks across 44 sessions, 0 failed.
+  - **Gate T1/T2:** 186/186 checks across 45 sessions, 0 failed.
   - **Selftest:** 39/39 mutations caught on green baseline (100% detection rate).
-  - **Total:** **234 checks, 0 failed (130.3s)**.
+  - **Total:** **238 checks, 0 failed (133.8s)**.
 
 ---
 
@@ -248,5 +248,56 @@ The container is emitted directly by `sjasmplus` using rotating `OUTPUT` directi
   - MSX-DOS 2 requires ~12.25 emulated seconds to complete boot and execute `AUTOEXEC.BAT` (`set throttle off` completes this in ~40ms wall clock).
   - `AUTOEXEC.BAT` strictly requires DOS CRLF (`\r\n`).
   - Gated breakpoints must verify opcode byte signatures after entry (`0x0100`) to avoid premature hits by COMMAND2/kernel code.
+
+---
+
+## 11. Fase 3a — Window Drawing & Background VRAM Buffer Subsystem
+
+Implemented and verified on 2026-09-17 on branch `feature/window-engine`.
+
+### 11.1 VRAM Architecture in Screen 6 (G5, 512x212, 4 colors / 2bpp, 128 KB VRAM)
+
+- Scanlines 0..211: Visible screen area (27,136 bytes, Bank 0).
+- Scanlines 212..255: Free / reserved for R#23 scroll offset.
+- Scanlines 256..511: 4 font tables (Normal, Bold, Italic, Bold+Italic; 32 KB, Bank 0).
+- Scanlines 512..1023: **64 KB off-screen VRAM in Bank 1** (`VR_WINBF EQU #10000`, `WINBUF_Y EQU 512`).
+
+### 11.2 Instant Hardware Save & Restore via `HMMM`
+
+- `HMMM` (opcode `#D0`) performs unformatted byte-transfer VRAM-to-VRAM copy.
+- In Screen 6, 1 byte = 4 pixels. Coordinates `WINX` and `WINW` are byte-aligned (`WINX & ~3`, `(WINW + 3) & ~3`).
+- **Save (`WINSAV`):** `HMMM` from $(X, Y)$ to $(X, 512 + Y)$ with $(W, H)$.
+- **Restore (`WINRST`):** `HMMM` from $(X, 512 + Y)$ to $(X, Y)$ with $(W, H)$, followed by `VDPWAIT`.
+- **Performance:** Hardware blit copies a $288 \times 104$ window in ~3.2 ms.
+- **Zero RAM footprint:** Preserves text, selection, and cursor underneath without CPU copy loops or RAM allocation.
+
+### 11.3 Window Engine (`WINDOW.Z8A` in `FTRSEG`)
+
+- `WINDOW.Z8A` packaged into `S6ED.DAT` Block 0 (`FTRSEG`), phased at `#8000` right after `CFG.Z8A`.
+- Added routines:
+  - `WINSAV`: Sets up `VDPCMBLK` and issues `HMMM` to Bank 1.
+  - `WINRST`: Sets up `VDPCMBLK` and issues `HMMM` back to visible VRAM.
+  - `WINBOX`: Draws outer frame in Color 2 (`COL_UI`), inner fill in Color 0 (`COL_BG`), and title bar in Color 2 (`COL_UI`).
+  - `WINPRN`: Prints text string at relative character $(col, row)$ using `BLTSTR`.
+  - `WINBTN`: Renders centered `[  OK  ]` button in Color 2 (`COL_UI`) with text in Color 1.
+  - `WINOPEN`: Erases text cursor if visible, enforces byte alignment, saves background, and draws window frame.
+  - `WINCLOS`: Restores background via `WINRST`.
+  - `DOABT`: Displays "About S6ED" modal dialog, runs modal event loop calling `WINPOLL`, and closes on `ENTER`, `SPACE`, or `ESC`.
+
+### 11.4 Action Wiring (`ACTION.Z8A`)
+
+- `ACTHELP` (action 24, bound to `F1`) wired to `LD A, (FTRSEG); LD HL, DOABT; JP FCALL`.
+- Added `WINPOLL` subroutine to `UI.Z8A` in Core (Page 1) to poll `CHKCLK`, `CHSNS`, and `CHGET` for modal dialogs.
+- Total added to `S6ED.COM`: 32 bytes (`HMMM` + `WINPOLL` + `ACTHELP` dispatch). Everything else resides in `S6ED.DAT` (`FTRSEG`).
+
+### 11.5 Empirical Read-Back Verification
+
+- Added `H7AboutDialog` to `TEST/gate.py`:
+  - Opens About dialog with `F1`.
+  - Asserts VRAM was modified while dialog is open.
+  - Dismisses with `RETURN` and asserts 27,136 bytes of VRAM are byte-for-byte restored.
+  - Opens with `F1`, dismisses with `SPACE`, asserts byte-for-byte restore.
+  - Opens with `F1`, dismisses with `ESC`, asserts byte-for-byte restore.
+- Complete suite verified: **238 checks, 0 failed (133.8s)** across 45 sessions and 39 mutations.
 
 
