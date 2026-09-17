@@ -76,27 +76,139 @@ FCALL           PUSH    BC
                 RET
 
 
-; --- F1COPY                    ----------------------------------------
+; --- CHKDAT                    ----------------------------------------
 
 
-; - F1COPY -----------------------------
-; - COPY FEATURE CONTAINER BLOB TO FTRSEG IN PAGE 2
+; - CHKDAT -----------------------------
+; - VERIFY S6ED.DAT EXISTS BEFORE ENTERING GRAPHICS MODE
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
 
-F1COPY          LD      A, (FTRSEG)
+CHKDAT          LD      HL, DATNAME
+                CALL    DSKOPEN
+                JR      C, .ERRDAT
+                CALL    DSKCLOSE
+                RET
+
+.ERRDAT         LD      DE, ENODAT
+                JP      ERRMSG
+
+
+; --- DATLOAD                   ----------------------------------------
+
+
+; - DATLOAD ----------------------------
+; - LOAD S6ED.DAT CONTAINER INTO MAPPER FEATURE SEGMENT
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DATLOAD         LD      HL, DATNAME
+                CALL    DSKOPEN
+                JP      C, .ERRDAT
+                LD      (DATHAND), A
+
+                LD      HL, 16          ; READ 16-BYTE FILE HEADER
+                LD      DE, DATHDR
+                CALL    DSKREAD         ; HL = BYTES READ
+
+                ; VERIFY 16 BYTES READ
+                LD      DE, 16
+                OR      A
+                SBC     HL, DE
+                JP      NZ, .ERRCOR
+
+                ; VERIFY MAGIC: "S6ED"
+                LD      HL, DATHDR
+                LD      A, (HL)
+                CP      'S'
+                JP      NZ, .ERRCOR
+                INC     HL
+                LD      A, (HL)
+                CP      '6'
+                JP      NZ, .ERRCOR
+                INC     HL
+                LD      A, (HL)
+                CP      'E'
+                JP      NZ, .ERRCOR
+                INC     HL
+                LD      A, (HL)
+                CP      'D'
+                JP      NZ, .ERRCOR
+
+                ; VERIFY VERSION: 1 (16-BIT LE: #01, #00)
+                INC     HL
+                LD      A, (HL)
+                CP      1
+                JP      NZ, .ERRCOR
+                INC     HL
+                LD      A, (HL)
+                OR      A
+                JP      NZ, .ERRCOR
+
+                ; VERIFY AT LEAST 1 BLOCK (OFFSET 7: NUMBLKS)
+                LD      A, (DATHDR + 7)
+                OR      A
+                JP      Z, .ERRCOR
+
+                ; READ FIRST BLOCK DESCRIPTOR (8 BYTES) INTO DATBLK
+                LD      A, (DATHAND)
+                LD      HL, 8
+                LD      DE, DATBLK
+                CALL    DSKREAD
+
+                ; VERIFY 8 BYTES READ
+                LD      DE, 8
+                OR      A
+                SBC     HL, DE
+                JP      NZ, .ERRCOR
+
+                ; GET BLOCK 0 LENGTH: (DATBLK + 4)
+                LD      HL, (DATBLK + 4)
+                LD      A, H
+                OR      L
+                JP      Z, .ERRCOR
+
+                PUSH    HL              ; SAVE PAYLOAD LENGTH
+
+                ; MAP FTRSEG INTO PAGE 2 (#8000-#BFFF)
+                LD      A, (FTRSEG)
                 LD      (TXSEG), A
                 CALL    PUTP2
-                LD      HL, FTRBLOB
+
+                ; READ PAYLOAD DIRECTLY INTO #8000
+                POP     HL              ; HL = BYTES TO READ
+                PUSH    HL              ; SAVE EXPECTED BYTES
+                LD      A, (DATHAND)
                 LD      DE, #8000
-                LD      BC, FTRBLEN
-                LDIR
+                CALL    DSKREAD
+
+                ; VERIFY PAYLOAD BYTES READ
+                POP     DE              ; DE = EXPECTED BYTES
+                OR      A
+                SBC     HL, DE
+                JP      NZ, .ERRCOR
+
+                ; CLOSE FILE
+                LD      A, (DATHAND)
+                CALL    DSKCLOSE
+
+                ; RESTORE PAGE 2 TO DEFSEG2
                 LD      A, (DEFSEG2)
                 LD      (TXSEG), A
                 CALL    PUTP2
                 RET
+
+.ERRDAT         LD      DE, ENODAT
+                JP      ERRMSG
+
+.ERRCOR         LD      A, (DATHAND)
+                CALL    DSKCLOSE
+                LD      DE, ENODCOR
+                JP      ERRMSG
 
 
 ; --- CFGRUN                    ----------------------------------------
@@ -109,7 +221,11 @@ F1COPY          LD      A, (FTRSEG)
 ; - CLOBBERS: ALL
 ; -
 
-CFGRUN          CALL    F1COPY
+CFGRUN          CALL    DATLOAD
                 LD      A, (FTRSEG)
                 LD      HL, CFGLOAD
                 JP      FCALL
+
+DATNAME         DEFM    "S6ED.DAT", 0
+ENODAT          DEFM    "S6ED.DAT not found.", 13, 10, "$"
+ENODCOR         DEFM    "S6ED.DAT corrupt.", 13, 10, "$"

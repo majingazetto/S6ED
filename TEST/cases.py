@@ -32,6 +32,7 @@ class Case(object):
     cfg = DEFAULT_CFG
     fixture_name = 'DOC.TXT'
     with_font = True
+    with_dat = True
     autoexec = None                 # defaults to "S6ED <fixture>"
     absolute = False                # True: never reaches MAINLOOP (e.g. /H),
                                     # schedule on absolute emulated time
@@ -68,6 +69,8 @@ class Case(object):
         out = [os.path.join(ctx.code_dir, 'S6ED.COM')]
         if self.with_font:
             out.append(os.path.join(ctx.code_dir, 'S6ED.FNT'))
+        if self.with_dat:
+            out.append(os.path.join(ctx.code_dir, 'S6ED.DAT'))
         return out
 
     # - behaviour ------------------------------------------------------

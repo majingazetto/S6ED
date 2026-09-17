@@ -45,6 +45,7 @@ endif
 # there is one binary and no FONTBIN switch: the choice is made at run time by
 # whether the file is there.
 FNTFILE			= S6ED.FNT
+DATFILE			= S6ED.DAT
 
 DSKFILE			= S6ED.DSK
 DSKTOOL			= ../../msxtools/bin/dsktool
@@ -57,13 +58,15 @@ all: build dsk
 # -	 Clean Target ------------------------------------------------------------
 
 clean:
-	@$(RM) -R $(OUTPUT) $(LSTFILE) $(SYMFILE) $(DSKFILE) $(FNTFILE)
+	@$(RM) -R $(OUTPUT) $(DATFILE) $(LSTFILE) $(SYMFILE) $(DSKFILE) $(FNTFILE)
 
-build: $(OUTPUT) $(FNTFILE)
+build: $(OUTPUT) $(DATFILE) $(FNTFILE)
+
+$(DATFILE): $(OUTPUT)
 
 dsk: $(DSKFILE)
 
-DSKCONT			= $(OUTPUT) $(FNTFILE) TEST.TXT AUTOEXEC.BAT S6ED.CFG
+DSKCONT			= $(OUTPUT) $(DATFILE) $(FNTFILE) TEST.TXT AUTOEXEC.BAT S6ED.CFG
 
 $(DSKFILE): $(DSKCONT)
 	@cp $(DSKBASE) $(DSKFILE)
