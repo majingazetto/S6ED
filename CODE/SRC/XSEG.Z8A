@@ -20,7 +20,13 @@ FCALL           PUSH    BC
                 LD      C, A            ; C = TARGET FEATURE SEGMENT
                 PUSH    HL              ; SAVE ENTRY ADDRESS
 
-                ; PUSH CURRENT STATE TO SEGSTK (TXSEG, HOMESEG)
+                ; PUSH CURRENT STATE TO SEGSTK (TXSEG, HOMESEG). THE STACK
+                ; HOLDS 4 FRAMES OF 2 BYTES; A 5TH LEVEL WOULD WRITE PAST
+                ; SEGSTK INTO DATHAND. OVERFLOW IS A DESIGN ERROR
+                ; (INTERSEG 4.1): ABORT LOUDLY, NEVER WRAP SILENTLY.
+                LD      A, (SEGSP)
+                CP      8
+                JP      NC, .STKOVF
                 LD      HL, SEGSP
                 LD      E, (HL)
                 INC     (HL)
@@ -75,129 +81,337 @@ FCALL           PUSH    BC
                 POP     AF
                 RET
 
+.STKOVF         LD      DE, ESEGOV
+                JP      ERRMSG          ; FATAL DESIGN ERROR: DOES NOT RETURN
+
 
 ; --- CHKDAT                    ----------------------------------------
 
 
 ; - CHKDAT -----------------------------
-; - VERIFY S6ED.DAT EXISTS BEFORE ENTERING GRAPHICS MODE
+; - VERIFY S6ED.DAT EXISTS AND ITS HEADER IS SANE, BEFORE GRAPHICS MODE
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
+; - RUNS IN TEXT MODE: A MISSING OR CORRUPT CONTAINER ABORTS HERE WITH A
+; - VISIBLE MESSAGE, BEFORE SCRINIT. DATHDR/DATSIZE/DATSZH ARE REFILLED
+; - BY DATLOAD WHEN IT REOPENS THE FILE FOR THE REAL LOAD.
 
 CHKDAT          LD      HL, DATNAME
                 CALL    DSKOPEN
                 JR      C, .ERRDAT
+                LD      (DATHAND), A
+                LD      (DATSIZE), HL   ; FILE SIZE, LOW 16 BITS
+                LD      A, D
+                OR      E
+                LD      (DATSZH), A     ; 0 = FILE < 64 KB
+
+                ; READ AND VALIDATE THE 16-BYTE FILE HEADER
+                LD      A, (DATHAND)
+                LD      HL, 16
+                LD      DE, DATHDR
+                CALL    DSKREAD
+                JR      C, .ERRCOR
+                LD      DE, 16
+                OR      A
+                SBC     HL, DE
+                JR      NZ, .ERRCOR     ; SHORT READ: TRUNCATED HEADER
+                CALL    DATHCHK
+                JR      C, .ERRCOR
+
+                LD      A, (DATHAND)
                 CALL    DSKCLOSE
                 RET
 
 .ERRDAT         LD      DE, ENODAT
                 JP      ERRMSG
 
+.ERRCOR         LD      A, (DATHAND)
+                CALL    DSKCLOSE
+                LD      DE, ENODCOR
+                JP      ERRMSG
+
+
+; --- DATHCHK                   ----------------------------------------
+
+
+; - DATHCHK ----------------------------
+; - VALIDATE THE 16-BYTE CONTAINER HEADER IN DATHDR
+; - IN:  DATHDR FILLED, DATSIZE/DATSZH = FILE SIZE
+; - OUT: CY = 1: CORRUPT HEADER
+; - CLOBBERS: AF, DE, HL
+; -
+; - CHECKS MAGIC, VERSION, NUMBLKS IN [1..DATMAX], TABLE OFFSET >= 16 AND
+; - THE WHOLE DESCRIPTOR TABLE INSIDE THE FILE. SHARED BY CHKDAT (TEXT
+; - MODE PRE-CHECK) AND DATLOAD (THE REAL LOAD).
+
+DATHCHK         ; MAGIC: "S6ED"
+                LD      HL, DATHDR
+                LD      A, (HL)
+                CP      'S'
+                JR      NZ, .BAD
+                INC     HL
+                LD      A, (HL)
+                CP      '6'
+                JR      NZ, .BAD
+                INC     HL
+                LD      A, (HL)
+                CP      'E'
+                JR      NZ, .BAD
+                INC     HL
+                LD      A, (HL)
+                CP      'D'
+                JR      NZ, .BAD
+
+                ; VERSION: 1 (16-BIT LE)
+                INC     HL
+                LD      A, (HL)
+                CP      1
+                JR      NZ, .BAD
+                INC     HL
+                LD      A, (HL)
+                OR      A
+                JR      NZ, .BAD
+
+                ; NUMBLKS IN [1..DATMAX]
+                LD      A, (DATHDR + 7)
+                OR      A
+                JR      Z, .BAD
+                CP      DATMAX + 1
+                JR      NC, .BAD
+
+                ; TABLE OFFSET >= 16 AND TABLE END INSIDE THE FILE
+                LD      HL, (DATHDR + 8)
+                LD      DE, 16
+                OR      A
+                SBC     HL, DE
+                JR      C, .BAD         ; TABLE OFFSET BELOW THE HEADER
+                LD      A, (DATHDR + 7)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; A = NUMBLKS * 8
+                LD      E, A
+                LD      D, 0
+                LD      HL, (DATHDR + 8)
+                ADD     HL, DE          ; HL = TABLE END OFFSET
+                JR      C, .BAD         ; WRAPS PAST 64 KB: NONSENSE
+                LD      A, (DATSZH)
+                OR      A
+                JR      NZ, .OK         ; FILE >= 64 KB: TABLE SURELY FITS
+                EX      DE, HL          ; DE = TABLE END OFFSET
+                LD      HL, (DATSIZE)
+                OR      A
+                SBC     HL, DE
+                JR      C, .BAD         ; TABLE RUNS PAST END OF FILE
+.OK             OR      A               ; CY = 0
+                RET
+.BAD            SCF
+                RET
+
+
+; --- BLKSEG                    ----------------------------------------
+
+
+; - BLKSEG -----------------------------
+; - MAP A CONTAINER BLOCK ID TO ITS TARGET MAPPER SEGMENT
+; - IN:  A  = BLKID FROM A BLOCK DESCRIPTOR
+; - OUT: A  = SEGMENT NUMBER (FROM THE SEGMENT VARIABLE)
+; -      CY = 1: UNKNOWN BLOCK ID
+; - CLOBBERS: B, HL
+; -
+; - THE TABLE LISTS (ID, VARIABLE) PAIRS SO NEW BLOCKS PLUG IN WITHOUT
+; - TOUCHING THE LOADER. TODAY ONLY THE FEATURE SEGMENT EXISTS.
+
+BLKSEG          LD      B, A            ; B = BLKID WANTED
+                LD      HL, BLKTBL
+.LOOP           LD      A, (HL)
+                OR      A
+                SCF
+                RET     Z               ; END OF TABLE: UNKNOWN ID
+                LD      A, B
+                CP      (HL)
+                JR      Z, .FOUND
+                INC     HL
+                INC     HL
+                INC     HL              ; NEXT PAIR
+                JR      .LOOP
+.FOUND          INC     HL
+                LD      A, (HL)
+                INC     HL
+                LD      H, (HL)
+                LD      L, A            ; HL = SEGMENT VARIABLE ADDRESS
+                LD      A, (HL)         ; A = SEGMENT NUMBER
+                OR      A               ; CY = 0
+                RET
+
 
 ; --- DATLOAD                   ----------------------------------------
 
 
 ; - DATLOAD ----------------------------
-; - LOAD S6ED.DAT CONTAINER INTO MAPPER FEATURE SEGMENT
+; - LOAD S6ED.DAT CONTAINER, DRIVEN BY ITS DESCRIPTOR TABLE
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
+; - READS THE 16-BYTE HEADER AND THE FULL DESCRIPTOR TABLE, THEN LOADS
+; - EACH BLOCK INDEPENDENTLY: SEEK TO DATAOFF, MAP THE TARGET SEGMENT,
+; - READ LENGTH BYTES AT LOADADDR. EVERY DESCRIPTOR IS VALIDATED BEFORE
+; - ANY WRITE: BLKID MUST BE KNOWN, LENGTH IN [1..16384], LOADADDR INSIDE
+; - THE PAGE 2 WINDOW WITH LOADADDR + LENGTH <= #C000, AND THE PAYLOAD
+; - INSIDE THE FILE. A LYING CONTAINER CANNOT WRITE OUTSIDE PAGE 2.
 
 DATLOAD         LD      HL, DATNAME
                 CALL    DSKOPEN
                 JP      C, .ERRDAT
                 LD      (DATHAND), A
+                LD      (DATSIZE), HL   ; FILE SIZE, LOW 16 BITS
+                LD      A, D
+                OR      E
+                LD      (DATSZH), A     ; 0 = FILE < 64 KB
 
-                LD      HL, 16          ; READ 16-BYTE FILE HEADER
+                ; READ AND VALIDATE THE 16-BYTE FILE HEADER
+                LD      A, (DATHAND)
+                LD      HL, 16
                 LD      DE, DATHDR
-                CALL    DSKREAD         ; HL = BYTES READ
-
-                ; VERIFY 16 BYTES READ
+                CALL    DSKREAD
+                JP      C, .ERRCOR
                 LD      DE, 16
                 OR      A
                 SBC     HL, DE
-                JP      NZ, .ERRCOR
+                JP      NZ, .ERRCOR     ; SHORT READ: TRUNCATED HEADER
+                CALL    DATHCHK
+                JP      C, .ERRCOR
 
-                ; VERIFY MAGIC: "S6ED"
-                LD      HL, DATHDR
-                LD      A, (HL)
-                CP      'S'
-                JP      NZ, .ERRCOR
-                INC     HL
-                LD      A, (HL)
-                CP      '6'
-                JP      NZ, .ERRCOR
-                INC     HL
-                LD      A, (HL)
-                CP      'E'
-                JP      NZ, .ERRCOR
-                INC     HL
-                LD      A, (HL)
-                CP      'D'
-                JP      NZ, .ERRCOR
-
-                ; VERIFY VERSION: 1 (16-BIT LE: #01, #00)
-                INC     HL
-                LD      A, (HL)
-                CP      1
-                JP      NZ, .ERRCOR
-                INC     HL
-                LD      A, (HL)
-                OR      A
-                JP      NZ, .ERRCOR
-
-                ; VERIFY AT LEAST 1 BLOCK (OFFSET 7: NUMBLKS)
-                LD      A, (DATHDR + 7)
-                OR      A
-                JP      Z, .ERRCOR
-
-                ; READ FIRST BLOCK DESCRIPTOR (8 BYTES) INTO DATBLK
+                ; SEEK TO THE DESCRIPTOR TABLE AND READ IT WHOLE
                 LD      A, (DATHAND)
-                LD      HL, 8
-                LD      DE, DATBLK
+                LD      HL, (DATHDR + 8)
+                CALL    DSKSEEK
+                JP      C, .ERRCOR
+                LD      A, (DATHDR + 7) ; NUMBLKS
+                LD      (DATCNT), A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; A = NUMBLKS * 8
+                LD      L, A
+                LD      H, 0
+                LD      A, (DATHAND)
+                LD      DE, DATTBL
                 CALL    DSKREAD
-
-                ; VERIFY 8 BYTES READ
-                LD      DE, 8
+                JP      C, .ERRCOR
+                LD      A, (DATHDR + 7)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      E, A
+                LD      D, 0
                 OR      A
                 SBC     HL, DE
-                JP      NZ, .ERRCOR
+                JP      NZ, .ERRCOR     ; SHORT READ: TRUNCATED TABLE
 
-                ; GET BLOCK 0 LENGTH: (DATBLK + 4)
+                LD      HL, DATTBL
+                LD      (DATPTR), HL
+
+.BLKLP          LD      A, (DATCNT)
+                OR      A
+                JP      Z, .DONE
+
+                ; COPY THE CURRENT DESCRIPTOR TO DATBLK FOR FIXED ACCESS
+                LD      HL, (DATPTR)
+                LD      DE, DATBLK
+                LD      BC, 8
+                LDIR
+                LD      (DATPTR), HL    ; NEXT DESCRIPTOR
+
+                ; BLKID DECIDES THE TARGET SEGMENT AND MUST BE KNOWN
+                LD      A, (DATBLK)
+                CALL    BLKSEG
+                JP      C, .ERRCOR      ; UNKNOWN BLOCK ID
+                LD      (DATSEG), A
+
+                ; BOUNDS: LENGTH IN [1..16384], LOADADDR IN [#8000,#C000),
+                ; LOADADDR + LENGTH <= #C000. A LYING DESCRIPTOR MUST NEVER
+                ; WRITE OUTSIDE THE PAGE 2 WINDOW -- PAST #C000 SIT THE DOS
+                ; AREA AND THE STACK.
                 LD      HL, (DATBLK + 4)
                 LD      A, H
                 OR      L
-                JP      Z, .ERRCOR
-
-                PUSH    HL              ; SAVE PAYLOAD LENGTH
-
-                ; MAP FTRSEG INTO PAGE 2 (#8000-#BFFF)
-                LD      A, (FTRSEG)
-                LD      (TXSEG), A
-                CALL    PUTP2
-
-                ; READ PAYLOAD DIRECTLY INTO #8000
-                POP     HL              ; HL = BYTES TO READ
-                PUSH    HL              ; SAVE EXPECTED BYTES
-                LD      A, (DATHAND)
-                LD      DE, #8000
-                CALL    DSKREAD
-
-                ; VERIFY PAYLOAD BYTES READ
-                POP     DE              ; DE = EXPECTED BYTES
+                JP      Z, .ERRCOR      ; LENGTH 0
+                LD      DE, DATBLEN + 1
                 OR      A
                 SBC     HL, DE
-                JP      NZ, .ERRCOR
+                JP      NC, .ERRCOR     ; LENGTH > 16384
+                LD      DE, (DATBLK + 2)
+                LD      A, D
+                AND     #C0
+                CP      #80
+                JP      NZ, .ERRCOR     ; LOADADDR OUTSIDE THE PAGE 2 WINDOW
+                LD      HL, #C000
+                OR      A
+                SBC     HL, DE          ; HL = ROOM LEFT IN THE WINDOW
+                LD      DE, (DATBLK + 4)
+                OR      A
+                SBC     HL, DE
+                JP      C, .ERRCOR      ; PAYLOAD OVERFLOWS #C000
 
-                ; CLOSE FILE
+                ; THE PAYLOAD MUST LIVE INSIDE THE FILE, PAST THE TABLE
+                LD      A, (DATHDR + 7)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      E, A
+                LD      D, 0
+                LD      HL, (DATHDR + 8)
+                ADD     HL, DE          ; HL = TABLE END OFFSET (NO WRAP:
+                                        ; DATHCHK ALREADY REJECTED IT)
+                EX      DE, HL
+                LD      HL, (DATBLK + 6)
+                OR      A
+                SBC     HL, DE
+                JP      C, .ERRCOR      ; DATAOFF POINTS INTO THE TABLE
+                LD      HL, (DATBLK + 6)
+                LD      DE, (DATBLK + 4)
+                ADD     HL, DE          ; HL = PAYLOAD END OFFSET
+                JP      C, .ERRCOR      ; WRAPS PAST 64 KB
+                LD      A, (DATSZH)
+                OR      A
+                JP      NZ, .SZOK       ; FILE >= 64 KB: ANY 16-BIT END FITS
+                EX      DE, HL          ; DE = PAYLOAD END OFFSET
+                LD      HL, (DATSIZE)
+                OR      A
+                SBC     HL, DE
+                JP      C, .ERRCOR      ; PAYLOAD RUNS PAST END OF FILE
+.SZOK
+                ; SEEK TO THE PAYLOAD, MAP THE TARGET SEGMENT, READ
+                LD      A, (DATHAND)
+                LD      HL, (DATBLK + 6)
+                CALL    DSKSEEK
+                JP      C, .ERRCOR
+                LD      A, (DATSEG)
+                LD      (TXSEG), A
+                CALL    PUTP2           ; PAGE 2 = TARGET SEGMENT
+                LD      A, (DATHAND)
+                LD      HL, (DATBLK + 4)
+                LD      DE, (DATBLK + 2)
+                CALL    DSKREAD
+                JP      C, .ERRCOR
+                LD      DE, (DATBLK + 4)
+                OR      A
+                SBC     HL, DE
+                JP      NZ, .ERRCOR     ; SHORT READ: TRUNCATED PAYLOAD
+
+                ; NEXT BLOCK
+                LD      HL, DATCNT
+                DEC     (HL)
+                JP      .BLKLP
+
+.DONE           ; CLOSE FILE
                 LD      A, (DATHAND)
                 CALL    DSKCLOSE
 
-                ; RESTORE PAGE 2 TO DEFSEG2
-                LD      A, (DEFSEG2)
+                ; RESTORE PAGE 2 TO THE FIRST TEXT SEGMENT
+                LD      A, (TXSEG0)
                 LD      (TXSEG), A
                 CALL    PUTP2
                 RET
@@ -229,3 +443,9 @@ CFGRUN          CALL    DATLOAD
 DATNAME         DEFM    "S6ED.DAT", 0
 ENODAT          DEFM    "S6ED.DAT not found.", 13, 10, "$"
 ENODCOR         DEFM    "S6ED.DAT corrupt.", 13, 10, "$"
+ESEGOV          DEFM    "S6ED internal: segment stack overflow.$"
+
+                ; BLOCK ID -> SEGMENT VARIABLE PAIRS, 0-TERMINATED
+BLKTBL          DEFB    BLK_FTR
+                DEFW    FTRSEG          ; 1 = FEATURE SEGMENT (CFG, WINDOWS)
+                DEFB    0               ; END OF TABLE

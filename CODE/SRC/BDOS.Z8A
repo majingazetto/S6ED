@@ -398,6 +398,33 @@ DSKREAD         LD      B,A
                 JP      RDBLK
 
 
+; - DSKSEEK -----------
+; - SEEK TO ABSOLUTE BYTE OFFSET IN AN OPEN FILE
+; - A: FILE HANDLE
+; - HL: BYTE OFFSET (LOW 16 BITS; THE CONTAINER IS < 64 KB)
+; - OUTPUT:
+; -     CY = 1 ERROR
+; -
+; - DOS 2 USES _SEEK DIRECTLY. THE DOS 1 PATH WRITES THE FCB RANDOM
+; - RECORD FIELD: FOPEN FIXED THE RECORD SIZE AT 1 BYTE, SO THE RECORD
+; - NUMBER IS THE BYTE OFFSET. DOS 1 NEVER REACHES THIS TODAY (INIT
+; - REJECTS IT IN DOSVER), BUT THE PATH KEEPS DSKREAD'S CONTRACT ALIVE.
+
+DSKSEEK         LD      B,A
+                LD      A,(DOS2)
+                AND     A
+                JR      Z,.DOS1
+                LD      DE,0
+                XOR     A               ; A = 0: ABSOLUTE OFFSET FROM START
+                JP      DSEEK.GEN
+
+.DOS1           LD      (FCB + FRNDREC),HL
+                XOR     A
+                LD      (FCB + FRNDREC + 2),A
+                LD      (FCB + FRNDREC + 3),A
+                RET                     ; CY = 0
+
+
 ; - DSKWRITE -----------
 ; - A: #F
 ; - HL: BYTES TO WRITE

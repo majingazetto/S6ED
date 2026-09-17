@@ -157,6 +157,14 @@ SEGLAST         EQU     (LINEPSEG - 1) * LINEREC
                                         ; FITS WHOLE INSIDE A 16KB SEGMENT
 
 
+; --- S6ED.DAT CONTAINER        ----------------------------------------
+
+
+DATMAX          EQU     8               ; MAX BLOCKS THE CONTAINER TABLE HOLDS
+DATBLEN         EQU     16384           ; HARD LENGTH CAP: THE PAGE 2 WINDOW
+BLK_FTR         EQU     1               ; BLOCK ID OF THE FEATURE SEGMENT
+
+
 ; --- LANGUAGE MODES            ----------------------------------------
 
 

@@ -501,9 +501,11 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'why': 'DATLOAD loads feature payload at wrong address in page 2',
         'file': 'XSEG.Z8A',
         'old': """                LD      A, (DATHAND)
-                LD      DE, #8000
+                LD      HL, (DATBLK + 4)
+                LD      DE, (DATBLK + 2)
                 CALL    DSKREAD""",
         'new': """                LD      A, (DATHAND)
+                LD      HL, (DATBLK + 4)
                 LD      DE, #9000       ; MUTATION: LOAD AT WRONG ADDRESS
                 CALL    DSKREAD""",
         'filter': 'G13',
@@ -519,6 +521,70 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 DEFM    "S6XX"          ; MUTATION: CORRUPT MAGIC""",
         'filter': 'G13',
         'expect_static': ['feature-discipline'],
+    },
+    {
+        'name': 'c1-datlen',
+        'why': 'DATLOAD does not bound LENGTH or LOADADDR to the page-2 '
+               'window: a 16,385-byte payload writes past #C000 into the '
+               'DOS area and the stack',
+        'file': 'XSEG.Z8A',
+        'old': """                LD      HL, (DATBLK + 4)
+                LD      A, H
+                OR      L
+                JP      Z, .ERRCOR      ; LENGTH 0
+                LD      DE, DATBLEN + 1
+                OR      A
+                SBC     HL, DE
+                JP      NC, .ERRCOR     ; LENGTH > 16384
+                LD      DE, (DATBLK + 2)
+                LD      A, D
+                AND     #C0
+                CP      #80
+                JP      NZ, .ERRCOR     ; LOADADDR OUTSIDE THE PAGE 2 WINDOW
+                LD      HL, #C000
+                OR      A
+                SBC     HL, DE          ; HL = ROOM LEFT IN THE WINDOW
+                LD      DE, (DATBLK + 4)
+                OR      A
+                SBC     HL, DE
+                JP      C, .ERRCOR      ; PAYLOAD OVERFLOWS #C000""",
+        'new': """                NOP                     ; MUTATION: NO LENGTH OR WINDOW BOUNDS""",
+        'filter': 'H14',
+        'expect': ['H14/corrupt-printed'],
+    },
+    {
+        'name': 'c1-datblkid',
+        'why': 'DATLOAD ignores BLKID and loads any block into FTRSEG',
+        'file': 'XSEG.Z8A',
+        'old': """                LD      A, (DATBLK)
+                CALL    BLKSEG
+                JP      C, .ERRCOR      ; UNKNOWN BLOCK ID
+                LD      (DATSEG), A""",
+        'new': """                LD      A, (DATBLK)
+                CALL    BLKSEG
+                LD      A, (FTRSEG)     ; MUTATION: UNKNOWN IDS LOAD INTO FTRSEG
+                LD      (DATSEG), A""",
+        'filter': 'H15',
+        'expect': ['H15/corrupt-printed'],
+    },
+    {
+        'name': 'c1-datseek',
+        'why': 'DATLOAD reads the payload sequentially instead of seeking '
+               'to DATAOFF: a padded or reordered container loads garbage',
+        'file': 'XSEG.Z8A',
+        'old': """                LD      A, (DATHAND)
+                LD      HL, (DATBLK + 6)
+                CALL    DSKSEEK
+                JP      C, .ERRCOR""",
+        'new': """                NOP                     ; MUTATION: NO SEEK, READ SEQUENTIALLY
+                NOP
+                NOP
+                NOP""",
+        'filter': 'H17',
+        # The payload comes out shifted by the padding: either the editor
+        # crashes before MAINLOOP (case-level failure) or it boots with the
+        # CFG never applied.
+        'expect_any': ['H17/cfg-applied', 'H17-dat-padded-seek'],
     },
 ]
 
