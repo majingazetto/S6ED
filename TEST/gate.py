@@ -1080,6 +1080,197 @@ class H7AboutDialog(Case):
         return checks
 
 
+# --- H8-H17  S6ED.DAT CONTAINER VALIDATION (FASE C1) --------------------
+
+
+class _DatCorrupt(Case):
+    """A tampered S6ED.DAT must abort with the corrupt message, not a hang.
+
+    The container served to the editor is the freshly built one with exactly
+    one field broken, so each case trips the validation it names.  Header
+    damage is caught by CHKDAT in text mode, before SCRINIT; descriptor and
+    payload damage passes CHKDAT and is caught by DATLOAD after entering
+    SCREEN 6.  Both paths end in ERRMSG -> TERM back in SCREEN 0, which is
+    what the TERM.TERMDON snap verifies.
+    """
+    absolute = True               # never reaches MAINLOOP
+    with_dat = False              # the crafted container replaces the real one
+    autoexec = 'S6ED'
+    cfg = None
+
+    def dat_mutate(self, ctx, dat):
+        """dat: bytearray of the built S6ED.DAT.  Break it, return bytes."""
+        raise NotImplementedError
+
+    def disk_files(self, ctx, variant=None):
+        files = super().disk_files(ctx, variant)
+        with open(os.path.join(ctx.code_dir, 'S6ED.DAT'), 'rb') as fh:
+            dat = bytearray(fh.read())
+        files['S6ED.DAT'] = bytes(self.dat_mutate(ctx, dat))
+        return files
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline(start=2.0)
+        t.snap('exit', vram='text', at='TERM.TERMDON')
+        t.t = 45.0
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        want = b'S6ED.DAT corrupt.'
+        text = run.blob('exit', 'text')
+        printed = text is not None and want in text
+        tag = self.name.split('-')[0].upper()
+        return [
+            Check('%s/corrupt-printed' % tag, printed,
+                  'text VRAM holds %r' % want if printed else
+                  'error message %r not found in text-mode name table' % want),
+            Check('%s/no-screen6' % tag,
+                  run.var('exit', 'SCRRDY') == 0 and
+                  run.var('exit', 'SCRMOD') == 0,
+                  'SCRRDY %s / SCRMOD %s: aborted back in text mode'
+                  % (run.var('exit', 'SCRRDY'), run.var('exit', 'SCRMOD'))),
+        ]
+
+
+class H8DatBadMagic(_DatCorrupt):
+    name = 'H8-dat-bad-magic'
+    desc = 'container with a bad magic ID is rejected by the header check'
+    origin = 'Fase C1: the loader trusted the file layout blindly'
+
+    def dat_mutate(self, ctx, dat):
+        dat[0:4] = b'S6XX'
+        return dat
+
+
+class H9DatBadVersion(_DatCorrupt):
+    name = 'H9-dat-bad-version'
+    desc = 'container with an unknown format version is rejected'
+    origin = 'Fase C1: the version field must match, not just be present'
+
+    def dat_mutate(self, ctx, dat):
+        dat[4:6] = (2).to_bytes(2, 'little')
+        return dat
+
+
+class H10DatNoBlocks(_DatCorrupt):
+    name = 'H10-dat-no-blocks'
+    desc = 'container with NUMBLKS = 0 is rejected'
+    origin = 'Fase C1: block count must be in [1..8]'
+
+    def dat_mutate(self, ctx, dat):
+        dat[7] = 0
+        return dat
+
+
+class H11DatTruncHdr(_DatCorrupt):
+    name = 'H11-dat-trunc-header'
+    desc = 'container truncated inside the 16-byte header is rejected'
+    origin = 'Fase C1: a short header read is corruption, not an empty file'
+
+    def dat_mutate(self, ctx, dat):
+        return dat[:8]
+
+
+class H12DatTruncTbl(_DatCorrupt):
+    name = 'H12-dat-trunc-table'
+    desc = 'container truncated inside the descriptor table is rejected'
+    origin = 'Fase C1: the whole table must fit inside the file'
+
+    def dat_mutate(self, ctx, dat):
+        return dat[:20]             # header + half a descriptor
+
+
+class H13DatLenZero(_DatCorrupt):
+    name = 'H13-dat-len-zero'
+    desc = 'block descriptor with LENGTH = 0 is rejected'
+    origin = 'Fase C1: LENGTH = 0 aborts instead of a vacuous load'
+
+    def dat_mutate(self, ctx, dat):
+        dat[20:22] = (0).to_bytes(2, 'little')
+        return dat
+
+
+class H14DatLenOver(_DatCorrupt):
+    name = 'H14-dat-len-over'
+    desc = 'descriptor with LENGTH = 16385 aborts clean, page 3 untouched'
+    origin = ('Fase C1 critical defect: LENGTH was only tested against zero, '
+              'so a larger one wrote past #C000 into the DOS area and the stack')
+
+    def dat_mutate(self, ctx, dat):
+        # The payload really is 16,385 bytes long: only the length clamp and
+        # the page-2 window bound reject this file, not the size checks.
+        dat[20:22] = (16385).to_bytes(2, 'little')
+        return dat + bytes(16385 - (len(dat) - 24))
+
+
+class H15DatBadBlkID(_DatCorrupt):
+    name = 'H15-dat-bad-blkid'
+    desc = 'block descriptor with an unknown BLKID is rejected'
+    origin = 'Fase C1: BLKID was ignored, any block loaded into FTRSEG'
+
+    def dat_mutate(self, ctx, dat):
+        dat[16] = 99
+        return dat
+
+
+class H16DatTruncPay(_DatCorrupt):
+    name = 'H16-dat-trunc-payload'
+    desc = 'container truncated inside the payload is rejected'
+    origin = 'Fase C1: DATAOFF + LENGTH must not run past end of file'
+
+    def dat_mutate(self, ctx, dat):
+        return dat[:-10]            # the last 10 payload bytes are missing
+
+
+class H17DatPadded(Case):
+    name = 'H17-dat-padded-seek'
+    desc = 'payload moved behind padding loads correctly via DSEEK'
+    origin = ('Fase C1: the loader seeks to DATAOFF per block, so on-disk '
+              'order and gaps between table and payload no longer matter')
+    cfg = ("; padded container still applies the CFG\r\n"
+           "PROFILE = WS\r\n"
+           "WRAP = TXT\r\n"
+           "TABWIDTH = 4\r\n")
+    with_dat = False
+    PAD = 64
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def disk_files(self, ctx, variant=None):
+        files = super().disk_files(ctx, variant)
+        with open(os.path.join(ctx.code_dir, 'S6ED.DAT'), 'rb') as fh:
+            dat = bytearray(fh.read())
+        dataoff = int.from_bytes(dat[22:24], 'little')
+        dat[22:24] = (dataoff + self.PAD).to_bytes(2, 'little')
+        files['S6ED.DAT'] = bytes(dat[:dataoff] + bytes(self.PAD) +
+                                  dat[dataoff:])
+        return files
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        return [
+            Check('H17/screen6',
+                  run.var('boot', 'SCRRDY') == 255 and
+                  run.var('boot', 'SCRMOD') == 6,
+                  'entered SCREEN 6 with a padded container'),
+            Check('H17/cfg-applied',
+                  run.var('boot', 'KMAPID') == 1 and
+                  run.var('boot', 'WRAPMODE') == 1 and
+                  run.var('boot', 'TABWIDTH') == 4,
+                  'KMAPID=%s WRAPMODE=%s TABWIDTH=%s from the moved payload'
+                  % (run.var('boot', 'KMAPID'),
+                     run.var('boot', 'WRAPMODE'),
+                     run.var('boot', 'TABWIDTH'))),
+        ]
+
+
 # --- B2  EXTERNAL FONT ASSET IN VRAM ----------------------------------
 
 
@@ -2343,6 +2534,9 @@ class I4ConvertUnixToDos(Case):
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
+         H8DatBadMagic(), H9DatBadVersion(), H10DatNoBlocks(),
+         H11DatTruncHdr(), H12DatTruncTbl(), H13DatLenZero(), H14DatLenOver(),
+         H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),

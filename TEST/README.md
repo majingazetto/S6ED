@@ -87,6 +87,8 @@ Every case names the defect it was derived from in its `origin` field.
 | D8 | Spanish characters via GRAPH matrix combos and dead-key state machine, each accent delivered exactly once | `CHKACNT` matrix scanner, `TRNGRPH` claim and `TRNDEAD` |
 | D9 | suppress KANA mode and force physical LED off in Boosted_MSX2+_JP | `MAINLOOP` / `KANARST` PSG R15 bit 7 control |
 | D10 | markdown and lite markup: cycling, delimiters, selection wrapping | `ACTCYCMK`, `INSDELIM` and `WRAPSEL` |
+| H8-H16 | corrupt `S6ED.DAT` (magic, version, NUMBLKS, truncation, LENGTH, BLKID) aborts with a message, never a hang | Fase C1: unvalidated container loader |
+| H17 | padded container loads correctly via `DSEEK` to DATAOFF | Fase C1: table-driven multi-block loader |
 | E1 | multi-line cut removes lines with clean screen | `ACTCUT` and `ACTDLS` multi-line deletion |
 | E2 | multi-line paste with CRLF splits host line | `ACTPAST` run inserter and `PSTNL` break |
 | E3 | extending selection across viewport edge scrolls cleanly | `ACTSLMD` motion and scrolling diffs |

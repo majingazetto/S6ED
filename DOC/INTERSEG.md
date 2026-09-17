@@ -1,8 +1,8 @@
 # S6ED — Inter-Segment Infrastructure & Container Architecture
 
-Date: 2026-09-17 · Status: **IMPLEMENTED & EMPIRICALLY VERIFIED (Fase 1a, Fase 1b & Fase 2 complete)**
+Date: 2026-09-17 · Status: **IMPLEMENTED & EMPIRICALLY VERIFIED (Fase 1a, Fase 1b, Fase 2 & Fase C1 complete)**
 Scope: Fase 1a (boot-time segment budget, mandatory minimum) + Fase 1b (inter-segment
-call machinery + first resident feature) + Fase 2 (`S6ED.DAT` standalone multi-segment container loader).
+call machinery + first resident feature) + Fase 2 (`S6ED.DAT` standalone multi-segment container loader) + Fase C1 (loader hardening: table-driven multi-block load, full descriptor validation, FCALL stack guard).
 Roadmap context: `informe_directorio_segmento_s6ed.md` §6.
 
 ---
@@ -86,7 +86,8 @@ New core module `SRC/XSEG.Z8A`, always mapped (pages 0+1). The page-2 window
 
 - `HOMESEG` — segment of the feature currently executing. Written only by `FCALL`.
 - `SEGSTK` — 4-deep stack of `{prev TXSEG, prev HOMESEG}` pairs; `SEGSP` pointer.
-  Overflow is a design error: `BRK` in DEBUG builds.
+  Overflow is a design error: fatal abort via `ERRMSG` (Fase C1 added the guard;
+  before it, a 5th level silently overwrote `DATHAND`).
 
 ### 4.2 Core → feature: only through `FCALL`
 
@@ -129,105 +130,129 @@ container loader `DATLOAD` described below.
 
 ---
 
-## 9. Fase 2 — `S6ED.DAT` Standalone Multi-Segment Container Loader (Implemented 2026-09-17)
+## 9. Fase 2 + C1 — `S6ED.DAT` Standalone Multi-Segment Container Loader (hardened 2026-09-17)
 
 Fase 2 physically decouples feature modules from the executable `S6ED.COM` into an
-external container file **`S6ED.DAT`**. The `.COM` image drops down to 14,239 bytes,
-freeing precious TPA RAM while allowing future features to grow up to 16 KB per segment.
+external container file **`S6ED.DAT`**. Fase C1 replaced the original linear
+loader (header → one descriptor → sequential payload) with a table-driven
+multi-block loader that validates every field before a single byte is written.
 
 ### 9.1 Container File Layout (`S6ED.DAT`)
 
-The container consists of a 16-byte global header, a variable-length Block
-Descriptor Table, and contiguous binary payloads. All multi-byte numeric fields
-are 16-bit Little-Endian.
+The container consists of a 16-byte global header, a Block Descriptor Table of
+`NUMBLKS` 8-byte entries, and the binary payloads anywhere past the table (the
+on-disk order is irrelevant: the loader seeks to each `DATAOFF`). All
+multi-byte numeric fields are 16-bit Little-Endian.
 
 ```
 +-------------------------------------------------------------+
 | Global Header (16 bytes)                                    |
 |   0..3:   Magic identifier ASCII "S6ED"                     |
-|   4..5:   Format version (0x0001, 2 bytes reserved)         |
-|   6:      MSX-DOS / CP/M EOF marker (0x1A)                  |
-|   7:      Global flags (0x00)                               |
-|   8..9:   Block count (0x0001)                              |
-|   10..11: Offset pointer to Block Table (0x0010 = 16 bytes) |
-|   12..15: Reserved (0x00000000)                             |
+|   4..5:   Format version (#0001, 16-bit LE)                 |
+|   6:      MSX-DOS / CP/M EOF marker (#1A)                   |
+|   7:      NUMBLKS: block count, 1..8 (DATMAX)               |
+|   8..9:   Offset pointer to Block Table (16-bit LE, >= 16)  |
+|   10..15: Reserved (#00)                                    |
 +-------------------------------------------------------------+
-| Block Descriptor Table (Entry 0: 8 bytes)                   |
-|   0..1:   BLKID (0x0001: Configuration Engine)              |
-|   2..3:   FLAGS (0x0001: Mandatory boot-load)              |
-|   4..5:   LOADADDR (0x8000: Base address in Page 2)         |
-|   6..7:   LENGTH (Payload byte length, e.g. 1,082 bytes)    |
-|   8..9:   DATAOFF (File offset to payload = 24 bytes)       |
+| Block Descriptor Table (NUMBLKS entries of 8 bytes each)    |
+|   0:      BLKID (1 = FTRSEG feature segment)                |
+|   1:      FLAGS (1 = mandatory boot-load; reserved)         |
+|   2..3:   LOADADDR (16-bit LE, inside #8000..#BFFF)         |
+|   4..5:   LENGTH  (16-bit LE, 1..16384)                     |
+|   6..7:   DATAOFF (16-bit LE, absolute file offset)         |
 +-------------------------------------------------------------+
-| Binary Payload Block 0 (CFG.Z8A assembled at #8000)         |
-|   Size: 1,082 bytes                                         |
+| Binary payload blocks, anywhere at/after end of table       |
 +-------------------------------------------------------------+
 ```
 
-Total container size for Fase 2: **1,106 bytes** (16B header + 8B descriptor 0 + 1,082B CFG payload).
+Current container (1 block): header 16 B + one descriptor 8 B + FTRSEG payload
+(`CFG.Z8A` + `WINDOW.Z8A`, phased at `#8000`) at `DATAOFF` = 24. `LENGTH` =
+`FTRBLEN` (2,243 bytes as of 2026-09-17); total file 2,267 bytes. The build
+enforces `ASSERT BLK0LEN <= 16384`; the loader re-enforces it at run time, so a
+patched or corrupted file cannot defeat it.
 
 ### 9.2 Build Pipeline
 
-The container is emitted directly by `sjasmplus` using rotating `OUTPUT` directives:
-1. `CODE/SRC/S6ED.Z8A` emits `S6ED.COM` up to `OUTEND` and `VARS.Z8A`.
-2. Directives switch output:
-   ```z80
-   OUTPUT "S6ED.DAT"
-   ; Emit 16-byte header
-   ; Emit 8-byte block descriptor 0
-   ; PHASE #8000 -> INCLUDE CFG.Z8A -> DEPHASE
-   ```
-3. `CODE/Makefile` declares `S6ED.DAT` as a primary build artifact and package target.
+Unchanged: the container is emitted directly by `sjasmplus` via the rotating
+`OUTPUT` directive at the end of `CODE/SRC/S6ED.Z8A` (header, descriptor table,
+`PHASE #8000` payload). `CODE/Makefile` declares `S6ED.DAT` as a primary build
+artifact.
 
-### 9.3 Loader Mechanics (`CHKDAT` & `DATLOAD` in `CODE/SRC/XSEG.Z8A`)
+### 9.3 Loader Mechanics (`CHKDAT`, `DATHCHK`, `DATLOAD`, `BLKSEG` in `XSEG.Z8A`)
 
 1. **Text-Mode Pre-Check (`CHKDAT`):**
-   - Called in `INIT` immediately after `SEGRESV` while still in text mode (SCREEN 0).
-   - Attempts `DSKOPEN` on `S6ED.DAT`. If missing (`CY=1`), branches to `.ERRDAT`
-     and exits cleanly to DOS via `ERRMSG` / `TERM` without ever entering Screen 6
-     or uploading fonts to VRAM, eliminating screen flicker.
-   - If present, closes file via `DSKCLOSE` and proceeds with normal initialization.
-2. **Handle Safety:** `DATHAND DEFB 0` in `VARS.Z8A` stores the file handle across
-   calls to `DSKREAD`, which clobbers register `B` under MSX-DOS 2.
-3. **Header Ingestion:** In `DATLOAD`, reads 16-byte header into `DATHDR`; validates:
-   - Exactly 16 bytes read.
-   - Magic ID == `"S6ED"`.
-   - Version == 1 (`#0001`).
-   - Block count $\ge 1$.
-4. **Block Ingestion:** Reads 8-byte descriptor 0 into `DATBLK`; validates:
-   - Exactly 8 bytes read.
-   - Block length $> 0$ and $\le 16384$.
-5. **Direct Page 2 Mapping & Load:**
-   - Maps `(FTRSEG)` into page 2 (`#8000-#BFFF`) via `PUTP2`.
-   - Reads payload directly into `LOADADDR` (`#8000`) using `LENGTH` bytes.
-   - Closes handle via `(DATHAND)` and `DSKCLOSE`.
-   - Restores `DEFSEG2` into page 2 via `PUTP2`.
-6. **Error Abort Path:**
-   - `.ERRDAT`: If `S6ED.DAT` is missing, prints `"S6ED.DAT not found."` and exits.
-   - `.ERRCOR`: If corrupted (bad magic, truncated read), prints `"S6ED.DAT is corrupted."` and exits.
-   - Both paths call `ERRMSG`, which drops back to Screen 0 with `PUSH DE`/`POP DE`
-     around BIOS `CHGMOD` to ensure the error string pointer in `DE` is preserved.
+   - Called in `INIT` after `SEGRESV`, before `SCRINIT`, in plain text mode.
+   - `DSKOPEN` on `S6ED.DAT` (failure → `.ERRDAT`, exit via `ERRMSG`/`TERM`).
+     The file size returned by `DSKOPEN` is kept in `DATSIZE`/`DATSZH`.
+   - Reads the 16-byte header and runs **`DATHCHK`**: exactly 16 bytes read,
+     carry from BDOS clean, magic `"S6ED"`, version 1, `NUMBLKS` in
+     `[1..DATMAX]`, table offset >= 16, and the whole descriptor table
+     (`TBLOFF + NUMBLKS*8`) inside the file. Any failure → `.ERRCOR`
+     (`"S6ED.DAT corrupt."`) without ever entering Screen 6.
+2. **Table-Driven Load (`DATLOAD`, run from `CFGRUN` after `SCRINIT`):**
+   - Reopens the file, re-reads and re-validates the header with `DATHCHK`.
+   - `DSKSEEK` to the table offset; reads all `NUMBLKS * 8` descriptor bytes
+     into `DATTBL` (VARS, 64 B max), verifying carry and byte count.
+   - For each descriptor, copied to `DATBLK` for fixed-field access:
+     - `BLKID` must be known: `BLKSEG` walks `BLKTBL` (BLKID → segment
+       variable pairs; today only `1 → FTRSEG`). Unknown → abort.
+     - `LENGTH` in `[1..DATBLEN]` (16384) — the critical clamp: a larger
+       length would write past `#C000` into the DOS area and the stack.
+     - `LOADADDR` in `[#8000,#C000)` and `LOADADDR + LENGTH <= #C000`.
+     - `DATAOFF >= TBLOFF + NUMBLKS*8` (payloads never overlap the table) and
+       `DATAOFF + LENGTH <= filesize` (the size `DSKOPEN` reported; files
+       >= 64 KB pass trivially since offsets are 16-bit).
+     - `DSKSEEK` to `DATAOFF` — DOS 2 via BDOS `_SEEK` (#4A); the DOS 1 path
+       writes the FCB random-record field (record size is 1, so it is a byte
+       offset), though DOS 1 never reaches this code (`INIT` rejects it in
+       `DOSVER`). Documented in `BDOS.Z8A`.
+     - Maps the target segment into page 2 (`PUTP2` + `TXSEG` follows),
+       `DSKREAD` of `LENGTH` bytes at `LOADADDR`, verifying carry after every
+       read and bytes read == `LENGTH`.
+   - Closes the handle and restores page 2 to **`TXSEG0`** (not `DEFSEG2`),
+     breaking the implicit DATLOAD↔BUFINIT coupling.
+3. **Error Abort Path:** `.ERRDAT` / `.ERRCOR` print and exit via `ERRMSG`,
+   which drops back to Screen 0 first, so descriptor-level failures detected
+   after `SCRINIT` are still reported as visible text.
+4. **FCALL stack guard:** `FCALL` now checks `SEGSP >= 8` (4 frames of 2
+   bytes) before pushing; overflow is a design error (§4.1) and aborts via
+   `ERRMSG` (`"S6ED internal: segment stack overflow."`) instead of silently
+   overwriting `DATHAND`.
 
 ### 9.4 Empirical Verification & Testing Suite
 
 - **T0 Static (`TEST/static.py`):**
-  - Enhanced `check_feature_discipline`: audits `S6ED.DAT` existence, file size,
-    16-byte magic `"S6ED"`, version 1, EOF marker `0x1A`, table pointer, block 0
-    fields, and guarantees `filesize == dataoff + length`.
+  - `check_feature_discipline`: audits `S6ED.DAT` existence, file size, magic,
+    version 1, EOF marker, table pointer, block 0 fields, and
+    `filesize == dataoff + length`.
 - **Gate Regression (`TEST/gate.py`):**
-  - `H6DatMissing`: Validates clean text-mode error exit to DOS (`SCRRDY=0`) with
-    error message when `S6ED.DAT` is missing from disk.
-  - `D8Accents`: Calibrated `GRAPH_GAP = 0.053` ensuring deterministic drift across
-    all 20ms frame phases during keystroke bursts.
+  - `H6DatMissing`: missing container aborts clean in text mode.
+  - `H8`–`H16` (Fase C1, corrupt container must abort with message, never
+    hang): `H8` bad magic, `H9` bad version, `H10` `NUMBLKS=0`, `H11` truncated
+    header, `H12` truncated descriptor table, `H13` `LENGTH=0`, `H14`
+    `LENGTH=16385` with a real 16,385-byte payload (only the length/window
+    clamp rejects it), `H15` unknown `BLKID`, `H16` truncated payload.
+  - `H17DatPadded`: payload moved behind 64 bytes of padding with `DATAOFF`
+    updated — proves the loader seeks instead of reading sequentially.
+  - `D8Accents`: Calibrated `GRAPH_GAP = 0.053` ensuring deterministic drift
+    across all 20 ms frame phases during keystroke bursts.
 - **Selftest Mutations (`TEST/mutations.py`):**
-  - `mut/f2-datload`: Alters load target from `#8000` to `#9000` (caught by `G13/cfg-applied`).
-  - `mut/f2-datmagic`: Corrupts header magic `"S6XX"` (caught by static `feature-discipline`).
+  - `mut/c1-datlen`: removes the LENGTH/window bounds (caught by
+    `H14/corrupt-printed`).
+  - `mut/c1-datblkid`: unknown IDs load into FTRSEG (caught by
+    `H15/corrupt-printed`).
+  - `mut/c1-datseek`: sequential payload read without seek (caught by
+    `H17/cfg-applied` or a session crash).
+  - `mut/f2-datload`: loads the payload at `#9000` instead of the descriptor's
+    `LOADADDR` (caught by `G13/cfg-applied`).
+  - `mut/f2-datmagic`: corrupts header magic `"S6XX"` (caught by static
+    `feature-discipline`).
   - `mut/d8-double`: Drops repeat claim in `TRNGRPH` (caught by `D8/content`).
-- **Suite Metrics (2026-09-17):**
+- **Suite Metrics (2026-09-17, post-C1):**
   - **T0 Static:** 13/13 PASS.
-  - **Gate T1/T2:** 186/186 checks across 45 sessions, 0 failed.
-  - **Selftest:** 39/39 mutations caught on green baseline (100% detection rate).
-  - **Total:** **238 checks, 0 failed (133.8s)**.
+  - **Gate T1/T2:** 207/207 checks across 55 sessions, 0 failed.
+  - **Selftest:** 42/42 mutations caught on green baseline (100% detection rate).
+  - **Total:** **262 checks, 0 failed (166.6s)**.
 
 ---
 
