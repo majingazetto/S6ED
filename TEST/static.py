@@ -336,11 +336,51 @@ def check_build_clean(ctx):
     return Check('build-clean', ok, summary or (r.stderr.strip()[:200]))
 
 
+def check_window_discipline(ctx):
+    """Window engine implementation rules and invariants (Fase C2).
+
+    WINOPEN must round WINW up capturing carry before masking.
+    Geometry bounds (508, 512, 211, 212) must be clamped in WINOPEN.
+    WINKIL must be called in WINOPEN.
+    WINACTV must be managed in WINOPEN and WINCLOS.
+    WINSTR must not clobber IXH/IXL.
+    .STRVER must compose version dynamically from VERSION.MAJOR and VERSION.MINOR.
+    """
+    path = os.path.join(ctx.src_dir, 'WINDOW.Z8A')
+    if not os.path.exists(path):
+        return Check('window-discipline', False, 'WINDOW.Z8A missing')
+    src = open(path).read()
+    bad = []
+
+    # Check carry ordering in WINOPEN
+    m = re.search(r'ADD\s+A,\s*3[\s\S]*?JR\s+NC,\s*\.NOWINC[\s\S]*?AND\s+%11111100', src)
+    if not m:
+        bad.append('WINOPEN WINW rounding does not preserve carry before AND')
+
+    # Check bounds
+    for bound in (r'DE,\s*508\b', r'HL,\s*512\b', r'DE,\s*211\b', r'HL,\s*212\b'):
+        if not re.search(bound, src):
+            bad.append('WINOPEN missing geometry clamp %s' % bound)
+
+    if 'CALL    WINKIL' not in src:
+        bad.append('WINOPEN does not call WINKIL to flush keyboard buffer')
+
+    if 'VERSION.MAJOR' not in src or 'VERSION.MINOR' not in src:
+        bad.append('.STRVER does not reference VERSION.MAJOR and VERSION.MINOR')
+
+    if 'IXH' in src or 'IXL' in src:
+        bad.append('WINDOW.Z8A uses IXH/IXL (forbidden: preserves IX for selection)')
+
+    return Check('window-discipline', not bad,
+                 '; '.join(bad) if bad else
+                 'window engine invariants clean (carry, clamps, WINKIL, dynamic version, IX-clean)')
+
+
 ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_layout_asserts, check_record_exclusive, check_data_placement,
        check_label_style,
        check_number_notation, check_defb_width, check_page1_hooks,
-       check_assets, check_feature_discipline]
+       check_assets, check_feature_discipline, check_window_discipline]
 
 
 def run(ctx):

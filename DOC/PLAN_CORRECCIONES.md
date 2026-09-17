@@ -1,6 +1,6 @@
 # S6ED — Plan de correcciones post-Fase 3a
 
-Fecha: 2026-09-17 · Estado: **C1 IMPLEMENTADA (2026-09-17) · C2-C4 PROPUESTAS**
+Fecha: 2026-09-17 · Estado: **C1, C2 IMPLEMENTADAS (2026-09-17) · C3-C4 PROPUESTAS**
 Origen: revisión cruzada de las Fases 1b (maquinaria inter-segmento), 2 (contenedor
 `S6ED.DAT`) y 3a (window engine, fuentes multi-peso, color 3, diálogo About).
 
@@ -112,6 +112,8 @@ contenedor con padding que carga bien vía seek) y mutaciones `c1-datlen`,
 
 ## Fase C2 — Robustez del window engine
 
+**Estado: IMPLEMENTADA 2026-09-17** — ver nota de cierre al final de la sección.
+
 Fallos vivos o latentes en `WINDOW.Z8A`/`VDP.Z8A`/`UI.Z8A`. Todos pequeños y
 aislados; ninguno cambia el diseño.
 
@@ -147,6 +149,38 @@ aislados; ninguno cambia el diseño.
 
 `make testall` verde; el motor rechaza o clampa geometría inválida sin manchar
 pantalla ni buffers.
+
+### Nota de cierre (2026-09-17)
+
+Implementada completa.
+1. `WINOPEN` reordena la captura de carry de `ADD A, 3` en `L` antes de aplicar la
+   máscara `AND %11111100`, redondeando anchos $\ge 253$ correctamente.
+2. Clamps defensivos en `WINOPEN`: $WINX \le 508$, $WINW \in [4, 512 - WINX]$,
+   $WINY \le 211$, $WINH \in [1, 212 - WINY]$, garantizando matemáticamente
+   $X+W \le 512$ e $Y+H \le 212$ (con buffers de guardado $\le 724 < 768$ y composición
+   $\le 980 \le 1024$ en Banco 1).
+3. Cabeceras de `VDP.Z8A` corregidas: `VDPCMD` (`CLOBBERS: AF, BC, HL`), wrappers `HMMM`,
+   `HMMV`, `YMMM`, `LMMM`, `LMMV` (`CLOBBERS: BC, DE`).
+4. `WINSTR` / `WINSTR3` migrados a variables de trabajo en `VARS.Z8A` (`WINVAR`, `WINOP`),
+   eliminando cualquier uso de `IX` y preservándolo intacto para el subsistema de selección.
+5. `WINKIL` en `UI.Z8A` ejecuta `KILBUF` (`#0156`) vía `BIOSCALL`; invocado en `WINOPEN`
+   para purgar cualquier pulsación de teclado residual antes de presentar el diálogo.
+6. Flag `WINACTV` en `VARS.Z8A`: activado a 1 en `WINOPEN`, reseteado a 0 en `WINCLOS`.
+   `CHKCLK` comprueba `(WINACTV)` inmediatamente y suspende el parpadeo de reloj en Fila 0
+   mientras el diálogo esté activo.
+7. `WINSTR` en `WINDOW.Z8A`: preservación estricta de `A` mediante `PUSH AF` / `POP AF`
+   al cargar `(WINVAR)` y `(WINOP)`, corrigiendo la corrupción de glifos donde todos los
+   caracteres del diálogo se convertían en tramas de control (`#03`/`#08`).
+8. `.STRVER` en `DOABT` compone dinámicamente la versión desde `VERSION.MAJOR` y `VERSION.MINOR`.
+9. Cabecera de `WINCLOS` documenta que la celda del cursor no se repinta en el cierre.
+10. Tests añadidos y blindados:
+    - Chequeo estático `check_window_discipline` en `TEST/static.py` (14/14 checks).
+    - Hardening de `H7AboutDialog` con verificación óptica/píxel a píxel de los glifos de
+      título (`"About S6ED"` en Negrita/Ámbar), cuerpo (`"S6ED"` en Negrita+Cursiva/Blanco)
+      y botón (`"[  OK  ]"` en Negrita/Ámbar) comparados contra `vram.glyph_mask`.
+    - Nuevo caso `H18WindowRobustness` en `TEST/gate.py`.
+    - 5 mutaciones nuevas (`mut/c2-wincarry`, `mut/c2-winactv`, `mut/c2-winkil`, `mut/c2-winclamp`, `mut/c2-winchtr-char`).
+`make testall`: **276 checks, 0 failed (114.4s)** (T0 14/14, Gate 215/215, Selftest 47/47).
 
 ---
 

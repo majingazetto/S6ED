@@ -184,7 +184,10 @@ WINCHTR         PUSH    AF
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
 
-WINSTR3         LD      IXL, VDP_TOR
+WINSTR3         PUSH    AF
+                LD      A, VDP_TOR
+                LD      (WINOP), A
+                POP     AF
                 JR      WINSTR.DOSTR
 
 
@@ -198,9 +201,12 @@ WINSTR3         LD      IXL, VDP_TOR
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
 
-WINSTR          LD      IXL, VDP_TIMP
+WINSTR          PUSH    AF
+                LD      A, VDP_TIMP
+                LD      (WINOP), A
+                POP     AF
 
-.DOSTR          LD      IXH, A
+.DOSTR          LD      (WINVAR), A
 .LOOP           LD      A, (HL)
                 OR      A
                 RET     Z
@@ -210,8 +216,12 @@ WINSTR          LD      IXL, VDP_TIMP
                 EX      DE, HL          ; HL = DX
                 LD      D, B
                 LD      E, C            ; DE = DY
-                LD      B, IXH
-                LD      C, IXL
+                PUSH    AF
+                LD      A, (WINVAR)
+                LD      B, A
+                LD      A, (WINOP)
+                LD      C, A
+                POP     AF
                 CALL    WINCHTR
                 POP     DE
                 POP     BC
@@ -491,6 +501,13 @@ WINBTN          PUSH    HL
 
 WINOPEN         PUSH    HL
 
+                ; FLUSH KEYBOARD BUFFER
+                CALL    WINKIL
+
+                ; MARK MODAL WINDOW ACTIVE TO INHIBIT CLOCK BLINK
+                LD      A, 1
+                LD      (WINACTV), A
+
                 ; ERASE CURSOR IF CURRENTLY VISIBLE
                 LD      A, (BLNKPH)
                 AND     A
@@ -506,16 +523,81 @@ WINOPEN         PUSH    HL
                 LD      L, A
                 LD      (WINX), HL
 
-                ; ALIGN WINW UP TO MULTIPLE OF 4
+                ; ALIGN WINW UP TO MULTIPLE OF 4 (PRESERVE CARRY)
                 LD      HL, (WINW)
                 LD      A, L
                 ADD     A, 3
-                AND     %11111100
                 LD      L, A
                 JR      NC, .NOWINC
                 INC     H
-.NOWINC         LD      (WINW), HL
+.NOWINC         LD      A, L
+                AND     %11111100
+                LD      L, A
+                LD      (WINW), HL
 
+                ; CLAMP WINX <= 508
+                LD      HL, (WINX)
+                LD      DE, 508
+                OR      A
+                SBC     HL, DE
+                JR      C, .XOK
+                LD      HL, 508
+                LD      (WINX), HL
+                JR      .XDON
+.XOK            ADD     HL, DE
+                LD      (WINX), HL
+.XDON           ; CLAMP WINW: MIN 4, WINX + WINW <= 512
+                LD      HL, (WINW)
+                LD      A, H
+                OR      L
+                JR      NZ, .WNOT0
+                LD      HL, 4
+                LD      (WINW), HL
+.WNOT0          LD      DE, (WINX)
+                LD      HL, 512
+                OR      A
+                SBC     HL, DE          ; HL = 512 - WINX (MULTIPLE OF 4)
+                EX      DE, HL          ; DE = MAXW
+                LD      HL, (WINW)
+                OR      A
+                SBC     HL, DE          ; WINW - MAXW
+                JR      C, .WOK
+                LD      (WINW), DE
+                JR      .WDON
+.WOK            ADD     HL, DE
+                LD      (WINW), HL
+.WDON           ; CLAMP WINY <= 211
+                LD      HL, (WINY)
+                LD      DE, 211
+                OR      A
+                SBC     HL, DE
+                JR      C, .YOK
+                LD      HL, 211
+                LD      (WINY), HL
+                JR      .YDON
+.YOK            ADD     HL, DE
+                LD      (WINY), HL
+.YDON           ; CLAMP WINH: MIN 1, WINY + WINH <= 212
+                LD      HL, (WINH)
+                LD      A, H
+                OR      L
+                JR      NZ, .HNOT0
+                LD      HL, 1
+                LD      (WINH), HL
+.HNOT0          LD      DE, (WINY)
+                LD      HL, 212
+                OR      A
+                SBC     HL, DE          ; HL = 212 - WINY
+                EX      DE, HL          ; DE = MAXH
+                LD      HL, (WINH)
+                OR      A
+                SBC     HL, DE          ; WINH - MAXH
+                JR      C, .HOK
+                LD      (WINH), DE
+                JR      .HDON
+.HOK            ADD     HL, DE
+                LD      (WINH), HL
+.HDON
                 ; SAVE VISIBLE BACKGROUND TO VRAM BUFFER (Y + 512)
                 CALL    WINSAV
 
@@ -529,9 +611,13 @@ WINOPEN         PUSH    HL
 ; - IN:  NONE (USES WINX, WINY, WINW, WINH)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
+; - NOTE: RESTORES SAVED VRAM BACKGROUND PIXELS. CURSOR IS NOT RE-DRAWN
+; -       HERE; MAINLOOP RE-DRAWS CURSOR UPON EDITING RESUMPTION.
 ; -
 
-WINCLOS         JP      WINRST
+WINCLOS         XOR     A
+                LD      (WINACTV), A
+                JP      WINRST
 
 
 ; --- DIALOGS                   ----------------------------------------
@@ -643,7 +729,7 @@ DOABT           LD      HL, 112
 .TITABT         DEFM    "About S6ED", 0
 .S6ED           DEFM    "S6ED", 0
 .STRSUB         DEFM    " - MSX2 Screen 6 Text Editor", 0
-.STRVER         DEFM    "Version 0.1 ", 0
+.STRVER         DEFB    "Version ", VERSION.MAJOR, '.', VERSION.MINOR, " ", 0
 .STREXP         DEFM    "(Experimental)", 0
 .LBDSP          DEFM    "Display: ", 0
 .VALDSP         DEFM    "80x24 Columns (512x212, 4 Colors)", 0

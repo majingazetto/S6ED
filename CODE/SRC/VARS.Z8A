@@ -295,6 +295,9 @@ WINX            DEFW    0               ; WINDOW X IN PIXELS
 WINY            DEFW    0               ; WINDOW Y IN PIXELS
 WINW            DEFW    0               ; WINDOW WIDTH IN PIXELS
 WINH            DEFW    0               ; WINDOW HEIGHT IN PIXELS
+WINACTV         DEFB    0               ; 1 = MODAL WINDOW ACTIVE, 0 = INACTIVE
+WINVAR          DEFB    0               ; WINSTR: FONT VARIANT TEMP
+WINOP           DEFB    0               ; WINSTR: VDP LOGOP TEMP
 
 
 ; --- VDP COMMAND BLOCK          ----------------------------------------
