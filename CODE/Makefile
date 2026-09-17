@@ -97,6 +97,10 @@ run: build dsk
 run128: build dsk
 	m2d2 128k $(DSKFILE)
 
+# Nextor 2.1 check: Nextor standalone kernel on 2 MB
+run-nextor: build dsk
+	m2d2 nextor $(DSKFILE)
+
 # Debug build, with the DBG trace captured from the openMSX debug device
 debug:
 	@$(MAKE) DEBUG=1 build dsk

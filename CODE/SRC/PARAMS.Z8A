@@ -24,6 +24,8 @@ SWTTBL          DEFB    '?'
                 DEFW    DOHLP
                 DEFB    'H'
                 DEFW    DOHLP
+                DEFB    'V'
+                DEFW    DOVRB
                 DEFB    0
 
 
@@ -90,6 +92,21 @@ PARAMS          LD      HL, PARBUF
 DOHLP           LD      DE, TXTHLP
                 CALL    STROUT
                 JP      TERM
+
+
+; --- DOVRB                     ----------------------------------------
+
+
+; - DOVRB ------------------------------
+; - SET VERBOSE BOOT MODE
+; - IN:  NONE
+; - OUT: SWTVERB = #FF
+; - CLOBBERS: AF
+; -
+
+DOVRB           LD      A, #FF
+                LD      (SWTVERB), A
+                RET
 
 
 ; --- FNDSWT                    ----------------------------------------

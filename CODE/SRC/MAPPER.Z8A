@@ -48,6 +48,7 @@ MAPINIT         DBG     "MAPINIT: ENTER"
                 RET                     ; CY = 1: NO MAPPER MANAGER
 
 .MAPOK          DBG     "MAPINIT: MAPOK"
+                LD      (SEGTOT), A     ; SAVE TOTAL MAPPER SEGMENTS (EXTBIO)
                 PUSH    HL
                 LD      DE, MJALLSEG
                 ADD     HL, DE
@@ -344,7 +345,7 @@ SEGRESV         CALL    SEGGET          ; 1: DIRECTORY SEGMENT
                 POP     HL
                 INC     HL
                 DJNZ    .RELEASE
-.COUNTED         ; TEXT CEILING = (SEGAVL + 1) * LINEPSEG -- DEFSEG2 JOINS
+.COUNTED        ; TEXT CEILING = (SEGAVL + 1) * LINEPSEG -- DEFSEG2 JOINS
                 ; THE TEXT POOL WITHOUT BEING CLAIMED
                 LD      A, (SEGAVL)
                 INC     A
@@ -355,55 +356,127 @@ SEGRESV         CALL    SEGGET          ; 1: DIRECTORY SEGMENT
                 DJNZ    .CEIL
                 LD      (SEGLNS), HL
 
-                ; COMPOSE "S6ED: NN SEGMENTS FREE, TEXT UP TO NNNNN LINES"
+                ; IF /V IS NOT SET, NORMAL BOOT IS 100% QUIET AND INSTANT
+                LD      A, (SWTVERB)
+                AND     A
+                RET     Z
+
+                ; VERBOSE BOOT INFORMATION (/V)
+                LD      DE, TXTVTIT
+                CALL    STROUT
+
+                ; TOTAL MAPPER MEMORY: "Total mapper:   NN segments (NNNN KB)"
                 LD      DE, SEGMSG
-                LD      HL, TXTSEG1
+                LD      HL, TXTVTOT
                 CALL    .APPZ
                 PUSH    DE
-                LD      A, (SEGAVL)
-                ADD     A, 2            ; THE TWO RESERVED ARE FREE TOO
-                CALL    B2D8            ; HL -> DIGITS, C = COUNT
+                LD      A, (SEGTOT)
+                CALL    B2D8
                 POP     DE
                 CALL    .APPB
-                LD      HL, TXTSEG2
+                LD      HL, TXTVSEG
                 CALL    .APPZ
                 PUSH    DE
-                LD      HL, (SEGLNS)
+                LD      A, (SEGTOT)
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; * 16 KB
                 CALL    B2D16
                 POP     DE
                 CALL    .APPB
-                LD      HL, TXTSEG3
+                LD      HL, TXTVKB
                 CALL    .APPZ
                 LD      A, '$'
                 LD      (DE), A
                 LD      DE, SEGMSG
                 CALL    STROUT
 
-                ; LOW CEILING: WARN AND GIVE THE USER A MOMENT TO READ IT.
-                ; THE WAIT HAS A 3 SECOND TIMEOUT, NOT JUST A KEYPRESS: THE
-                ; WARNING ALWAYS FIRES ON THE 128KB MACHINE THE GATE RUNS
-                ; ON, AND AN UNATTENDED BOOT MUST NOT HANG.
+                ; AVAILABLE MAPPER: "Available:      NN segments (NNNN KB)"
+                LD      DE, SEGMSG
+                LD      HL, TXTVAVL
+                CALL    .APPZ
+                PUSH    DE
+                LD      A, (SEGAVL)
+                ADD     A, 2            ; 2 RESERVED ARE INCLUDED IN FREE AT BOOT
+                CALL    B2D8
+                POP     DE
+                CALL    .APPB
+                LD      HL, TXTVSEG
+                CALL    .APPZ
+                PUSH    DE
+                LD      A, (SEGAVL)
+                ADD     A, 2
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; * 16 KB
+                CALL    B2D16
+                POP     DE
+                CALL    .APPB
+                LD      HL, TXTVKB
+                CALL    .APPZ
+                LD      A, '$'
+                LD      (DE), A
+                LD      DE, SEGMSG
+                CALL    STROUT
+
+                ; RESERVED SEGMENTS: "Reserved:       2 segments (Directory, Features)"
+                LD      DE, TXTVRES
+                CALL    STROUT
+
+                ; TEXT CAPACITY: "Text capacity:  NNNNN lines"
+                LD      DE, SEGMSG
+                LD      HL, TXTVCAP
+                CALL    .APPZ
+                PUSH    DE
+                LD      HL, (SEGLNS)
+                CALL    B2D16
+                POP     DE
+                CALL    .APPB
+                LD      HL, TXTVLNS
+                CALL    .APPZ
+                LD      A, '$'
+                LD      (DE), A
+                LD      DE, SEGMSG
+                CALL    STROUT
+
+                ; LOW MEMORY WARNING IF CAPACITY IS AT FLOOR
                 LD      HL, (SEGLNS)
                 LD      DE, WARNLNS
                 CALL    CMPHLDE
-                RET     NC
-                LD      DE, TXTWARN
+                JR      NC, .NOWARN
+                LD      DE, TXTVLOW
                 CALL    STROUT
-                LD      HL, (JIFFY)
-.WAIT           PUSH    HL
-                LD      IX, CHSNS
+
+.NOWARN         ; SHOW TARGET FILE IF GIVEN ON COMMAND LINE
+                LD      A, (FILENAME)
+                AND     A
+                JR      Z, .NOFILE
+                LD      DE, SEGMSG
+                LD      HL, TXTVFIL
+                CALL    .APPZ
+                LD      HL, FILENAME
+                CALL    .APPZ
+                LD      HL, TXTVCR
+                CALL    .APPZ
+                LD      A, '$'
+                LD      (DE), A
+                LD      DE, SEGMSG
+                CALL    STROUT
+
+.NOFILE         ; PROMPT AND WAIT FOR KEYPRESS
+                LD      DE, TXTVKEY
+                CALL    STROUT
+
+.KEYWAIT        LD      IX, CHGET
                 CALL    BIOSCALL
-                POP     HL
-                RET     NZ              ; A KEY IS WAITING: MAINLOOP EATS IT
-                PUSH    HL
-                LD      DE, (JIFFY)
-                EX      DE, HL          ; HL = NOW, DE = START
-                OR      A
-                SBC     HL, DE
-                LD      DE, 180         ; 3S AT 60HZ (3.6S AT 50HZ)
-                CALL    CMPHLDE
-                POP     HL
-                JR      C, .WAIT
+                LD      IX, KILBUF
+                CALL    BIOSCALL
                 RET
 
 .NOFTR          LD      DE, ENO2SEG
@@ -425,8 +498,18 @@ SEGRESV         CALL    SEGGET          ; 1: DIRECTORY SEGMENT
                 JR      NZ, .APPB
                 RET
 
-TXTSEG1         DEFM    "S6ED: ", 0
-TXTSEG2         DEFM    " SEGMENTS FREE, TEXT UP TO ", 0
-TXTSEG3         DEFM    " LINES", 13, 10, 0
-TXTWARN         DEFM    "WARNING: LOW MAPPER MEMORY, TEXT TRUNCATES AT THE CEILING.", 13, 10
-                DEFM    "PRESS ANY KEY TO CONTINUE", 13, 10, "$"
+TXTVTIT         DEFM    "S6ED v"
+                DEFB    VERSION.MAJOR, '.', VERSION.MINOR
+                DEFM    " - Screen 6 text editor for MSX2", 13, 10
+                DEFM    "(c) 2024-2026 Armando Perez Abad", 13, 10, 13, 10, "$"
+TXTVTOT         DEFM    "Total mapper:   ", 0
+TXTVAVL         DEFM    "Available:      ", 0
+TXTVSEG         DEFM    " segments (", 0
+TXTVKB          DEFM    " KB)", 13, 10, 0
+TXTVRES         DEFM    "Reserved:       2 segments (Directory, Features)", 13, 10, "$"
+TXTVCAP         DEFM    "Text capacity:  ", 0
+TXTVLNS         DEFM    " lines", 13, 10, 0
+TXTVLOW         DEFM    "Low mapper memory: text capacity limited to 101 lines.", 13, 10, "$"
+TXTVFIL         DEFM    "File:           ", 0
+TXTVCR          DEFM    13, 10, 0
+TXTVKEY         DEFM    13, 10, "Press any key to continue...", 13, 10, "$"
