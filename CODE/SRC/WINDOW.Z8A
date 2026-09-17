@@ -4,15 +4,16 @@
 ;
 ; WINDOW AND DIALOG SUBSYSTEM FOR SCREEN 6 (512X212, 4 COLORS).
 ; RUNS IN RESIDENT FEATURE SEGMENT (PAGE 2, PHASED AT #8000).
-; PROVIDES INSTANT VRAM BACKGROUND SAVE / RESTORE VIA HARDWARE HMMM
-; USING OFF-SCREEN VRAM BANK 1 (Y = 512..1023).
+; PROVIDES OFF-SCREEN VRAM COMPOSITION BUFFER (Y = 768..979) AND
+; VRAM BACKGROUND SAVE / RESTORE BUFFER (Y = 512..723) IN BANK 1.
+; POP-UP APPEARANCE AND RESTORE BOTH TAKE ~3.2 MS VIA HARDWARE HMMM.
 
 
-; --- VRAM BUFFER               ----------------------------------------
+; --- VRAM BUFFER & DISPLAY     ----------------------------------------
 
 
 ; - WINSAV -----------------------------
-; - SAVE WINDOW BACKGROUND TO VRAM BANK 1
+; - SAVE VISIBLE BACKGROUND TO VRAM BANK 1
 ; - IN:  NONE (USES WINX, WINY, WINW, WINH)
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL
@@ -36,8 +37,33 @@ WINSAV          LD      HL, (WINX)
                 JP      HMMM
 
 
+; - WINSHOW ----------------------------
+; - COPY COMPOSED WINDOW FROM OFF-SCREEN BUFFER (Y=768) TO SCREEN
+; - IN:  NONE (USES WINX, WINY, WINW, WINH)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINSHOW         LD      HL, (WINX)
+                LD      (VDP_SX), HL
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y
+                LD      (VDP_SY), HL
+                LD      HL, (WINY)
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                LD      (VDP_NX), HL
+                LD      HL, (WINH)
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMM
+                JP      VDPWAIT
+
+
 ; - WINRST -----------------------------
-; - RESTORE BACKGROUND FROM VRAM BANK 1
+; - RESTORE BACKGROUND FROM VRAM BANK 1 TO SCREEN
 ; - IN:  NONE (USES WINX, WINY, WINW, WINH)
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL
@@ -62,23 +88,206 @@ WINRST          LD      HL, (WINX)
                 JP      VDPWAIT
 
 
+; --- GLYPH & STRING BLITTING   ----------------------------------------
+
+
+; - WINCHTR ----------------------------
+; - BLIT SINGLE GLYPH WITH FONT WEIGHT AND LOGOP
+; - IN:  A  = ASCII CHAR
+; -      HL = DX
+; -      DE = DY
+; -      B  = FONT VARIANT (0=NORM, 1=BOLD, 2=ITAL, 3=BI)
+; -      C  = LOGOP (VDP_TIMP OR VDP_TOR)
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+WINCHTR         PUSH    AF
+                PUSH    BC
+                PUSH    DE
+                PUSH    HL
+
+                LD      (VDP_DX), HL
+                EX      DE, HL
+                LD      (VDP_DY), HL
+
+                ; CALC SX = (CHAR & 31) * 8
+                LD      E, A
+                AND     %00011111
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      (VDP_SX), HL
+
+                ; CALC SY = (CHAR >> 5) * 8 + VARIANT BASE SY
+                LD      A, E
+                SRL     A
+                SRL     A
+                SRL     A
+                SRL     A
+                SRL     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A
+                LD      H, 0
+
+                ; LOOKUP VARIANT BASE (256, 320, 384, 448)
+                LD      A, B
+                AND     3
+                ADD     A, A
+                LD      E, A
+                LD      D, 0
+                PUSH    HL
+                LD      HL, .SYTBL
+                ADD     HL, DE
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)
+                POP     HL
+                ADD     HL, DE
+                LD      (VDP_SY), HL
+
+                LD      HL, CELLW
+                LD      (VDP_NX), HL
+                LD      HL, CELLH
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      A, VDP_LMMM
+                OR      C
+                LD      (VDP_CMD), A
+                LD      HL, VDPCMBLK
+                CALL    VDPCMD
+
+                POP     HL
+                POP     DE
+                POP     BC
+                POP     AF
+                RET
+
+.SYTBL          DEFW    FNORM_SY        ; 256
+                DEFW    FBOLD_SY        ; 320
+                DEFW    FITAL_SY        ; 384
+                DEFW    FBI_SY          ; 448
+
+
+; - WINSTR3 ----------------------------
+; - BLIT ASCIIZ STRING WITH COLOR 3 HIGHLIGHT (TOR)
+; - IN:  HL = POINTER TO ASCIIZ STRING
+; -      DE = DX
+; -      BC = DY
+; -      A  = FONT VARIANT (0..3)
+; - OUT: DE = DX ADVANCED PAST LAST CHAR
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINSTR3         LD      IXL, VDP_TOR
+                JR      WINSTR.DOSTR
+
+
+; - WINSTR -----------------------------
+; - BLIT ASCIIZ STRING WITH FONT VARIANT (TIMP)
+; - IN:  HL = POINTER TO ASCIIZ STRING
+; -      DE = DX
+; -      BC = DY
+; -      A  = FONT VARIANT (0..3)
+; - OUT: DE = DX ADVANCED PAST LAST CHAR
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINSTR          LD      IXL, VDP_TIMP
+
+.DOSTR          LD      IXH, A
+.LOOP           LD      A, (HL)
+                OR      A
+                RET     Z
+                PUSH    HL
+                PUSH    BC
+                PUSH    DE
+                EX      DE, HL          ; HL = DX
+                LD      D, B
+                LD      E, C            ; DE = DY
+                LD      B, IXH
+                LD      C, IXL
+                CALL    WINCHTR
+                POP     DE
+                POP     BC
+                POP     HL
+                INC     HL
+                LD      A, CELLW
+                ADD     A, E
+                LD      E, A
+                JR      NC, .LOOP
+                INC     D
+                JR      .LOOP
+
+
+; - WINPRN -----------------------------
+; - PRINT TEXT LINE INSIDE WINDOW COMPOSITION BUFFER (TIMP)
+; - IN:  HL = ASCIIZ STRING
+; -      C  = COLUMN (0-BASED CHAR UNITS)
+; -      B  = ROW    (0-BASED ROW UNITS)
+; -      A  = FONT VARIANT (0..3)
+; - OUT: DE = DX ADVANCED PAST LAST CHAR
+; - CLOBBERS: ALL
+; -
+
+WINPRN          PUSH    HL
+                PUSH    AF
+
+                ; DX = WINX + 6 + C * 6
+                LD      L, C
+                LD      H, 0
+                ADD     HL, HL
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL
+                ADD     HL, DE
+                LD      DE, 6
+                ADD     HL, DE
+                LD      DE, (WINX)
+                ADD     HL, DE
+                PUSH    HL
+
+                ; DY = WINCOMP_Y + 16 + B * 8
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      DE, 16
+                ADD     HL, DE
+                LD      DE, WINCOMP_Y
+                ADD     HL, DE
+                LD      B, H
+                LD      C, L
+
+                POP     DE
+                POP     AF
+                POP     HL
+                JP      WINSTR
+
+
 ; --- WINDOW DRAWING            ----------------------------------------
 
 
 ; - WINBOX -----------------------------
-; - DRAW WINDOW FRAME, FILL, AND TITLE
+; - DRAW WINDOW FRAME, FILLS, ACCENTS, AND TITLE INTO COMPOSITION BUFFER
 ; - IN:  HL = ASCIIZ TITLE STRING (0 = NONE)
-; -      USES WINX, WINY, WINW, WINH
+; -      USES WINX, WINW, WINH
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
 WINBOX          PUSH    HL
 
-                ; 1. OUTER BORDER (COL_UI)
+                ; 1. OUTER BORDER (COL_UI) AT (WINX, WINCOMP_Y)
                 LD      HL, (WINX)
                 LD      (VDP_DX), HL
-                LD      HL, (WINY)
+                LD      HL, WINCOMP_Y
                 LD      (VDP_DY), HL
                 LD      HL, (WINW)
                 LD      (VDP_NX), HL
@@ -92,12 +301,28 @@ WINBOX          PUSH    HL
                 LD      A, VDP_LMMV | VDP_IMP
                 CALL    LMMV
 
-                ; 2. INNER FILL (COL_BG)
+                ; 2. TOP ACCENT HIGHLIGHT LINE (COL_HI)
+                LD      HL, (WINX)
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                LD      (VDP_NX), HL
+                LD      HL, 1
+                LD      (VDP_NY), HL
+                LD      A, COL_HI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; 3. INNER FILL (COL_BG)
                 LD      HL, (WINX)
                 INC     HL
                 LD      (VDP_DX), HL
-                LD      HL, (WINY)
-                INC     HL
+                LD      HL, WINCOMP_Y + 1
                 LD      (VDP_DY), HL
                 LD      HL, (WINW)
                 DEC     HL
@@ -115,7 +340,7 @@ WINBOX          PUSH    HL
                 LD      A, VDP_LMMV | VDP_IMP
                 CALL    LMMV
 
-                ; 3. TITLE BAR
+                ; 4. TITLE BAR
                 POP     HL
                 LD      A, H
                 OR      L
@@ -130,8 +355,7 @@ WINBOX          PUSH    HL
                 LD      HL, (WINX)
                 INC     HL
                 LD      (VDP_DX), HL
-                LD      HL, (WINY)
-                INC     HL
+                LD      HL, WINCOMP_Y + 1
                 LD      (VDP_DY), HL
                 LD      HL, (WINW)
                 DEC     HL
@@ -147,65 +371,39 @@ WINBOX          PUSH    HL
                 LD      A, VDP_LMMV | VDP_IMP
                 CALL    LMMV
 
-                ; TITLE TEXT AT DX = WINX + 6, DY = WINY + 2
+                ; TITLE SEPARATOR LINE IN COLOR 3 (COL_HI)
+                LD      HL, (WINX)
+                INC     HL
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y + 11
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                DEC     HL
+                DEC     HL
+                LD      (VDP_NX), HL
+                LD      HL, 1
+                LD      (VDP_NY), HL
+                LD      A, COL_HI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; TITLE TEXT IN BOLD + COLOR 3 (TOR) AT (WINX + 6, WINCOMP_Y + 2)
                 LD      HL, (WINX)
                 LD      DE, 6
                 ADD     HL, DE
-                EX      DE, HL
-                LD      HL, (WINY)
-                INC     HL
-                INC     HL
-                LD      B, H
-                LD      C, L
-                POP     HL
-                JP      BLTSTR
-
-
-; - WINPRN -----------------------------
-; - PRINT TEXT LINE INSIDE WINDOW
-; - IN:  HL = ASCIIZ STRING
-; -      C  = COLUMN (0-BASED CHAR UNITS)
-; -      B  = ROW    (0-BASED ROW UNITS)
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-
-WINPRN          PUSH    HL
-
-                ; DX = WINX + 6 + C * 6
-                LD      L, C
-                LD      H, 0
-                ADD     HL, HL
-                LD      D, H
-                LD      E, L
-                ADD     HL, HL
-                ADD     HL, DE
-                LD      DE, 6
-                ADD     HL, DE
-                LD      DE, (WINX)
-                ADD     HL, DE
-                PUSH    HL
-
-                ; DY = WINY + 16 + B * 8
-                LD      L, B
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                LD      DE, 16
-                ADD     HL, DE
-                LD      DE, (WINY)
-                ADD     HL, DE
-                LD      B, H
-                LD      C, L
-
-                POP     DE
-                POP     HL
-                JP      BLTSTR
+                EX      DE, HL          ; DE = DX
+                LD      BC, WINCOMP_Y + 2
+                POP     HL              ; HL = TITLE STRING
+                LD      A, 1            ; BOLD (VARIANT 1)
+                JP      WINSTR3
 
 
 ; - WINBTN -----------------------------
-; - DRAW BUTTON WITH SOLID UI BACKGROUND
+; - DRAW BUTTON WITH COLOR 3 HIGHLIGHT BORDER AND COLOR 2 BODY
 ; - IN:  HL = ASCIIZ BUTTON TEXT
 ; -      DE = RELATIVE X (PIXELS)
 ; -      BC = RELATIVE Y (PIXELS)
@@ -217,16 +415,38 @@ WINBTN          PUSH    HL
                 PUSH    DE
                 PUSH    BC
 
-                ; DX = WINX + REL X
+                ; 1. OUTER BORDER (COL_HI) 58 X 14
+                LD      HL, (WINX)
+                ADD     HL, DE
+                DEC     HL
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y
+                ADD     HL, BC
+                DEC     HL
+                LD      (VDP_DY), HL
+                LD      HL, 58
+                LD      (VDP_NX), HL
+                LD      HL, 14
+                LD      (VDP_NY), HL
+                LD      A, COL_HI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; 2. BUTTON BODY (COL_UI) 56 X 12
+                POP     BC
+                POP     DE
+                PUSH    DE
+                PUSH    BC
                 LD      HL, (WINX)
                 ADD     HL, DE
                 LD      (VDP_DX), HL
-
-                ; DY = WINY + REL Y
-                LD      HL, (WINY)
+                LD      HL, WINCOMP_Y
                 ADD     HL, BC
                 LD      (VDP_DY), HL
-
                 LD      HL, 56
                 LD      (VDP_NX), HL
                 LD      HL, 12
@@ -239,7 +459,7 @@ WINBTN          PUSH    HL
                 LD      A, VDP_LMMV | VDP_IMP
                 CALL    LMMV
 
-                ; TEXT DX = WINX + REL X + 4
+                ; 3. BUTTON TEXT IN BOLD + COLOR 3 (TOR)
                 POP     BC
                 POP     DE
                 LD      HL, (WINX)
@@ -248,25 +468,21 @@ WINBTN          PUSH    HL
                 INC     HL
                 INC     HL
                 INC     HL
-                EX      DE, HL
-
-                ; TEXT DY = WINY + REL Y + 2
-                LD      HL, (WINY)
+                EX      DE, HL          ; DE = DX = WINX + REL X + 4
+                LD      HL, WINCOMP_Y + 2
                 ADD     HL, BC
-                INC     HL
-                INC     HL
                 LD      B, H
-                LD      C, L
-
-                POP     HL
-                JP      BLTSTR
+                LD      C, L            ; BC = DY = WINCOMP_Y + REL Y + 2
+                POP     HL              ; HL = TEXT
+                LD      A, 1            ; BOLD (VARIANT 1)
+                JP      WINSTR3
 
 
 ; --- WINDOW MANAGEMENT         ----------------------------------------
 
 
 ; - WINOPEN ----------------------------
-; - OPEN WINDOW (ALIGN, SAVE, DRAW BOX)
+; - OPEN WINDOW (ALIGN, SAVE BACKGROUND, DRAW BOX INTO COMPOSITION BUFFER)
 ; - IN:  HL = ASCIIZ TITLE STRING (0 = NONE)
 ; -      USES WINX, WINY, WINW, WINH
 ; - OUT: NONE
@@ -300,16 +516,16 @@ WINOPEN         PUSH    HL
                 INC     H
 .NOWINC         LD      (WINW), HL
 
-                ; SAVE BACKGROUND TO VRAM BUFFER (Y + 512)
+                ; SAVE VISIBLE BACKGROUND TO VRAM BUFFER (Y + 512)
                 CALL    WINSAV
 
-                ; DRAW WINDOW BOX AND TITLE
+                ; DRAW WINDOW BOX AND TITLE INTO COMPOSITION BUFFER (Y = 768)
                 POP     HL
                 JP      WINBOX
 
 
 ; - WINCLOS ----------------------------
-; - CLOSE WINDOW (RESTORE BACKGROUND)
+; - CLOSE WINDOW (RESTORE BACKGROUND FROM VRAM BUFFER)
 ; - IN:  NONE (USES WINX, WINY, WINW, WINH)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
@@ -322,7 +538,7 @@ WINCLOS         JP      WINRST
 
 
 ; - DOABT ------------------------------
-; - DISPLAY ABOUT S6ED MODAL DIALOG
+; - DISPLAY ABOUT S6ED MODAL DIALOG WITH MULTI-WEIGHT FONTS & HIGHLIGHTS
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
@@ -340,40 +556,66 @@ DOABT           LD      HL, 112
                 LD      HL, .TITABT
                 CALL    WINOPEN
 
-                ; LINE 0: APP NAME (COL 7, ROW 0)
-                LD      HL, .STRNM
+                ; LINE 0: "S6ED" (BI) + " - MSX2 Screen 6 Text Editor" (NORM)
+                LD      HL, .S6ED
                 LD      C, 7
                 LD      B, 0
+                LD      A, 3            ; BOLD+ITALIC
                 CALL    WINPRN
+                LD      HL, .STRSUB
+                LD      BC, WINCOMP_Y + 16
+                XOR     A               ; NORMAL
+                CALL    WINSTR
 
-                ; LINE 1: VERSION (COL 10, ROW 1)
+                ; LINE 1: "Version 0.1 " (BOLD) + "(Experimental)" (ITALIC)
                 LD      HL, .STRVER
                 LD      C, 10
                 LD      B, 1
+                LD      A, 1            ; BOLD
                 CALL    WINPRN
+                LD      HL, .STREXP
+                LD      BC, WINCOMP_Y + 24
+                LD      A, 2            ; ITALIC
+                CALL    WINSTR
 
-                ; LINE 3: SCREEN MODE (COL 2, ROW 3)
-                LD      HL, .STRDSP
+                ; LINE 3: "Display: " (BOLD) + "80x24 Columns (512x212, 4 Colors)" (NORM)
+                LD      HL, .LBDSP
                 LD      C, 2
                 LD      B, 3
+                LD      A, 1            ; BOLD
                 CALL    WINPRN
+                LD      HL, .VALDSP
+                LD      BC, WINCOMP_Y + 40
+                XOR     A               ; NORMAL
+                CALL    WINSTR
 
-                ; LINE 4: FONTS (COL 2, ROW 4)
-                LD      HL, .STRFNT
+                ; LINE 4: "Fonts:   " (BOLD) + "4 Typographic Weights (B, I, BI)" (NORM)
+                LD      HL, .LBFNT
                 LD      C, 2
                 LD      B, 4
+                LD      A, 1            ; BOLD
                 CALL    WINPRN
+                LD      HL, .VALFNT
+                LD      BC, WINCOMP_Y + 48
+                XOR     A               ; NORMAL
+                CALL    WINSTR
 
-                ; LINE 5: MEMORY (COL 2, ROW 5)
-                LD      HL, .STRMEM
+                ; LINE 5: "Memory:  " (BOLD) + "DOS 2 / Nextor Mapper Manager" (NORM)
+                LD      HL, .LBMEM
                 LD      C, 2
                 LD      B, 5
+                LD      A, 1            ; BOLD
                 CALL    WINPRN
+                LD      HL, .VALMEM
+                LD      BC, WINCOMP_Y + 56
+                XOR     A               ; NORMAL
+                CALL    WINSTR
 
-                ; LINE 7: INSTRUCTIONS (COL 6, ROW 7)
+                ; LINE 7: "Press ENTER, SPACE or ESC to close"
                 LD      HL, .STRINS
                 LD      C, 6
                 LD      B, 7
+                XOR     A               ; NORMAL
                 CALL    WINPRN
 
                 ; BUTTON [  OK  ] (REL X = 116, REL Y = 84)
@@ -382,24 +624,32 @@ DOABT           LD      HL, 112
                 LD      BC, 84
                 CALL    WINBTN
 
+                ; POP-UP COMPOSED WINDOW INSTANTLY (~3.2 MS)
+                CALL    WINSHOW
+
                 ; MODAL KEY LOOP
 .KEYLP          CALL    WINPOLL
                 JR      Z, .KEYLP
-                CP      13
+                CP      13              ; ENTER
                 JR      Z, .DONE
-                CP      ' '
+                CP      ' '             ; SPACE
                 JR      Z, .DONE
-                CP      27
+                CP      27              ; ESC
                 JR      Z, .DONE
                 JR      .KEYLP
 
 .DONE           JP      WINCLOS
 
 .TITABT         DEFM    "About S6ED", 0
-.STRNM          DEFM    "S6ED - MSX2 Screen 6 Text Editor", 0
-.STRVER         DEFM    "Version 0.1 (Experimental)", 0
-.STRDSP         DEFM    "Display: 80x24 Columns (512x212, 4 Colors)", 0
-.STRFNT         DEFM    "Fonts:   4 Typographic Weights", 0
-.STRMEM         DEFM    "Memory:  DOS 2 / Nextor Mapper Manager", 0
+.S6ED           DEFM    "S6ED", 0
+.STRSUB         DEFM    " - MSX2 Screen 6 Text Editor", 0
+.STRVER         DEFM    "Version 0.1 ", 0
+.STREXP         DEFM    "(Experimental)", 0
+.LBDSP          DEFM    "Display: ", 0
+.VALDSP         DEFM    "80x24 Columns (512x212, 4 Colors)", 0
+.LBFNT          DEFM    "Fonts:   ", 0
+.VALFNT         DEFM    "4 Typographic Weights (B, I, BI)", 0
+.LBMEM          DEFM    "Memory:  ", 0
+.VALMEM         DEFM    "DOS 2 / Nextor Mapper Manager", 0
 .STRINS         DEFM    "Press ENTER, SPACE or ESC to close", 0
 .BTNOK          DEFM    "[  OK  ]", 0
