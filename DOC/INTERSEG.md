@@ -260,44 +260,65 @@ Implemented and verified on 2026-09-17 on branch `feature/window-engine`.
 - Scanlines 0..211: Visible screen area (27,136 bytes, Bank 0).
 - Scanlines 212..255: Free / reserved for R#23 scroll offset.
 - Scanlines 256..511: 4 font tables (Normal, Bold, Italic, Bold+Italic; 32 KB, Bank 0).
-- Scanlines 512..1023: **64 KB off-screen VRAM in Bank 1** (`VR_WINBF EQU #10000`, `WINBUF_Y EQU 512`).
+- Scanlines 512..1023: **64 KB off-screen VRAM in Bank 1**:
+  - Scanlines 512..723: Visible screen background save buffer (`WINBUF_Y EQU 512`).
+  - Scanlines 768..979: Off-screen window composition buffer (`WINCOMP_Y EQU 768`).
 
-### 11.2 Instant Hardware Save & Restore via `HMMM`
+### 11.2 Instant Hardware Save, Off-Screen Composition & Fast Blit via `HMMM`
 
 - `HMMM` (opcode `#D0`) performs unformatted byte-transfer VRAM-to-VRAM copy.
 - In Screen 6, 1 byte = 4 pixels. Coordinates `WINX` and `WINW` are byte-aligned (`WINX & ~3`, `(WINW + 3) & ~3`).
 - **Save (`WINSAV`):** `HMMM` from $(X, Y)$ to $(X, 512 + Y)$ with $(W, H)$.
-- **Restore (`WINRST`):** `HMMM` from $(X, 512 + Y)$ to $(X, Y)$ with $(W, H)$, followed by `VDPWAIT`.
-- **Performance:** Hardware blit copies a $288 \times 104$ window in ~3.2 ms.
+- **Compose:** Frame, backgrounds, separator lines, multi-weight text, and buttons are composed entirely off-screen at $(X, 768)$ in Bank 1. Eliminates progressive cell-by-cell drawing artifacts.
+- **Instant Pop-Up (`WINSHOW`):** Single `HMMM` from $(X, 768)$ to visible $(X, Y)$ with $(W, H)$ followed by `VDPWAIT` (~3.2 ms).
+- **Restore (`WINRST`):** `HMMM` from $(X, 512 + Y)$ to $(X, Y)$ with $(W, H)$, followed by `VDPWAIT` (~3.2 ms).
 - **Zero RAM footprint:** Preserves text, selection, and cursor underneath without CPU copy loops or RAM allocation.
 
-### 11.3 Window Engine (`WINDOW.Z8A` in `FTRSEG`)
+### 11.3 Multi-Weight Typography & Color 3 Highlights
+
+- **4 Font Weights:** `WINCHTR` selects source VRAM scanline via `.SYTBL` (`FNORM_SY=256`, `FBOLD_SY=320`, `FITAL_SY=384`, `FBI_SY=448`) from variant index (0..3).
+- **Color 3 (Amber/Gold Highlight) via `TOR` LOGOP:**
+  - Screen 6 2bpp pixel encoding: Color 0=`%00`, Color 1=`%01`, Color 2=`%10`, Color 3=`%11`.
+  - Font glyphs have `%01` pixels. When blitted over Color 2 (`COL_UI`, `%10`) with `TOR` (Transparent OR):
+    $\%01 \mid \%10 = \mathbf{\%11}$ (Color 3).
+  - Title and Button text blitted via `WINSTR3` render in Color 3 highlight with zero runtime palette alteration.
+  - Top window highlight, title separator bar, and button outer border drawn in Color 3 (`COL_HI`).
+
+### 11.4 Window Engine (`WINDOW.Z8A` in `FTRSEG`)
 
 - `WINDOW.Z8A` packaged into `S6ED.DAT` Block 0 (`FTRSEG`), phased at `#8000` right after `CFG.Z8A`.
-- Added routines:
-  - `WINSAV`: Sets up `VDPCMBLK` and issues `HMMM` to Bank 1.
-  - `WINRST`: Sets up `VDPCMBLK` and issues `HMMM` back to visible VRAM.
-  - `WINBOX`: Draws outer frame in Color 2 (`COL_UI`), inner fill in Color 0 (`COL_BG`), and title bar in Color 2 (`COL_UI`).
-  - `WINPRN`: Prints text string at relative character $(col, row)$ using `BLTSTR`.
-  - `WINBTN`: Renders centered `[  OK  ]` button in Color 2 (`COL_UI`) with text in Color 1.
-  - `WINOPEN`: Erases text cursor if visible, enforces byte alignment, saves background, and draws window frame.
+- Routines:
+  - `WINSAV`: Sets up `VDPCMBLK` and issues `HMMM` to Bank 1 save buffer ($Y=512$).
+  - `WINSHOW`: Blits completed window from Bank 1 composition buffer ($Y=768$) to visible screen ($Y=WINY$).
+  - `WINRST`: Sets up `VDPCMBLK` and issues `HMMM` back to visible VRAM from save buffer.
+  - `WINBOX`: Draws outer frame in Color 2, top accent highlight in Color 3, title bar in Color 2, bottom accent separator in Color 3, and title text in Bold + Color 3 (`TOR`).
+  - `WINCHTR`: Blits single glyph with variant lookup and configurable LOGOP (`TIMP` vs `TOR`).
+  - `WINSTR` / `WINSTR3`: Blits string with variant index in `TIMP` or `TOR`, advancing `DE` past the last character for chained inline styles.
+  - `WINPRN` / `WINPRN3`: Relative character coordinate printing into off-screen composition buffer.
+  - `WINBTN`: Renders button with Color 3 border ($58 \times 14$), Color 2 body ($56 \times 12$), and centered text in Bold + Color 3 (`TOR`).
+  - `WINOPEN`: Enforces byte alignment, saves visible background, and initializes window box in composition buffer.
   - `WINCLOS`: Restores background via `WINRST`.
-  - `DOABT`: Displays "About S6ED" modal dialog, runs modal event loop calling `WINPOLL`, and closes on `ENTER`, `SPACE`, or `ESC`.
+  - `DOABT`: Composes About dialog off-screen using mixed typographic styles:
+    - `"S6ED"` in Bold+Italic + `" - MSX2 Screen 6 Text Editor"` in Normal.
+    - `"Version 0.1 "` in Bold + `"(Experimental)"` in Italic.
+    - `"Display: "`, `"Fonts:   "`, `"Memory:  "` in Bold with values in Normal.
+    - Centered `[  OK  ]` button in Color 3 / Color 2.
+    - Calls `WINSHOW` for instant ~3.2 ms popup, handles modal loop (`ENTER`, `SPACE`, `ESC`), and calls `WINCLOS`.
 
-### 11.4 Action Wiring (`ACTION.Z8A`)
+### 11.5 Action Wiring (`ACTION.Z8A`)
 
 - `ACTHELP` (action 24, bound to `F1`) wired to `LD A, (FTRSEG); LD HL, DOABT; JP FCALL`.
 - Added `WINPOLL` subroutine to `UI.Z8A` in Core (Page 1) to poll `CHKCLK`, `CHSNS`, and `CHGET` for modal dialogs.
 - Total added to `S6ED.COM`: 32 bytes (`HMMM` + `WINPOLL` + `ACTHELP` dispatch). Everything else resides in `S6ED.DAT` (`FTRSEG`).
 
-### 11.5 Empirical Read-Back Verification
+### 11.6 Empirical Read-Back Verification
 
 - Added `H7AboutDialog` to `TEST/gate.py`:
   - Opens About dialog with `F1`.
-  - Asserts VRAM was modified while dialog is open.
-  - Dismisses with `RETURN` and asserts 27,136 bytes of VRAM are byte-for-byte restored.
-  - Opens with `F1`, dismisses with `SPACE`, asserts byte-for-byte restore.
-  - Opens with `F1`, dismisses with `ESC`, asserts byte-for-byte restore.
-- Complete suite verified: **238 checks, 0 failed (133.8s)** across 45 sessions and 39 mutations.
+  - Asserts VRAM was modified while dialog is open (`H7/dialog-displayed`).
+  - Asserts Color 3 (amber) highlights are present in VRAM during display (`H7/color-highlight`, $> 1,000$ px).
+  - Dismisses with `RETURN` and asserts VRAM is byte-for-byte restored (`H7/restore-return`).
+  - Opens with `F1`, dismisses with `SPACE`, asserts byte-for-byte restore (`H7/restore-space`).
+  - Opens with `F1`, dismisses with `ESC`, asserts byte-for-byte restore (`H7/restore-escape`).
 
 

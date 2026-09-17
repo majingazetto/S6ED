@@ -1054,6 +1054,11 @@ class H7AboutDialog(Case):
                             v_d1 != v_boot,
                             'VRAM modified while dialog is open'))
 
+        hi_pixels = sum(1 for b in v_d1 for s in (0, 2, 4, 6) if ((b >> s) & 3) == 3)
+        checks.append(Check('H7/color-highlight',
+                            hi_pixels > 500,
+                            'Color 3 (amber) highlights present (%d px)' % hi_pixels))
+
         cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]
         d_ret = vram.diff(v_boot, v_ret, ignore_cells=cursor)
         checks.append(Check('H7/restore-return', not d_ret,
