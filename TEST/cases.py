@@ -33,6 +33,8 @@ class Case(object):
     fixture_name = 'DOC.TXT'
     with_font = True
     autoexec = None                 # defaults to "S6ED <fixture>"
+    absolute = False                # True: never reaches MAINLOOP (e.g. /H),
+                                    # schedule on absolute emulated time
 
     # A case that has to compare two code paths runs one session per variant
     # against the same build -- the only honest way to say "these are
