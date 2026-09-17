@@ -869,6 +869,53 @@ class H4FileSwitch(Case):
         ]
 
 
+class H5Verbose(Case):
+    name = 'H5-verbose'
+    desc = '/V switch shows startup banner and memory statistics in text mode'
+    origin = 'verbose boot switch /V requested for startup diagnostic'
+    autoexec = 'S6ED /V DOC.TXT'
+    absolute = True
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline(start=2.0)
+        t.snap('textmode', vram='text', at='SEGRESV.KEYWAIT')
+        t.snap('boot', at='MAINLOOP')
+        t.t = 30.0
+        t.press('RETURN')
+        t.t = 45.0
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        text = run.blob('textmode', 'text')
+        want_title = b'S6ED v'
+        want_author = b'Armando Perez Abad'
+        want_mapper = b'Total mapper:'
+        want_file = b'DOC.TXT'
+        has_title = text is not None and want_title in text
+        has_author = text is not None and want_author in text
+        has_mapper = text is not None and want_mapper in text
+        has_file = text is not None and want_file in text
+        return [
+            Check('H5/text-printed',
+                  has_title and has_author and has_mapper and has_file,
+                  'text mode printed title, author, mapper info, and file' if (has_title and has_author and has_mapper and has_file) else
+                  'missing text mode output: title=%s author=%s mapper=%s file=%s' % (has_title, has_author, has_mapper, has_file)),
+            Check('H5/verbose-set', run.var('boot', 'SWTVERB') == 255,
+                  'SWTVERB is #FF (%s)' % run.var('boot', 'SWTVERB')),
+            Check('H5/screen6',
+                  run.var('boot', 'SCRRDY') == 255 and
+                  run.var('boot', 'SCRMOD') == 6,
+                  'entered SCREEN 6 normally after keypress'),
+            Check('H5/file-loaded', run.var('boot', 'TOTLINES') == 5,
+                  'loaded 5 fixture lines (TOTLINES = %s)'
+                  % run.var('boot', 'TOTLINES')),
+        ]
+
+
 # --- B2  EXTERNAL FONT ASSET IN VRAM ----------------------------------
 
 
@@ -1442,7 +1489,7 @@ class D8Accents(Case):
     # fixed build is byte for byte correct at every one of those gaps.
     GRAPH_ROW = 'AEIOUNW1/'
     GRAPH_PASSES = 4
-    GRAPH_GAP = 0.05
+    GRAPH_GAP = 0.04
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
@@ -2131,7 +2178,7 @@ class I4ConvertUnixToDos(Case):
 
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
-         G12ScreenRestore(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(),
+         G12ScreenRestore(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),

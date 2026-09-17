@@ -451,6 +451,17 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['H4/file-loaded'],
     },
     {
+        'name': 'h5-verbose',
+        'why': 'the /V switch is missing from SWTTBL: S6ED /V boots quiet without verbose mode',
+        'file': 'PARAMS.Z8A',
+        'old': """                DEFB    'V'
+                DEFW    DOVRB""",
+        'new': """                DEFB    'Z'             ; MUTATION: /V NOT IN TABLE
+                DEFW    DOVRB""",
+        'filter': 'H5',
+        'expect': ['H5/text-printed', 'H5/verbose-set'],
+    },
+    {
         'name': 'i1-unix-save',
         'why': 'FILESAVE always writes CRLF ignoring SAVEEOL = 1',
         'file': 'FILEIO.Z8A',

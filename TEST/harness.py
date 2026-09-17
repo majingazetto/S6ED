@@ -42,6 +42,7 @@ DEFAULT_VARS = [
     ('SCRMOD', 1), ('LINLEN', 1), ('LINL40', 1),
     ('FORCLR', 1), ('BAKCLR', 1), ('BDRCLR', 1),
     ('KANAST', 1), ('KANAMOD', 1),
+    ('SWTVERB', 1), ('SEGTOT', 1), ('SEGAVL', 1), ('SEGLNS', 2),
 ]
 
 # Byte ranges worth having whole.  The selection records are here because a

@@ -62,9 +62,10 @@ TXTHLP       DEFM    "S6ED v"
              DEFM    " - Screen 6 text editor for MSX2", 13, 10
              DEFM    "Requires MSX-DOS 2 or Nextor and 2 free mapper "
              DEFM    "segments.", 13, 10, 13, 10
-             DEFM    "Usage: S6ED [file] [/H | /?]", 13, 10, 13, 10
+             DEFM    "Usage: S6ED [file] [/V] [/H | /?]", 13, 10, 13, 10
              DEFM    "  file    file to open (paths allowed: A:/DIR/FILE.TXT)"
              DEFM    13, 10
+             DEFM    "  /V      verbose startup info and memory stats", 13, 10
              DEFM    "  /H, /?  show this help and exit", 13, 10, "$"
 
 
