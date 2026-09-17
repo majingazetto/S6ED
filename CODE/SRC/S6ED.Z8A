@@ -89,7 +89,7 @@ TXTHLP       DEFM    "S6ED v"
                 INCLUDE UI.Z8A
                 INCLUDE FILEIO.Z8A
                 INCLUDE PARAMS.Z8A
-                INCLUDE CFG.Z8A
+                INCLUDE XSEG.Z8A
 
 
 ; --- INIT                      ----------------------------------------
@@ -205,8 +205,8 @@ INIT            DBG     "1: INIT START"
                 CALL    BUFINIT
 
                 ; LOAD CONFIGURATION FROM S6ED.CFG (IF PRESENT)
-                DBG     "7b: CFGLOAD"
-                CALL    CFGLOAD
+                DBG     "7b: CFGRUN"
+                CALL    CFGRUN
 
                 ; LOAD THE FILE NAMED ON THE COMMAND LINE, IF ANY. PARAMS
                 ; ALREADY RAN BACK IN TEXT MODE; FILENAME IS EMPTY WHEN NO
@@ -403,9 +403,30 @@ DEFPLT          DEFB    #00, #00, #00, #00, #11, #06, #33, #07  ; 0:TRANSP, 1:BL
                 DEFB    #11, #04, #65, #02, #55, #05, #77, #07  ; 12:DKGRN, 13:MAG, 14:GRAY, 15:WHITE
 
 
+; --- FEATURES                  ----------------------------------------
+ 
+                ; GLOBAL RESIDENT FEATURE CONTAINER (FASE 1B)
+                ; ALL FEATURE PASSENGERS ASSEMBLE SEQUENTIALLY INSIDE A
+                ; SINGLE PHASE #8000 / DEPHASE BLOCK TO PREVENT ADDRESS
+                ; COLLISIONS IN PAGE 2 (#8000-#BFFF). F1COPY COPIES THE
+                ; ENTIRE BLOB INTO FTRSEG AT BOOT.
+FTRBLOB:
+                PHASE   #8000
+FTRSTRT:
+                INCLUDE CFG.Z8A
+                ; FUTURE PASSENGERS APPENDED HERE SEQUENTIALLY:
+                ; INCLUDE TOKEN.Z8A
+                ; INCLUDE MENU.Z8A
+                ; INCLUDE VI.Z8A
+FTREND:
+                DEPHASE
+FTRBLEN         EQU     FTREND - FTRSTRT
+                ASSERT  FTRBLEN <= 16384        ; TOTAL FEATURE SEGMENT BUDGET
+ 
+ 
 ; --- VARS                      ----------------------------------------
-
-
+ 
+ 
                 OUTEND
 
                 INCLUDE VARS.Z8A

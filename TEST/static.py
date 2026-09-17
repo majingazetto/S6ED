@@ -257,6 +257,38 @@ def check_assets(ctx):
                  (size, 'identical' if same else 'DIFFERENT'))
 
 
+def check_feature_discipline(ctx):
+    """Feature passengers in FTRBLOB must obey mapper rules and size limits.
+
+    Features in Page 2 must not call raw mapper manipulation routines
+    (PUTP2, RECBANK, DIRBANK, GETP2, SEGGET, FRESEG).
+    The feature blob must fit inside a single 16 KB mapper segment.
+    """
+    forbidden = {'PUTP2', 'RECBANK', 'DIRBANK', 'GETP2', 'SEGGET', 'FRESEG'}
+    feature_files = ['CFG.Z8A']
+    bad = []
+    for fname in feature_files:
+        path = os.path.join(ctx.src_dir, fname)
+        if not os.path.exists(path):
+            continue
+        for n, line in enumerate(open(path, errors='replace'), 1):
+            code = line.split(';')[0]
+            for word in forbidden:
+                if re.search(r'\b%s\b' % word, code):
+                    bad.append('%s:%d calls forbidden mapper routine %s' % (fname, n, word))
+
+    cfgload = ctx.sym.addr.get('CFGLOAD')
+    if cfgload != 0x8000:
+        bad.append('CFGLOAD at #%04X, expected #8000' % (cfgload or 0))
+    ftrlen = ctx.sym.addr.get('FTRBLEN')
+    if ftrlen is None or ftrlen > 16384:
+        bad.append('FTRBLEN %s, expected <= 16384' % ftrlen)
+
+    return Check('feature-discipline', not bad, '; '.join(bad) if bad else
+                 'FTRBLEN %d <= 16384, CFGLOAD phased at #8000, mapper discipline clean'
+                 % (ftrlen or 0))
+
+
 def check_build_clean(ctx):
     """The build itself: 0 errors, 0 warnings, every ASSERT satisfied."""
     # -B: force the assembly even when nothing changed, so every ASSERT in
@@ -273,7 +305,7 @@ ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_layout_asserts, check_record_exclusive, check_data_placement,
        check_label_style,
        check_number_notation, check_defb_width, check_page1_hooks,
-       check_assets]
+       check_assets, check_feature_discipline]
 
 
 def run(ctx):

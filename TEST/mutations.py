@@ -485,6 +485,28 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'I1',
         'expect': ['I1/saveeol', 'I1/content'],
     },
+    {
+        'name': 'f1-homeseg',
+        'why': 'FCALL leaves HOMESEG non-zero when returning to core',
+        'file': 'XSEG.Z8A',
+        'old': """                LD      HL, HOMESEG
+                LD      (HL), B""",
+        'new': """                LD      HL, HOMESEG
+                LD      (HL), 1         ; MUTATION: LEAVE HOMESEG DIRTY""",
+        'filter': 'G13',
+        'expect': ['G13/homeseg-idle'],
+    },
+    {
+        'name': 'f1-copy',
+        'why': 'F1COPY truncates blob copy so feature code is not fully present',
+        'file': 'XSEG.Z8A',
+        'old': """                LD      BC, FTRBLEN
+                LDIR""",
+        'new': """                LD      BC, 10          ; MUTATION: TRUNCATE FEATURE BLOB COPY
+                LDIR""",
+        'filter': 'G13',
+        'expect': ['G13/cfg-applied'],
+    },
 ]
 
 

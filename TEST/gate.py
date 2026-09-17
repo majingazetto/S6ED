@@ -776,6 +776,71 @@ class G12ScreenRestore(Case):
         return checks
 
 
+# --- G13 FEATURE SEGMENT RESIDENCY & INTER-SEGMENT INTEGRITY ------------
+
+
+class G13FeatureResidency(Case):
+    name = 'G13-feature-residency'
+    desc = 'FTRSEG stays resident in SEGTBL[1], HOMESEG clean at idle, CFG applied'
+    origin = ('Fase 1b inter-segment architecture: feature code lives in FTRSEG, '
+              'is copied at boot, and retains residency across execution')
+    cfg = ("; spaced form, trailing comments, CRLF\r\n"
+           "PROFILE = WS\r\n"
+           "WRAP = TXT\r\n"
+           "TABWIDTH = 4\r\n")
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        checks = []
+
+        # 1. SEGCNT must be 2 on stock 128 kB machine (DIRSEG + FTRSEG)
+        segcnt = run.var('boot', 'SEGCNT')
+        checks.append(Check('G13/segcnt', segcnt == 2,
+                            'SEGCNT = %s (expected 2: DIRSEG + FTRSEG)' % segcnt))
+
+        # 2. SEGTBL[0] is DIRSEG, SEGTBL[1] is FTRSEG, both non-zero and distinct
+        dirseg = run.var('boot', 'DIRSEG')
+        ftrseg = run.var('boot', 'FTRSEG')
+        raw_tbl = [int(x) for x in run.var('boot', 'SEGTBL').split()]
+        tbl_match = len(raw_tbl) >= 2 and raw_tbl[0] == dirseg and raw_tbl[1] == ftrseg
+        checks.append(Check('G13/segtbl-entries',
+                            tbl_match and dirseg != 0 and ftrseg != 0 and dirseg != ftrseg,
+                            'SEGTBL[0..1] = [%s, %s] (DIRSEG=%s, FTRSEG=%s)'
+                            % (raw_tbl[0] if raw_tbl else None,
+                               raw_tbl[1] if len(raw_tbl) > 1 else None,
+                               dirseg, ftrseg)))
+
+        # 3. HOMESEG must be 0 at MAINLOOP (core is running, no feature active)
+        homeseg = run.var('boot', 'HOMESEG')
+        checks.append(Check('G13/homeseg-idle', homeseg == 0,
+                            'HOMESEG = %s (expected 0 when idle in core)' % homeseg))
+
+        # 4. SEGSP must be 0 at MAINLOOP (stack clean, no unbalanced FCALLs)
+        segsp = run.var('boot', 'SEGSP')
+        checks.append(Check('G13/segsp-clean', segsp == 0,
+                            'SEGSP = %s (expected 0: inter-segment stack clean)' % segsp))
+
+        # 5. Config loaded via FCALL was applied
+        checks.append(Check('G13/cfg-applied',
+                            run.var('boot', 'KMAPID') == 1 and
+                            run.var('boot', 'WRAPMODE') == 1 and
+                            run.var('boot', 'TABWIDTH') == 4,
+                            'KMAPID=%s WRAPMODE=%s TABWIDTH=%s from CFG'
+                            % (run.var('boot', 'KMAPID'),
+                               run.var('boot', 'WRAPMODE'),
+                               run.var('boot', 'TABWIDTH'))))
+
+        return checks
+
+
 # --- H1-H4  COMMAND-LINE PARAMETERS & SWITCHES ------------------------
 
 
@@ -2178,7 +2243,7 @@ class I4ConvertUnixToDos(Case):
 
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
-         G12ScreenRestore(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(),
+         G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),
