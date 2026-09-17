@@ -44,6 +44,7 @@ DEFAULT_VARS = [
     ('KANAST', 1), ('KANAMOD', 1),
     ('SWTVERB', 1), ('SEGTOT', 1), ('SEGAVL', 1), ('SEGLNS', 2),
     ('FTRSEG', 1), ('HOMESEG', 1), ('SEGSP', 1),
+    ('WINACTV', 1), ('WINX', 2), ('WINY', 2), ('WINW', 2), ('WINH', 2),
 ]
 
 # Byte ranges worth having whole.  The selection records are here because a

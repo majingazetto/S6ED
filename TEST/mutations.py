@@ -586,6 +586,89 @@ SELTMPXB        EQU     SELTMPXB2""")],
         # CFG never applied.
         'expect_any': ['H17/cfg-applied', 'H17-dat-padded-seek'],
     },
+    {
+        'name': 'c2-wincarry',
+        'why': 'WINOPEN applies AND %11111100 before JR NC, clearing carry and corrupting widths >= 253',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      HL, (WINW)
+                LD      A, L
+                ADD     A, 3
+                LD      L, A
+                JR      NC, .NOWINC
+                INC     H
+.NOWINC         LD      A, L
+                AND     %11111100
+                LD      L, A
+                LD      (WINW), HL""",
+        'new': """                LD      HL, (WINW)
+                LD      A, L
+                ADD     A, 3
+                AND     %11111100
+                LD      L, A
+                JR      NC, .NOWINC
+                INC     H
+.NOWINC         LD      (WINW), HL""",
+        'filter': 'H7',
+        'expect_static': ['window-discipline'],
+    },
+    {
+        'name': 'c2-winactv',
+        'why': 'WINOPEN fails to set WINACTV=1 so modal window state is lost and clock is not inhibited',
+        'file': 'WINDOW.Z8A',
+        'old': """                ; MARK MODAL WINDOW ACTIVE TO INHIBIT CLOCK BLINK
+                LD      A, 1
+                LD      (WINACTV), A""",
+        'new': """                ; MARK MODAL WINDOW ACTIVE TO INHIBIT CLOCK BLINK
+                XOR     A
+                LD      (WINACTV), A""",
+        'filter': 'H7',
+        'expect': ['H7/winactv-active'],
+    },
+    {
+        'name': 'c2-winkil',
+        'why': 'WINOPEN does not flush keyboard buffer so pre-queued keys dismiss modals prematurely',
+        'file': 'WINDOW.Z8A',
+        'old': """                ; FLUSH KEYBOARD BUFFER
+                CALL    WINKIL""",
+        'new': """                ; FLUSH KEYBOARD BUFFER
+                NOP
+                NOP
+                NOP""",
+        'filter': 'H18',
+        'expect_any': ['H18/key-purged', 'window-discipline'],
+    },
+    {
+        'name': 'c2-winclamp',
+        'why': 'WINOPEN does not clamp geometry to 512x212 screen and VRAM buffer bounds',
+        'file': 'WINDOW.Z8A',
+        'old': """                ; CLAMP WINX <= 508
+                LD      HL, (WINX)
+                LD      DE, 508""",
+        'new': """                ; CLAMP WINX <= 508
+                LD      HL, (WINX)
+                LD      DE, 999""",
+        'filter': 'H7',
+        'expect_static': ['window-discipline'],
+    },
+    {
+        'name': 'c2-winchtr-char',
+        'why': 'WINSTR.LOOP clobbers A before calling WINCHTR so all characters become control patterns',
+        'file': 'WINDOW.Z8A',
+        'old': """                PUSH    AF
+                LD      A, (WINVAR)
+                LD      B, A
+                LD      A, (WINOP)
+                LD      C, A
+                POP     AF
+                CALL    WINCHTR""",
+        'new': """                LD      A, (WINVAR)
+                LD      B, A
+                LD      A, (WINOP)
+                LD      C, A
+                CALL    WINCHTR""",
+        'filter': 'H7',
+        'expect': ['H7/title-text'],
+    },
 ]
 
 

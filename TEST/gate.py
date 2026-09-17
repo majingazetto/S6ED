@@ -1077,6 +1077,56 @@ class H7AboutDialog(Case):
                             'restored byte-for-byte on ESCAPE'
                             if not d_esc else
                             '%d stray pixels after ESCAPE' % len(d_esc)))
+
+        checks.append(Check('H7/winactv-active',
+                            run.var('dialog1', 'WINACTV') == 1,
+                            'WINACTV=1 while modal dialog is open'))
+
+        checks.append(Check('H7/winactv-idle',
+                            run.var('after_ret', 'WINACTV') == 0,
+                            'WINACTV=0 after modal dialog is closed'))
+
+        font = font_of(ctx)
+
+        # Title: "About S6ED" at (118, 54) in bold (variant 1) on UI background
+        bad_title = []
+        for pos, ch in enumerate("About S6ED"):
+            x0 = 118 + pos * vram.CELLW
+            got = vram.ink_mask(v_d1, x0, 54, ground=vram.COL_UI, first_line=vram.TEXT_FIRST_LINE)
+            want = vram.glyph_mask(font, ch, variant=1)
+            if got != want:
+                bad_title.append("char %d (%r)" % (pos, ch))
+        checks.append(Check('H7/title-text', not bad_title,
+                            'title "About S6ED" rendered in bold'
+                            if not bad_title else
+                            'title mismatches at: %s' % ', '.join(bad_title)))
+
+        # Body: "S6ED" at (160, 68) in bold+italic (variant 3) on BG background
+        bad_body = []
+        for pos, ch in enumerate("S6ED"):
+            x0 = 160 + pos * vram.CELLW
+            got = vram.ink_mask(v_d1, x0, 68, ground=vram.COL_BG, first_line=vram.TEXT_FIRST_LINE)
+            want = vram.glyph_mask(font, ch, variant=3)
+            if got != want:
+                bad_body.append("char %d (%r)" % (pos, ch))
+        checks.append(Check('H7/body-text', not bad_body,
+                            'body "S6ED" rendered in bold+italic'
+                            if not bad_body else
+                            'body mismatches at: %s' % ', '.join(bad_body)))
+
+        # Button: "[  OK  ]" at (232, 138) in bold (variant 1) on UI background
+        bad_btn = []
+        for pos, ch in enumerate("[  OK  ]"):
+            x0 = 232 + pos * vram.CELLW
+            got = vram.ink_mask(v_d1, x0, 138, ground=vram.COL_UI, first_line=vram.TEXT_FIRST_LINE)
+            want = vram.glyph_mask(font, ch, variant=1)
+            if got != want:
+                bad_btn.append("char %d (%r)" % (pos, ch))
+        checks.append(Check('H7/button-text', not bad_btn,
+                            'button "[  OK  ]" rendered in bold'
+                            if not bad_btn else
+                            'button mismatches at: %s' % ', '.join(bad_btn)))
+
         return checks
 
 
@@ -1269,6 +1319,56 @@ class H17DatPadded(Case):
                      run.var('boot', 'WRAPMODE'),
                      run.var('boot', 'TABWIDTH'))),
         ]
+
+
+# --- H18  WINDOW ENGINE ROBUSTNESS (FASE C2) -----------------------------
+
+
+class H18WindowRobustness(Case):
+    name = 'H18-window-robustness'
+    desc = 'Window engine robustness: pre-queued key flush, clock inhibition and WINACTV lifecycle'
+    origin = ('Fase C2: KILBUF flushes stray keys on open, WINACTV inhibits clock blits '
+              'during modals and restores cleanly on close')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(10))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('before_modal', vram=True)
+        # Inject stray space into BIOS buffer right as F1 opens modal
+        t.at('type " "')
+        t.press('F1')
+        t.snap('modal_open', vram=True, at='WINPOLL')
+        # Close with RETURN
+        t.press('RETURN')
+        t.snap('after_close', vram=True)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        v_before = run.blob('before_modal', 'vram')
+        v_modal = run.blob('modal_open', 'vram')
+        v_close = run.blob('after_close', 'vram')
+
+        checks = []
+        # If KILBUF failed, the pre-queued SPACE would have dismissed the dialog immediately
+        checks.append(Check('H18/key-purged',
+                            v_modal != v_before and run.var('modal_open', 'WINACTV') == 1,
+                            'pre-queued key purged, modal window remained active'))
+
+        checks.append(Check('H18/winactv-idle',
+                            run.var('after_close', 'WINACTV') == 0,
+                            'WINACTV reset to 0 after window close'))
+
+        # Background restored byte-for-byte
+        cursor = [(run.var('before_modal', 'CURX') or 0, run.var('before_modal', 'CURY') or 0)]
+        d_close = vram.diff(v_before, v_close, ignore_cells=cursor)
+        checks.append(Check('H18/restore-clean', not d_close,
+                            'VRAM restored cleanly after modal close'
+                            if not d_close else
+                            '%d stray pixels after close' % len(d_close)))
+        return checks
 
 
 # --- B2  EXTERNAL FONT ASSET IN VRAM ----------------------------------
@@ -1844,7 +1944,7 @@ class D8Accents(Case):
     # fixed build is byte for byte correct at every one of those gaps.
     GRAPH_ROW = 'AEIOUNW1/'
     GRAPH_PASSES = 4
-    GRAPH_GAP = 0.053
+    GRAPH_GAP = 0.050
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
@@ -2536,7 +2636,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
          H8DatBadMagic(), H9DatBadVersion(), H10DatNoBlocks(),
          H11DatTruncHdr(), H12DatTruncTbl(), H13DatLenZero(), H14DatLenOver(),
-         H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(),
+         H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(), H18WindowRobustness(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),

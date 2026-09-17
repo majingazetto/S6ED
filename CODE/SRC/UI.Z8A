@@ -361,6 +361,10 @@ CHKCLK          LD      A, (SHOWCLK)
                 OR      A
                 RET     Z
 
+                LD      A, (WINACTV)
+                OR      A
+                RET     NZ
+
                 ; JIFFY IS A 16-BIT FRAME COUNTER. SUBTRACTING THE STAMP AS
                 ; A WORD KEEPS THE ELAPSED COUNT EXACT ACROSS ITS WRAP AND
                 ; ACROSS STALLS LONGER THAN 256 FRAMES -- AN 8-BIT DIFFERENCE
@@ -700,4 +704,16 @@ WINPOLL         CALL    CHKCLK
                 RET     Z
                 LD      IX, CHGET
                 JP      BIOSCALL
+
+
+; - WINKIL -----------------------------
+; - FLUSH KEYBOARD BUFFER VIA BIOS KILBUF
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINKIL          LD      IX, KILBUF
+                JP      BIOSCALL
+
 
