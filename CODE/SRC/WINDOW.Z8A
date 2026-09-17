@@ -1,0 +1,405 @@
+;                                       ****************************************
+;                                       * WINDOW ENGINE                        *
+;                                       ****************************************
+;
+; WINDOW AND DIALOG SUBSYSTEM FOR SCREEN 6 (512X212, 4 COLORS).
+; RUNS IN RESIDENT FEATURE SEGMENT (PAGE 2, PHASED AT #8000).
+; PROVIDES INSTANT VRAM BACKGROUND SAVE / RESTORE VIA HARDWARE HMMM
+; USING OFF-SCREEN VRAM BANK 1 (Y = 512..1023).
+
+
+; --- VRAM BUFFER               ----------------------------------------
+
+
+; - WINSAV -----------------------------
+; - SAVE WINDOW BACKGROUND TO VRAM BANK 1
+; - IN:  NONE (USES WINX, WINY, WINW, WINH)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINSAV          LD      HL, (WINX)
+                LD      (VDP_SX), HL
+                LD      (VDP_DX), HL
+                LD      HL, (WINY)
+                LD      (VDP_SY), HL
+                LD      DE, WINBUF_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                LD      (VDP_NX), HL
+                LD      HL, (WINH)
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                JP      HMMM
+
+
+; - WINRST -----------------------------
+; - RESTORE BACKGROUND FROM VRAM BANK 1
+; - IN:  NONE (USES WINX, WINY, WINW, WINH)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINRST          LD      HL, (WINX)
+                LD      (VDP_SX), HL
+                LD      (VDP_DX), HL
+                LD      HL, (WINY)
+                LD      (VDP_DY), HL
+                LD      DE, WINBUF_Y
+                ADD     HL, DE
+                LD      (VDP_SY), HL
+                LD      HL, (WINW)
+                LD      (VDP_NX), HL
+                LD      HL, (WINH)
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMM
+                JP      VDPWAIT
+
+
+; --- WINDOW DRAWING            ----------------------------------------
+
+
+; - WINBOX -----------------------------
+; - DRAW WINDOW FRAME, FILL, AND TITLE
+; - IN:  HL = ASCIIZ TITLE STRING (0 = NONE)
+; -      USES WINX, WINY, WINW, WINH
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINBOX          PUSH    HL
+
+                ; 1. OUTER BORDER (COL_UI)
+                LD      HL, (WINX)
+                LD      (VDP_DX), HL
+                LD      HL, (WINY)
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                LD      (VDP_NX), HL
+                LD      HL, (WINH)
+                LD      (VDP_NY), HL
+                LD      A, COL_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; 2. INNER FILL (COL_BG)
+                LD      HL, (WINX)
+                INC     HL
+                LD      (VDP_DX), HL
+                LD      HL, (WINY)
+                INC     HL
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                DEC     HL
+                DEC     HL
+                LD      (VDP_NX), HL
+                LD      HL, (WINH)
+                DEC     HL
+                DEC     HL
+                LD      (VDP_NY), HL
+                LD      A, COL_BG
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; 3. TITLE BAR
+                POP     HL
+                LD      A, H
+                OR      L
+                RET     Z
+                LD      A, (HL)
+                OR      A
+                RET     Z
+
+                PUSH    HL
+
+                ; TITLE BAR FILL (COL_UI, HEIGHT 10)
+                LD      HL, (WINX)
+                INC     HL
+                LD      (VDP_DX), HL
+                LD      HL, (WINY)
+                INC     HL
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                DEC     HL
+                DEC     HL
+                LD      (VDP_NX), HL
+                LD      HL, 10
+                LD      (VDP_NY), HL
+                LD      A, COL_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; TITLE TEXT AT DX = WINX + 6, DY = WINY + 2
+                LD      HL, (WINX)
+                LD      DE, 6
+                ADD     HL, DE
+                EX      DE, HL
+                LD      HL, (WINY)
+                INC     HL
+                INC     HL
+                LD      B, H
+                LD      C, L
+                POP     HL
+                JP      BLTSTR
+
+
+; - WINPRN -----------------------------
+; - PRINT TEXT LINE INSIDE WINDOW
+; - IN:  HL = ASCIIZ STRING
+; -      C  = COLUMN (0-BASED CHAR UNITS)
+; -      B  = ROW    (0-BASED ROW UNITS)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINPRN          PUSH    HL
+
+                ; DX = WINX + 6 + C * 6
+                LD      L, C
+                LD      H, 0
+                ADD     HL, HL
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL
+                ADD     HL, DE
+                LD      DE, 6
+                ADD     HL, DE
+                LD      DE, (WINX)
+                ADD     HL, DE
+                PUSH    HL
+
+                ; DY = WINY + 16 + B * 8
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      DE, 16
+                ADD     HL, DE
+                LD      DE, (WINY)
+                ADD     HL, DE
+                LD      B, H
+                LD      C, L
+
+                POP     DE
+                POP     HL
+                JP      BLTSTR
+
+
+; - WINBTN -----------------------------
+; - DRAW BUTTON WITH SOLID UI BACKGROUND
+; - IN:  HL = ASCIIZ BUTTON TEXT
+; -      DE = RELATIVE X (PIXELS)
+; -      BC = RELATIVE Y (PIXELS)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINBTN          PUSH    HL
+                PUSH    DE
+                PUSH    BC
+
+                ; DX = WINX + REL X
+                LD      HL, (WINX)
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+
+                ; DY = WINY + REL Y
+                LD      HL, (WINY)
+                ADD     HL, BC
+                LD      (VDP_DY), HL
+
+                LD      HL, 56
+                LD      (VDP_NX), HL
+                LD      HL, 12
+                LD      (VDP_NY), HL
+                LD      A, COL_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; TEXT DX = WINX + REL X + 4
+                POP     BC
+                POP     DE
+                LD      HL, (WINX)
+                ADD     HL, DE
+                INC     HL
+                INC     HL
+                INC     HL
+                INC     HL
+                EX      DE, HL
+
+                ; TEXT DY = WINY + REL Y + 2
+                LD      HL, (WINY)
+                ADD     HL, BC
+                INC     HL
+                INC     HL
+                LD      B, H
+                LD      C, L
+
+                POP     HL
+                JP      BLTSTR
+
+
+; --- WINDOW MANAGEMENT         ----------------------------------------
+
+
+; - WINOPEN ----------------------------
+; - OPEN WINDOW (ALIGN, SAVE, DRAW BOX)
+; - IN:  HL = ASCIIZ TITLE STRING (0 = NONE)
+; -      USES WINX, WINY, WINW, WINH
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINOPEN         PUSH    HL
+
+                ; ERASE CURSOR IF CURRENTLY VISIBLE
+                LD      A, (BLNKPH)
+                AND     A
+                JR      Z, .NOCUR
+                CALL    DRWCUR
+                XOR     A
+                LD      (BLNKPH), A
+
+.NOCUR          ; ALIGN WINX DOWN TO MULTIPLE OF 4
+                LD      HL, (WINX)
+                LD      A, L
+                AND     %11111100
+                LD      L, A
+                LD      (WINX), HL
+
+                ; ALIGN WINW UP TO MULTIPLE OF 4
+                LD      HL, (WINW)
+                LD      A, L
+                ADD     A, 3
+                AND     %11111100
+                LD      L, A
+                JR      NC, .NOWINC
+                INC     H
+.NOWINC         LD      (WINW), HL
+
+                ; SAVE BACKGROUND TO VRAM BUFFER (Y + 512)
+                CALL    WINSAV
+
+                ; DRAW WINDOW BOX AND TITLE
+                POP     HL
+                JP      WINBOX
+
+
+; - WINCLOS ----------------------------
+; - CLOSE WINDOW (RESTORE BACKGROUND)
+; - IN:  NONE (USES WINX, WINY, WINW, WINH)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINCLOS         JP      WINRST
+
+
+; --- DIALOGS                   ----------------------------------------
+
+
+; - DOABT ------------------------------
+; - DISPLAY ABOUT S6ED MODAL DIALOG
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DOABT           LD      HL, 112
+                LD      (WINX), HL
+                LD      HL, 52
+                LD      (WINY), HL
+                LD      HL, 288
+                LD      (WINW), HL
+                LD      HL, 104
+                LD      (WINH), HL
+
+                LD      HL, .TITABT
+                CALL    WINOPEN
+
+                ; LINE 0: APP NAME (COL 7, ROW 0)
+                LD      HL, .STRNM
+                LD      C, 7
+                LD      B, 0
+                CALL    WINPRN
+
+                ; LINE 1: VERSION (COL 10, ROW 1)
+                LD      HL, .STRVER
+                LD      C, 10
+                LD      B, 1
+                CALL    WINPRN
+
+                ; LINE 3: SCREEN MODE (COL 2, ROW 3)
+                LD      HL, .STRDSP
+                LD      C, 2
+                LD      B, 3
+                CALL    WINPRN
+
+                ; LINE 4: FONTS (COL 2, ROW 4)
+                LD      HL, .STRFNT
+                LD      C, 2
+                LD      B, 4
+                CALL    WINPRN
+
+                ; LINE 5: MEMORY (COL 2, ROW 5)
+                LD      HL, .STRMEM
+                LD      C, 2
+                LD      B, 5
+                CALL    WINPRN
+
+                ; LINE 7: INSTRUCTIONS (COL 6, ROW 7)
+                LD      HL, .STRINS
+                LD      C, 6
+                LD      B, 7
+                CALL    WINPRN
+
+                ; BUTTON [  OK  ] (REL X = 116, REL Y = 84)
+                LD      HL, .BTNOK
+                LD      DE, 116
+                LD      BC, 84
+                CALL    WINBTN
+
+                ; MODAL KEY LOOP
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+                CP      13
+                JR      Z, .DONE
+                CP      ' '
+                JR      Z, .DONE
+                CP      27
+                JR      Z, .DONE
+                JR      .KEYLP
+
+.DONE           JP      WINCLOS
+
+.TITABT         DEFM    "About S6ED", 0
+.STRNM          DEFM    "S6ED - MSX2 Screen 6 Text Editor", 0
+.STRVER         DEFM    "Version 0.1 (Experimental)", 0
+.STRDSP         DEFM    "Display: 80x24 Columns (512x212, 4 Colors)", 0
+.STRFNT         DEFM    "Fonts:   4 Typographic Weights", 0
+.STRMEM         DEFM    "Memory:  DOS 2 / Nextor Mapper Manager", 0
+.STRINS         DEFM    "Press ENTER, SPACE or ESC to close", 0
+.BTNOK          DEFM    "[  OK  ]", 0

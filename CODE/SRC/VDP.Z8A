@@ -87,6 +87,25 @@ VDPCMD          CALL    VDPWAIT
 ; --- WRAPPER PRIMITIVES        ----------------------------------------
 
 
+; - HMMM -------------------------------
+; - COPY VRAM -> VRAM (BYTE-TRANSFER)
+; - IN:  HL = POINTER TO CMD BLOCK
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+HMMM            PUSH    AF
+                PUSH    HL
+                LD      DE, 14
+                ADD     HL, DE
+                LD      A, VDP_HMMM
+                LD      (HL), A
+                POP     HL
+                CALL    VDPCMD
+                POP     AF
+                RET
+
+
 ; - HMMV -------------
 ; - FILL VRAM REGION WITH BYTE COLOR
 ; - HL: POINTER TO CMD BLOCK (ONLY R#36-R#46 USED)

@@ -682,3 +682,22 @@ DRWCUR          PUSH    AF
                 POP     AF
                 RET
 
+
+; --- MODAL DIALOG INPUT        ----------------------------------------
+
+
+; - WINPOLL ----------------------------
+; - POLL KEYBOARD AND CLOCK FOR MODAL DIALOGS
+; - IN:  NONE
+; - OUT: Z  = NO KEY PRESSED
+; -      NZ = KEY PRESSED (A = ASCII CODE)
+; - CLOBBERS: ALL
+; -
+
+WINPOLL         CALL    CHKCLK
+                LD      IX, CHSNS
+                CALL    BIOSCALL
+                RET     Z
+                LD      IX, CHGET
+                JP      BIOSCALL
+
