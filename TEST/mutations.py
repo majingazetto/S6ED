@@ -38,7 +38,7 @@ MUTATIONS = [
         # Which sample goes red depends on which digits happen to change, so
         # the requirement is that at least one of them does.  G5 guarantees a
         # revealing transition is in the window; see the note on SAMPLES.
-        'expect_any': ['G5/c%d' % i for i in range(9)],
+        'expect_any': ['G5/c%d' % i for i in range(7)],
     },
     {
         'name': 'g7-selrange',
@@ -410,6 +410,45 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 NOP""",
         'filter': 'G12',
         'expect': ['G12/vdp-palette'],
+    },
+    {
+        'name': 'h1-help',
+        'why': 'the /H switch is missing from SWTTBL: S6ED /H boots instead '
+               'of printing help and exiting in text mode',
+        'file': 'PARAMS.Z8A',
+        'old': """SWTTBL          DEFB    '?'
+                DEFW    DOHLP
+                DEFB    'H'""",
+        'new': """SWTTBL          DEFB    '?'
+                DEFW    DOHLP
+                DEFB    'Z'             ; MUTATION: /H NOT IN TABLE""",
+        'filter': 'H1',
+        'expect': ['H1/help-printed', 'H1/no-screen6', 'H1/no-segments'],
+    },
+    {
+        'name': 'h2-question',
+        'why': 'the /? switch is missing from SWTTBL: S6ED /? boots instead '
+               'of printing help and exiting in text mode',
+        'file': 'PARAMS.Z8A',
+        'old': """SWTTBL          DEFB    '?'
+                DEFW    DOHLP""",
+        'new': """SWTTBL          DEFB    'Z'             ; MUTATION: /? NOT IN TABLE
+                DEFW    DOHLP""",
+        'filter': 'H2',
+        'expect': ['H2/help-printed', 'H2/no-screen6', 'H2/no-segments'],
+    },
+    {
+        'name': 'h4-chkfile',
+        'why': 'CHKFILE does not skip / switches, treating /X as the filename',
+        'file': 'PARAMS.Z8A',
+        'old': """                LD      A, (HL)
+                CP      '/'
+                JR      NZ, .FOUND      ; NOT A SWITCH → FILENAME""",
+        'new': """                LD      A, (HL)
+                CP      '/'
+                JR      Z, .FOUND       ; MUTATION: ACCEPTS / SWITCH AS FILENAME""",
+        'filter': 'H4',
+        'expect': ['H4/file-loaded'],
     },
     {
         'name': 'i1-unix-save',

@@ -203,7 +203,8 @@ class Session(object):
             a(self._snap_proc(i, label, spec))
 
         a('proc finish {} {')
-        a('    if {$::pending > 0} { after time 0.2 finish; return }')
+        if not self.case.absolute:
+            a('    if {$::pending > 0} { after time 0.2 finish; return }')
         a('    p "DONE"')
         a('    close $::LOGF')
         a('    exit 0')
@@ -218,14 +219,21 @@ class Session(object):
           % (timeline.t + 1.0))
         a('}')
         a('')
-        a('set ::bpid [debug set_bp $MAIN {} {')
-        a('    if {$::t0 != 0} return')
-        a('    if {![ready]} return')
-        a('    set ::t0 [machine_info time]')
-        a('    p [format "T0 %.3f" $::t0]')
-        a('    debug remove_bp $::bpid')
-        a('    schedule')
-        a('}]')
+        if self.case.absolute:
+            # A case like S6ED /H exits in text mode and never reaches
+            # MAINLOOP, so there is no T0 to anchor to: schedule on absolute
+            # emulated time, and finish must not wait for snaps a mutation
+            # may prevent from ever firing (they report as missing instead).
+            a('schedule')
+        else:
+            a('set ::bpid [debug set_bp $MAIN {} {')
+            a('    if {$::t0 != 0} return')
+            a('    if {![ready]} return')
+            a('    set ::t0 [machine_info time]')
+            a('    p [format "T0 %.3f" $::t0]')
+            a('    debug remove_bp $::bpid')
+            a('    schedule')
+            a('}]')
         a('')
         a('# Always arm an own timeout: a hung emulator killed from outside')
         a('# leaves no log, which is indistinguishable from a broken program.')
@@ -290,6 +298,12 @@ class Session(object):
                 addr, length, kind = 0, 8 * 128, 'menu'
             elif spec['vram'] == 'font':
                 addr, length, kind = 0x8000, 32768, 'font'
+            elif spec['vram'] == 'text':
+                # Text-mode name table (screens 0/1, linear from #0000):
+                # boot banners and switch output, for cases that never
+                # reach SCREEN 6.  Rows are contiguous in memory, so a
+                # printed string survives a row wrap as one byte sequence.
+                addr, length, kind = 0, 2048, 'text'
             else:
                 addr, length, kind = TEXT_VRAM_ADDR, TEXT_VRAM_LEN, 'vram'
             a('    after time 0.002 {')
@@ -374,7 +388,8 @@ class Session(object):
                 run.snaps.setdefault(label, {})[name] = [
                     int(v) for v in value.split()]
         for (_, label, spec) in timeline.snaps:
-            for kind in ('vram', 'menu', 'dir', 'image', 'pal', 'font'):
+            for kind in ('vram', 'menu', 'dir', 'image', 'pal', 'font',
+                         'text'):
                 path = os.path.join(self.dir, '%s.%s' % (label, kind))
                 if os.path.exists(path):
                     run.files[(label, kind)] = path

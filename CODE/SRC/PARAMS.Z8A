@@ -2,31 +2,150 @@
 ;                                       * PARAMS                               *
 ;                                       ****************************************
 ;
-; PARSES DOS COMMAND-LINE PARAMETERS VIA EXTPARM (BDOS.Z8A).
-; S6ED ACCEPTS ONE OPTIONAL PARAMETER: THE FILENAME TO OPEN.
-; NO /X SWITCHES DEFINED YET — SCAFFOLD IS READY FOR FUTURE ADDITIONS.
+; PARSES THE DOS COMMAND LINE VIA EXTPARM / GETPARAM (BDOS.Z8A). S6ED TAKES AN
+; OPTIONAL FILENAME (FULL PATHS INCLUDED, PASSED THROUGH TO DSKOPEN AS-IS) AND
+; ONE-LETTER /X SWITCHES.
 ;
-; CALL PARAMS FROM INIT AFTER BUFINIT.
+; PARAMS RUNS FROM INIT IN TEXT MODE, BEFORE ANY SEGMENT IS CLAIMED OR THE
+; SCREEN IS TOUCHED, SO A SWITCH CAN PRINT AND EXIT CLEANLY. WITH NO SWITCHES
+; AND NO FILENAME THE EDITOR SIMPLY STARTS EMPTY: NO PARAMS IS NOT AN ERROR.
+;
+; SWITCHES:
+;   /H, /?  PRINT HELP AND EXIT TO DOS (NEVER ENTERS SCREEN 6)
+;
 ; ON RETURN: CY=0  FILENAME FOUND → FILENAME IS POPULATED (ASCIIZ)
 ;            CY=1  NO FILENAME GIVEN → OPEN EMPTY BUFFER
 
 
+; --- SWITCH TABLE              ----------------------------------------
+
+
+SWTTBL          DEFB    '?'
+                DEFW    DOHLP
+                DEFB    'H'
+                DEFW    DOHLP
+                DEFB    0
+
+
 ; --- PARAMS                    ----------------------------------------
 
-; - PARAMS -----------
-; - PARSE COMMAND LINE, FIND FILENAME
-; - OUTPUT:
-; -     CY = 0  FILENAME COPIED TO FILENAME (VARS)
-; -     CY = 1  NO FILENAME PARAM FOUND
+
+; - PARAMS -----------------------------
+; - PARSE COMMAND LINE, DISPATCH SWITCHES VIA TABLE, FIND FILENAME
+; - IN:  NONE
+; - OUT: CY = 0  FILENAME COPIED TO FILENAME (VARS)
+; -      CY = 1  NO FILENAME PARAM FOUND
+; -      DOES NOT RETURN WHEN A TERMINAL SWITCH (/H, /?) IS PRESENT
+; - CLOBBERS: ALL
 ; -
 
 PARAMS          LD      HL, PARBUF
                 CALL    EXTPARM
                 RET     C               ; NO PARAMS AT ALL → CY=1
 
-                ; --- CHECK #EAC PARAM FOR A BARE FILENAME (NOT STARTING '/')
+                ; DISPATCH KNOWN SWITCHES VIA SWTTBL.
+                ; TERMINAL SWITCHES (/H, /?) EXIT DIRECTLY TO DOS.
+                LD      HL, SWTTBL
+.SWTLP          LD      A, (HL)
+                AND     A
+                JR      Z, .SWTDON      ; END OF TABLE (#00)
 
-                JP      CHKFILE         ; CY FROM CHKFILE PROPAGATES
+                INC     HL
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)
+                INC     HL              ; HL -> NEXT ENTRY, DE = HANDLER
+
+                PUSH    HL              ; SAVE TABLE POINTER
+                PUSH    DE              ; SAVE HANDLER ADDRESS
+                CALL    FNDSWT          ; SEARCH FOR SWITCH LETTER IN A
+                POP     DE              ; DE = HANDLER
+                JR      C, .SWTNXT      ; NOT FOUND → NEXT SWITCH
+
+                ; FOUND: HL -> CHAR AFTER SWITCH LETTER (VALUE TAIL)
+                ; INVOKE HANDLER VIA CALL .CALLDE
+                PUSH    DE
+                CALL    .CALLDE
+                POP     DE
+
+.SWTNXT         POP     HL              ; RESTORE TABLE POINTER
+                JR      .SWTLP
+
+.SWTDON         JP      CHKFILE         ; FIND BARE FILENAME; CY PROPAGATES
+
+.CALLDE         PUSH    DE
+                RET                     ; INDIRECT CALL (JUMPS TO DE, HANDLER RETS TO .SWTNXT)
+
+
+; --- DOHLP                     ----------------------------------------
+
+
+; - DOHLP ------------------------------
+; - PRINT HELP AND TERMINATE IN TEXT MODE
+; - IN:  NONE
+; - OUT: DOES NOT RETURN (EXITS TO DOS VIA TERM)
+; - CLOBBERS: ALL
+; -
+
+DOHLP           LD      DE, TXTHLP
+                CALL    STROUT
+                JP      TERM
+
+
+; --- FNDSWT                    ----------------------------------------
+
+; - FNDSWT -----------
+; - FIND A ONE-LETTER /X SWITCH IN THE COMMAND LINE
+; - IN:  A = SWITCH LETTER, UPPERCASE
+; - OUTPUT:
+; -     CY = 0  FOUND: HL -> CHARACTER RIGHT AFTER THE LETTER (SWITCH VALUE
+; -             OR END OF TOKEN), READY FOR A VALUE PARSER
+; -     CY = 1  NOT PRESENT
+; - CLOBBERS: AF, BC, DE, HL
+; -
+; - CASE-INSENSITIVE ON BOTH SIDES (THE TAKA-NAMI FNDPARAM FOLDED ONLY THE
+; - TABLE SIDE, SO /S IN THE TABLE NEVER MATCHED AN UPPERCASE /S TYPED ON
+; - THE COMMAND LINE). MATCHES THE FIRST LETTER ONLY: /H AND /HELP ARE THE
+; - SAME SWITCH. MULTI-LETTER SWITCHES ARE NOT SUPPORTED YET.
+; -
+; - THE LETTER RIDES ON THE STACK ACROSS GETPARAM: THE DE=0 THAT SELECTS
+; - GETPARAM'S COUNT-ONLY MODE WOULD OTHERWISE OVERWRITE D. MEASURED LIVE:
+; - .CMP SAW D = #00 AND /H NEVER MATCHED.
+; -
+
+FNDSWT          LD      D, A            ; D = LETTER TO MATCH
+                LD      A, (PARBUF)     ; TOKEN COUNT
+                LD      B, A
+                LD      C, 0
+.LOOP           PUSH    BC
+                PUSH    DE              ; KEEP THE LETTER: DE IS REUSED BELOW
+                LD      HL, PARBUF
+                LD      DE, 0           ; DE = 0: COUNT ONLY, NO COPY
+                LD      A, C
+                CALL    GETPARAM        ; → HL = TOKEN, C = LENGTH
+                POP     DE
+                LD      A, (HL)
+                CP      '/'
+                JR      NZ, .NEXT
+                INC     HL
+                LD      A, (HL)
+                CP      'a'             ; FOLD a-z TO A-Z
+                JR      C, .CMP
+                CP      'z' + 1
+                JR      NC, .CMP
+                AND     %11011111
+.CMP            CP      D
+                JR      Z, .FOUND
+.NEXT           POP     BC
+                INC     C
+                DJNZ    .LOOP
+                SCF
+                RET
+
+.FOUND          POP     BC
+                INC     HL              ; HL -> CHAR AFTER THE LETTER
+                AND     A               ; CY=0
+                RET
 
 
 ; --- CHKFILE                   ----------------------------------------

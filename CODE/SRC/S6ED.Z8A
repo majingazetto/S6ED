@@ -57,6 +57,15 @@ ENODOS2      DEFM    "Requires MSX-DOS 2 or Nextor.$"
 ENOMAP       DEFM    "No mapper manager found.$"
 ENOMEM       DEFM    "Out of mapper memory.$"
 ENO2SEG      DEFM    "S6ED requires 2 free mapper segments.$"
+TXTHLP       DEFM    "S6ED v"
+             DEFB    VERSION.MAJOR, '.', VERSION.MINOR
+             DEFM    " - Screen 6 text editor for MSX2", 13, 10
+             DEFM    "Requires MSX-DOS 2 or Nextor and 2 free mapper "
+             DEFM    "segments.", 13, 10, 13, 10
+             DEFM    "Usage: S6ED [file] [/H | /?]", 13, 10, 13, 10
+             DEFM    "  file    file to open (paths allowed: A:/DIR/FILE.TXT)"
+             DEFM    13, 10
+             DEFM    "  /H, /?  show this help and exit", 13, 10, "$"
 
 
 ; --- MODULE INCLUDES           ----------------------------------------
@@ -142,6 +151,13 @@ INIT            DBG     "1: INIT START"
                 CALL    DOSVER
                 JP      C, .NODOS2      ; CARRY = DOS1 ONLY
 
+                ; PARSE THE COMMAND LINE WHILE STILL IN TEXT MODE: /H
+                ; PRINTS THE HELP AND EXITS THROUGH TERM WITH NOTHING
+                ; CLAIMED; A FILENAME IS REMEMBERED IN FILENAME AND LOADED
+                ; AFTER CFGLOAD, ONCE THE TEXT BUFFER EXISTS.
+                DBG     "2b: PARAMS"
+                CALL    PARAMS
+
                 ; LOCATE MAPPER MANAGER
                 DBG     "3: MAPINIT"
                 CALL    MAPINIT
@@ -191,11 +207,13 @@ INIT            DBG     "1: INIT START"
                 DBG     "7b: CFGLOAD"
                 CALL    CFGLOAD
 
-                ; CHECK COMMAND-LINE PARAMS: OPTIONAL FILENAME TO LOAD
-                DBG     "8: PARAMS"
-                CALL    PARAMS
-                JR      C, .NOARG       ; CY=1 → NO FILENAME GIVEN
-                DBG     "9: FILELOAD"
+                ; LOAD THE FILE NAMED ON THE COMMAND LINE, IF ANY. PARAMS
+                ; ALREADY RAN BACK IN TEXT MODE; FILENAME IS EMPTY WHEN NO
+                ; FILE WAS GIVEN.
+                DBG     "8: FILELOAD"
+                LD      A, (FILENAME)
+                AND     A
+                JR      Z, .NOARG       ; NO FILENAME GIVEN
                 LD      HL, FILENAME
                 CALL    FILELOAD
                 CALL    REDRAW          ; RENDER LOADED DOCUMENT

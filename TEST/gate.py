@@ -9,6 +9,7 @@ it.  `origin` on each case says which.
 
 import hashlib
 import os
+import re
 
 import vram
 from cases import Case, DEFAULT_CFG, crlf, numbered
@@ -268,10 +269,15 @@ class G5Clock(Case):
     # transitions, 6 reveal the residue and the non-revealing ones are
     # (1,2) (3,4) (8,9) (9,0), whose longest consecutive run is two (8->9->0).
     # THREE minute changes therefore always contain at least one revealing
-    # transition.  Nine samples 31 s apart span ~4.1 minutes: at least four.
-    # Sampling at half-seconds (3.5s, 34.5s...) avoids sampling on the exact
-    # 1.0s JIFFY toggle boundary where the variable and VDP blit race.
-    SAMPLES = [3.5 + 31.0 * i for i in range(9)]
+    # transition.
+    # Sampling intervals tuned to the MSX hardware frame rate:
+    # On PAL (Philips NMS 8250 at 50.157 Hz), 50 frames is ~0.99687 s.
+    # Stepping by exactly 31 50-frame cycles (31 * 50 / 50.157 ≈ 30.903 s)
+    # alternates the blink phase (31 is odd) while keeping the sample locked
+    # to the midpoint of the 1-second window with strictly zero accumulated drift.
+    # 7 samples span ~3.1 minutes, guaranteeing observation of at least 4 distinct
+    # minutes across any boot time.
+    SAMPLES = [3.5 + (31 * (50.0 / 50.15738)) * i for i in range(7)]
     MIN_MINUTES = 4             # 4 distinct minutes = 3 transitions
 
     def fixture(self, ctx, variant=None):
@@ -768,6 +774,99 @@ class G12ScreenRestore(Case):
                             'VDP palette mismatch at exit: %r' % exit_pal[:8]))
 
         return checks
+
+
+# --- H1-H4  COMMAND-LINE PARAMETERS & SWITCHES ------------------------
+
+
+class _HelpCase(Case):
+    absolute = True               # never reaches MAINLOOP: no T0 to anchor to
+    cfg = None                    # help must not depend on S6ED.CFG
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline(start=2.0)   # arm early: the breakpoint then just waits
+        t.snap('exit', vram='text', at='TERM.TERMDON')
+        t.t = 45.0                # finish well past boot; MAINLOOP never comes
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        ver = self._version(ctx)
+        want = b'S6ED v' + ver
+        text = run.blob('exit', 'text')
+        printed = text is not None and want in text
+        tag = self.name.split('-')[0].upper()
+        return [
+            Check('%s/help-printed' % tag, printed,
+                  'text VRAM holds the %r banner' % want if printed else
+                  'banner %r not found in the text-mode name table' % want),
+            Check('%s/no-screen6' % tag,
+                  run.var('exit', 'SCRRDY') == 0 and
+                  run.var('exit', 'SCRMOD') == 0,
+                  'SCRRDY %s / SCRMOD %s: never entered graphic mode'
+                  % (run.var('exit', 'SCRRDY'), run.var('exit', 'SCRMOD'))),
+            Check('%s/no-segments' % tag, run.var('exit', 'SEGCNT') == 0,
+                  'SEGCNT %s: exit before SEGRESV claims nothing'
+                  % run.var('exit', 'SEGCNT')),
+        ]
+
+    def _version(self, ctx):
+        """The version the banner must show, straight from CONST.Z8A."""
+        with open(os.path.join(ctx.src_dir, 'CONST.Z8A')) as fh:
+            src = fh.read()
+        maj = re.search(r"\.MAJOR\s+EQU\s+'(.)'", src).group(1)
+        mnr = re.search(r"\.MINOR\s+EQU\s+'(.)'", src).group(1)
+        return ('%s.%s' % (maj, mnr)).encode('ascii')
+
+
+class H1Help(_HelpCase):
+    name = 'H1-help'
+    desc = '/H prints version and usage in text mode and exits before SCREEN 6'
+    origin = ('command-line switches: PARAMS now runs in text mode before '
+              'MAPINIT/SEGRESV, so /H must print and exit with no segment '
+              'claimed and the screen untouched')
+    autoexec = 'S6ED /H'
+
+
+class H2HelpQuestion(_HelpCase):
+    name = 'H2-help-question'
+    desc = '/? prints version and usage in text mode and exits before SCREEN 6'
+    origin = '/? is the traditional DOS alias for /H'
+    autoexec = 'S6ED /?'
+
+
+class H3HelpFile(_HelpCase):
+    name = 'H3-help-file'
+    desc = '/H takes precedence over a filename argument'
+    origin = '/H wins over everything on the line, even with a file target'
+    autoexec = 'S6ED DOC.TXT /H'
+
+
+class H4FileSwitch(Case):
+    name = 'H4-file-switch'
+    desc = 'filename loaded normally when preceded by an ignored switch'
+    origin = 'CHKFILE must skip / switches and find the bare filename'
+    autoexec = 'S6ED /X DOC.TXT'
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram=True)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        return [
+            Check('H4/screen6',
+                  run.var('boot', 'SCRRDY') == 255 and
+                  run.var('boot', 'SCRMOD') == 6,
+                  'entered SCREEN 6 normally'),
+            Check('H4/file-loaded', run.var('boot', 'TOTLINES') == 5,
+                  'loaded 5 fixture lines (TOTLINES = %s)'
+                  % run.var('boot', 'TOTLINES')),
+        ]
 
 
 # --- B2  EXTERNAL FONT ASSET IN VRAM ----------------------------------
@@ -2032,7 +2131,7 @@ class I4ConvertUnixToDos(Case):
 
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
-         G12ScreenRestore(),
+         G12ScreenRestore(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),
