@@ -1,0 +1,115 @@
+; **********************************************
+; * XSEG.Z8A - INTER-SEGMENT CALL MACHINERY    *
+; * CORE (PAGES 0+1) <-> FEATURE (PAGE 2)      *
+; **********************************************
+
+
+; --- FCALL                     ----------------------------------------
+
+
+; - FCALL ------------------------------
+; - CALL ROUTINE IN FEATURE SEGMENT AT PAGE 2
+; - IN:  A  = TARGET FEATURE SEGMENT
+; -      HL = ENTRY ADDRESS (#8000-#BFFF)
+; - OUT: PRESERVES TARGET RETURN VALUES (AF, BC, DE, HL)
+; - CLOBBERS: NONE (BEYOND TARGET REGISTERS)
+; -
+
+FCALL           PUSH    BC
+                PUSH    DE
+                LD      C, A            ; C = TARGET FEATURE SEGMENT
+                PUSH    HL              ; SAVE ENTRY ADDRESS
+
+                ; PUSH CURRENT STATE TO SEGSTK (TXSEG, HOMESEG)
+                LD      HL, SEGSP
+                LD      E, (HL)
+                INC     (HL)
+                INC     (HL)            ; SEGSP += 2
+                LD      D, 0
+                LD      HL, SEGSTK
+                ADD     HL, DE          ; HL = POINTER TO FRAME
+                LD      A, (TXSEG)
+                LD      (HL), A         ; FRAME[0] = PREV TXSEG
+                INC     HL
+                LD      A, (HOMESEG)
+                LD      (HL), A         ; FRAME[1] = PREV HOMESEG
+
+                ; BANK TARGET SEGMENT INTO PAGE 2
+                LD      A, C
+                LD      (HOMESEG), A
+                LD      (TXSEG), A
+                CALL    PUTP2
+
+                POP     HL              ; HL = TARGET ENTRY ADDRESS
+                POP     DE
+                POP     BC
+
+                ; CALL TARGET ROUTINE IN PAGE 2
+                CALL    CALHL
+
+                ; PRESERVE RETURN REGISTERS AND FLAGS
+                PUSH    AF
+                PUSH    BC
+                PUSH    DE
+                PUSH    HL
+
+                ; RESTORE PREVIOUS STATE FROM SEGSTK
+                LD      HL, SEGSP
+                DEC     (HL)
+                DEC     (HL)            ; SEGSP -= 2
+                LD      E, (HL)
+                LD      D, 0
+                LD      HL, SEGSTK
+                ADD     HL, DE
+                LD      A, (HL)         ; A = PREV TXSEG
+                INC     HL
+                LD      B, (HL)         ; B = PREV HOMESEG
+                LD      HL, HOMESEG
+                LD      (HL), B
+                LD      (TXSEG), A
+                CALL    PUTP2           ; RESTORE PAGE 2 MAPPING (CLOBBERS HL)
+
+                POP     HL
+                POP     DE
+                POP     BC
+                POP     AF
+                RET
+
+
+; --- F1COPY                    ----------------------------------------
+
+
+; - F1COPY -----------------------------
+; - COPY FEATURE CONTAINER BLOB TO FTRSEG IN PAGE 2
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+F1COPY          LD      A, (FTRSEG)
+                LD      (TXSEG), A
+                CALL    PUTP2
+                LD      HL, FTRBLOB
+                LD      DE, #8000
+                LD      BC, FTRBLEN
+                LDIR
+                LD      A, (DEFSEG2)
+                LD      (TXSEG), A
+                CALL    PUTP2
+                RET
+
+
+; --- CFGRUN                    ----------------------------------------
+
+
+; - CFGRUN -----------------------------
+; - LOAD S6ED.CFG VIA RESIDENT FEATURE SEGMENT
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+CFGRUN          CALL    F1COPY
+                LD      A, (FTRSEG)
+                LD      HL, CFGLOAD
+                JP      FCALL

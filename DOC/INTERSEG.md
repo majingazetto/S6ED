@@ -1,6 +1,6 @@
 # S6ED — Fase 1: Boot Segment Accounting & Inter-Segment Infrastructure
 
-Date: 2026-09-16 · Status: **SPEC, agreed — not yet implemented**
+Date: 2026-09-17 · Status: **IMPLEMENTED & EMPIRICALLY VERIFIED (Fase 1a & Fase 1b complete)**
 Scope: Fase 1a (boot-time segment budget, mandatory minimum) + Fase 1b (inter-segment
 call machinery + first resident feature). Roadmap context: `informe_directorio_segmento_s6ed.md` §6.
 
