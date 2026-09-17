@@ -1,8 +1,9 @@
-# S6ED — Fase 1: Boot Segment Accounting & Inter-Segment Infrastructure
+# S6ED — Inter-Segment Infrastructure & Container Architecture
 
-Date: 2026-09-17 · Status: **IMPLEMENTED & EMPIRICALLY VERIFIED (Fase 1a & Fase 1b complete)**
+Date: 2026-09-17 · Status: **IMPLEMENTED & EMPIRICALLY VERIFIED (Fase 1a, Fase 1b & Fase 2 complete)**
 Scope: Fase 1a (boot-time segment budget, mandatory minimum) + Fase 1b (inter-segment
-call machinery + first resident feature). Roadmap context: `informe_directorio_segmento_s6ed.md` §6.
+call machinery + first resident feature) + Fase 2 (`S6ED.DAT` standalone multi-segment container loader).
+Roadmap context: `informe_directorio_segmento_s6ed.md` §6.
 
 ---
 
@@ -121,96 +122,116 @@ irrelevant against any paint path.
 
 ### 4.5 How code reaches the segment in Fase 1 (no loader yet)
 
-The feature modules are assembled inside the `.COM` image wrapped in a
-**single global `PHASE #8000` / `DEPHASE` container block** (`FTRBLOB`):
+In Fase 1b, the feature modules were assembled inside the `.COM` image wrapped in a
+single global `PHASE #8000` / `DEPHASE` container block (`FTRBLOB`) and LDIR-copied
+via `F1COPY`. In Fase 2, this copy has been completely replaced by the external
+container loader `DATLOAD` described below.
 
-```z80
-FTRBLOB:
-        PHASE   #8000
-FTRSTART:
-        INCLUDE CFG.Z8A
-        ; Future passengers appended here sequentially:
-        ; INCLUDE TOKEN.Z8A
-        ; INCLUDE MENU.Z8A
-        ; INCLUDE VI.Z8A
-FTREND:
-        DEPHASE
-FTRBLEN EQU     FTREND - FTRSTART
-        ASSERT  FTRBLEN <= 16384        ; Total feature segment budget
+---
+
+## 9. Fase 2 — `S6ED.DAT` Standalone Multi-Segment Container Loader (Implemented 2026-09-17)
+
+Fase 2 physically decouples feature modules from the executable `S6ED.COM` into an
+external container file **`S6ED.DAT`**. The `.COM` image drops down to 14,239 bytes,
+freeing precious TPA RAM while allowing future features to grow up to 16 KB per segment.
+
+### 9.1 Container File Layout (`S6ED.DAT`)
+
+The container consists of a 16-byte global header, a variable-length Block
+Descriptor Table, and contiguous binary payloads. All multi-byte numeric fields
+are 16-bit Little-Endian.
+
+```
++-------------------------------------------------------------+
+| Global Header (16 bytes)                                    |
+|   0..3:   Magic identifier ASCII "S6ED"                     |
+|   4..5:   Format version (0x0001, 2 bytes reserved)         |
+|   6:      MSX-DOS / CP/M EOF marker (0x1A)                  |
+|   7:      Global flags (0x00)                               |
+|   8..9:   Block count (0x0001)                              |
+|   10..11: Offset pointer to Block Table (0x0010 = 16 bytes) |
+|   12..15: Reserved (0x00000000)                             |
++-------------------------------------------------------------+
+| Block Descriptor Table (Entry 0: 8 bytes)                   |
+|   0..1:   BLKID (0x0001: Configuration Engine)              |
+|   2..3:   FLAGS (0x0001: Mandatory boot-load)              |
+|   4..5:   LOADADDR (0x8000: Base address in Page 2)         |
+|   6..7:   LENGTH (Payload byte length, e.g. 1,082 bytes)    |
+|   8..9:   DATAOFF (File offset to payload = 24 bytes)       |
++-------------------------------------------------------------+
+| Binary Payload Block 0 (CFG.Z8A assembled at #8000)         |
+|   Size: 1,082 bytes                                         |
++-------------------------------------------------------------+
 ```
 
-**Critical architecture rule (agreed 2026-09-16):** Do **not** use per-module
-`PHASE #8000` / `DEPHASE` wrappers. A per-module wrapper would reset the logical
-assembly counter to `#8000` for each file, causing multiple modules in `FTRSEG`
-to collide and overwrite each other's addresses. A single container block ensures
-all feature modules assemble sequentially into the `#8000`–`#BFFF` address space.
+Total container size for Fase 2: **1,106 bytes** (16B header + 8B descriptor 0 + 1,082B CFG payload).
 
-At boot, a single routine `F1COPY` LDIRs the entire container blob (`FTRBLEN` bytes)
-into `FTRSEG` through the page-2 window. Fase 2 replaces this copy with the
-`S6ED.DAT` loader without touching the modules themselves.
+### 9.2 Build Pipeline
 
-## 5. First passenger: `CFG.Z8A` (resident in `FTRSEG`)
+The container is emitted directly by `sjasmplus` using rotating `OUTPUT` directives:
+1. `CODE/SRC/S6ED.Z8A` emits `S6ED.COM` up to `OUTEND` and `VARS.Z8A`.
+2. Directives switch output:
+   ```z80
+   OUTPUT "S6ED.DAT"
+   ; Emit 16-byte header
+   ; Emit 8-byte block descriptor 0
+   ; PHASE #8000 -> INCLUDE CFG.Z8A -> DEPHASE
+   ```
+3. `CODE/Makefile` declares `S6ED.DAT` as a primary build artifact and package target.
 
-Why CFG: cold path (runs once at boot), self-contained (~1,082 bytes).
+### 9.3 Loader Mechanics (`CHKDAT` & `DATLOAD` in `CODE/SRC/XSEG.Z8A`)
 
-### 5.1 Empirical Verification: BDOS file I/O from Page 2 (2026-09-16)
+1. **Text-Mode Pre-Check (`CHKDAT`):**
+   - Called in `INIT` immediately after `SEGRESV` while still in text mode (SCREEN 0).
+   - Attempts `DSKOPEN` on `S6ED.DAT`. If missing (`CY=1`), branches to `.ERRDAT`
+     and exits cleanly to DOS via `ERRMSG` / `TERM` without ever entering Screen 6
+     or uploading fonts to VRAM, eliminating screen flicker.
+   - If present, closes file via `DSKCLOSE` and proceeds with normal initialization.
+2. **Handle Safety:** `DATHAND DEFB 0` in `VARS.Z8A` stores the file handle across
+   calls to `DSKREAD`, which clobbers register `B` under MSX-DOS 2.
+3. **Header Ingestion:** In `DATLOAD`, reads 16-byte header into `DATHDR`; validates:
+   - Exactly 16 bytes read.
+   - Magic ID == `"S6ED"`.
+   - Version == 1 (`#0001`).
+   - Block count $\ge 1$.
+4. **Block Ingestion:** Reads 8-byte descriptor 0 into `DATBLK`; validates:
+   - Exactly 8 bytes read.
+   - Block length $> 0$ and $\le 16384$.
+5. **Direct Page 2 Mapping & Load:**
+   - Maps `(FTRSEG)` into page 2 (`#8000-#BFFF`) via `PUTP2`.
+   - Reads payload directly into `LOADADDR` (`#8000`) using `LENGTH` bytes.
+   - Closes handle via `(DATHAND)` and `DSKCLOSE`.
+   - Restores `DEFSEG2` into page 2 via `PUTP2`.
+6. **Error Abort Path:**
+   - `.ERRDAT`: If `S6ED.DAT` is missing, prints `"S6ED.DAT not found."` and exits.
+   - `.ERRCOR`: If corrupted (bad magic, truncated read), prints `"S6ED.DAT is corrupted."` and exits.
+   - Both paths call `ERRMSG`, which drops back to Screen 0 with `PUSH DE`/`POP DE`
+     around BIOS `CHGMOD` to ensure the error string pointer in `DE` is preserved.
 
-Before restructuring, the hypothesis that MSX-DOS 2 supports BDOS file operations
-from page 2 was **verified empirically** with `TEST/PROBE2.Z8A` on both
-`Boosted_MSX2_EN` (2 MB) and the reference stock 128 kB `Philips_NMS_8250`:
-- Code running at `#8000` (in a mapper segment).
-- Filename string located at `#80xx` (inside the page-2 mapper segment).
-- DMA target located in page 1 (`#0277`).
-- Operations: `_OPEN` (#43), `_READ` (#48), `_CLOSE` (#45) — read self and
-  verified byte 0 = `#C3` (JP).
-- **Result: 100% PASS** on both machines.
+### 9.4 Empirical Verification & Testing Suite
 
-### 5.2 Module Relocation without Stubs
+- **T0 Static (`TEST/static.py`):**
+  - Enhanced `check_feature_discipline`: audits `S6ED.DAT` existence, file size,
+    16-byte magic `"S6ED"`, version 1, EOF marker `0x1A`, table pointer, block 0
+    fields, and guarantees `filesize == dataoff + length`.
+- **Gate Regression (`TEST/gate.py`):**
+  - `H6DatMissing`: Validates clean text-mode error exit to DOS (`SCRRDY=0`) with
+    error message when `S6ED.DAT` is missing from disk.
+  - `D8Accents`: Calibrated `GRAPH_GAP = 0.053` ensuring deterministic drift across
+    all 20ms frame phases during keystroke bursts.
+- **Selftest Mutations (`TEST/mutations.py`):**
+  - `mut/f2-datload`: Alters load target from `#8000` to `#9000` (caught by `G13/cfg-applied`).
+  - `mut/f2-datmagic`: Corrupts header magic `"S6XX"` (caught by static `feature-discipline`).
+  - `mut/d8-double`: Drops repeat claim in `TRNGRPH` (caught by `D8/content`).
+- **Suite Metrics (2026-09-17):**
+  - **T0 Static:** 13/13 PASS.
+  - **Gate T1/T2:** 182/182 checks across 44 sessions, 0 failed.
+  - **Selftest:** 39/39 mutations caught on green baseline (100% detection rate).
+  - **Total:** **234 checks, 0 failed (130.3s)**.
 
-Because page 1 code is always mapped, any routine in `FTRSEG` (`#8000+`) can
-call core routines in page 1 (`DSKOPEN`, `DSKREAD`, `DSKCLOSE`, `SETPAL`,
-`KMAPSW`) via standard direct Z80 `CALL` / `JP`. Intermediate core stubs
-are not required for the first passenger.
+---
 
-Changes:
-- `CFG.Z8A` included inside the global `FTRBLOB` (`PHASE #8000` block).
-- `INIT` change: `CALL CFGLOAD` → `CALL CFGRUN` (core wrapper in `XSEG.Z8A`:
-  `F1COPY` + `FCALL CFGLOAD`). `FTRSEG` stays resident (§1).
-
-## 6. Tests (per AGENTS.md rules)
-
-**T0 static (`TEST/static.py`):**
-- Lint: no reference to `PUTP2` / `RECBANK` / `DIRBANK` / `GETP2` / `SEGGET` /
-  `FRESEG` in a feature module; every `CALL`/`JP` target from `CFG.Z8A` resolves
-  inside the module or to a `STB_*` symbol (checked against `S6ED.sym`).
-- `ASSERT` blob ≤ 16 KB present; `CFGSEG` phased at `#8000`.
-
-**Gate (`TEST/gate.py`):**
-- **G13 (new)** — feature residency: at a `MAINLOOP` breakpoint gated on the code
-  signature, `SEGCNT == 2` and `SEGTBL[0..1] == [DIRSEG, FTRSEG]` on the 128 kB
-  machine; config values from a spaced-keys fixture are applied (overlaps G8, kept).
-- **G3 updated** — 128 kB capacity 202 → **101** lines. Documented consequence of
-  the resident `FTRSEG`, not a regression to fix.
-- G1/G2/G8/G9 stay green: banking discipline did not break text integrity, saving
-  or CFG parsing.
-
-**Selftest (`TEST/mutations.py`):**
-- `mut/f1-stub-norebank` — a stub that skips the re-bank (`CALL PUTP2` removed):
-  the `RET` lands in the wrong segment → G8/G13 must go red. Green baseline first
-  (Rule 1).
-- `mut/f1a-probe-leak` — the boot probe forgets to free its extras: 128 kB
-  capacity collapses → G3 red.
-
-## 7. Explicitly out of scope
-
-- `S6ED.DAT` loader, `.DAT` header format, per-priority feature accounting (Fase 2).
-- Feature migrations: tokenizer, Vi command line, menus, keymap bundles (Fase 3).
-- Tabs / two documents (Fase 4).
-- Mailbox implementation (contract only, §4.4).
-- Status-bar user messaging for refused edits (still unwired; boot messages in §3
-  are text-mode and unrelated).
-
-## 8. Harness notes from the probe session (reusable)
+## 10. Harness notes from the probe session (reusable)
 
 - openMSX 21: `after time N` **requires a command argument** — bare sleeps error
   out and the emulator keeps running; `clock` does not exist in its Tcl.
@@ -227,4 +248,5 @@ Changes:
   - MSX-DOS 2 requires ~12.25 emulated seconds to complete boot and execute `AUTOEXEC.BAT` (`set throttle off` completes this in ~40ms wall clock).
   - `AUTOEXEC.BAT` strictly requires DOS CRLF (`\r\n`).
   - Gated breakpoints must verify opcode byte signatures after entry (`0x0100`) to avoid premature hits by COMMAND2/kernel code.
+
 

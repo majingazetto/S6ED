@@ -9,6 +9,7 @@ still the contract the code assumes.
 import hashlib
 import os
 import re
+import struct
 import subprocess
 
 from result import Check
@@ -284,9 +285,43 @@ def check_feature_discipline(ctx):
     if ftrlen is None or ftrlen > 16384:
         bad.append('FTRBLEN %s, expected <= 16384' % ftrlen)
 
+    datpath = os.path.join(ctx.code_dir, 'S6ED.DAT')
+    if not os.path.exists(datpath):
+        bad.append('S6ED.DAT container file missing')
+    else:
+        dat = open(datpath, 'rb').read()
+        if len(dat) < 24:
+            bad.append('S6ED.DAT too small (%d bytes < 24)' % len(dat))
+        else:
+            if dat[0:4] != b'S6ED':
+                bad.append('S6ED.DAT bad magic: %r' % dat[0:4])
+            ver = struct.unpack_from('<H', dat, 4)[0]
+            if ver != 1:
+                bad.append('S6ED.DAT bad version: %d' % ver)
+            if dat[6] != 0x1A:
+                bad.append('S6ED.DAT missing EOF marker: #%02X' % dat[6])
+            nblks = dat[7]
+            if nblks < 1:
+                bad.append('S6ED.DAT block count: %d' % nblks)
+            tbloff = struct.unpack_from('<H', dat, 8)[0]
+            if tbloff != 16:
+                bad.append('S6ED.DAT table offset: %d' % tbloff)
+            # Block descriptor 0
+            blkid = dat[16]
+            flags = dat[17]
+            loadaddr = struct.unpack_from('<H', dat, 18)[0]
+            blklen = struct.unpack_from('<H', dat, 20)[0]
+            dataoff = struct.unpack_from('<H', dat, 22)[0]
+            if blkid != 1 or loadaddr != 0x8000 or dataoff != 24:
+                bad.append('S6ED.DAT block 0 mismatch: id=%d addr=#%04X off=%d' % (blkid, loadaddr, dataoff))
+            if blklen != ftrlen:
+                bad.append('S6ED.DAT block 0 len %d != FTRBLEN %d' % (blklen, ftrlen or 0))
+            if len(dat) != dataoff + blklen:
+                bad.append('S6ED.DAT file size %d != off %d + len %d' % (len(dat), dataoff, blklen))
+
     return Check('feature-discipline', not bad, '; '.join(bad) if bad else
-                 'FTRBLEN %d <= 16384, CFGLOAD phased at #8000, mapper discipline clean'
-                 % (ftrlen or 0))
+                 'S6ED.DAT (%dB) FTRBLEN %d <= 16384, CFGLOAD phased at #8000, mapper discipline clean'
+                 % (len(dat) if 'dat' in locals() else 0, ftrlen or 0))
 
 
 def check_build_clean(ctx):

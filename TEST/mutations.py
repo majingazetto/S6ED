@@ -497,15 +497,28 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['G13/homeseg-idle'],
     },
     {
-        'name': 'f1-copy',
-        'why': 'F1COPY truncates blob copy so feature code is not fully present',
+        'name': 'f2-datload',
+        'why': 'DATLOAD loads feature payload at wrong address in page 2',
         'file': 'XSEG.Z8A',
-        'old': """                LD      BC, FTRBLEN
-                LDIR""",
-        'new': """                LD      BC, 10          ; MUTATION: TRUNCATE FEATURE BLOB COPY
-                LDIR""",
+        'old': """                LD      A, (DATHAND)
+                LD      DE, #8000
+                CALL    DSKREAD""",
+        'new': """                LD      A, (DATHAND)
+                LD      DE, #9000       ; MUTATION: LOAD AT WRONG ADDRESS
+                CALL    DSKREAD""",
         'filter': 'G13',
         'expect': ['G13/cfg-applied'],
+    },
+    {
+        'name': 'f2-datmagic',
+        'why': 'S6ED.DAT header magic corrupted',
+        'file': 'S6ED.Z8A',
+        'old': """DATHDRS:
+                DEFM    "S6ED"          ; 0..3: MAGIC ID (4 BYTES)""",
+        'new': """DATHDRS:
+                DEFM    "S6XX"          ; MUTATION: CORRUPT MAGIC""",
+        'filter': 'G13',
+        'expect_static': ['feature-discipline'],
     },
 ]
 

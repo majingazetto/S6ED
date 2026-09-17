@@ -178,6 +178,10 @@ INIT            DBG     "1: INIT START"
                 DBG     "4b: SEGRESV"
                 CALL    SEGRESV
 
+                ; VERIFY S6ED.DAT EXISTS BEFORE ENTERING GRAPHICS MODE
+                DBG     "4c: CHKDAT"
+                CALL    CHKDAT
+
                 ; PRESERVE ORIGINAL SCREEN CONFIGURATION
                 LD      A, (SCRMOD)
                 LD      (SAVSCRMD), A
@@ -268,12 +272,14 @@ ERRMEM          LD      DE, ENOMEM
 ERRMSG          LD      A, (SCRRDY)
                 AND     A
                 JR      Z, .SAY
+                PUSH    DE
                 CALL    RSTPAL
                 XOR     A               ; SCREEN 0
                 LD      IX, CHGMOD
                 CALL    BIOSCALL
                 XOR     A
                 LD      (SCRRDY), A     ; TELL TERM THE SCREEN IS ALREADY BACK
+                POP     DE
 
 .SAY            CALL    STROUT
                 JP      TERM
@@ -403,30 +409,57 @@ DEFPLT          DEFB    #00, #00, #00, #00, #11, #06, #33, #07  ; 0:TRANSP, 1:BL
                 DEFB    #11, #04, #65, #02, #55, #05, #77, #07  ; 12:DKGRN, 13:MAG, 14:GRAY, 15:WHITE
 
 
-; --- FEATURES                  ----------------------------------------
- 
-                ; GLOBAL RESIDENT FEATURE CONTAINER (FASE 1B)
-                ; ALL FEATURE PASSENGERS ASSEMBLE SEQUENTIALLY INSIDE A
-                ; SINGLE PHASE #8000 / DEPHASE BLOCK TO PREVENT ADDRESS
-                ; COLLISIONS IN PAGE 2 (#8000-#BFFF). F1COPY COPIES THE
-                ; ENTIRE BLOB INTO FTRSEG AT BOOT.
-FTRBLOB:
-                PHASE   #8000
-FTRSTRT:
-                INCLUDE CFG.Z8A
-                ; FUTURE PASSENGERS APPENDED HERE SEQUENTIALLY:
-                ; INCLUDE TOKEN.Z8A
-                ; INCLUDE MENU.Z8A
-                ; INCLUDE VI.Z8A
-FTREND:
-                DEPHASE
-FTRBLEN         EQU     FTREND - FTRSTRT
-                ASSERT  FTRBLEN <= 16384        ; TOTAL FEATURE SEGMENT BUDGET
- 
- 
 ; --- VARS                      ----------------------------------------
  
  
                 OUTEND
 
                 INCLUDE VARS.Z8A
+
+
+; --- S6ED.DAT                  ----------------------------------------
+
+                ; S6ED.DAT MULTI-SEGMENT FEATURE CONTAINER (FASE 2)
+                ; ASSEMBLED AS AN INDEPENDENT BINARY FILE VIA ROTATING OUTPUT.
+                ; CONTAINS 16-BYTE FILE HEADER, 8-BYTE BLOCK DESCRIPTORS,
+                ; AND THE FEATURE PAYLOAD PHASED AT #8000.
+                OUTPUT  "S6ED.DAT"
+
+; --- FILE HEADER (16 BYTES) -------------------------------------------
+
+DATHDRS:
+                DEFM    "S6ED"          ; 0..3: MAGIC ID (4 BYTES)
+                DEFW    1               ; 4..5: FORMAT VERSION 1 (16-BIT LE)
+                DEFB    #1A             ; 6:    DOS EOF MARKER (STOPS TYPE)
+                DEFB    1               ; 7:    NUMBER OF BLOCKS IN TABLE (1)
+                DEFW    16              ; 8..9: OFFSET TO BLOCK TABLE (16)
+                DEFS    6, 0            ; 10..15: RESERVED EXPANSION PADDING
+
+; --- BLOCK DESCRIPTOR TABLE (8 BYTES PER BLOCK) -----------------------
+
+; BLOCK 0: RESIDENT FEATURE SEGMENT (FTRSEG)
+                DEFB    1               ; 0: BLOCK ID (1 = FTRSEG)
+                DEFB    1               ; 1: FLAGS (1 = MANDATORY)
+                DEFW    #8000           ; 2..3: LOAD ADDRESS IN PAGE 2
+                DEFW    BLK0LEN         ; 4..5: PAYLOAD LENGTH IN BYTES
+                DEFW    BLK0OFF         ; 6..7: ABSOLUTE OFFSET IN S6ED.DAT
+
+BLK0OFF         EQU     $ - DATHDRS
+
+; --- BLOCK 0 PAYLOAD (PHASE #8000) ------------------------------------
+
+                PHASE   #8000
+
+BLK0STR:
+                INCLUDE CFG.Z8A
+                ; FUTURE PASSENGERS APPENDED HERE SEQUENTIALLY:
+                ; INCLUDE MENU.Z8A
+                ; INCLUDE VI.Z8A
+                ; INCLUDE TOKEN.Z8A
+BLK0END:
+
+                DEPHASE
+
+BLK0LEN         EQU     BLK0END - BLK0STR
+FTRBLEN         EQU     BLK0LEN
+                ASSERT  BLK0LEN <= 16384        ; TOTAL FEATURE SEGMENT BUDGET

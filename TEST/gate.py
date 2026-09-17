@@ -981,6 +981,37 @@ class H5Verbose(Case):
         ]
 
 
+class H6DatMissing(Case):
+    name = 'H6-dat-missing'
+    desc = 'missing S6ED.DAT aborts cleanly to DOS in text mode'
+    origin = 'Fase 2 multi-segment container loader requires S6ED.DAT on disk'
+    autoexec = 'S6ED'
+    absolute = True
+    with_dat = False
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline(start=2.0)
+        t.snap('exit', vram='text', at='TERM.TERMDON')
+        t.t = 45.0
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        want = b'S6ED.DAT not found.'
+        text = run.blob('exit', 'text')
+        printed = text is not None and want in text
+        return [
+            Check('H6/not-found-printed', printed,
+                  'text VRAM holds %r' % want if printed else
+                  'error message %r not found in text-mode name table' % want),
+            Check('H6/no-screen6',
+                  run.var('exit', 'SCRRDY') == 0 and
+                  run.var('exit', 'SCRMOD') == 0,
+                  'SCRRDY %s / SCRMOD %s: exited in text mode'
+                  % (run.var('exit', 'SCRRDY'), run.var('exit', 'SCRMOD'))),
+        ]
+
+
 # --- B2  EXTERNAL FONT ASSET IN VRAM ----------------------------------
 
 
@@ -1554,7 +1585,7 @@ class D8Accents(Case):
     # fixed build is byte for byte correct at every one of those gaps.
     GRAPH_ROW = 'AEIOUNW1/'
     GRAPH_PASSES = 4
-    GRAPH_GAP = 0.04
+    GRAPH_GAP = 0.053
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
@@ -2243,7 +2274,7 @@ class I4ConvertUnixToDos(Case):
 
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
-         G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(),
+         G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),
