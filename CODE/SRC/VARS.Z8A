@@ -304,10 +304,13 @@ WINOP           DEFB    0               ; WINSTR: VDP LOGOP TEMP
 WINBST          DEFB    0               ; WINBTS: BUTTON STYLE (0=NORMAL, 1=SELECTED)
 WINSEL          DEFB    0               ; MODAL DIALOG: SELECTED OPTION INDEX
 WINRES          DEFB    0               ; MODAL DIALOG RESULT (0=CANCEL, 1=CONFIRM)
-MNUID           DEFB    0               ; ACTIVE MENU ID (0=FILE)
+MNUID           DEFB    0               ; ACTIVE MENU ID (0=FILE, 1=EDIT, 2=VIEW, 3=OPT, 4=HELP)
 MNUSEL          DEFB    0               ; ACTIVE MENU ITEM INDEX
 MNUTMPY         DEFB    0               ; MENU TEMP REL Y
 MNUTMPP         DEFW    0               ; MENU TEMP STRING POINTER
+MNUITMC         DEFB    0               ; ACTIVE MENU ITEM COUNT
+MNUPTY          DEFW    0               ; ACTIVE MENU YTBL POINTER
+MNUPTS          DEFW    0               ; ACTIVE MENU STBL POINTER
 
 
 ; --- VDP COMMAND BLOCK          ----------------------------------------

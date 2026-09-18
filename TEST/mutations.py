@@ -773,12 +773,9 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 'menu-defsel',
         'why': 'File menu opens with item 1 selected instead of default item 0 (New)',
         'file': 'MENU.Z8A',
-        'old': """DOMNU           XOR     A
-                LD      (MNUID), A      ; ACTIVE MENU = 0 (FILE)
+        'old': """.INITOK         XOR     A
                 LD      (MNUSEL), A     ; DEFAULT SELECTION = 0 (NEW)""",
-        'new': """DOMNU           XOR     A
-                LD      (MNUID), A      ; ACTIVE MENU = 0 (FILE)
-                LD      A, 1            ; MUTATION: DEFAULT SELECTION = 1
+        'new': """.INITOK         LD      A, 1            ; MUTATION: DEFAULT SELECTION = 1
                 LD      (MNUSEL), A""",
         'filter': 'H22',
         'expect': ['H22/default-new'],
@@ -787,17 +784,16 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 'menu-skipsep',
         'why': 'DOWN navigation fails to skip the separator line at item 4',
         'file': 'MENU.Z8A',
-        'old': """.DWNLP          INC     A
-                CP      4               ; SEPARATOR?
-                JR      NZ, .DWNCHK
-                INC     A               ; SKIP SEPARATOR TO 5
-.DWNCHK         CP      MNUCNT_F        ; >= 7?""",
-        'new': """.DWNLP          INC     A
+        'old': """.DWNCHK         CALL    MNUCHKS         ; SEPARATOR?
+                JR      NZ, .DWNOK
+                INC     A               ; SKIP SEPARATOR
+.DWNOK          JR      .MOVE""",
+        'new': """.DWNCHK         CALL    MNUCHKS         ; SEPARATOR?
                 NOP                     ; MUTATION: NEVER SKIP SEPARATOR
                 NOP
                 NOP
                 NOP
-.DWNCHK         CP      MNUCNT_F        ; >= 7?""",
+.DWNOK          JR      .MOVE""",
         'filter': 'H22',
         'expect': ['H22/nav-skip-sep'],
     },
@@ -815,6 +811,40 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 SCF                     ; CY = 1 (CANCELLED)""",
         'filter': 'H22',
         'expect': ['H22/cancel-esc'],
+    },
+    {
+        'name': 'menu-nav-wrap',
+        'why': 'RIGHT navigation fails to wrap from Help (4) to File (0)',
+        'file': 'MENU.Z8A',
+        'old': """.RIGHT          LD      A, (MNUID)
+                INC     A
+                CP      MNUCOUNT        ; 5
+                JR      C, .RGHTOK
+                XOR     A               ; WRAP 4 -> 0
+.RGHTOK         JP      MNUSWCH""",
+        'new': """.RIGHT          LD      A, (MNUID)
+                INC     A
+                CP      MNUCOUNT        ; 5
+                JR      C, .RGHTOK
+                LD      A, 4            ; MUTATION: CLAMP TO 4 INSTEAD OF WRAPPING TO 0
+.RGHTOK         JP      MNUSWCH""",
+        'filter': 'H23',
+        'expect': ['H23/nav-right-wrap'],
+    },
+    {
+        'name': 'menu-switch-title',
+        'why': 'horizontal switch fails to un-highlight previous menu title',
+        'file': 'MENU.Z8A',
+        'old': """; 2. UN-HIGHLIGHT CURRENT TITLE IN ROW 0
+                CALL    MNUTITL
+                POP     BC""",
+        'new': """; 2. UN-HIGHLIGHT CURRENT TITLE IN ROW 0
+                NOP                     ; MUTATION: SKIP UN-HIGHLIGHT
+                NOP
+                NOP
+                POP     BC""",
+        'filter': 'H23',
+        'expect': ['H23/title-switch-xor'],
     },
 ]
 
