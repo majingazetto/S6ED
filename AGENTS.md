@@ -43,12 +43,12 @@ The S6ED test suite (`TEST/`) is built on historical defects. To prevent past fa
 
 ## 2. Assembly & Code Standards
 
-All Z80 assembly code for S6ED is built with the **Glass** assembler.
+All Z80 assembly code for S6ED is built with the **sjasmplus** assembler (see `CODE/Makefile`).
 
 * **Label formatting:** Maximum 8 characters, UPPERCASE, alphanumeric only. No underscores (`_`).
 * **Numeric notation:** Use `#` prefix for hexadecimal values (e.g. `#A0`, `#3758`). Never use `0x...` or `...h`.
 * **DEFB width:** Maximum 8 byte values per `DEFB` line.
-* **Variable placement:** All variables must reside strictly in `VARS.Z8A` within the allocated window `[#3758, #44D0)`.
+* **Variable placement:** All variables must reside in `VARS.Z8A`, inside the block between the `VARS` and `ENDVARS` symbols (RAM right past the `.COM` image, zeroed by `INIT`). `TEST/static.py` `check_vars_block` enforces both the placement and the zeroing.
 * **Page 1 Hook Protection:** Never install hooks (such as `H.TIMI` or `H.KEYI`) pointing into Page 1 (`#4000-#7FFF`), as mapper banking can page out the target code and crash the machine.
 
 ---

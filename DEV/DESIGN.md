@@ -17,66 +17,61 @@ A text editor for MSX2 running in SCREEN 6 (GRAPHIC 5):
 ## Screen Layout
 
 ```
-Total width: 512px
+Total width: 512px, 4 colors
 
-  [left gutter: 24px] [text area: 480px] [right gutter: 8px]
+  [left margin: 16px] [text area: 480px] [right margin: 16px]
 
-Left gutter  — line numbers, right-justified, color 2 (UI chrome)
-Text area    — 80 cols × 26 rows @ 6×8px
-Right gutter — vertical scroll position bar, color 2
+Row 0     — menu bar
+Rows 1-24 — text area, 80 cols × 24 rows @ 6×8px
+Row 25    — status bar (pixels 200..211)
 ```
 
-### Line Number Format
+The 80×6px text area is centred with a 16px margin per side. 16px is 4 bytes
+in Screen 6, so every even column starts on a byte boundary and the byte
+commands (HMMV, HMMM, YMMM) can address it.
 
-```
-Width: 4 chars × 6px = 24px
-
-Lines 1–9999  : right-justified decimal  "   1" " 999" "9999"
-Lines 10000+  : k-notation               " 10k" " 99k" "999k"
-Lines 1000000+: m-notation               "  1m"
-```
-
-### Scroll Bar (right gutter, 8px wide)
-
-```
-Thumb height  = (visible_rows / total_rows) × 212  (min 4px)
-Thumb Y       = (top_line / total_rows) × 212
-Draw with HMMV: 8px wide × thumb_height, updated on every scroll
-```
+The line-number gutter (24px) and scrollbar gutter (8px) that once filled
+these 32px were removed in favour of the centred layout; both may return as
+optional features.
 
 ## VRAM Layout
 
 ```
-SCREEN 6 (GR5): 2bpp, 4 dots/byte, 128 bytes/line
+SCREEN 6 (GRAPHIC 5): 2bpp, 4 dots/byte, 128 bytes/line, 128 KB VRAM
 
-  00000H – 069FFH   Bitmap display (128 × 212 = 27136 bytes)
-  06A00H – 06BFFH   Sprite Attribute Table (SAT)
-  06C00H – 06FFFH   Sprite Generator Table (SGT)
+  00000H – 069FFH   Bitmap display (128 × 212 = 27136 bytes, lines 0-211)
+  06A00H – 07FFFH   Free, must stay clear: display lines 212-255, exposed by
+                    an R#23 hardware scroll. The BIOS sprite tables sit here;
+                    sprites are disabled (R#8 SPD=1).
 
-  Font tables (256 glyphs × 16 bytes each = 4096 bytes per variant):
-  07000H – 07FFFH   Font — Normal
-  08000H – 08FFFH   Font — Bold
-  09000H – 09FFFH   Font — Italic
-  0A000H – 0AFFFH   Font — Bold+Italic
+  Font tables — 4 variants × 8 KB each (one VRAM line holds the same
+  scanline of 32 glyphs, so a 256-glyph table spans 64 lines, not 32):
+  08000H – 09FFFH   Font — Normal      (source Y 256)
+  0A000H – 0BFFFH   Font — Bold        (source Y 320)
+  0C000H – 0DFFFH   Font — Italic      (source Y 384)
+  0E000H – 0FFFFH   Font — Bold+Italic (source Y 448)
+
+  Bank 1 (10000H – 1FFFFH) — off-screen, window engine:
+  lines 512-723      WINBUF:  visible background save buffer (Y offset 512)
+  lines 768-979      WINCOMP: window composition buffer (Y offset 768)
 
   Glyph layout (all tables identical structure):
     32 glyphs per row → 8 rows (256 glyphs total)
     Glyph N: X = (N % 32) * 6,  Y = table_base_y + (N / 32) * 8
-    Each glyph = 6×8px = 2 bytes/row × 8 rows = 16 bytes
+    Each glyph = 6×8px in an 8px slot: 2 bytes/row × 8 rows
     (rightmost 2px of each 8px slot = color 0 padding)
 ```
 
 ## Character Grid
 
 ```
-80 columns × 26 rows
+80 columns × 24 text rows (row 0 = menu bar, row 25 = status bar)
 Cell width:  6px (2 bytes in VRAM at 4px/byte, right 2px = padding)
 Cell height: 8px
 
-Cell VRAM byte address (text area origin = X:24, Y:0):
-  row * 8 * 128 + 24/4 + col * 6/4   ← not byte-aligned; use pixel coords
-  DX = 24 + col * 6
-  DY = row * 8
+Cell pixel coordinates (text area origin = X:16, Y:8):
+  DX = 16 + col * 6
+  DY = row * 8        (row 1 is the first text row)
 ```
 
 ## Pixel Format (2bpp)
@@ -138,33 +133,32 @@ Future language modes remap the same 3-color scheme to their own token classes.
 
 ### Source
 
-MSX Screen 0 (TEXT 1) ROM charset — 256 glyphs × 8 bytes, 1bpp, 6 significant
-bits per row (bits 7–2). Address read from BIOS work area `CGPNT` at `0004H`.
+Two sources, chosen at run time by `FONTINIT`:
 
-This is the native 6×8 font; no external asset required.
+1. **`S6ED.FNT`** (preferred): external asset shipped next to the `.COM`,
+   built offline from `RES/FONT.PNG` by `RES/fontcheck.py`. It holds the four
+   variants (Normal, Bold, Italic, Bold+Italic) as 1bpp 6×8 charsets of
+   256 glyphs × 8 bytes, concatenated in that order — exactly 8,192 bytes
+   (`FNTFSIZ`); any other size is rejected.
+2. **ROM charset fallback**: MSX Screen 0 (TEXT 1) charset — 256 glyphs ×
+   8 bytes, 1bpp, 6 significant bits per row (bits 7–2). The base address is
+   read from `CGTABL` in the main BIOS ROM (page 0 is RAM under MSX-DOS, so
+   both the pointer and the glyphs are fetched via `RDBIOS`). The single ROM
+   weight feeds all four tables: bold and italic render as normal.
 
-### Startup Expansion
+### Startup Upload
 
-For each glyph in the ROM font, generate all four VRAM variants:
+`FONTINIT` blanks the screen (Screen 6 VRAM timing demands a wide gap between
+accesses while the display is active) and uploads the four tables walking
+VRAM **lines**, not glyphs: one VRAM line holds the same scanline of 32
+consecutive glyphs (64 sequential bytes), so a table costs 64 `SETWRT` bursts
+instead of one per glyph line. Each staged 1bpp row byte is expanded to
+2 bytes of 2bpp color-1 pixels by `EXPNORM`.
 
-```
-Normal:
-  foreach row: expand bits 7-2 → 6 pixels of color 0/1; pad 2 right pixels to 0
-
-Bold:
-  foreach row: normal_row | (normal_row >> 1)
-  (OR with 1px-right-shifted self — thickens strokes)
-
-Italic:
-  Row shift table (8 rows): +1 +1 +1 +1  0  -1 -1 -1
-  (positive = shift row left, creating forward slant)
-  Clip pixels shifted out of the 6px window
-
-Bold+Italic:
-  Apply bold transform first, then italic shift
-```
-
-All variants written to respective VRAM font tables via HMMC or block OTIR.
+Variants are staged one at a time in `CLIPBUF` (necessarily idle during INIT).
+The ROM fallback stages once and reuses the same buffer for all four tables —
+re-extracting per variant would cost 8,192 `RDSLT` calls against 2,048
+(measured 2,182 ms vs 547 ms).
 
 ### Underline
 
@@ -609,8 +603,7 @@ Tags:
 ## Build System
 
 Follows MSX workspace convention:
-- Assembler: `sjasmplus`
-- Preprocessor: `gcc -E -P` for Z80 source
+- Assembler: `sjasmplus` (no preprocessor; see `CODE/Makefile`)
 - Emulator target: `m2d2 128k S6ED.DSK` (stock 128 kB Philips NMS 8250) or `m2d2 S6ED.DSK` (2 MB)
 - Executable: MSX-DOS 2 `.COM` (running under MSX-DOS 2 kernel cartridge)
 

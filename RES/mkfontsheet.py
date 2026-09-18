@@ -86,7 +86,7 @@ def bold(rows):
 def italic(rows):
     """Top half leans one pixel right, bottom half stays put.
 
-    DESIGN.md proposes +1 +1 +1 +1 0 -1 -1 -1, but shifting the bottom rows the
+    DEV/DESIGN.md proposes +1 +1 +1 +1 0 -1 -1 -1, but shifting the bottom rows the
     other way pushes ink out of column 0 and loses it, and with bit 7 as the
     leftmost pixel that table actually produces a backslant. Leaning only the
     top half into the reserved column 5 is lossless and slants the right way.
@@ -172,7 +172,7 @@ def build(font: bytes, guides: bool) -> Canvas:
 
     if not guides:
         # The working sheet: nothing but the glyphs, in grid order. Every
-        # annotation lives in DOC/FONT_BRIEF.md instead, so nothing on the
+        # annotation lives in DEV/FONT_BRIEF.md instead, so nothing on the
         # canvas can be mistaken for content.
         for code in range(256):
             c.glyph(font, code,
