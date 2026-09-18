@@ -23,7 +23,7 @@ FCALL           PUSH    BC
                 ; PUSH CURRENT STATE TO SEGSTK (TXSEG, HOMESEG). THE STACK
                 ; HOLDS 4 FRAMES OF 2 BYTES; A 5TH LEVEL WOULD WRITE PAST
                 ; SEGSTK INTO DATHAND. OVERFLOW IS A DESIGN ERROR
-                ; (INTERSEG 4.1): ABORT LOUDLY, NEVER WRAP SILENTLY.
+                ; (DEV/INTERSEG.MD §4.1): ABORT LOUDLY, NEVER WRAP SILENTLY.
                 LD      A, (SEGSP)
                 CP      8
                 JP      NC, .STKOVF

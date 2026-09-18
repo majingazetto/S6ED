@@ -160,9 +160,10 @@ timeline, not to delete the case.
 
 - The Gate covers core invariants, fonts, vertical scroll, core editing
   semantics (D1-D6), accents, tabs and markup (D7-D10), the full selection &
-  clipboard subsystem (E1-E7) and the EOL round-trips (I1-I4). Suites B
-  (themes, bad asset fallback), F (status bar, clamping) and H (keymap
-  profiles) are specified in `informe_test_plan_s6ed.md`.
+  clipboard subsystem (E1-E7), the EOL round-trips (I1-I4), the `S6ED.DAT`
+  container loader (H6, H8-H17) and the window engine (H7, H18). Suites B
+  (themes, bad asset fallback) and F (status bar, clamping) are not yet
+  implemented.
 - Everything runs on the 128 kB `Philips_NMS_8250`. Cases that need the 2 MB
   machine set `machine = MACH_2MB` explicitly.
 - `type` goes through the BIOS buffer, so it cannot produce modifiers or cursor

@@ -62,7 +62,15 @@ clean:
 
 build: $(OUTPUT) $(DATFILE) $(FNTFILE)
 
+# S6ED.DAT is written by the same sjasmplus run as S6ED.COM (rotating OUTPUT
+# directive in S6ED.Z8A), so normally it simply follows the .COM. The recipe
+# covers the case where the .DAT is deleted while the .COM is still up to
+# date: without it make considered the missing .DAT "updated" and the disk
+# image went out with a stale or absent container.
 $(DATFILE): $(OUTPUT)
+	@if [ ! -f $(DATFILE) ]; then \
+		$(ASM) --lst=$(LSTFILE) --sym=$(SYMFILE) $(INCLUDES) $(DEFINES) $(MAIN); \
+	fi
 
 dsk: $(DSKFILE)
 

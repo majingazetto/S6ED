@@ -1,6 +1,6 @@
 """Screen 6 VRAM decoding, for verdicts taken off the screen itself.
 
-G5 (Graphic 5) packs 4 pixels into every byte, 2 bits each, leftmost pixel in
+Screen 6 (GRAPHIC 5) packs 4 pixels into every byte, 2 bits each, leftmost pixel in
 the high bits, 128 bytes per display line.  Getting this wrong in the other
 direction is what produced the clock residue: HMMV counts BYTES, so an NX of 30
 truncates to 28 and leaves two pixel columns of the previous digit standing.

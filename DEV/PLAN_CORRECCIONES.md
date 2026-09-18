@@ -1,6 +1,6 @@
 # S6ED — Plan de correcciones post-Fase 3a
 
-Fecha: 2026-09-17 · Estado: **C1, C2 IMPLEMENTADAS (2026-09-17) · C3-C4 PROPUESTAS**
+Fecha: 2026-09-17 · Estado: **C1, C2 IMPLEMENTADAS (2026-09-17) · C4 IMPLEMENTADA (2026-09-18) · C3 PROPUESTA**
 Origen: revisión cruzada de las Fases 1b (maquinaria inter-segmento), 2 (contenedor
 `S6ED.DAT`) y 3a (window engine, fuentes multi-peso, color 3, diálogo About).
 
@@ -106,7 +106,7 @@ Tests: casos Gate H8–H17 (9 formas de contenedor corrupto abortando limpio +
 contenedor con padding que carga bien vía seek) y mutaciones `c1-datlen`,
 `c1-datblkid`, `c1-datseek` (`f2-datload` actualizada al nuevo loader).
 `make testall`: **262 checks, 0 failed** (T0 13/13, Gate 207/207, Selftest
-42/42). Formato real documentado en `DOC/INTERSEG.md` §9.
+42/42). Formato real documentado en `INTERSEG.md` §9.
 
 ---
 
@@ -220,30 +220,52 @@ HMMM de 1 línea ≈ 50 µs).
 
 ## Fase C4 — Deuda sistémica y documentación
 
+**Estado: IMPLEMENTADA 2026-09-18** — ver nota de cierre al final de la sección.
+
 Sin urgencia; hacer cuando toque cada archivo.
 
-- **AGENTS.md**: la ventana de variables `[#3758, #44D0)` ya no se cumple
-  (`ENDVARS=#46C6` en el build actual, +502 B) y `check_vars_block` usa límites
-  dinámicos, así que crece en silencio. Decidir: actualizar el límite
-  documentado al modelo actual (VARS..ENDVARS + assert contra el directorio)
-  o reponer un `ASSERT` duro. Además: el ensamblador real es **sjasmplus**
-  (Makefile), no Glass — corregir §2.
-- **`DOC/INTERSEG.md` §9**: la especificación del formato DAT está desplazada
-  +2 bytes respecto al código (offset 7 = NUMBLKS, no "global flags") y cita
-  tamaños obsoletos. Reescribirla cuando C1 fije el formato definitivo.
-- **`DOC/INTERSEG.md` §4.3 (stubs `STB_`)**: la disciplina feature→core con
-  re-banco incondicional nunca se implementó y el código ya llama a BDOS/core
+- **AGENTS.md**: la ventana de variables `[#3758, #44D0)` ya no se cumplía
+  (`ENDVARS=#48A2` tras C2) y `check_vars_block` usa límites dinámicos, así que
+  crecía en silencio. Resuelto: §2 documenta ahora el modelo real (bloque
+  `VARS`..`ENDVARS` en RAM tras la imagen `.COM`, puesto a cero por `INIT`,
+  verificado por `check_vars_block`). Además: el ensamblador real es
+  **sjasmplus** (Makefile), no Glass — corregido en §2.
+- **`INTERSEG.md` §9**: verificada contra el código — ya quedó correcta con el
+  cierre de C1 (offset 7 = `NUMBLKS`, tabla en 8..9, descriptores de 8 B). Los
+  tamaños citados se actualizan al build actual (`FTRBLEN` = 2.402 B, fichero
+  2.426 B); los anteriores provenían de un artefacto local anterior a las
+  fuentes finales de C2 (el `.DAT` no está versionado).
+- **`INTERSEG.md` §4.3 (stubs `STB_`)**: la disciplina feature→core con
+  re-banco incondicional nunca se implementó y el código llama a BDOS/core
   directamente desde el FTRSEG (`CFG.Z8A`, `WINPOLL`→`UPDMCLK`→`CALL DOS`).
-  Funciona porque se verificó empíricamente que BDOS no rebanquea página 2.
-  Decidir: implementar los stubs (defensa real para futuros diálogos con I/O
-  de disco) o reescribir la sección documentando el invariante verificado.
-- **DESIGN.md**: §VRAM Layout y §Startup Expansion describen el diseño antiguo
-  (fuentes en #07000 de 4 KB, expansión por OR-shift rechazada el 2026-09-12,
-  gutter de 24 px). Actualizar al mapa real (fuentes #08000-#0FFFF de 8 KB,
-  buffers de ventana en banco 1, márgenes de 16 px) o delegar en INTERSEG.md.
-- **Erratas**: "GRAPHIC 5"/"G5" → Screen 6 en `VDP.Z8A:127`, `CONST.Z8A`.
-- **Makefile**: `$(DATFILE): $(OUTPUT)` sin receta — si se borra `S6ED.DAT`
-  con el `.COM` al día, no se regenera. Darle regla explícita.
+  Resuelto documentando el invariante verificado empíricamente con
+  `TEST/PROBE2.Z8A`: ni BDOS (DOS 2 / Nextor) ni el core re-banquean la
+  página 2 entre llamadas. La sección conserva el diseño de stubs como defensa
+  documentada si el invariante se rompe algún día.
+- **`DESIGN.md`**: §Screen Layout, §VRAM Layout, §Character Grid, §Font y
+  §Build System reescritos al estado real (márgenes de 16 px, filas
+  menú/texto/estado, fuentes de 8 KB en `#08000-#0FFFF`, buffers de ventana en
+  banco 1, asset `S6ED.FNT` con fallback ROM, sjasmplus sin preprocesador).
+- **Reorganización documental**: `DOC/` queda reservado para la documentación
+  *del editor* (manuales de usuario, referencias de teclas). La documentación
+  de desarrollo se mueve a `DEV/` (`DESIGN.md`, `INTERSEG.md`,
+  `PLAN_CORRECCIONES.md`, `FONT_BRIEF.md`, los dos `informe_*.md`), con
+  `README.md` de índice en ambos directorios y referencias actualizadas en
+  `RES/mkfontsheet.py`, `TEST/README.md` y los comentarios de `CONST.Z8A`,
+  `RENDER.Z8A`, `SCROLL.Z8A` y `XSEG.Z8A`. La referencia muerta a
+  `informe_test_plan_s6ed.md` en `TEST/README.md` queda eliminada.
+- **Erratas**: "GRAPHIC 5"/"G5" → Screen 6 en `CONST.Z8A`, `FONT.Z8A`,
+  `RENDER.Z8A`, `TEST/vram.py` e `INTERSEG.md` §11.1. Los nombres de caso de
+  test (`G5Clock`, filtros `G5/*`) se conservan: allí `G5` es el identificador
+  del caso, no el modo de vídeo.
+- **Makefile**: `$(DATFILE)` tenía dependencia sin receta — si se borraba
+  `S6ED.DAT` con el `.COM` al día, no se regeneraba. Ahora tiene receta que
+  re-ensambla solo si el `.DAT` no existe.
+
+### Nota de cierre (2026-09-18)
+
+Fase puramente documental salvo el Makefile; ningún cambio toca código
+ejecutable (solo comentarios). `make testall`: **276 checks, 0 failed**.
 
 ---
 

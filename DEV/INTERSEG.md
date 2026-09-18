@@ -96,9 +96,22 @@ Pushes `{TXSEG, HOMESEG}`, banks the feature (`PUTP2`, `TXSEG` follows), sets
 `HOMESEG`, `CALL` the entry, and on return **restores the previous page-2 segment**
 and pops the pair.
 
-### 4.3 Feature → core: only through stubs
+### 4.3 Feature → core: direct calls under a verified invariant
 
-One stub per core routine, living **in the core** (one copy serves every feature):
+The original design routed every feature→core call through re-banking stubs
+(`STB_X`, one per core routine, living in the core). **The stubs were never
+implemented.** Feature code in `FTRSEG` calls core routines and BDOS directly
+(e.g. `CFG.Z8A`, `WINPOLL`→`UPDMCLK`→`CALL DOS`), which is safe under an
+empirically verified invariant:
+
+> **Neither BDOS (MSX-DOS 2 / Nextor) nor the S6ED core re-banks page 2 across
+> a call.** The feature segment stays mapped for the whole call, so no
+> re-bank on return is needed.
+
+Verified with `TEST/PROBE2.Z8A` (page-2 BDOS caller probe, §10). The invariant
+must be re-verified before any future feature performs disk I/O from inside
+`FTRSEG`; if it ever breaks, the defence is the original stub design — an
+unconditional re-bank on return, ≈ 150 T-states per call:
 
 ```
 STB_X   CALL  X
@@ -107,10 +120,6 @@ STB_X   CALL  X
         CALL  PUTP2
         RET
 ```
-
-The re-bank is **unconditional**: BDOS page-2 behaviour across calls is not assumed
-(this is also the defence for the Fase 2 .DAT loader). Stub cost ≈ 150 T-states,
-irrelevant against any paint path.
 
 ### 4.4 Rules
 
@@ -167,7 +176,7 @@ multi-byte numeric fields are 16-bit Little-Endian.
 
 Current container (1 block): header 16 B + one descriptor 8 B + FTRSEG payload
 (`CFG.Z8A` + `WINDOW.Z8A`, phased at `#8000`) at `DATAOFF` = 24. `LENGTH` =
-`FTRBLEN` (2,243 bytes as of 2026-09-17); total file 2,267 bytes. The build
+`FTRBLEN` (2,402 bytes as of 2026-09-18); total file 2,426 bytes. The build
 enforces `ASSERT BLK0LEN <= 16384`; the loader re-enforces it at run time, so a
 patched or corrupted file cannot defeat it.
 
@@ -280,7 +289,7 @@ artifact.
 
 Implemented and verified on 2026-09-17 on branch `feature/window-engine`.
 
-### 11.1 VRAM Architecture in Screen 6 (G5, 512x212, 4 colors / 2bpp, 128 KB VRAM)
+### 11.1 VRAM Architecture in Screen 6 (GRAPHIC 5, 512x212, 4 colors / 2bpp, 128 KB VRAM)
 
 - Scanlines 0..211: Visible screen area (27,136 bytes, Bank 0).
 - Scanlines 212..255: Free / reserved for R#23 scroll offset.
