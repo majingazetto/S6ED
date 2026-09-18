@@ -669,6 +669,57 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'H7',
         'expect': ['H7/title-text'],
     },
+    {
+        'name': 'wq-direct',
+        'why': 'ACTQUIT jumps straight to TERM without asking (pre-3b behaviour)',
+        'file': 'ACTION.Z8A',
+        'old': """.ASKQ           LD      A, (FTRSEG)
+                LD      HL, DOQIT
+                CALL    FCALL""",
+        'new': """.ASKQ           JP      TERM            ; MUTATION: QUIT WITHOUT ASKING""",
+        'filter': 'H19',
+        # ESC exits on the spot: either the dialog-displayed check goes red,
+        # or the whole case dies waiting for a WINPOLL that never comes.
+        'expect_any': ['H19/dialog-displayed', 'H19-quit-dialog'],
+    },
+    {
+        'name': 'wq-defsel',
+        'why': 'the Quit dialog defaults to YES, so an accidental ENTER quits',
+        'file': 'WINDOW.Z8A',
+        'old': """                ; DEFAULT: NO SELECTED, RESULT CANCELLED
+                LD      A, 1
+                LD      (WINSEL), A""",
+        'new': """                ; DEFAULT: NO SELECTED, RESULT CANCELLED
+                XOR     A               ; MUTATION: DEFAULT SELECTION = YES
+                LD      (WINSEL), A""",
+        'filter': 'H19',
+        'expect': ['H19/default-no'],
+    },
+    {
+        'name': 'wq-nav',
+        'why': 'a selection change never repaints the buttons',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      (HL), A
+                CALL    .BTNS
+                CALL    WINSHOW""",
+        'new': """                LD      (HL), A
+                CALL    WINSHOW         ; MUTATION: SELECTION NEVER REPAINTS""",
+        'filter': 'H19',
+        'expect': ['H19/nav-left'],
+    },
+    {
+        'name': 'wq-yes',
+        'why': 'the Y accelerator records CANCEL instead of CONFIRM',
+        'file': 'WINDOW.Z8A',
+        'old': """.YES            LD      A, 1
+                LD      (WINRES), A""",
+        'new': """.YES            XOR     A               ; MUTATION: Y DOES NOT CONFIRM
+                LD      (WINRES), A""",
+        'filter': 'H19',
+        # Y records CANCEL: either quit-y goes red, or the case dies waiting
+        # for a TERM.TERMDON that never comes.
+        'expect_any': ['H19/quit-y', 'H19-quit-dialog'],
+    },
 ]
 
 

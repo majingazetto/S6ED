@@ -1,6 +1,6 @@
 # S6ED — Inter-Segment Infrastructure & Container Architecture
 
-Date: 2026-09-17 · Status: **IMPLEMENTED & EMPIRICALLY VERIFIED (Fase 1a, Fase 1b, Fase 2 & Fase C1 complete)**
+Date: 2026-09-17 · Status: **IMPLEMENTED & EMPIRICALLY VERIFIED (Fase 1a, Fase 1b, Fase 2, Fase 3a, Fase 3b, Fase C1 & Fase C2 complete)**
 Scope: Fase 1a (boot-time segment budget, mandatory minimum) + Fase 1b (inter-segment
 call machinery + first resident feature) + Fase 2 (`S6ED.DAT` standalone multi-segment container loader) + Fase C1 (loader hardening: table-driven multi-block load, full descriptor validation, FCALL stack guard).
 Roadmap context: `informe_directorio_segmento_s6ed.md` §6.
@@ -328,8 +328,8 @@ Implemented and verified on 2026-09-17 on branch `feature/window-engine`.
   - `WINBOX`: Draws outer frame in Color 2, top accent highlight in Color 3, title bar in Color 2, bottom accent separator in Color 3, and title text in Bold + Color 3 (`TOR`).
   - `WINCHTR`: Blits single glyph with variant lookup and configurable LOGOP (`TIMP` vs `TOR`).
   - `WINSTR` / `WINSTR3`: Blits string with variant index in `TIMP` or `TOR`, advancing `DE` past the last character for chained inline styles.
-  - `WINPRN` / `WINPRN3`: Relative character coordinate printing into off-screen composition buffer.
-  - `WINBTN`: Renders button with Color 3 border ($58 \times 14$), Color 2 body ($56 \times 12$), and centered text in Bold + Color 3 (`TOR`).
+  - `WINPRN`: Relative character coordinate printing into off-screen composition buffer.
+  - `WINBTN` / `WINBTS`: Renders a button ($58 \times 14$ border, $56 \times 12$ body, centered bold text). `WINBTN` is the normal style (Color 3 border, Color 2 body, text in `TOR`); `WINBTS` takes a style in `A` (0=normal, 1=selected: Color 3 body, text in `TIMP`), kept in `WINBST`. Used for option selection since Fase 3b.
   - `WINOPEN`: Enforces byte alignment, saves visible background, and initializes window box in composition buffer.
   - `WINCLOS`: Restores background via `WINRST`.
   - `DOABT`: Composes About dialog off-screen using mixed typographic styles:
@@ -354,5 +354,34 @@ Implemented and verified on 2026-09-17 on branch `feature/window-engine`.
   - Dismisses with `RETURN` and asserts VRAM is byte-for-byte restored (`H7/restore-return`).
   - Opens with `F1`, dismisses with `SPACE`, asserts byte-for-byte restore (`H7/restore-space`).
   - Opens with `F1`, dismisses with `ESC`, asserts byte-for-byte restore (`H7/restore-escape`).
+
+### 11.7 Fase 3b — Quit Confirmation Dialog: Selectable Options (2026-09-18)
+
+The first multi-option modal dialog, and the foundation of the future menu
+system: option selection with two visual button states.
+
+- `DOQIT` (in `WINDOW.Z8A`, FTRSEG): modal 200×64 dialog at (156,74), title
+  `"Quit S6ED"`, message `"Exit to MSX-DOS?"`, and a bold
+  `"Unsaved changes!"` line shown only when `MODIFIED` is set.
+- **Two selectable options** rendered as buttons (`[  YES  ]` / `[  NO  ]`).
+  Selection state lives in `WINSEL` (0=YES, 1=NO; default NO — an accidental
+  ESC never drops the document), the dialog result in `WINRES` (0=cancel,
+  1=confirm). Both live in `VARS.Z8A` with `WINBST`.
+- Button styles via `WINBTS` (§11.4): normal = Color 3 border / Color 2 body /
+  bold `TOR` text; selected = Color 3 body / bold `TIMP` text.
+- Keys: `LEFT`/`RIGHT` move the selection (only the two buttons are repainted
+  in the composition buffer, then `WINSHOW` re-blits — no tearing),
+  `ENTER`/`SPACE` activate the selected option, `Y`/`N` are accelerators,
+  `ESC` cancels.
+- `ACTQUIT` (ESC / Ctrl+Q in every keymap) now `CALL FCALL`s `DOQIT` and only
+  falls through to `TERM` when `WINRES` = 1. With an active selection, ESC
+  still just drops it (`ACTDSEL`), as before.
+- Tests: `H19QuitDialog` (dialog displayed, default-NO button pixels, LEFT
+  navigation repaint, ESC cancel with byte-for-byte restore, warning band
+  clean on a clean buffer, Y exits to Screen 0, `WINRES` on both paths),
+  `H20QuitDirty` (`MODIFIED` set, warning rendered glyph-for-glyph in bold,
+  N cancels). `G12` updated to confirm the dialog with `Y`. Mutations
+  `wq-direct`, `wq-defsel`, `wq-nav`, `wq-yes`. `make testall`: **290 checks,
+  0 failed (260 s)**.
 
 

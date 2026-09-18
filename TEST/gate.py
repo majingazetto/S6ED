@@ -718,8 +718,10 @@ class G12ScreenRestore(Case):
         t.snap('boot', palette=True)
         # 2. Arm exit snap at TERM.TERMDON so breakpoint is active when TERM runs
         t.snap('exit', palette=True, at='TERM.TERMDON')
-        # 3. Press Ctrl+Q to exit S6ED via ACTQUIT -> TERM
+        # 3. Press Ctrl+Q: ACTQUIT now asks first (DOQIT dialog); 'Y' confirms
+        #    and only then does ACTQUIT -> TERM run
         t.press('Q', mods=['CTRL'])
+        t.press('Y')
         t.wait(1.0)
         return t
 
@@ -1368,6 +1370,158 @@ class H18WindowRobustness(Case):
                             'VRAM restored cleanly after modal close'
                             if not d_close else
                             '%d stray pixels after close' % len(d_close)))
+        return checks
+
+
+# --- H19-H20  QUIT CONFIRMATION DIALOG (FASE 3B) -----------------------
+
+
+class H19QuitDialog(Case):
+    name = 'H19-quit-dialog'
+    desc = ('ESC opens the Quit dialog with selectable YES/NO: NO selected by '
+            'default, LEFT moves to YES, ESC cancels and Y quits to DOS')
+    origin = ('Fase 3b: ACTQUIT used to jump straight to TERM; first '
+              'multi-option modal dialog of the window engine')
+
+    YESPX = (194, 122)      # YES button body sample point (clear of glyphs)
+    NOPX = (264, 122)       # NO button body sample point
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(10))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram=True)
+        # 1. ESC opens the dialog, NO selected by default
+        t.press('ESC')
+        t.snap('dlg_no', vram=True, at='WINPOLL')
+        # 2. LEFT moves the selection to YES
+        t.press('LEFT')
+        t.snap('dlg_yes', vram=True, at='WINPOLL')
+        # 3. ESC cancels: dialog closes, editing resumes
+        t.press('ESC')
+        t.snap('after_esc', vram=True)
+        # 4. ESC reopens the dialog and Y confirms: exit to DOS.  The exit
+        #    breakpoint fires once, so it is armed BEFORE the key that quits.
+        t.press('ESC')
+        t.snap('exit', at='TERM.TERMDON')
+        t.press('Y')
+        t.wait(1.0)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        v_boot = run.blob('boot', 'vram')
+        v_no = run.blob('dlg_no', 'vram')
+        v_yes = run.blob('dlg_yes', 'vram')
+        v_esc = run.blob('after_esc', 'vram')
+        fl = vram.TEXT_FIRST_LINE
+
+        def body(buf, pt):
+            if buf is None:
+                return None
+            return vram.pixel(buf, pt[0], pt[1], first_line=fl)
+
+        checks = []
+        checks.append(Check('H19/dialog-displayed',
+                            v_no is not None and v_no != v_boot,
+                            'VRAM modified while dialog is open'))
+
+        checks.append(Check(
+            'H19/default-no',
+            body(v_no, self.YESPX) == vram.COL_UI and
+            body(v_no, self.NOPX) == vram.COL_HI,
+            'NO selected on open (YES body=%s, NO body=%s)'
+            % (body(v_no, self.YESPX), body(v_no, self.NOPX))))
+
+        checks.append(Check(
+            'H19/nav-left',
+            body(v_yes, self.YESPX) == vram.COL_HI and
+            body(v_yes, self.NOPX) == vram.COL_UI,
+            'LEFT selects YES (YES body=%s, NO body=%s)'
+            % (body(v_yes, self.YESPX), body(v_yes, self.NOPX))))
+
+        cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]
+        d_esc = vram.diff(v_boot, v_esc, ignore_cells=cursor)
+        checks.append(Check('H19/cancel-esc',
+                            not d_esc and run.var('after_esc', 'WINRES') == 0,
+                            'restored byte-for-byte on ESC, WINRES=0'
+                            if not d_esc else
+                            '%d stray pixels after ESC' % len(d_esc)))
+
+        # Clean buffer: the warning band must stay background
+        if v_no is None:
+            stray = -1
+        else:
+            stray = sum(sum(r) for r in
+                        vram.ink_mask(v_no, 162, 106, w=188, h=8,
+                                      ground=vram.COL_BG, first_line=fl))
+        checks.append(Check('H19/no-warning',
+                            stray == 0,
+                            'no unsaved-changes line on a clean buffer'
+                            if stray == 0 else
+                            'warning band not clean (%s)' % stray))
+
+        checks.append(Check('H19/quit-y',
+                            run.var('exit', 'SCRMOD') == 0,
+                            'Y confirms and exits to DOS (Screen 0)'
+                            if run.var('exit', 'SCRMOD') == 0 else
+                            'SCRMOD at exit = %s' % run.var('exit', 'SCRMOD')))
+        checks.append(Check('H19/winres-quit',
+                            run.var('exit', 'WINRES') == 1,
+                            'WINRES=1 after Y'
+                            if run.var('exit', 'WINRES') == 1 else
+                            'WINRES at exit = %s' % run.var('exit', 'WINRES')))
+        return checks
+
+
+class H20QuitDirty(Case):
+    name = 'H20-quit-dirty'
+    desc = 'Quit dialog shows the unsaved-changes warning when the buffer is modified'
+    origin = 'Fase 3b: conditional warning line driven by MODIFIED'
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(10))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.text('x')
+        t.press('ESC')
+        t.snap('dlg', vram=True, at='WINPOLL')
+        t.press('N')
+        t.snap('after_n', vram=True)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        v_dlg = run.blob('dlg', 'vram')
+        checks = []
+        checks.append(Check('H20/modified',
+                            run.var('dlg', 'MODIFIED') != 0,
+                            'buffer marked modified after typing'
+                            if run.var('dlg', 'MODIFIED') else
+                            'MODIFIED is clear after typing'))
+
+        font = font_of(ctx)
+        bad = []
+        for pos, ch in enumerate("Unsaved changes!"):
+            x0 = 204 + pos * vram.CELLW
+            got = vram.ink_mask(v_dlg, x0, 106, ground=vram.COL_BG,
+                                first_line=vram.TEXT_FIRST_LINE)
+            want = vram.glyph_mask(font, ch, variant=1)
+            if got != want:
+                bad.append("char %d (%r)" % (pos, ch))
+        checks.append(Check('H20/warning-text', not bad,
+                            '"Unsaved changes!" rendered in bold'
+                            if not bad else
+                            'warning mismatches at: %s' % ', '.join(bad)))
+
+        checks.append(Check('H20/cancel-n',
+                            run.var('after_n', 'WINRES') == 0 and
+                            run.var('after_n', 'SCRMOD') == 6,
+                            'N cancels, editor resumes'
+                            if run.var('after_n', 'SCRMOD') == 6 else
+                            'SCRMOD after N = %s' % run.var('after_n', 'SCRMOD')))
         return checks
 
 
@@ -2637,6 +2791,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          H8DatBadMagic(), H9DatBadVersion(), H10DatNoBlocks(),
          H11DatTruncHdr(), H12DatTruncTbl(), H13DatLenZero(), H14DatLenOver(),
          H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(), H18WindowRobustness(),
+         H19QuitDialog(), H20QuitDirty(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),

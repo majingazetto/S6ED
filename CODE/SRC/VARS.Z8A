@@ -298,6 +298,9 @@ WINH            DEFW    0               ; WINDOW HEIGHT IN PIXELS
 WINACTV         DEFB    0               ; 1 = MODAL WINDOW ACTIVE, 0 = INACTIVE
 WINVAR          DEFB    0               ; WINSTR: FONT VARIANT TEMP
 WINOP           DEFB    0               ; WINSTR: VDP LOGOP TEMP
+WINBST          DEFB    0               ; WINBTS: BUTTON STYLE (0=NORMAL, 1=SELECTED)
+WINSEL          DEFB    0               ; MODAL DIALOG: SELECTED OPTION INDEX
+WINRES          DEFB    0               ; MODAL DIALOG RESULT (0=CANCEL, 1=CONFIRM)
 
 
 ; --- VDP COMMAND BLOCK          ----------------------------------------
