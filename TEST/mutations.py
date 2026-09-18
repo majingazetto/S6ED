@@ -639,16 +639,65 @@ SELTMPXB        EQU     SELTMPXB2""")],
     },
     {
         'name': 'c2-winclamp',
-        'why': 'WINOPEN does not clamp geometry to 512x212 screen and VRAM buffer bounds',
+        'why': 'WINOPEN does not clamp geometry to screen and VRAM buffer bounds',
         'file': 'WINDOW.Z8A',
-        'old': """                ; CLAMP WINX <= 508
+        'old': """                ; CLAMP WINX <= 504: WINX + WINW + WINSHDW <= 512, WINW >= 4
                 LD      HL, (WINX)
-                LD      DE, 508""",
-        'new': """                ; CLAMP WINX <= 508
+                LD      DE, 504""",
+        'new': """                ; CLAMP WINX <= 504: WINX + WINW + WINSHDW <= 512, WINW >= 4
                 LD      HL, (WINX)
-                LD      DE, 999""",
+                LD      DE, 999         ; MUTATION: NO HORIZONTAL CLAMP""",
         'filter': 'H7',
         'expect_static': ['window-discipline'],
+    },
+    {
+        'name': 'c3-accent',
+        'why': 'the top accent band is painted in UI color instead of highlight',
+        'file': 'WINDOW.Z8A',
+        'old': """                ; 4. TOP ACCENT BAND (COL_HI, 1 PX)
+                LD      DE, 0
+                LD      HL, 1
+                LD      A, CLR_HI""",
+        'new': """                ; 4. TOP ACCENT BAND (COL_HI, 1 PX)
+                LD      DE, 0
+                LD      HL, 1
+                LD      A, CLR_UI       ; MUTATION: ACCENT IN UI COLOR""",
+        'filter': 'H7',
+        'expect': ['H7/color-highlight'],
+    },
+    {
+        'name': 'c3-shadow',
+        'why': 'the shadow bars are painted in highlight color, not background',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      HL, WINCOMP_Y + WINSHDW
+                LD      (VDP_DY), HL
+                LD      HL, WINSHDW
+                LD      (VDP_NX), HL
+                LD      HL, (WINH)
+                LD      (VDP_NY), HL
+                LD      A, CLR_BG""",
+        'new': """                LD      HL, WINCOMP_Y + WINSHDW
+                LD      (VDP_DY), HL
+                LD      HL, WINSHDW
+                LD      (VDP_NX), HL
+                LD      HL, (WINH)
+                LD      (VDP_NY), HL
+                LD      A, CLR_HI       ; MUTATION: SHADOW IN HIGHLIGHT""",
+        'filter': 'H21',
+        'expect': ['H21/shadow-right'],
+    },
+    {
+        'name': 'c3-winupd',
+        'why': 'WINUPD blits from the save buffer instead of the composition buffer',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      HL, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_SY), HL    ; SY = WINCOMP_Y + REL Y""",
+        'new': """                LD      HL, WINBUF_Y    ; MUTATION: WRONG SOURCE BUFFER
+                ADD     HL, DE
+                LD      (VDP_SY), HL    ; SY = WINCOMP_Y + REL Y""",
+        'filter': 'H19',
+        'expect': ['H19/nav-left'],
     },
     {
         'name': 'c2-winchtr-char',
@@ -701,9 +750,9 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'file': 'WINDOW.Z8A',
         'old': """                LD      (HL), A
                 CALL    .BTNS
-                CALL    WINSHOW""",
+                CALL    WINVSY""",
         'new': """                LD      (HL), A
-                CALL    WINSHOW         ; MUTATION: SELECTION NEVER REPAINTS""",
+                CALL    WINVSY         ; MUTATION: SELECTION NEVER REPAINTS""",
         'filter': 'H19',
         'expect': ['H19/nav-left'],
     },
