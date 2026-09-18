@@ -1026,20 +1026,20 @@ class H7AboutDialog(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot', vram=True)
-        # 1. Open with F1 then A, close with RETURN
-        t.press('F1')
+        # 1. Open with F5 then A, close with RETURN
+        t.press('F5')
         t.press('A')
         t.snap('dialog1', vram=True, at='WINPOLL')
         t.press('RETURN')
         t.snap('after_ret', vram=True)
-        # 2. Open with F1 then A, close with SPACE
-        t.press('F1')
+        # 2. Open with F5 then A, close with SPACE
+        t.press('F5')
         t.press('A')
         t.snap('dialog2', vram=True, at='WINPOLL')
         t.press('SPACE')
         t.snap('after_spc', vram=True)
-        # 3. Open with F1 then A, close with ESC
-        t.press('F1')
+        # 3. Open with F5 then A, close with ESC
+        t.press('F5')
         t.press('A')
         t.snap('dialog3', vram=True, at='WINPOLL')
         t.press('ESC')
@@ -1817,6 +1817,215 @@ class H22FileMenu(Case):
             % (run.var('before_new', 'MODIFIED'),
                run.var('after_new', 'MODIFIED'),
                run.var('after_new', 'TOTLINES'))))
+
+        return checks
+
+
+# --- H23  MENU HORIZONTAL NAVIGATION & FKEYS ---------------------------
+
+
+class H23MenuNav(Case):
+    name = 'H23-menu-nav'
+    desc = ('Horizontal menu navigation across all 5 menus (RIGHT/LEFT wrapping), '
+            'direct function key jumps (F1..F5), item navigation with separator '
+            'skipping in Edit menu, and clean screen/title restoration on cancel')
+    origin = ('5-menu horizontal navigation engine with table-driven dimensions, '
+              'dynamic background save/restore, and title XOR highlighting')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(10))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram=True)
+        t.snap('boot_r0', vram='menu')
+
+        # 1. F1 opens File menu (MNUID=0)
+        t.press('F1')
+        t.snap('open_file', at='WINPOLL')
+
+        # 2. RIGHT navigates across all menus:
+        # File (0) -> Edit (1) -> View (2) -> Options (3) -> Help (4) -> wrap File (0)
+        t.press('RIGHT')
+        t.snap('nav_edit', vram='menu', at='WINPOLL')
+        t.press('RIGHT')
+        t.snap('nav_view', at='WINPOLL')
+        t.press('RIGHT')
+        t.snap('nav_opts', at='WINPOLL')
+        t.press('RIGHT')
+        t.snap('nav_help', at='WINPOLL')
+        t.press('RIGHT')
+        t.snap('nav_wrap_file', at='WINPOLL')
+
+        # 3. LEFT wraps backwards:
+        # File (0) -> wrap Help (4) -> Options (3)
+        t.press('LEFT')
+        t.snap('nav_wrap_help', at='WINPOLL')
+        t.press('LEFT')
+        t.snap('nav_left_opts', at='WINPOLL')
+
+        # 4. Direct function keys jump across menus:
+        t.press('F2')
+        t.snap('f2_jump_edit', at='WINPOLL')
+        t.press('F4')
+        t.snap('f4_jump_opts', at='WINPOLL')
+        t.press('F5')
+        t.snap('f5_jump_help', at='WINPOLL')
+        t.press('F3')
+        t.snap('f3_jump_view', at='WINPOLL')
+        t.press('F1')
+        t.snap('f1_jump_file', at='WINPOLL')
+
+        # 5. Navigate into Edit menu items and test separator skipping:
+        # Items in Edit: 0:Cut, 1:Copy, 2:Paste, 3:Del Line, 4:Sep, 5:Select All, 6:Clear Sel
+        t.press('F2')
+        t.snap('edit_menu', at='WINPOLL')
+        t.press('DOWN')
+        t.snap('edit_item1', at='WINPOLL')
+        t.press('DOWN')
+        t.press('DOWN')
+        t.snap('edit_item3', at='WINPOLL')
+        t.press('DOWN')
+        t.snap('edit_item5', at='WINPOLL')
+        t.press('UP')
+        t.snap('edit_item3_up', at='WINPOLL')
+
+        # 6. ESC cancels menu cleanly
+        t.press('ESC')
+        t.snap('after_cancel', vram=True)
+        t.snap('after_cancel_r0', vram='menu')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        v_boot = run.blob('boot', 'vram')
+        v_cancel = run.blob('after_cancel', 'vram')
+        r0_boot = run.blob('boot_r0', 'menu')
+        r0_edit = run.blob('nav_edit', 'menu')
+        r0_cancel = run.blob('after_cancel_r0', 'menu')
+
+        checks = []
+
+        # 1. F1 opens File menu
+        checks.append(Check(
+            'H23/f1-open',
+            run.var('open_file', 'WINACTV') == 1 and
+            run.var('open_file', 'MNUID') == 0 and
+            run.var('open_file', 'MNUSEL') == 0,
+            'F1 opens File menu (WINACTV=%s, MNUID=%s, MNUSEL=%s)'
+            % (run.var('open_file', 'WINACTV'),
+               run.var('open_file', 'MNUID'),
+               run.var('open_file', 'MNUSEL'))))
+
+        # 2. Horizontal RIGHT navigation + wrap
+        right_ok = (
+            run.var('nav_edit', 'WINACTV') == 1 and run.var('nav_edit', 'MNUID') == 1 and
+            run.var('nav_view', 'WINACTV') == 1 and run.var('nav_view', 'MNUID') == 2 and
+            run.var('nav_opts', 'WINACTV') == 1 and run.var('nav_opts', 'MNUID') == 3 and
+            run.var('nav_help', 'WINACTV') == 1 and run.var('nav_help', 'MNUID') == 4 and
+            run.var('nav_wrap_file', 'WINACTV') == 1 and run.var('nav_wrap_file', 'MNUID') == 0
+        )
+        checks.append(Check(
+            'H23/nav-right-wrap',
+            right_ok,
+            'RIGHT cycles 0->1->2->3->4->0 (Edit=%s, View=%s, Opts=%s, Help=%s, WrapFile=%s)'
+            % (run.var('nav_edit', 'MNUID'),
+               run.var('nav_view', 'MNUID'),
+               run.var('nav_opts', 'MNUID'),
+               run.var('nav_help', 'MNUID'),
+               run.var('nav_wrap_file', 'MNUID'))))
+
+        # 3. Row 0 title highlighting on switch
+        xor_title_ok = True
+        if r0_boot is not None and r0_edit is not None:
+            for y in range(8):
+                # File title restored
+                for x in range(48, 72):
+                    if vram.pixel(r0_edit, x, y, first_line=0) != vram.pixel(r0_boot, x, y, first_line=0):
+                        xor_title_ok = False
+                        break
+                # Edit title inverted
+                for x in range(84, 108):
+                    if vram.pixel(r0_edit, x, y, first_line=0) != (vram.pixel(r0_boot, x, y, first_line=0) ^ 1):
+                        xor_title_ok = False
+                        break
+                if not xor_title_ok:
+                    break
+        else:
+            xor_title_ok = False
+        checks.append(Check(
+            'H23/title-switch-xor',
+            xor_title_ok,
+            'Switching to Edit menu restores File title and inverts Edit title (84..107)'
+            if xor_title_ok else 'Title switch XOR mismatch'))
+
+        # 4. Horizontal LEFT navigation + wrap
+        left_ok = (
+            run.var('nav_wrap_help', 'WINACTV') == 1 and run.var('nav_wrap_help', 'MNUID') == 4 and
+            run.var('nav_left_opts', 'WINACTV') == 1 and run.var('nav_left_opts', 'MNUID') == 3
+        )
+        checks.append(Check(
+            'H23/nav-left-wrap',
+            left_ok,
+            'LEFT wraps 0->4->3 (WrapHelp=%s, Opts=%s)'
+            % (run.var('nav_wrap_help', 'MNUID'),
+               run.var('nav_left_opts', 'MNUID'))))
+
+        # 5. Direct F1..F5 key jumps
+        fkeys_ok = (
+            run.var('f2_jump_edit', 'MNUID') == 1 and
+            run.var('f4_jump_opts', 'MNUID') == 3 and
+            run.var('f5_jump_help', 'MNUID') == 4 and
+            run.var('f3_jump_view', 'MNUID') == 2 and
+            run.var('f1_jump_file', 'MNUID') == 0
+        )
+        checks.append(Check(
+            'H23/direct-fkeys',
+            fkeys_ok,
+            'F1..F5 keys jump directly to corresponding menus (F2=%s, F4=%s, F5=%s, F3=%s, F1=%s)'
+            % (run.var('f2_jump_edit', 'MNUID'),
+               run.var('f4_jump_opts', 'MNUID'),
+               run.var('f5_jump_help', 'MNUID'),
+               run.var('f3_jump_view', 'MNUID'),
+               run.var('f1_jump_file', 'MNUID'))))
+
+        # 6. Item navigation and separator skip in Edit menu
+        edit_nav_ok = (
+            run.var('edit_item1', 'MNUSEL') == 1 and
+            run.var('edit_item3', 'MNUSEL') == 3 and
+            run.var('edit_item5', 'MNUSEL') == 5 and
+            run.var('edit_item3_up', 'MNUSEL') == 3
+        )
+        checks.append(Check(
+            'H23/edit-skip-sep',
+            edit_nav_ok,
+            'DOWN advances 1->3, skips separator to 5; UP skips back to 3 (item1=%s, item3=%s, item5=%s, item3_up=%s)'
+            % (run.var('edit_item1', 'MNUSEL'),
+               run.var('edit_item3', 'MNUSEL'),
+               run.var('edit_item5', 'MNUSEL'),
+               run.var('edit_item3_up', 'MNUSEL'))))
+
+        # 7. Clean cancellation and restoration
+        cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]
+        d_cancel = vram.diff(v_boot, v_cancel, ignore_cells=cursor)
+        r0_clean = True
+        if r0_boot and r0_cancel:
+            for y in range(8):
+                for x in range(256):
+                    if vram.pixel(r0_cancel, x, y, first_line=0) != vram.pixel(r0_boot, x, y, first_line=0):
+                        r0_clean = False
+                        break
+                if not r0_clean:
+                    break
+        else:
+            r0_clean = False
+        checks.append(Check(
+            'H23/cancel-clean',
+            not d_cancel and r0_clean and run.var('after_cancel', 'WINACTV') == 0,
+            'ESC cleanly closes menu and restores entire text area and row 0 chrome'
+            if (not d_cancel and r0_clean and run.var('after_cancel', 'WINACTV') == 0) else
+            'cancel restore failed: %d text diffs, r0_clean=%s, WINACTV=%s'
+            % (len(d_cancel), r0_clean, run.var('after_cancel', 'WINACTV'))))
 
         return checks
 
@@ -3087,7 +3296,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          H8DatBadMagic(), H9DatBadVersion(), H10DatNoBlocks(),
          H11DatTruncHdr(), H12DatTruncTbl(), H13DatLenZero(), H14DatLenOver(),
          H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(), H18WindowRobustness(),
-         H19QuitDialog(), H20QuitDirty(), H21Shadow(), H22FileMenu(),
+         H19QuitDialog(), H20QuitDirty(), H21Shadow(), H22FileMenu(), H23MenuNav(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),

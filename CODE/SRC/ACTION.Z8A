@@ -61,7 +61,11 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTTGLIT        ; 49
                 DEFW    ACTCYCMK        ; 50
                 DEFW    ACTTAB          ; 51
-                DEFW    ACTMENU         ; 52
+                DEFW    ACTMENU         ; 52 (FILE)
+                DEFW    ACTMNU1         ; 53 (EDIT)
+                DEFW    ACTMNU2         ; 54 (VIEW)
+                DEFW    ACTMNU3         ; 55 (OPTIONS)
+                DEFW    ACTMNU4         ; 56 (HELP)
 
 
 ; --- ACTNONE                   ----------------------------------------
@@ -2612,33 +2616,204 @@ ACTTAB          LD      A, (SELACT)
 ; - CLOBBERS: ALL
 ; -
 
-ACTMENU         LD      A, (FTRSEG)
+ACTMENU         XOR     A
+                LD      (MNUID), A
+                JR      MNUENT
+
+
+; - ACTMNU1 ----------------------------
+; - OPEN DROP-DOWN MENU (EDIT MENU)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTMNU1         LD      A, 1
+                LD      (MNUID), A
+                JR      MNUENT
+
+
+; - ACTMNU2 ----------------------------
+; - OPEN DROP-DOWN MENU (VIEW MENU)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTMNU2         LD      A, 2
+                LD      (MNUID), A
+                JR      MNUENT
+
+
+; - ACTMNU3 ----------------------------
+; - OPEN DROP-DOWN MENU (OPTIONS MENU)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTMNU3         LD      A, 3
+                LD      (MNUID), A
+                JR      MNUENT
+
+
+; - ACTMNU4 ----------------------------
+; - OPEN DROP-DOWN MENU (HELP MENU)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTMNU4         LD      A, 4
+                LD      (MNUID), A
+                JR      MNUENT
+
+
+; - MNUENT -----------------------------
+; - COMMON ENTRY POINT FOR DROP-DOWN MENUS
+; - IN:  NONE (USES MNUID)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+MNUENT          LD      A, (FTRSEG)
                 LD      HL, DOMNU
                 CALL    FCALL
                 RET     C               ; CANCELLED: RETURN TO EDITING
 
-                ; DISPATCH SELECTED ACTION (A = 0..6)
+                ; DISPATCH SELECTED ACTION BASED ON (MNUID)
+                LD      A, (MNUID)
                 OR      A
-                JR      Z, .NEW
-                CP      2
-                JR      Z, .SAVE
-                CP      5
-                JR      Z, .ABOUT
-                CP      6
-                JR      Z, .QUIT
-                RET                     ; 1 (OPEN) / 3 (SAVE AS): NO-OP FOR NOW
+                JR      Z, .FILMNU
+                DEC     A
+                JR      Z, .EDIMNU
+                DEC     A
+                JP      Z, .VIWMNU
+                DEC     A
+                JP      Z, .OPTMNU
+                JP      .HLPMNU
 
-.NEW            CALL    FILENEW
+.FILMNU         LD      A, (MNUSEL)
+                OR      A
+                JR      Z, .FNEW
+                CP      2
+                JR      Z, .FSAVE
+                CP      5
+                JR      Z, .FQUIT
+                RET
+
+.FNEW           CALL    FILENEW
                 XOR     A
                 LD      (MODIFIED), A
                 CALL    REDRAW
                 JP      DRWSTAT
 
-.SAVE           CALL    FILESAVE
+.FSAVE          CALL    FILESAVE
                 JP      DRWSTAT
 
-.ABOUT          JP      ACTHELP
+.FQUIT          JP      ACTQUIT
 
-.QUIT           JP      ACTQUIT
+.EDIMNU         LD      A, (MNUSEL)
+                OR      A
+                JR      Z, .ECUT
+                CP      1
+                JR      Z, .ECPY
+                CP      2
+                JR      Z, .EPST
+                CP      3
+                JR      Z, .EDEL
+                CP      5
+                JR      Z, .EALL
+                CP      6
+                JR      Z, .EDSL
+                RET
+
+.ECUT           CALL    ACCUT
+                JP      DRWSTAT
+
+.ECPY           CALL    ACCOPY
+                JP      DRWSTAT
+
+.EPST           CALL    ACTPAST
+                JP      DRWSTAT
+
+.EDEL           CALL    ACDELLN
+                JP      DRWSTAT
+
+.EALL           CALL    ACSELAL
+                JP      DRWSTAT
+
+.EDSL           CALL    ACDSEL
+                JP      DRWSTAT
+
+.VIWMNU         LD      A, (MNUSEL)
+                OR      A
+                JR      Z, .VWRAP
+                CP      1
+                JR      Z, .VMKUP
+                CP      3
+                JR      Z, .VCLK
+                CP      4
+                JR      Z, .VRDRW
+                RET
+
+.VWRAP          CALL    ACTTGLWR
+                JP      DRWSTAT
+
+.VMKUP          CALL    ACTCYCMK
+                JP      DRWSTAT
+
+.VCLK           LD      A, (SHOWCLK)
+                XOR     1
+                LD      (SHOWCLK), A
+                CALL    DRWMENU
+                JP      DRWSTAT
+
+.VRDRW          CALL    REDRAW
+                JP      DRWSTAT
+
+.OPTMNU         LD      A, (MNUSEL)
+                OR      A
+                JR      Z, .OPROF
+                CP      1
+                JR      Z, .OTAB
+                CP      2
+                JR      Z, .OEOL
+                CP      3
+                JR      Z, .OINS
+                RET
+
+.OPROF          CALL    ACTCYCMK
+                JP      DRWSTAT
+
+.OTAB           LD      A, (TABWIDTH)
+                CP      2
+                JR      Z, .TAB4
+                CP      4
+                JR      Z, .TAB8
+                LD      A, 2
+                JR      .TABSET
+.TAB4           LD      A, 4
+                JR      .TABSET
+.TAB8           LD      A, 8
+.TABSET         LD      (TABWIDTH), A
+                JP      DRWSTAT
+
+.OEOL           LD      A, (SAVEEOL)
+                XOR     1
+                LD      (SAVEEOL), A
+                XOR     A
+                LD      (AUTOLOD), A
+                JP      DRWSTAT
+
+.OINS           CALL    ACTTGLIN
+                JP      DRWSTAT
+
+.HLPMNU         LD      A, (MNUSEL)
+                CP      2
+                JR      Z, .HABT
+                RET
+
+.HABT           JP      ACTHELP
 
 

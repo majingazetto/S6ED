@@ -278,8 +278,14 @@ ACTGLBD         EQU     48              ; CTRL + B (TOGGLE BOLD)
 ACTGLIT         EQU     49              ; CTRL + I (TOGGLE ITALIC)
 ACCYCMK         EQU     50              ; F3 / CTRL + T (CYCLE MARKUP MODE)
 ACTABS          EQU     51              ; TAB (INSERT SPACES TO NEXT TAB STOP)
-ACMENU          EQU     52              ; DROP-DOWN MENU (SELECT / F10)
-ACMAX           EQU     53
+ACMENU          EQU     52              ; DROP-DOWN MENU FILE (F1 / SELECT / F10)
+ACMNU1          EQU     53              ; DROP-DOWN MENU EDIT (F2)
+ACMNU2          EQU     54              ; DROP-DOWN MENU VIEW (F3)
+ACMNU3          EQU     55              ; DROP-DOWN MENU OPTIONS (F4)
+ACMNU4          EQU     56              ; DROP-DOWN MENU HELP (F5)
+ACMAX           EQU     57
+
+MNUCOUNT        EQU     5               ; TOTAL TOP-LEVEL MENUS (FILE, EDIT, VIEW, OPT, HELP)
 
 
 ; --- KEYMAP PROFILES           ----------------------------------------

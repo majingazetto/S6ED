@@ -61,14 +61,15 @@ KMAPSTD         ; UNMODIFIED CURSORS
                 DEFB    CTRL_S,  MODCTRL, ACSAVE
                 DEFB    CTRL_W,  MODCTRL, ACTGLWR
                 DEFB    CTRL_K,  MODCTRL, ACCYCKM
+                DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    CTRL_Y,  MODCTRL, ACDELLN
                 DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    ESC,     MODANY,  ACQUIT
                 DEFB    F1KEY,   MODANY,  ACMENU
-                DEFB    F2KEY,   MODANY,  ACSAVE
-                DEFB    F3KEY,   MODANY,  ACCYCMK
-                DEFB    CTRL_T,  MODCTRL, ACCYCMK
-                DEFB    F5KEY,   MODANY,  ACCYCKM
+                DEFB    F2KEY,   MODANY,  ACMNU1
+                DEFB    F3KEY,   MODANY,  ACMNU2
+                DEFB    F4KEY,   MODANY,  ACMNU3
+                DEFB    F5KEY,   MODANY,  ACMNU4
                 DEFB    SELKEY,  MODNONE, ACMENU
                 DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
@@ -135,14 +136,15 @@ KMAPWS          ; WORDSTAR DIAMOND
                 DEFB    CR,      MODANY,  ACNWLIN
                 DEFB    INSKEY,  MODANY,  ACTGLIN
                 DEFB    CTRL_K,  MODCTRL, ACCYCKM
+                DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    CTRL_W,  MODCTRL, ACTGLWR
                 DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    ESC,     MODANY,  ACQUIT
                 DEFB    F1KEY,   MODANY,  ACMENU
-                DEFB    F2KEY,   MODANY,  ACSAVE
-                DEFB    F3KEY,   MODANY,  ACCYCMK
-                DEFB    CTRL_T,  MODCTRL, ACCYCMK
-                DEFB    F5KEY,   MODANY,  ACCYCKM
+                DEFB    F2KEY,   MODANY,  ACMNU1
+                DEFB    F3KEY,   MODANY,  ACMNU2
+                DEFB    F4KEY,   MODANY,  ACMNU3
+                DEFB    F5KEY,   MODANY,  ACMNU4
                 DEFB    SELKEY,  MODNONE, ACMENU
                 DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
@@ -188,14 +190,15 @@ KMAPEMAC        ; EMACS NAVIGATION & EDITING
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
                 DEFB    INSKEY,  MODANY,  ACTGLIN
+                DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    CTRL_W,  MODCTRL, ACTGLWR
                 DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    ESC,     MODANY,  ACQUIT
                 DEFB    F1KEY,   MODANY,  ACMENU
-                DEFB    F2KEY,   MODANY,  ACSAVE
-                DEFB    F3KEY,   MODANY,  ACCYCMK
-                DEFB    CTRL_T,  MODCTRL, ACCYCMK
-                DEFB    F5KEY,   MODANY,  ACCYCKM
+                DEFB    F2KEY,   MODANY,  ACMNU1
+                DEFB    F3KEY,   MODANY,  ACMNU2
+                DEFB    F4KEY,   MODANY,  ACMNU3
+                DEFB    F5KEY,   MODANY,  ACMNU4
                 DEFB    SELKEY,  MODNONE, ACMENU
                 DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
@@ -238,13 +241,14 @@ KMAPVIN         ; VI NORMAL MOVEMENT
 
                 ; EDITING & SYSTEM
                 DEFB    CTRL_K,  MODCTRL, ACCYCKM
+                DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    CTRL_S,  MODCTRL, ACSAVE
                 DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    F1KEY,   MODANY,  ACMENU
-                DEFB    F2KEY,   MODANY,  ACSAVE
-                DEFB    F3KEY,   MODANY,  ACCYCMK
-                DEFB    CTRL_T,  MODCTRL, ACCYCMK
-                DEFB    F5KEY,   MODANY,  ACCYCKM
+                DEFB    F2KEY,   MODANY,  ACMNU1
+                DEFB    F3KEY,   MODANY,  ACMNU2
+                DEFB    F4KEY,   MODANY,  ACMNU3
+                DEFB    F5KEY,   MODANY,  ACMNU4
                 DEFB    SELKEY,  MODNONE, ACMENU
                 DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
@@ -259,6 +263,7 @@ KMAPVII         ; RETURN TO NORMAL MODE
                 ; CURSORS & BASIC EDITING
                 DEFB    CTRL_B,  MODCTRL, ACTGLBD
                 DEFB    CTRL_I,  MODCTRL, ACTGLIT
+                DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    CLEFT,   MODANY,  ACMVL
                 DEFB    CRIGHT,  MODANY,  ACMVR
                 DEFB    CUP,     MODANY,  ACMVU
@@ -268,10 +273,10 @@ KMAPVII         ; RETURN TO NORMAL MODE
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
                 DEFB    F1KEY,   MODANY,  ACMENU
-                DEFB    F2KEY,   MODANY,  ACSAVE
-                DEFB    F3KEY,   MODANY,  ACCYCMK
-                DEFB    CTRL_T,  MODCTRL, ACCYCMK
-                DEFB    F5KEY,   MODANY,  ACCYCKM
+                DEFB    F2KEY,   MODANY,  ACMNU1
+                DEFB    F3KEY,   MODANY,  ACMNU2
+                DEFB    F4KEY,   MODANY,  ACMNU3
+                DEFB    F5KEY,   MODANY,  ACMNU4
                 DEFB    SELKEY,  MODNONE, ACMENU
                 DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
