@@ -67,6 +67,11 @@ VR_FBI          EQU     #0E000          ; FONT: BOLD+ITALIC  SY 448
 VR_WINBF        EQU     #10000          ; WINDOW BACKGROUND BUFFER BASE (SY 512)
 WINBUF_Y        EQU     512             ; OFF-SCREEN VRAM WINDOW BUFFER BASE Y
 WINCOMP_Y       EQU     768             ; OFF-SCREEN VRAM COMPOSITION BUFFER BASE Y
+WINSHDW         EQU     4               ; WINDOW DROP SHADOW OFFSET/WIDTH (PX).
+                                        ; 4 PX KEEPS WINX+WINW A MULTIPLE OF 4
+                                        ; AND EVERY SHADOW BAR BYTE-ALIGNED
+                                        ; (HMMV); THE SAVE/SHOW RECT GROWS TO
+                                        ; (WINW+WINSHDW) X (WINH+WINSHDW)
 
 FONTSIZ         EQU     2048            ; 256 GLYPHS X 8 BYTES, 1BPP (SOURCE)
 FNTFSIZ         EQU     FONTSIZ * 4     ; S6ED.FNT: THE FOUR VARIANTS, EXACTLY

@@ -1,6 +1,6 @@
 # S6ED — Plan de correcciones post-Fase 3a
 
-Fecha: 2026-09-17 · Estado: **C1, C2 IMPLEMENTADAS (2026-09-17) · C4 IMPLEMENTADA (2026-09-18) · C3 PROPUESTA**
+Fecha: 2026-09-17 · Estado: **C1, C2 IMPLEMENTADAS (2026-09-17) · C4 IMPLEMENTADA (2026-09-18) · C3 EN CURSO (rama `feature/c3-window-painting`)**
 Origen: revisión cruzada de las Fases 1b (maquinaria inter-segmento), 2 (contenedor
 `S6ED.DAT`) y 3a (window engine, fuentes multi-peso, color 3, diálogo About).
 
@@ -186,6 +186,13 @@ Implementada completa.
 
 ## Fase C3 — Mejora del pintado de ventanas
 
+**Estado: DISEÑO AMPLIADO 2026-09-18 (rama `feature/c3-window-painting`)** —
+la propuesta original quedó revisada con las medidas reales de
+`informe_optimizacion_s6ed.md` y salió una versión mucho más ambiciosa.
+Ver "Estudio C3 ampliado" más abajo; la lista de trabajo es la del estudio.
+
+### Propuesta original (2026-09-17, SUPERSEDED)
+
 El diseño actual (composición oculta en Y=768 + 2 HMMM visibles de ~7,5 KB) es
 correcto: sin flicker y bajo un frame. Estas mejoras son de pulido, no de
 arquitectura. Orden de ataque sugerido:
@@ -209,6 +216,85 @@ solo comando de coste fijo; subdividir solo añade esperas CE), y escritura
 parcial de registros VDP (~5 ms offscreen, complejidad innecesaria). Guardar la
 idea de repaint por líneas para ventanas con contenido dinámico futuro (un
 HMMM de 1 línea ≈ 50 µs).
+
+### Estudio C3 ampliado (2026-09-18)
+
+La propuesta original subestimó los costes casi un orden de magnitud: usaba el
+"~3,2 ms por blit" de la cabecera de `WINDOW.Z8A`, que es ~10× optimista a los
+tamaños reales de diálogo. Con las medidas del informe de optimización
+(`Philips_NMS_8250`, display on):
+
+| Primitiva | Coste medido |
+|---|---|
+| HMMV (relleno por bytes) | 3,8 µs/byte |
+| HMMM (copia) | ~5,0 µs/byte |
+| LMMV (relleno por dots) | ~9,4 µs/byte-equivalente (2,5× HMMV) |
+| LMMM glifo 6×8 | ~550 µs (~450 overhead fijo VDP + ~100 CPU + ~46 píxeles) |
+
+Coste actual de abrir el diálogo About (288×104 px = 7.488 B):
+
+| Parte | Hoy |
+|---|---|
+| `WINSAV` (HMMM) | ~37 ms |
+| Rellenos `WINBOX` en LMMV (borde + interior + barra título + separador, con triple overdraw) | ~146 ms |
+| Texto (~170 glifos × 550 µs; ~30 son espacios que no pintan nada) | ~94 ms |
+| Botón | ~8 ms |
+| `WINSHOW` (HMMM) | ~37 ms |
+| **Total** | **~320 ms** |
+
+Los rellenos LMMV — no el texto — son el mayor coste de composición, y el
+ítem 2 original ("ahorra ~3-5 ms") arañaba solo el borde. Lista de trabajo
+ampliada, ordenada por impacto:
+
+1. **Descomposición por bandas HMMV (nueva, la estrella).** Sustituir borde +
+   relleno interior + barra de título LMMV (triple overdraw) por bandas
+   horizontales a ancho completo en HMMV — WINX/WINW ya son múltiplos de 4 por
+   el clamp de C2: acento (COL_HI, 1 px), título (COL_UI, 10 px), separador
+   (COL_HI, 1 px), cuerpo (COL_BG), borde inferior; más dos slivers LMMV de
+   1 px para los bordes laterales. Cero overdraw, todo el grueso en modo byte.
+   About: ~146 → ~29 ms; Quit: ~64 → ~12 ms. Subsume el ítem 2 original.
+   Ojo: las bandas con alto ≤ 0 se saltan (NY=0 en un comando VDP es peligroso).
+2. **Skip de espacios en `WINSTR`/`WINSTR3` (nueva).** El glifo de espacio es
+   todo ceros: con TIMP/TOR pintarlo es un no-op garantizado (las T-ops no
+   transfieren dots de color 0). Saltarlo es píxel-idéntico y ahorra ~550 µs
+   por espacio (~17 ms en About; cada botón `"[  YES  ]"` lleva 4).
+3. **Re-blit parcial `WINUPD` (nueva).** Generalizar `WINSHOW` a un
+   sub-rectángulo (relX múltiplo de 4, NX múltiplo de 4): la navegación YES/NO
+   de `DOQIT` re-blittea solo los dos botones (~450 B ≈ 2,3 ms) en vez de la
+   ventana entera (3.200 B ≈ 16 ms) por flecha. Es la mejora más perceptible
+   (interactiva) y la primitiva que necesitarán los menús de Fase 4 —
+   resucita la idea aplazada de repaint por líneas, generalizada a rects.
+4. **Sincronía VBLANK en `WINSHOW`/`WINRST`/`WINUPD` (ítem 1 original).**
+   Espera de flanco de JIFFY (el ISR del BIOS está vivo: WINPOLL usa
+   CHSNS/CHGET y el blink usa JIFFY; seguro y determinista en openMSX).
+   Matiz que el plan original no veía: un blit >1 frame (About ≈ 37 ms) no
+   puede ser 100% tear-free solo sincronizando el inicio; el residual es un
+   wipe top-down determinista de un frame en lugar de tearing aleatorio.
+   Quit (~16 ms) queda limpio.
+5. **Cuerpos de botón en HMMV (nueva, menor).** Rel-X múltiplos de 4
+   (nudge 106→108 en DOQIT; 36 y 116 ya lo son) y el cuerpo 56×12 pasa a
+   HMMV con patrón de byte (`CLR_UI`/`CLR_HI`). El borde 58×14 se queda LMMV.
+6. **Recorte de texto a WINW (ítem 4 original).** `WINOPEN` fija
+   `WINCLIPX = WINX + WINW - 1`; `WINSTR` corta el string cuando el siguiente
+   glifo lo superaría. Cero = sin clip (escape para usos futuros).
+7. **Sombra 4 px (ítem 3 original, APROBADA).** En 4 px, no 2: mantiene
+   WINX+WINW múltiplo de 4 y todas las barras en HMMV alineado (barra derecha
+   4×WINH en X+WINW/Y+4; inferior WINW×4 en X+4/Y+WINH, COL_BG). Los rects de
+   `WINSAV`/`WINSHOW`/`WINRST` crecen a `(WINW+4)×(WINH+4)` y los clamps de
+   `WINOPEN` reservan esos 4 px (WINX+WINW ≤ 508, WINY+WINH ≤ 208). Margen de
+   VRAM: salvado acaba en 512+216=728 < 768; composición en 768+216=984 ≤ 1024.
+8. **Errata doc:** la cabecera de `WINDOW.Z8A` decía "pop-up takes ~3.2 ms";
+   a tamaños reales es `NX/4 × NY × 5 µs` (About ≈ 37 ms, Quit ≈ 16 ms).
+
+Proyección: About ~320 → ~190 ms; Quit ~125 → ~65 ms; navegación 16 → ~2,4 ms;
+tearing aleatorio eliminado.
+
+Descartadas en esta revisión (con las medidas en la mano): glifos por HMMM en
+columnas alineadas (el overhead de ~450 µs es *por comando*, no por byte: no
+gana nada y ensucia el borde derecho del string); caché de diálogos compuestos
+(no cabe en banco 1: WINCOMP+216=984 y quedan 40 líneas); slim de VDPCMD a
+R#32-37+R#46 (recorta solo los ~100 µs CPU de los 550 µs por glifo — ~17 ms en
+About — a cambio del cambio más arriesgado del lote; fuera de C3).
 
 ### Tests
 

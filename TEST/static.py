@@ -337,13 +337,16 @@ def check_build_clean(ctx):
 
 
 def check_window_discipline(ctx):
-    """Window engine implementation rules and invariants (Fase C2).
+    """Window engine implementation rules and invariants (Fases C2 y C3).
 
     WINOPEN must round WINW up capturing carry before masking.
-    Geometry bounds (508, 512, 211, 212) must be clamped in WINOPEN.
+    Geometry bounds (504, 508, 207, 208 — C3 reserves the 4-px shadow)
+    must be clamped in WINOPEN.
     WINKIL must be called in WINOPEN.
     WINACTV must be managed in WINOPEN and WINCLOS.
-    WINSTR must not clobber IXH/IXL.
+    WINSTR must not clobber IXH/IXL, must skip spaces and honor WINCLIPX.
+    WINSHOW/WINRST must sync to VBLANK via WINVSY (C3).
+    The frame must be painted as HMMV bands (WINBAND) with a WINSHDW shadow.
     .STRVER must compose version dynamically from VERSION.MAJOR and VERSION.MINOR.
     """
     path = os.path.join(ctx.src_dir, 'WINDOW.Z8A')
@@ -357,8 +360,8 @@ def check_window_discipline(ctx):
     if not m:
         bad.append('WINOPEN WINW rounding does not preserve carry before AND')
 
-    # Check bounds
-    for bound in (r'DE,\s*508\b', r'HL,\s*512\b', r'DE,\s*211\b', r'HL,\s*212\b'):
+    # Check bounds (C3: shadow margin reserved — 504/508 horizontal, 207/208 vertical)
+    for bound in (r'DE,\s*504\b', r'HL,\s*508\b', r'DE,\s*207\b', r'HL,\s*208\b'):
         if not re.search(bound, src):
             bad.append('WINOPEN missing geometry clamp %s' % bound)
 
@@ -371,9 +374,34 @@ def check_window_discipline(ctx):
     if 'IXH' in src or 'IXL' in src:
         bad.append('WINDOW.Z8A uses IXH/IXL (forbidden: preserves IX for selection)')
 
+    # C3: VBLANK sync on the two visible full blits
+    if not re.search(r'WINSHOW\s+CALL\s+WINVSY', src):
+        bad.append('WINSHOW does not sync to VBLANK via WINVSY')
+    if not re.search(r'WINRST\s+CALL\s+WINVSY', src):
+        bad.append('WINRST does not sync to VBLANK via WINVSY')
+
+    # C3: band-decomposed frame with shadow
+    if 'CALL    WINBAND' not in src:
+        bad.append('WINBOX is not band-decomposed (no WINBAND calls)')
+    if 'WINSHDW' not in src:
+        bad.append('WINBOX/WINSAV do not paint/save the WINSHDW shadow margin')
+
+    # C3: space skip and clipping in WINSTR
+    if "CP      ' '" not in src:
+        bad.append('WINSTR does not skip spaces (all-zero glyph, TIMP/TOR no-op)')
+    if 'WINCLIPX' not in src:
+        bad.append('WINSTR/WINOPEN do not implement the WINCLIPX text clip')
+
+    # C3: partial re-blit primitive and its use in the Quit dialog nav
+    if not re.search(r'WINUPD\s+PUSH\s+AF', src):
+        bad.append('WINUPD partial re-blit primitive missing')
+    if 'CALL    WINUPD' not in src:
+        bad.append('DOQIT navigation does not re-blit via WINUPD')
+
     return Check('window-discipline', not bad,
                  '; '.join(bad) if bad else
-                 'window engine invariants clean (carry, clamps, WINKIL, dynamic version, IX-clean)')
+                 'window engine invariants clean (carry, clamps, WINKIL, dynamic version, '
+                 'IX-clean, vsync, bands, shadow, clip, WINUPD)')
 
 
 ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,

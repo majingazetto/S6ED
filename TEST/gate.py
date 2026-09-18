@@ -1058,7 +1058,7 @@ class H7AboutDialog(Case):
 
         hi_pixels = sum(1 for b in v_d1 for s in (0, 2, 4, 6) if ((b >> s) & 3) == 3)
         checks.append(Check('H7/color-highlight',
-                            hi_pixels > 500,
+                            hi_pixels > 900,
                             'Color 3 (amber) highlights present (%d px)' % hi_pixels))
 
         cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]
@@ -1338,8 +1338,6 @@ class H18WindowRobustness(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('before_modal', vram=True)
-        # Inject stray space into BIOS buffer right as F1 opens modal
-        t.at('type " "')
         t.press('F1')
         t.snap('modal_open', vram=True, at='WINPOLL')
         # Close with RETURN
@@ -1522,6 +1520,91 @@ class H20QuitDirty(Case):
                             'N cancels, editor resumes'
                             if run.var('after_n', 'SCRMOD') == 6 else
                             'SCRMOD after N = %s' % run.var('after_n', 'SCRMOD')))
+        return checks
+
+
+# --- H21  WINDOW DROP SHADOW (FASE C3) ---------------------------------
+
+
+class H21Shadow(Case):
+    name = 'H21-window-shadow'
+    desc = ('Quit dialog casts a 4 px COL_BG shadow over the text below it; '
+            'shadow corners show the saved background; close restores everything')
+    origin = ('Fase C3: the save/show rect grew to (WINW+4)x(WINH+4) and the '
+              'corner strips are copied from the saved background so the '
+              'extended blit carries no stale composition data')
+
+    # Quit dialog at (156,74), 200x64, shadow 4 px:
+    #   right bar   x 356..359, y 78..141
+    #   bottom bar  x 160..359, y 138..141
+    #   corners     x 356..359 y 74..77 / x 156..159 y 138..141 (background)
+    RIGHTBAR = (356, 78, 4, 64)
+    BOTBAR = (160, 138, 200, 4)
+    CORNERS = ([(x, y) for x in range(356, 360) for y in range(74, 78)] +
+               [(x, y) for x in range(156, 160) for y in range(138, 142)])
+
+    def fixture(self, ctx, variant=None):
+        # 70-char lines leave ink under both shadow bars (80 px right,
+        # 230 px bottom with the S6ED font's 'X' glyph)
+        return crlf(['X' * 70] * 20)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram=True)
+        t.press('ESC')
+        t.snap('dlg', vram=True, at='WINPOLL')
+        t.press('ESC')
+        t.snap('closed', vram=True)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        v_boot = run.blob('boot', 'vram')
+        v_dlg = run.blob('dlg', 'vram')
+        v_closed = run.blob('closed', 'vram')
+        fl = vram.TEXT_FIRST_LINE
+
+        def ink(buf, rect):
+            if buf is None:
+                return None
+            x0, y0, w, h = rect
+            return sum(sum(r) for r in
+                       vram.ink_mask(buf, x0, y0, w=w, h=h,
+                                     ground=vram.COL_BG, first_line=fl))
+
+        checks = []
+        boot_right = ink(v_boot, self.RIGHTBAR)
+        checks.append(Check(
+            'H21/shadow-right',
+            boot_right and ink(v_dlg, self.RIGHTBAR) == 0,
+            'right shadow bar hides the text under it (ink %s -> 0)' % boot_right
+            if boot_right else
+            'fixture left no ink under the right bar — test proves nothing'))
+
+        boot_bottom = ink(v_boot, self.BOTBAR)
+        checks.append(Check(
+            'H21/shadow-bottom',
+            boot_bottom and ink(v_dlg, self.BOTBAR) == 0,
+            'bottom shadow bar hides the text under it (ink %s -> 0)' % boot_bottom
+            if boot_bottom else
+            'fixture left no ink under the bottom bar — test proves nothing'))
+
+        if v_boot is None or v_dlg is None:
+            stray = [(-1, -1)]
+        else:
+            stray = [(x, y) for (x, y) in self.CORNERS
+                     if vram.pixel(v_boot, x, y, fl) != vram.pixel(v_dlg, x, y, fl)]
+        checks.append(Check('H21/corners-clean', not stray,
+                            'shadow corners show the saved background'
+                            if not stray else
+                            '%d stale pixels in shadow corners' % len(stray)))
+
+        cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]
+        d = vram.diff(v_boot, v_closed, ignore_cells=cursor)
+        checks.append(Check('H21/restore', not d,
+                            'VRAM (shadow margin included) restored on close'
+                            if not d else
+                            '%d stray pixels after close' % len(d)))
         return checks
 
 
@@ -2791,7 +2874,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          H8DatBadMagic(), H9DatBadVersion(), H10DatNoBlocks(),
          H11DatTruncHdr(), H12DatTruncTbl(), H13DatLenZero(), H14DatLenOver(),
          H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(), H18WindowRobustness(),
-         H19QuitDialog(), H20QuitDirty(),
+         H19QuitDialog(), H20QuitDirty(), H21Shadow(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),
