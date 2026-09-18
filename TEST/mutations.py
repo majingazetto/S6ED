@@ -769,6 +769,53 @@ SELTMPXB        EQU     SELTMPXB2""")],
         # for a TERM.TERMDON that never comes.
         'expect_any': ['H19/quit-y', 'H19-quit-dialog'],
     },
+    {
+        'name': 'menu-defsel',
+        'why': 'File menu opens with item 1 selected instead of default item 0 (New)',
+        'file': 'MENU.Z8A',
+        'old': """DOMNU           XOR     A
+                LD      (MNUID), A      ; ACTIVE MENU = 0 (FILE)
+                LD      (MNUSEL), A     ; DEFAULT SELECTION = 0 (NEW)""",
+        'new': """DOMNU           XOR     A
+                LD      (MNUID), A      ; ACTIVE MENU = 0 (FILE)
+                LD      A, 1            ; MUTATION: DEFAULT SELECTION = 1
+                LD      (MNUSEL), A""",
+        'filter': 'H22',
+        'expect': ['H22/default-new'],
+    },
+    {
+        'name': 'menu-skipsep',
+        'why': 'DOWN navigation fails to skip the separator line at item 4',
+        'file': 'MENU.Z8A',
+        'old': """.DWNLP          INC     A
+                CP      4               ; SEPARATOR?
+                JR      NZ, .DWNCHK
+                INC     A               ; SKIP SEPARATOR TO 5
+.DWNCHK         CP      MNUCNT_F        ; >= 7?""",
+        'new': """.DWNLP          INC     A
+                NOP                     ; MUTATION: NEVER SKIP SEPARATOR
+                NOP
+                NOP
+                NOP
+.DWNCHK         CP      MNUCNT_F        ; >= 7?""",
+        'filter': 'H22',
+        'expect': ['H22/nav-skip-sep'],
+    },
+    {
+        'name': 'menu-title',
+        'why': 'cancellation leaves the row 0 File title inverted',
+        'file': 'MENU.Z8A',
+        'old': """.CANCEL         CALL    WINCLOS
+                CALL    MNUTITL         ; UN-HIGHLIGHT TITLE
+                SCF                     ; CY = 1 (CANCELLED)""",
+        'new': """.CANCEL         CALL    WINCLOS
+                NOP                     ; MUTATION: DO NOT UN-HIGHLIGHT TITLE
+                NOP
+                NOP
+                SCF                     ; CY = 1 (CANCELLED)""",
+        'filter': 'H22',
+        'expect': ['H22/cancel-esc'],
+    },
 ]
 
 

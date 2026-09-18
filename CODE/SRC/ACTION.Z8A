@@ -61,6 +61,7 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTTGLIT        ; 49
                 DEFW    ACTCYCMK        ; 50
                 DEFW    ACTTAB          ; 51
+                DEFW    ACTMENU         ; 52
 
 
 ; --- ACTNONE                   ----------------------------------------
@@ -2599,4 +2600,45 @@ ACTTAB          LD      A, (SELACT)
                 POP     BC
                 DJNZ    .TABLP
                 RET
+
+
+; --- ACTMENU                   ----------------------------------------
+
+
+; - ACTMENU ----------------------------
+; - OPEN DROP-DOWN MENU (FILE MENU)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTMENU         LD      A, (FTRSEG)
+                LD      HL, DOMNU
+                CALL    FCALL
+                RET     C               ; CANCELLED: RETURN TO EDITING
+
+                ; DISPATCH SELECTED ACTION (A = 0..6)
+                OR      A
+                JR      Z, .NEW
+                CP      2
+                JR      Z, .SAVE
+                CP      5
+                JR      Z, .ABOUT
+                CP      6
+                JR      Z, .QUIT
+                RET                     ; 1 (OPEN) / 3 (SAVE AS): NO-OP FOR NOW
+
+.NEW            CALL    FILENEW
+                XOR     A
+                LD      (MODIFIED), A
+                CALL    REDRAW
+                JP      DRWSTAT
+
+.SAVE           CALL    FILESAVE
+                JP      DRWSTAT
+
+.ABOUT          JP      ACTHELP
+
+.QUIT           JP      ACTQUIT
+
 

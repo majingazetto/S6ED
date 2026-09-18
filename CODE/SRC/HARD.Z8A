@@ -267,11 +267,13 @@ F2KEY           EQU     #F2
 F3KEY           EQU     #F3
 F4KEY           EQU     #F4
 F5KEY           EQU     #F5
+F10KEY          EQU     #FA             ; FUNCTION KEY F10 (SHIFT+F5)
 
                 ; MSX DEDICATED KEYS
 INSKEY          EQU     #12
 HOMEKEY         EQU     #0B
 CLSKEY          EQU     #0C
+SELKEY          EQU     #18             ; MSX DEDICATED SELECT KEY
 
                 ; CONTROL KEYS
 CTRL_A          EQU     #01

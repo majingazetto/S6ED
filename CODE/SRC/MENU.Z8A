@@ -1,0 +1,373 @@
+;                                       ****************************************
+;                                       * MENU — DROP-DOWN MENU SUBSYSTEM      *
+;                                       ****************************************
+
+
+; --- DOMNU                     ----------------------------------------
+
+
+; - DOMNU ------------------------------
+; - MAIN ENTRY POINT FOR DROP-DOWN MENU (FILE MENU)
+; - IN:  NONE
+; - OUT: CY = 1: CANCELLED (ESC / SELECT)
+; -      CY = 0: ACCEPTED, A = (MNUSEL) (0..6)
+; - CLOBBERS: ALL
+; -
+
+DOMNU           XOR     A
+                LD      (MNUID), A      ; ACTIVE MENU = 0 (FILE)
+                LD      (MNUSEL), A     ; DEFAULT SELECTION = 0 (NEW)
+
+                ; 1. HIGHLIGHT "File" TITLE IN ROW 0
+                CALL    MNUTITL
+
+                ; 2. OPEN WINDOW (Y=8, WINW=144, WINH=60, NO TITLE)
+                LD      HL, MNUX_FIL
+                LD      (WINX), HL
+                LD      HL, MNUY_FIL
+                LD      (WINY), HL
+                LD      HL, MNUW_FIL
+                LD      (WINW), HL
+                LD      HL, MNUH_FIL
+                LD      (WINH), HL
+                LD      HL, 0           ; NO TITLE
+                CALL    WINOPEN
+
+                ; 3. DRAW ALL ITEMS INTO COMPOSITION BUFFER
+                CALL    MNUDRAW
+
+                ; 4. DISPLAY WINDOW AT VBLANK
+                CALL    WINSHOW
+
+                ; 5. MODAL KEY LOOP
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+
+                CP      ESC
+                JP      Z, .CANCEL
+                CP      SELKEY
+                JP      Z, .CANCEL
+
+                CP      CR
+                JP      Z, .ACCEPT
+                CP      ' '
+                JP      Z, .ACCEPT
+
+                CP      CUP
+                JP      Z, .UP
+                CP      CDOWN
+                JP      Z, .DOWN
+
+                ; ACCELERATORS
+                CP      'n'
+                JR      Z, .ACCN
+                CP      'N'
+                JR      Z, .ACCN
+                CP      'o'
+                JR      Z, .ACCO
+                CP      'O'
+                JR      Z, .ACCO
+                CP      's'
+                JR      Z, .ACCS
+                CP      'S'
+                JR      Z, .ACCS
+                CP      'a'
+                JP      Z, .ACCA
+                CP      'A'
+                JP      Z, .ACCA
+                CP      'q'
+                JP      Z, .ACCQ
+                CP      'Q'
+                JP      Z, .ACCQ
+
+                JR      .KEYLP
+
+.ACCN           XOR     A               ; ITEM 0 (NEW)
+                JR      .ACCOK
+.ACCO           LD      A, 1            ; ITEM 1 (OPEN)
+                JR      .ACCOK
+.ACCS           LD      A, 2            ; ITEM 2 (SAVE)
+                JR      .ACCOK
+.ACCA           LD      A, 5            ; ITEM 5 (ABOUT)
+                JR      .ACCOK
+.ACCQ           LD      A, 6            ; ITEM 6 (QUIT)
+.ACCOK          LD      (MNUSEL), A
+                JP      .ACCEPT
+
+.DOWN           LD      A, (MNUSEL)
+                LD      C, A            ; C = OLD
+.DWNLP          INC     A
+                CP      4               ; SEPARATOR?
+                JR      NZ, .DWNCHK
+                INC     A               ; SKIP SEPARATOR TO 5
+.DWNCHK         CP      MNUCNT_F        ; >= 7?
+                JR      C, .DWNOK
+                XOR     A               ; WRAP TO 0
+.DWNOK          JR      .MOVE
+
+.UP             LD      A, (MNUSEL)
+                LD      C, A            ; C = OLD
+                OR      A
+                JR      NZ, .UPDEC
+                LD      A, MNUCNT_F - 1 ; WRAP TO 6
+                JR      .UPOK
+.UPDEC          DEC     A
+                CP      4               ; SEPARATOR?
+                JR      NZ, .UPOK
+                DEC     A               ; SKIP SEPARATOR TO 3
+.UPOK           JR      .MOVE
+
+.MOVE           CP      C               ; SAME SELECTION?
+                JP      Z, .KEYLP
+                LD      (MNUSEL), A
+                PUSH    AF              ; SAVE NEW
+                ; REPAINT OLD AS UNSELECTED
+                LD      A, C
+                LD      B, 0
+                CALL    MNUUPD
+                ; REPAINT NEW AS SELECTED
+                POP     AF
+                LD      B, 1
+                CALL    MNUUPD
+                JP      .KEYLP
+
+.CANCEL         CALL    WINCLOS
+                CALL    MNUTITL         ; UN-HIGHLIGHT TITLE
+                SCF                     ; CY = 1 (CANCELLED)
+                RET
+
+.ACCEPT         CALL    WINCLOS
+                CALL    MNUTITL         ; UN-HIGHLIGHT TITLE
+                LD      A, (MNUSEL)
+                OR      A               ; CY = 0 (SUCCESS)
+                RET
+
+.YTBL           DEFB    #03, #0B, #13, #1B, #25, #29, #31
+
+.STBL           DEFW    .STR0
+                DEFW    .STR1
+                DEFW    .STR2
+                DEFW    .STR3
+                DEFW    0               ; SEPARATOR HAS NO STRING
+                DEFW    .STR5
+                DEFW    .STR6
+
+.STR0           DEFM    "New             Ctrl+N", 0
+.STR1           DEFM    "Open...         Ctrl+O", 0
+.STR2           DEFM    "Save            Ctrl+S", 0
+.STR3           DEFM    "Save As...", 0
+.STR5           DEFM    "About S6ED", 0
+.STR6           DEFM    "Quit            Ctrl+Q", 0
+
+
+; --- MNUTITL                   ----------------------------------------
+
+
+; - MNUTITL ----------------------------
+; - TOGGLE HIGHLIGHT OF "File" IN MENU BAR (ROW 0) VIA LMMV XOR
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+MNUTITL         LD      HL, MNUX_FIL    ; DX = 48
+                LD      (VDP_DX), HL
+                LD      HL, 0           ; DY = 0
+                LD      (VDP_DY), HL
+                LD      HL, 24          ; NX = 24 (4 CHARS * 6 PX)
+                LD      (VDP_NX), HL
+                LD      HL, 8           ; NY = 8
+                LD      (VDP_NY), HL
+                LD      A, COL_FG       ; XOR WITH %01
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_XOR
+                CALL    LMMV
+                JP      VDPWAIT
+
+
+; --- MNUDRAW                   ----------------------------------------
+
+
+; - MNUDRAW ----------------------------
+; - DRAW ALL ITEMS OF FILE MENU INTO COMPOSITION BUFFER
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+MNUDRAW         LD      C, 0            ; ITEM COUNTER (0..6)
+.LOOP           LD      A, (MNUSEL)
+                CP      C
+                LD      B, 0            ; STYLE = UNSELECTED
+                JR      NZ, .NOTSEL
+                LD      B, 1            ; STYLE = SELECTED
+.NOTSEL         LD      A, C            ; A = ITEM INDEX
+                PUSH    BC
+                CALL    MNUPNT
+                POP     BC
+                INC     C
+                LD      A, C
+                CP      MNUCNT_F
+                JR      C, .LOOP
+                RET
+
+
+; --- MNUPNT                    ----------------------------------------
+
+
+; - MNUPNT -----------------------------
+; - PAINT ONE MENU ITEM INTO COMPOSITION BUFFER
+; - IN:  A = ITEM INDEX (0..6)
+; -      B = STYLE (0 = UNSELECTED, 1 = SELECTED)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+MNUPNT          PUSH    AF
+                PUSH    BC
+                CP      4               ; SEPARATOR?
+                JP      Z, .PNTSEP
+
+                ; LOOK UP REL Y FROM .YTBL
+                LD      E, A
+                LD      D, 0
+                LD      HL, DOMNU.YTBL
+                ADD     HL, DE
+                LD      A, (HL)
+                LD      (MNUTMPY), A    ; SAVE REL Y
+
+                ; LOOK UP STRING POINTER FROM .STBL
+                POP     BC              ; RESTORE B = STYLE
+                POP     AF              ; RESTORE A = ITEM INDEX
+                PUSH    AF
+                PUSH    BC
+                ADD     A, A            ; WORD OFFSET
+                LD      E, A
+                LD      D, 0
+                LD      HL, DOMNU.STBL
+                ADD     HL, DE
+                LD      A, (HL)
+                INC     HL
+                LD      H, (HL)
+                LD      L, A            ; HL = STRING POINTER
+                LD      (MNUTMPP), HL   ; SAVE STRING POINTER
+
+                ; DRAW INSET BACKGROUND BAR: DX=52, DY=WINCOMP_Y+RelY, NX=136, NY=8
+                LD      HL, MNUBX_FL    ; DX = 52
+                LD      (VDP_DX), HL
+                LD      A, (MNUTMPY)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                LD      HL, MNUBW_FL    ; NX = 136
+                LD      (VDP_NX), HL
+                LD      HL, 8           ; NY = 8
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+
+                POP     BC              ; B = STYLE
+                POP     AF              ; A = ITEM INDEX
+                PUSH    AF
+                PUSH    BC
+                LD      A, B
+                OR      A
+                JR      NZ, .SELBG
+
+                ; UNSELECTED: FILL BAR WITH CLR_BG
+                LD      A, CLR_BG
+                LD      (VDP_CLR), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+
+                ; DRAW UNSELECTED TEXT: WINSTR, VARIANT 0 (NORMAL), TIMP
+                LD      A, (MNUTMPY)
+                LD      C, A
+                LD      B, 0
+                LD      HL, WINCOMP_Y
+                ADD     HL, BC
+                LD      B, H
+                LD      C, L            ; BC = DY = WINCOMP_Y + RelY
+                LD      DE, MNUTX_FL    ; DX = 54
+                LD      HL, (MNUTMPP)   ; HL = STRING POINTER
+                XOR     A               ; VARIANT 0 (NORMAL)
+                CALL    WINSTR
+                JP      .PNTDON
+
+.SELBG          ; SELECTED: FILL BAR WITH CLR_UI
+                LD      A, CLR_UI
+                LD      (VDP_CLR), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+
+                ; DRAW SELECTED TEXT: WINSTR3, VARIANT 1 (BOLD), TOR -> COL_HI
+                LD      A, (MNUTMPY)
+                LD      C, A
+                LD      B, 0
+                LD      HL, WINCOMP_Y
+                ADD     HL, BC
+                LD      B, H
+                LD      C, L            ; BC = DY = WINCOMP_Y + RelY
+                LD      DE, MNUTX_FL    ; DX = 54
+                LD      HL, (MNUTMPP)   ; HL = STRING POINTER
+                LD      A, 1            ; VARIANT 1 (BOLD)
+                CALL    WINSTR3
+                JP      .PNTDON
+
+.PNTSEP         ; DRAW 1-PX INSET SEPARATOR LINE: DX=52, DY=WINCOMP_Y+37, NX=136, NY=1
+                LD      HL, MNUBX_FL
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y + 37
+                LD      (VDP_DY), HL
+                LD      HL, MNUBW_FL
+                LD      (VDP_NX), HL
+                LD      HL, 1
+                LD      (VDP_NY), HL
+                LD      A, CLR_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+
+.PNTDON         POP     BC
+                POP     AF
+                RET
+
+
+; --- MNUUPD                    ----------------------------------------
+
+
+; - MNUUPD -----------------------------
+; - REPAINT AND SUB-BLIT ONE MENU ITEM TO SCREEN
+; - IN:  A = ITEM INDEX (0..6)
+; -      B = STYLE (0 = UNSELECTED, 1 = SELECTED)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+MNUUPD          PUSH    AF
+                CALL    MNUPNT
+                POP     AF
+                CP      4               ; NEVER BLIT SEPARATOR DIRECTLY
+                RET     Z
+
+                ; LOOK UP REL Y FOR BLIT
+                LD      E, A
+                LD      D, 0
+                LD      HL, DOMNU.YTBL
+                ADD     HL, DE
+                LD      A, (HL)
+                LD      E, A            ; DE = REL Y
+                LD      D, 0
+
+                CALL    WINVSY
+                LD      HL, 0           ; REL X = 0
+                LD      BC, MNUW_FIL    ; NX = 144
+                LD      A, 8            ; NY = 8
+                JP      WINUPD

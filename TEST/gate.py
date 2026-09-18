@@ -1026,18 +1026,21 @@ class H7AboutDialog(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot', vram=True)
-        # 1. Open with F1, close with RETURN
+        # 1. Open with F1 then A, close with RETURN
         t.press('F1')
+        t.press('A')
         t.snap('dialog1', vram=True, at='WINPOLL')
         t.press('RETURN')
         t.snap('after_ret', vram=True)
-        # 2. Open with F1, close with SPACE
+        # 2. Open with F1 then A, close with SPACE
         t.press('F1')
+        t.press('A')
         t.snap('dialog2', vram=True, at='WINPOLL')
         t.press('SPACE')
         t.snap('after_spc', vram=True)
-        # 3. Open with F1, close with ESC
+        # 3. Open with F1 then A, close with ESC
         t.press('F1')
+        t.press('A')
         t.snap('dialog3', vram=True, at='WINPOLL')
         t.press('ESC')
         t.snap('after_esc', vram=True)
@@ -1340,8 +1343,8 @@ class H18WindowRobustness(Case):
         t.snap('before_modal', vram=True)
         t.press('F1')
         t.snap('modal_open', vram=True, at='WINPOLL')
-        # Close with RETURN
-        t.press('RETURN')
+        # Close with ESC
+        t.press('ESC')
         t.snap('after_close', vram=True)
         return t
 
@@ -1605,6 +1608,216 @@ class H21Shadow(Case):
                             'VRAM (shadow margin included) restored on close'
                             if not d else
                             '%d stray pixels after close' % len(d)))
+        return checks
+
+
+# --- H22  DROP-DOWN FILE MENU -----------------------------------------
+
+
+class H22FileMenu(Case):
+    name = 'H22-file-menu'
+    desc = ('SELECT opens File dropdown menu at (48,8); DOWN/UP navigates '
+            'items skipping separator; ESC/SELECT cancels and restores screen; '
+            'accelerators and actions execute cleanly')
+    origin = ('Dropdown menu subsystem: first top menu (File) with XOR title toggle, '
+              'custom item rendering in composition buffer, and action dispatch')
+
+    ITEM0_PX = (53, 13)    # Item 0 (New) selection bar body padding (DX=52..187, RelY=3..10 -> Y=11..18)
+    ITEM1_PX = (53, 21)    # Item 1 (Open) bar body padding (RelY=11..18 -> Y=19..26)
+    SEP_PX = (53, 45)      # Separator line body (RelY=37 -> Y=45)
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(10))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram=True)
+        t.snap('boot_r0', vram='menu')
+
+        # 1. SELECT opens the File dropdown menu
+        t.press('SELECT')
+        t.snap('menu_open', vram=True, at='WINPOLL')
+        t.snap('menu_r0', vram='menu', at='WINPOLL')
+
+        # 2. DOWN navigates: 0 -> 1 -> 2 -> 3 -> 5 (skips separator 4!)
+        t.press('DOWN')
+        t.snap('item1', at='WINPOLL')
+        t.press('DOWN')
+        t.press('DOWN')
+        t.snap('item3', at='WINPOLL')
+        t.press('DOWN')
+        t.snap('item5', at='WINPOLL')
+
+        # 3. UP navigates backwards: 5 -> 3 (skips separator 4!)
+        t.press('UP')
+        t.snap('item3_up', at='WINPOLL')
+
+        # 4. ESC cancels: menu closes, row 0 restored, editing resumes
+        t.press('ESC')
+        t.snap('after_esc', vram=True)
+        t.snap('after_esc_r0', vram='menu')
+
+        # 5. Reopen with SELECT and cancel with SELECT
+        t.press('SELECT')
+        t.snap('menu_reopen', at='WINPOLL')
+        t.press('SELECT')
+        t.snap('after_sel_cancel', vram=True)
+
+        # 6. Reopen with F1 and cancel with ESC
+        t.press('F1')
+        t.snap('menu_f1', at='WINPOLL')
+        t.press('ESC')
+        t.snap('after_f1_cancel', vram=True)
+
+        # 7. Reopen with SELECT and trigger New via 'N' accelerator
+        t.text('EDITED')
+        t.snap('before_new')
+        t.press('SELECT')
+        t.snap('menu_for_n', at='WINPOLL')
+        t.press('N')
+        t.snap('after_new')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        v_boot = run.blob('boot', 'vram')
+        v_open = run.blob('menu_open', 'vram')
+        v_esc = run.blob('after_esc', 'vram')
+        v_sel_esc = run.blob('after_sel_cancel', 'vram')
+        fl = vram.TEXT_FIRST_LINE
+
+        r0_boot = run.blob('boot_r0', 'menu')
+        r0_open = run.blob('menu_r0', 'menu')
+        r0_esc = run.blob('after_esc_r0', 'menu')
+
+        def body(buf, pt):
+            if buf is None:
+                return None
+            return vram.pixel(buf, pt[0], pt[1], first_line=fl)
+
+        checks = []
+
+        # 1. Menu displayed and vars initialized
+        checks.append(Check('H22/menu-displayed',
+                            v_open is not None and v_open != v_boot,
+                            'VRAM modified while menu is open'))
+
+        checks.append(Check(
+            'H22/default-new',
+            run.var('menu_open', 'WINACTV') == 1 and
+            run.var('menu_open', 'MNUID') == 0 and
+            run.var('menu_open', 'MNUSEL') == 0,
+            'File menu open (WINACTV=%s, MNUID=%s, MNUSEL=%s)'
+            % (run.var('menu_open', 'WINACTV'),
+               run.var('menu_open', 'MNUID'),
+               run.var('menu_open', 'MNUSEL'))))
+
+        # 2. Row 0 title "File" XOR inversion
+        if r0_boot is not None and r0_open is not None:
+            xor_ok = True
+            for y in range(8):
+                for x in range(48, 72):
+                    p_boot = vram.pixel(r0_boot, x, y, first_line=0)
+                    p_open = vram.pixel(r0_open, x, y, first_line=0)
+                    if p_open != (p_boot ^ 1):
+                        xor_ok = False
+                        break
+                if not xor_ok:
+                    break
+        else:
+            xor_ok = False
+        checks.append(Check('H22/title-xor', xor_ok,
+                            'row 0 "File" title inverted with XOR (48..71, 0..7)'
+                            if xor_ok else
+                            'title XOR mismatch in row 0'))
+
+        # 3. Item styles in composition/display
+        item_styles_ok = (body(v_open, self.ITEM0_PX) == vram.COL_UI and
+                          body(v_open, self.ITEM1_PX) == vram.COL_BG and
+                          body(v_open, self.SEP_PX) == vram.COL_UI)
+        checks.append(Check(
+            'H22/item-styles',
+            item_styles_ok,
+            'item 0 highlighted, item 1 unselected, separator present'
+            if item_styles_ok else
+            'item styles mismatch: item0=%s, item1=%s, sep=%s'
+            % (body(v_open, self.ITEM0_PX),
+               body(v_open, self.ITEM1_PX),
+               body(v_open, self.SEP_PX))))
+
+        # 4. Navigation
+        checks.append(Check(
+            'H22/nav-down',
+            run.var('item1', 'MNUSEL') == 1 and
+            run.var('item3', 'MNUSEL') == 3,
+            'DOWN advances selection 0 -> 1 -> 3 (item1=%s, item3=%s)'
+            % (run.var('item1', 'MNUSEL'), run.var('item3', 'MNUSEL'))))
+
+        checks.append(Check(
+            'H22/nav-skip-sep',
+            run.var('item5', 'MNUSEL') == 5 and
+            run.var('item3_up', 'MNUSEL') == 3,
+            'DOWN skips separator to 5, UP skips separator to 3 (item5=%s, item3_up=%s)'
+            % (run.var('item5', 'MNUSEL'), run.var('item3_up', 'MNUSEL'))))
+
+        # 5. Cancellation via ESC
+        cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]
+        d_esc = vram.diff(v_boot, v_esc, ignore_cells=cursor)
+        r0_match = True
+        if r0_boot and r0_esc:
+            for y in range(8):
+                for x in range(48, 72):
+                    if vram.pixel(r0_esc, x, y, first_line=0) != vram.pixel(r0_boot, x, y, first_line=0):
+                        r0_match = False
+                        break
+                if not r0_match:
+                    break
+        else:
+            r0_match = False
+        checks.append(Check(
+            'H22/cancel-esc',
+            not d_esc and r0_match and run.var('after_esc', 'WINACTV') == 0,
+            'ESC cleanly restores text VRAM and row 0 title, WINACTV=0'
+            if not d_esc and r0_match and run.var('after_esc', 'WINACTV') == 0 else
+            'restore failed: %d text diffs, title match=%s, WINACTV=%s'
+            % (len(d_esc), r0_match, run.var('after_esc', 'WINACTV'))))
+
+        # 6. Cancellation via SELECT
+        d_sel = vram.diff(v_boot, v_sel_esc, ignore_cells=cursor)
+        checks.append(Check(
+            'H22/cancel-select',
+            not d_sel and run.var('after_sel_cancel', 'WINACTV') == 0,
+            'SELECT key toggles/cancels cleanly, WINACTV=0'
+            if not d_sel and run.var('after_sel_cancel', 'WINACTV') == 0 else
+            'cancel select failed: %d diffs, WINACTV=%s'
+            % (len(d_sel), run.var('after_sel_cancel', 'WINACTV'))))
+
+        # 7. Open with F1 key
+        checks.append(Check(
+            'H22/f1-open',
+            run.var('menu_f1', 'WINACTV') == 1 and
+            run.var('menu_f1', 'MNUID') == 0 and
+            run.var('after_f1_cancel', 'WINACTV') == 0,
+            'F1 key opens File menu and ESC cancels cleanly'
+            if (run.var('menu_f1', 'WINACTV') == 1 and
+                run.var('menu_f1', 'MNUID') == 0 and
+                run.var('after_f1_cancel', 'WINACTV') == 0) else
+            'F1 open failed: WINACTV=%s, MNUID=%s, after_cancel=%s'
+            % (run.var('menu_f1', 'WINACTV'),
+               run.var('menu_f1', 'MNUID'),
+               run.var('after_f1_cancel', 'WINACTV'))))
+
+        # 8. Action New via 'N' accelerator
+        checks.append(Check(
+            'H22/action-new',
+            run.var('before_new', 'MODIFIED') == 0xFF and
+            run.var('after_new', 'MODIFIED') == 0 and
+            run.var('after_new', 'TOTLINES') == 1,
+            'N accelerator executes New action (MODIFIED %s -> %s, TOTLINES %s)'
+            % (run.var('before_new', 'MODIFIED'),
+               run.var('after_new', 'MODIFIED'),
+               run.var('after_new', 'TOTLINES'))))
+
         return checks
 
 
@@ -2874,7 +3087,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          H8DatBadMagic(), H9DatBadVersion(), H10DatNoBlocks(),
          H11DatTruncHdr(), H12DatTruncTbl(), H13DatLenZero(), H14DatLenOver(),
          H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(), H18WindowRobustness(),
-         H19QuitDialog(), H20QuitDirty(), H21Shadow(),
+         H19QuitDialog(), H20QuitDirty(), H21Shadow(), H22FileMenu(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),
