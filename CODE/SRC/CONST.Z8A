@@ -73,6 +73,15 @@ WINSHDW         EQU     4               ; WINDOW DROP SHADOW OFFSET/WIDTH (PX).
                                         ; (HMMV); THE SAVE/SHOW RECT GROWS TO
                                         ; (WINW+WINSHDW) X (WINH+WINSHDW)
 
+MNUX_FIL        EQU     48              ; FILE MENU X
+MNUY_FIL        EQU     8               ; FILE MENU Y
+MNUW_FIL        EQU     144             ; FILE MENU WIDTH
+MNUH_FIL        EQU     60              ; FILE MENU HEIGHT
+MNUTX_FL        EQU     54              ; FILE MENU TEXT X (52 + 2)
+MNUBX_FL        EQU     52              ; FILE MENU BAR X (48 + 4)
+MNUBW_FL        EQU     136             ; FILE MENU BAR WIDTH (144 - 8)
+MNUCNT_F        EQU     7               ; TOTAL ITEMS IN FILE MENU
+
 FONTSIZ         EQU     2048            ; 256 GLYPHS X 8 BYTES, 1BPP (SOURCE)
 FNTFSIZ         EQU     FONTSIZ * 4     ; S6ED.FNT: THE FOUR VARIANTS, EXACTLY
 
@@ -269,7 +278,8 @@ ACTGLBD         EQU     48              ; CTRL + B (TOGGLE BOLD)
 ACTGLIT         EQU     49              ; CTRL + I (TOGGLE ITALIC)
 ACCYCMK         EQU     50              ; F3 / CTRL + T (CYCLE MARKUP MODE)
 ACTABS          EQU     51              ; TAB (INSERT SPACES TO NEXT TAB STOP)
-ACMAX           EQU     52
+ACMENU          EQU     52              ; DROP-DOWN MENU (SELECT / F10)
+ACMAX           EQU     53
 
 
 ; --- KEYMAP PROFILES           ----------------------------------------

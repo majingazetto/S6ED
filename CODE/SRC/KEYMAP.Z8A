@@ -64,11 +64,13 @@ KMAPSTD         ; UNMODIFIED CURSORS
                 DEFB    CTRL_Y,  MODCTRL, ACDELLN
                 DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    ESC,     MODANY,  ACQUIT
-                DEFB    F1KEY,   MODANY,  ACHELP
+                DEFB    F1KEY,   MODANY,  ACMENU
                 DEFB    F2KEY,   MODANY,  ACSAVE
                 DEFB    F3KEY,   MODANY,  ACCYCMK
                 DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    F5KEY,   MODANY,  ACCYCKM
+                DEFB    SELKEY,  MODNONE, ACMENU
+                DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
 
 
@@ -136,11 +138,13 @@ KMAPWS          ; WORDSTAR DIAMOND
                 DEFB    CTRL_W,  MODCTRL, ACTGLWR
                 DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    ESC,     MODANY,  ACQUIT
-                DEFB    F1KEY,   MODANY,  ACHELP
+                DEFB    F1KEY,   MODANY,  ACMENU
                 DEFB    F2KEY,   MODANY,  ACSAVE
                 DEFB    F3KEY,   MODANY,  ACCYCMK
                 DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    F5KEY,   MODANY,  ACCYCKM
+                DEFB    SELKEY,  MODNONE, ACMENU
+                DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
 
 
@@ -187,11 +191,13 @@ KMAPEMAC        ; EMACS NAVIGATION & EDITING
                 DEFB    CTRL_W,  MODCTRL, ACTGLWR
                 DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    ESC,     MODANY,  ACQUIT
-                DEFB    F1KEY,   MODANY,  ACHELP
+                DEFB    F1KEY,   MODANY,  ACMENU
                 DEFB    F2KEY,   MODANY,  ACSAVE
                 DEFB    F3KEY,   MODANY,  ACCYCMK
                 DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    F5KEY,   MODANY,  ACCYCKM
+                DEFB    SELKEY,  MODNONE, ACMENU
+                DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
 
 
@@ -234,11 +240,13 @@ KMAPVIN         ; VI NORMAL MOVEMENT
                 DEFB    CTRL_K,  MODCTRL, ACCYCKM
                 DEFB    CTRL_S,  MODCTRL, ACSAVE
                 DEFB    CTRL_Q,  MODCTRL, ACQUIT
-                DEFB    F1KEY,   MODANY,  ACHELP
+                DEFB    F1KEY,   MODANY,  ACMENU
                 DEFB    F2KEY,   MODANY,  ACSAVE
                 DEFB    F3KEY,   MODANY,  ACCYCMK
                 DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    F5KEY,   MODANY,  ACCYCKM
+                DEFB    SELKEY,  MODNONE, ACMENU
+                DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
 
 
@@ -259,9 +267,11 @@ KMAPVII         ; RETURN TO NORMAL MODE
                 DEFB    BS,      MODNONE, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
-                DEFB    F1KEY,   MODANY,  ACHELP
+                DEFB    F1KEY,   MODANY,  ACMENU
                 DEFB    F2KEY,   MODANY,  ACSAVE
                 DEFB    F3KEY,   MODANY,  ACCYCMK
                 DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    F5KEY,   MODANY,  ACCYCKM
+                DEFB    SELKEY,  MODNONE, ACMENU
+                DEFB    F10KEY,  MODANY,  ACMENU
                 DEFB    #FF
