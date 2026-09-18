@@ -413,15 +413,26 @@ WINBOX          PUSH    HL
 
 
 ; - WINBTN -----------------------------
-; - DRAW BUTTON WITH COLOR 3 HIGHLIGHT BORDER AND COLOR 2 BODY
+; - DRAW BUTTON, NORMAL STYLE (SEE WINBTS FOR THE STYLE LAYOUT)
 ; - IN:  HL = ASCIIZ BUTTON TEXT
 ; -      DE = RELATIVE X (PIXELS)
 ; -      BC = RELATIVE Y (PIXELS)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
+; - WINBTS -----------------------------
+; - SAME, WITH EXPLICIT STYLE FOR OPTION SELECTION:
+; - STYLE 0 (NORMAL):   COL_HI BORDER, COL_UI BODY, BOLD TEXT IN TOR
+; - STYLE 1 (SELECTED): COL_HI BORDER, COL_HI BODY, BOLD TEXT IN TIMP
+; - IN:  A  = STYLE (0 = NORMAL, 1 = SELECTED)
+; -      HL, DE, BC AS ABOVE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
 
-WINBTN          PUSH    HL
+WINBTN          XOR     A               ; STYLE NORMAL
+WINBTS          LD      (WINBST), A
+                PUSH    HL
                 PUSH    DE
                 PUSH    BC
 
@@ -446,7 +457,7 @@ WINBTN          PUSH    HL
                 LD      A, VDP_LMMV | VDP_IMP
                 CALL    LMMV
 
-                ; 2. BUTTON BODY (COL_UI) 56 X 12
+                ; 2. BUTTON BODY 56 X 12: COL_UI NORMAL, COL_HI SELECTED
                 POP     BC
                 POP     DE
                 PUSH    DE
@@ -461,15 +472,20 @@ WINBTN          PUSH    HL
                 LD      (VDP_NX), HL
                 LD      HL, 12
                 LD      (VDP_NY), HL
-                LD      A, COL_UI
-                LD      (VDP_CLR), A
+                LD      A, (WINBST)
+                OR      A
+                JR      Z, .BODYN
+                LD      A, COL_HI
+                JR      .BODYGO
+.BODYN          LD      A, COL_UI
+.BODYGO         LD      (VDP_CLR), A
                 XOR     A
                 LD      (VDP_ARG), A
                 LD      HL, VDPCMBLK
                 LD      A, VDP_LMMV | VDP_IMP
                 CALL    LMMV
 
-                ; 3. BUTTON TEXT IN BOLD + COLOR 3 (TOR)
+                ; 3. BUTTON TEXT IN BOLD: TOR NORMAL, TIMP SELECTED
                 POP     BC
                 POP     DE
                 LD      HL, (WINX)
@@ -484,8 +500,13 @@ WINBTN          PUSH    HL
                 LD      B, H
                 LD      C, L            ; BC = DY = WINCOMP_Y + REL Y + 2
                 POP     HL              ; HL = TEXT
+                LD      A, (WINBST)
+                OR      A
+                JR      NZ, .TXTSEL
                 LD      A, 1            ; BOLD (VARIANT 1)
                 JP      WINSTR3
+.TXTSEL         LD      A, 1            ; BOLD (VARIANT 1)
+                JP      WINSTR
 
 
 ; --- WINDOW MANAGEMENT         ----------------------------------------
@@ -739,3 +760,126 @@ DOABT           LD      HL, 112
 .VALMEM         DEFM    "DOS 2 / Nextor Mapper Manager", 0
 .STRINS         DEFM    "Press ENTER, SPACE or ESC to close", 0
 .BTNOK          DEFM    "[  OK  ]", 0
+
+
+; - DOQIT ------------------------------
+; - CONFIRM EXIT TO DOS: TWO SELECTABLE OPTIONS (YES / NO)
+; - IN:  NONE (READS MODIFIED FOR THE UNSAVED-CHANGES WARNING)
+; - OUT: WINRES = 1: QUIT CONFIRMED, 0: CANCELLED
+; - CLOBBERS: ALL
+; -
+; - LEFT/RIGHT MOVE THE SELECTION, ENTER/SPACE ACTIVATE IT, Y/N ARE
+; - ACCELERATORS AND ESC CANCELS. THE DEFAULT IS NO: AN ACCIDENTAL ESC
+; - NEVER DROPS THE DOCUMENT. A SELECTION CHANGE REPAINTS ONLY THE TWO
+; - BUTTONS IN THE COMPOSITION BUFFER AND RE-BLITS WITH WINSHOW, SO THE
+; - DIALOG NEVER TEARS.
+
+DOQIT           LD      HL, 156
+                LD      (WINX), HL
+                LD      HL, 74
+                LD      (WINY), HL
+                LD      HL, 200
+                LD      (WINW), HL
+                LD      HL, 64
+                LD      (WINH), HL
+
+                LD      HL, .TITQIT
+                CALL    WINOPEN
+
+                ; DEFAULT: NO SELECTED, RESULT CANCELLED
+                LD      A, 1
+                LD      (WINSEL), A
+                XOR     A
+                LD      (WINRES), A
+
+                ; MESSAGE LINE
+                LD      HL, .STRQIT
+                LD      C, 7
+                LD      B, 1
+                XOR     A               ; NORMAL
+                CALL    WINPRN
+
+                ; WARNING LINE, ONLY WITH A DIRTY BUFFER
+                LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .NOWRN
+                LD      HL, .STRWRN
+                LD      C, 7
+                LD      B, 2
+                LD      A, 1            ; BOLD
+                CALL    WINPRN
+
+.NOWRN          CALL    .BTNS
+                CALL    WINSHOW
+
+                ; MODAL KEY LOOP
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+                CP      ESC
+                JR      Z, .DONE        ; CANCEL (WINRES ALREADY 0)
+                CP      CR
+                JR      Z, .ACCEPT
+                CP      ' '
+                JR      Z, .ACCEPT
+                CP      CLEFT
+                JR      Z, .TOYES
+                CP      CRIGHT
+                JR      Z, .TONO
+                CP      'Y'
+                JR      Z, .YES
+                CP      'y'
+                JR      Z, .YES
+                CP      'N'
+                JR      Z, .DONE
+                CP      'n'
+                JR      Z, .DONE
+                JR      .KEYLP
+
+.TOYES          XOR     A
+                JR      .NAV
+.TONO           LD      A, 1
+.NAV            LD      HL, WINSEL
+                CP      (HL)
+                JR      Z, .KEYLP       ; ALREADY THERE: NOTHING TO REPAINT
+                LD      (HL), A
+                CALL    .BTNS
+                CALL    WINSHOW
+                JR      .KEYLP
+
+.ACCEPT         LD      A, (WINSEL)
+                XOR     1               ; YES (0) CONFIRMS, NO (1) CANCELS
+                LD      (WINRES), A
+                JR      .DONE
+
+.YES            LD      A, 1
+                LD      (WINRES), A
+
+.DONE           JP      WINCLOS
+
+; .BTNS: PAINT BOTH BUTTONS WITH THE STYLE THEIR SELECTION STATE DICTATES
+.BTNS           LD      A, (WINSEL)
+                OR      A
+                JR      Z, .YSSEL
+                XOR     A               ; YES NORMAL
+                JR      .YSGO
+.YSSEL          LD      A, 1            ; YES SELECTED
+.YSGO           LD      HL, .BTNYES
+                LD      DE, 36
+                LD      BC, 44
+                CALL    WINBTS
+                LD      A, (WINSEL)
+                CP      1
+                JR      Z, .NSSEL
+                XOR     A               ; NO NORMAL
+                JR      .NSGO
+.NSSEL          LD      A, 1            ; NO SELECTED
+.NSGO           LD      HL, .BTNNO
+                LD      DE, 106
+                LD      BC, 44
+                JP      WINBTS
+
+.TITQIT         DEFM    "Quit S6ED", 0
+.STRQIT         DEFM    "Exit to MSX-DOS?", 0
+.STRWRN         DEFM    "Unsaved changes!", 0
+.BTNYES         DEFM    "[  YES  ]", 0
+.BTNNO          DEFM    "[  NO  ]", 0

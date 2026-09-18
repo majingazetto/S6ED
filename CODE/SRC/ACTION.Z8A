@@ -857,7 +857,8 @@ ACTSAVE         CALL    FILESAVE
 
 
 ; - ACTQUIT ----------------------------
-; - EXIT EDITOR TO DOS
+; - EXIT EDITOR TO DOS, ASKING FOR CONFIRMATION FIRST (DOQIT DIALOG IN
+; - FTRSEG). WITH AN ACTIVE SELECTION ESC JUST DROPS IT, AS BEFORE.
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
@@ -865,9 +866,15 @@ ACTSAVE         CALL    FILESAVE
 
 ACTQUIT         LD      A, (SELACT)
                 OR      A
-                JR      Z, .DOQUIT
+                JR      Z, .ASKQ
                 JP      ACTDSEL
-.DOQUIT         JP      TERM
+.ASKQ           LD      A, (FTRSEG)
+                LD      HL, DOQIT
+                CALL    FCALL
+                LD      A, (WINRES)
+                OR      A
+                RET     Z               ; CANCELLED: RESUME EDITING
+                JP      TERM
 
 
 ; --- ACTHELP                   ----------------------------------------
