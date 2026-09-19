@@ -49,6 +49,7 @@ EDINSCHR        PUSH    AF
                 JP      EDPSHWR
 
 .DOINS          ; ROOM EXISTS AT COLUMN 79: PLAIN INSERT ON THIS LINE
+                CALL    UNDOBGN
                 LD      HL, WORKBUF
                 LD      A, (CURX)
                 CALL    WBINS           ; TEXT + ATTRS SHIFTED, LENGTH UPDATED
@@ -166,7 +167,8 @@ EDINSRUN        LD      (WBSRC), HL     ; SURVIVES LINEREAD
 ; - CLOBBERS: ALL
 ; -
 
-EDPSHWR         ; REFUSE IF THE LINE DIRECTORY IS FULL
+EDPSHWR         CALL    UNDOCLS
+                ; REFUSE IF THE LINE DIRECTORY IS FULL
                 LD      HL, (TOTLINES)
                 LD      DE, MAXLINES
                 CALL    CMPHLDE
@@ -1134,12 +1136,13 @@ EDDELBK         LD      A, (CURX)
                 JR      Z, .ATCOL0
 
                 ; IN-LINE BACKSPACE (CURX > 0)
-                DEC     A
-                LD      (CURX), A
-
-                ; LOAD LINE RECORD
                 LD      HL, (DOCLINE)
                 CALL    LINEREAD
+                CALL    UNDOBGN
+
+                LD      A, (CURX)
+                DEC     A
+                LD      (CURX), A
 
                 ; SHIFT LEFT FROM CURX UP TO COL 78 (TEXT AND ATTRS)
                 LD      A, (CURX)
@@ -1246,6 +1249,8 @@ EDDELCHR        LD      HL, (DOCLINE)
                 JR      NC, .ATEOL      ; CURX >= LENGTH: AT OR PAST END OF LINE
 
                 ; IN-LINE DELETE (CURX < LENGTH)
+                CALL    UNDOBGN
+                LD      A, (CURX)
                 LD      B, A
 .DCHSHFT        LD      A, B
                 CP      79
@@ -1408,7 +1413,8 @@ CALCALN         LD      A, (WORKBUF)
 ; - CLOBBERS: ALL
 ; -
 
-EDNWLIN         ; REFUSE IF THE LINE DIRECTORY IS FULL
+EDNWLIN         CALL    UNDOCLS
+                ; REFUSE IF THE LINE DIRECTORY IS FULL
                 LD      HL, (TOTLINES)
                 LD      DE, MAXLINES
                 CALL    CMPHLDE
