@@ -646,7 +646,8 @@ ACTDELFW        LD      A, (SELACT)
 ; - CLOBBERS: ALL
 ; -
 
-ACTDELLN        LD      HL, (TOTLINES)
+ACTDELLN        CALL    UNDOCLS
+                LD      HL, (TOTLINES)
                 LD      A, H
                 OR      L
                 RET     Z
@@ -656,6 +657,7 @@ ACTDELLN        LD      HL, (TOTLINES)
                 ; SINGLE LINE LEFT: CLEAR RECORD TO SPACES
                 LD      HL, (DOCLINE)
                 CALL    LINEREAD
+                CALL    UNDOBGN
                 XOR     A
                 LD      (WORKBUF), A
                 LD      HL, WORKBUF + 1
@@ -665,6 +667,7 @@ ACTDELLN        LD      HL, (TOTLINES)
                 LDIR
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
+                CALL    UNDOCLS
                 LD      A, (CURY)
                 INC     A
                 LD      B, A
@@ -675,6 +678,9 @@ ACTDELLN        LD      HL, (TOTLINES)
                 LD      (MODIFIED), A
                 RET
 .DLMULT         LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                CALL    UNDODEL
+                LD      HL, (DOCLINE)
                 CALL    LINEDEL
                 LD      HL, (TOTLINES)
                 DEC     HL
