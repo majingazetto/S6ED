@@ -1890,7 +1890,14 @@ class H23MenuNav(Case):
         t.press('UP')
         t.snap('edit_item3_up', at='WINPOLL')
 
-        # 6. ESC cancels menu cleanly
+        # 6. Action Keymap Profile via Options menu (Item 0)
+        t.press('F4')
+        t.snap('opts_menu_prof', at='WINPOLL')
+        t.press('RETURN')
+        t.snap('after_prof_exec')
+
+        # 7. Open File menu and ESC cancels cleanly
+        t.press('F1')
         t.press('ESC')
         t.snap('after_cancel', vram=True)
         t.snap('after_cancel_r0', vram='menu')
@@ -2005,7 +2012,22 @@ class H23MenuNav(Case):
                run.var('edit_item5', 'MNUSEL'),
                run.var('edit_item3_up', 'MNUSEL'))))
 
-        # 7. Clean cancellation and restoration
+        # 7. Action Keymap Profile execution via Options menu (Item 0)
+        checks.append(Check(
+            'H23/action-keymap-prof',
+            run.var('opts_menu_prof', 'MNUID') == 3 and
+            run.var('opts_menu_prof', 'MNUSEL') == 0 and
+            run.var('after_prof_exec', 'KMAPID') == 1,
+            'Options item 0 cycles Keymap Profile (KMAPID 0 -> 1)'
+            if (run.var('opts_menu_prof', 'MNUID') == 3 and
+                run.var('opts_menu_prof', 'MNUSEL') == 0 and
+                run.var('after_prof_exec', 'KMAPID') == 1) else
+            'Keymap profile failed: MNUID=%s, MNUSEL=%s, KMAPID=%s'
+            % (run.var('opts_menu_prof', 'MNUID'),
+               run.var('opts_menu_prof', 'MNUSEL'),
+               run.var('after_prof_exec', 'KMAPID'))))
+
+        # 8. Clean cancellation and restoration
         cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]
         d_cancel = vram.diff(v_boot, v_cancel, ignore_cells=cursor)
         r0_clean = True
