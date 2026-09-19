@@ -3383,6 +3383,80 @@ class U1UndoMod(Case):
         return checks
 
 
+# --- U2  LINE DELETION UNDO AND REDO ----------------------------------
+
+
+class U2UndoDel(Case):
+    name = 'U2-undo-del'
+    desc = 'line deletion (Ctrl+Y), structural Undo (Ctrl+Z) and Redo (Ctrl+Shift+Z)'
+    origin = ('Phase U2 Undo subsystem: structural line deletion undo/redo via NEWREC '
+              'and LINEINS, preserving directory integrity and document lines')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE 1: ALPHA', 'LINE 2: BETA', 'LINE 3: GAMMA'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        # Move down to Line 1 ('LINE 2: BETA')
+        t.press('DOWN')
+        t.snap('down')
+        # Delete Line 1 with Ctrl+Y
+        t.press('Y', mods=['CTRL'])
+        t.snap('deleted')
+        # Undo line deletion (Ctrl+Z) -> restores Line 1
+        t.press('Z', mods=['CTRL'])
+        t.snap('undone')
+        # Redo line deletion (Ctrl+Shift+Z) -> deletes Line 1 again
+        t.press('Z', mods=['SHIFT', 'CTRL'])
+        t.snap('redone')
+        # Undo line deletion again -> restores Line 1
+        t.press('Z', mods=['CTRL'])
+        t.snap('undone2')
+        # Save to disk
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['LINE 1: ALPHA', 'LINE 2: BETA', 'LINE 3: GAMMA'])
+        checks = [
+            # Check boot initial state
+            Check('U2/boot-totlines',
+                  run.var('boot', 'TOTLINES') == 3,
+                  'TOTLINES=3 at boot'),
+            # Check down moved to line 1
+            Check('U2/down-docline',
+                  run.var('down', 'DOCLINE') == 1,
+                  'DOCLINE=1 after DOWN'),
+            # Check line deletion reduced TOTLINES to 2
+            Check('U2/deleted-totlines',
+                  run.var('deleted', 'TOTLINES') == 2,
+                  'TOTLINES=2 after Ctrl+Y'),
+            # Check undo restored TOTLINES to 3 and DOCLINE to 1
+            Check('U2/undone-totlines',
+                  run.var('undone', 'TOTLINES') == 3 and run.var('undone', 'DOCLINE') == 1,
+                  'TOTLINES=3, DOCLINE=1 after Undo'),
+            # Check redo reduced TOTLINES to 2
+            Check('U2/redone-totlines',
+                  run.var('redone', 'TOTLINES') == 2,
+                  'TOTLINES=2 after Redo'),
+            # Check second undo restored TOTLINES to 3 and DOCLINE to 1
+            Check('U2/undone2-totlines',
+                  run.var('undone2', 'TOTLINES') == 3 and run.var('undone2', 'DOCLINE') == 1,
+                  'TOTLINES=3, DOCLINE=1 after second Undo'),
+            # Check saved document matches original fixture byte for byte
+            Check('U2/content',
+                  got == want,
+                  'document matches original byte for byte after undo' if got == want else
+                  'got %r, want %r' % (got, want)),
+        ]
+        return checks
+
+
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
@@ -3395,7 +3469,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),
          E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit(),
          I1UnixAuto(), I2DosAuto(), I3ConvertDosToUnix(), I4ConvertUnixToDos(),
-         U1UndoMod()]
+         U1UndoMod(), U2UndoDel()]
 
 
 def run(ctx, cases):

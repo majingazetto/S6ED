@@ -866,6 +866,21 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'U1',
         'expect': ['U1/undone-state'],
     },
+    {
+        'name': 'undo-del',
+        'why': 'line deletion fails to record in undo ringbuffer when UNDODEL is bypassed',
+        'file': 'ACTION.Z8A',
+        'old': """.DLMULT         LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                CALL    UNDODEL""",
+        'new': """.DLMULT         LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                NOP
+                NOP
+                NOP""",
+        'filter': 'U2',
+        'expect': ['U2/undone-totlines'],
+    },
 ]
 
 

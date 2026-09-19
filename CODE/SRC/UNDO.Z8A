@@ -48,6 +48,132 @@ UNDOCLS         XOR     A
                 RET
 
 
+; --- UNDOREC                   ----------------------------------------
+
+
+; - UNDOREC ----------------------------
+; - ALLOCATE RECORD IN RING BUFFER AND WRITE TRANSACTION HEADER & PAYLOAD
+; - IN:  A = OP_TYPE (UNDOT_MOD OR UNDOT_DEL)
+; -      WORKBUF HAS PRE-MUTATION RECORD
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+UNDOREC         LD      C, A            ; C = OP_TYPE
+
+                ; 1. COMPUTE ALLOCATION ADDRESS IN RING BUFFER
+                LD      HL, (UNDONXT)
+                LD      A, H
+                OR      L
+                JR      NZ, .HAVENX
+                LD      HL, UNDOBAS
+                LD      (UNDONXT), HL
+                LD      (UNDOBOT), HL
+
+.HAVENX         ; DOES IT FIT BEFORE END OF RING BUFFER?
+                ; RANGE: [UNDOBAS, UNDOBAS + UNDOSIZ)
+                PUSH    HL              ; SAVE CANDIDATE
+                LD      DE, UNDOMOD_SZ
+                ADD     HL, DE          ; HL = END OF CANDIDATE RECORD
+                LD      DE, UNDOBAS + UNDOSIZ
+                OR      A
+                SBC     HL, DE          ; CY=1 OR Z=1 IF FITS BEFORE END
+                POP     HL              ; RESTORE CANDIDATE
+                JR      C, .FITS
+                JR      Z, .FITS
+
+                ; DOES NOT FIT AT END: WRAP TO START OF BUFFER
+                LD      HL, UNDOBAS
+
+.FITS           ; HL = WRITE ADDRESS FOR NEW RECORD
+                ; 2. EVICT OLDEST TRANSACTIONS IF OVERLAPPING [HL, HL + UNDOMOD_SZ)
+                LD      A, (UNDOPTR)
+                LD      E, A
+                LD      A, (UNDOPTR + 1)
+                OR      E
+                JR      Z, .NOEVCT      ; BUFFER EMPTY: NO EVICTION NEEDED
+
+                PUSH    BC              ; PRESERVE C (OP_TYPE)
+                PUSH    HL
+                CALL    UNDOEVC
+                POP     HL
+                POP     BC
+
+.NOEVCT         ; 3. WRITE TRANSACTION HEADER AT HL
+                PUSH    HL              ; SAVE RECORD BASE
+
+                ; PREV_TRN = (UNDOPTR)
+                LD      DE, (UNDOPTR)
+                LD      (HL), E
+                INC     HL
+                LD      (HL), D
+                INC     HL
+
+                ; NEXT_TRN = 0
+                LD      (HL), 0
+                INC     HL
+                LD      (HL), 0
+                INC     HL
+
+                ; OP_TYPE
+                LD      (HL), C
+                INC     HL
+
+                ; DOCLINE
+                LD      DE, (DOCLINE)
+                LD      (HL), E
+                INC     HL
+                LD      (HL), D
+                INC     HL
+
+                ; CURX
+                LD      A, (CURX)
+                LD      (HL), A
+                INC     HL
+
+                ; TOPLINE
+                LD      DE, (TOPLINE)
+                LD      (HL), E
+                INC     HL
+                LD      (HL), D
+                INC     HL              ; HL = HL + 10 (PAYLOAD BASE)
+
+                ; 4. COPY WORKBUF (161 BYTES) TO PAYLOAD
+                EX      DE, HL          ; DE = DESTINATION (HL + 10)
+                LD      HL, WORKBUF     ; HL = SOURCE
+                LD      BC, LINEREC     ; 161 BYTES
+                LDIR                    ; DE ADVANCES TO HL + 171
+
+                POP     HL              ; HL = START OF THIS RECORD
+
+                ; 5. LINK PREVIOUS RECORD'S NEXT_TRN TO THIS RECORD
+                LD      BC, (UNDOPTR)
+                LD      A, B
+                OR      C
+                JR      Z, .FIRST
+                ; PREVIOUS RECORD EXISTS AT BC. ITS NEXT_TRN IS AT BC + 2
+                INC     BC
+                INC     BC
+                LD      A, L
+                LD      (BC), A
+                INC     BC
+                LD      A, H
+                LD      (BC), A
+                JR      .LNKDON
+
+.FIRST          ; THIS IS THE FIRST/ONLY RECORD IN EMPTY BUFFER
+                LD      (UNDOBOT), HL
+
+.LNKDON         ; 6. UPDATE GLOBAL UNDO STATE
+                LD      (UNDOPTR), HL   ; NEW HEAD OF UNDO CHAIN
+                EX      DE, HL          ; HL = DE (END OF RECORD: BASE + 171)
+                LD      (UNDONXT), HL   ; NEXT WRITE LOCATION
+                XOR     A
+                LD      (REDOPTR), A    ; NEW EDIT INVALIDATES REDO
+                LD      (REDOPTR + 1), A
+                RET
+
+
 ; --- UNDOBGN                   ----------------------------------------
 
 
@@ -76,114 +202,8 @@ UNDOBGN         PUSH    BC
                 ; DIFFERENT LINE: CLOSE PREVIOUS
                 CALL    UNDOCLS
 
-.NEWTRN         ; 2. COMPUTE ALLOCATION ADDRESS IN RING BUFFER
-                LD      HL, (UNDONXT)
-                LD      A, H
-                OR      L
-                JR      NZ, .HAVENX
-                LD      HL, UNDOBAS
-                LD      (UNDONXT), HL
-                LD      (UNDOBOT), HL
-
-.HAVENX         ; DOES IT FIT BEFORE END OF RING BUFFER?
-                ; RANGE: [UNDOBAS, UNDOBAS + UNDOSIZ)
-                PUSH    HL              ; SAVE CANDIDATE
-                LD      DE, UNDOMOD_SZ
-                ADD     HL, DE          ; HL = END OF CANDIDATE RECORD
-                LD      DE, UNDOBAS + UNDOSIZ
-                OR      A
-                SBC     HL, DE          ; CY=1 OR Z=1 IF FITS BEFORE END
-                POP     HL              ; RESTORE CANDIDATE
-                JR      C, .FITS
-                JR      Z, .FITS
-
-                ; DOES NOT FIT AT END: WRAP TO START OF BUFFER
-                LD      HL, UNDOBAS
-
-.FITS           ; HL = WRITE ADDRESS FOR NEW RECORD
-                ; 3. EVICT OLDEST TRANSACTIONS IF OVERLAPPING [HL, HL + UNDOMOD_SZ)
-                LD      A, (UNDOPTR)
-                LD      E, A
-                LD      A, (UNDOPTR + 1)
-                OR      E
-                JR      Z, .NOEVCT      ; BUFFER EMPTY: NO EVICTION NEEDED
-
-                PUSH    HL
-                CALL    .EVICT
-                POP     HL
-
-.NOEVCT         ; 4. WRITE TRANSACTION HEADER AT HL
-                PUSH    HL              ; SAVE RECORD BASE
-
-                ; PREV_TRN = (UNDOPTR)
-                LD      DE, (UNDOPTR)
-                LD      (HL), E
-                INC     HL
-                LD      (HL), D
-                INC     HL
-
-                ; NEXT_TRN = 0
-                LD      (HL), 0
-                INC     HL
-                LD      (HL), 0
-                INC     HL
-
-                ; OP_TYPE = UNDOT_MOD (1)
-                LD      (HL), UNDOT_MOD
-                INC     HL
-
-                ; DOCLINE
-                LD      DE, (DOCLINE)
-                LD      (HL), E
-                INC     HL
-                LD      (HL), D
-                INC     HL
-
-                ; CURX
-                LD      A, (CURX)
-                LD      (HL), A
-                INC     HL
-
-                ; TOPLINE
-                LD      DE, (TOPLINE)
-                LD      (HL), E
-                INC     HL
-                LD      (HL), D
-                INC     HL              ; HL = HL + 10 (PAYLOAD BASE)
-
-                ; 5. COPY WORKBUF (161 BYTES) TO PAYLOAD
-                EX      DE, HL          ; DE = DESTINATION (HL + 10)
-                LD      HL, WORKBUF     ; HL = SOURCE
-                LD      BC, LINEREC     ; 161 BYTES
-                LDIR                    ; DE ADVANCES TO HL + 171
-
-                POP     HL              ; HL = START OF THIS RECORD
-
-                ; 6. LINK PREVIOUS RECORD'S NEXT_TRN TO THIS RECORD
-                LD      BC, (UNDOPTR)
-                LD      A, B
-                OR      C
-                JR      Z, .FIRST
-                ; PREVIOUS RECORD EXISTS AT BC. ITS NEXT_TRN IS AT BC + 2
-                INC     BC
-                INC     BC
-                LD      A, L
-                LD      (BC), A
-                INC     BC
-                LD      A, H
-                LD      (BC), A
-                JR      .LNKDON
-
-.FIRST          ; THIS IS THE FIRST/ONLY RECORD IN EMPTY BUFFER
-                LD      (UNDOBOT), HL
-
-.LNKDON         ; 7. UPDATE GLOBAL UNDO STATE
-                LD      (UNDOPTR), HL   ; NEW HEAD OF UNDO CHAIN
-                EX      DE, HL          ; HL = DE (END OF RECORD: BASE + 171)
-                LD      (UNDONXT), HL   ; NEXT WRITE LOCATION
-                XOR     A
-                LD      (REDOPTR), A    ; NEW EDIT INVALIDATES REDO
-                LD      (REDOPTR + 1), A
+.NEWTRN         LD      A, UNDOT_MOD
+                CALL    UNDOREC
 
                 ; SET COALESCING ACTIVE FOR THIS LINE
                 LD      A, 1
@@ -195,7 +215,33 @@ UNDOBGN         PUSH    BC
                 POP     BC
                 RET
 
-.EVICT          ; EVICT TRANSACTIONS AT (UNDOBOT) THAT COLLIDE WITH [HL, HL + UNDOMOD_SZ)
+
+; --- UNDODEL                   ----------------------------------------
+
+
+; - UNDODEL ----------------------------
+; - RECORD DELETED LINE IN UNDO RING BUFFER
+; - IN:  WORKBUF HAS PRE-MUTATION LINE RECORD
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+UNDODEL         CALL    UNDOCLS
+                LD      A, UNDOT_DEL
+                JP      UNDOREC
+
+
+; --- UNDOEVC                   ----------------------------------------
+
+
+; - UNDOEVC ----------------------------
+; - EVICT TRANSACTIONS AT (UNDOBOT) THAT COLLIDE WITH [HL, HL + UNDOMOD_SZ)
+; - IN:  HL = WRITE BASE ADDRESS
+; - OUT: NONE
+; - CLOBBERS: AF, DE (PRESERVES BC, HL)
+; -
+
+UNDOEVC         ; EVICT TRANSACTIONS AT (UNDOBOT) THAT COLLIDE WITH [HL, HL + UNDOMOD_SZ)
 .EVCLP          LD      DE, (UNDOBOT)
                 LD      A, D
                 OR      E
@@ -340,9 +386,12 @@ ACTUNDO         CALL    UNDOCLS
                 ; CHECK OP_TYPE (IX + 4)
                 LD      A, (IX + 4)
                 CP      UNDOT_MOD
-                RET     NZ              ; FUTURE OP TYPES
+                JR      Z, .DOMOD
+                CP      UNDOT_DEL
+                JR      Z, .DODEL
+                RET
 
-                ; RECORD BEING UNDONE BECOMES HEAD OF REDO
+.DOMOD          ; RECORD BEING UNDONE BECOMES HEAD OF REDO
                 LD      (REDOPTR), IX
 
                 ; ADVANCE UNDOPTR BACKWARDS: UNDOPTR = PREV_TRN (IX + 0)
@@ -352,6 +401,9 @@ ACTUNDO         CALL    UNDOCLS
 
                 ; SWAP DOCUMENT WITH PAYLOAD (RESTORING PRE-MUTATION STATE)
                 JP      UNDOSWP
+
+.DODEL          ; REVERSE DELETION: RE-INSERT LINE
+                JP      UNDORST
 
 
 ; --- ACTREDO                   ----------------------------------------
@@ -376,9 +428,12 @@ ACTREDO         CALL    UNDOCLS
                 ; CHECK OP_TYPE (IX + 4)
                 LD      A, (IX + 4)
                 CP      UNDOT_MOD
-                RET     NZ
+                JR      Z, .DOMOD
+                CP      UNDOT_DEL
+                JR      Z, .DODEL
+                RET
 
-                ; RECORD BEING REDONE BECOMES HEAD OF UNDO
+.DOMOD          ; RECORD BEING REDONE BECOMES HEAD OF UNDO
                 LD      (UNDOPTR), IX
 
                 ; ADVANCE REDOPTR FORWARD: REDOPTR = NEXT_TRN (IX + 2)
@@ -388,3 +443,132 @@ ACTREDO         CALL    UNDOCLS
 
                 ; SWAP DOCUMENT WITH PAYLOAD (RESTORES MUTATION STATE)
                 JP      UNDOSWP
+
+.DODEL          ; RE-APPLY DELETION: DELETE LINE AGAIN
+                JP      UNDOKIL
+
+
+; --- UNDORST                   ----------------------------------------
+
+
+; - UNDORST ----------------------------
+; - REVERSE LINE DELETION: RE-INSERT LINE INTO DOCUMENT
+; - IN:  IX = UNDO TRANSACTION ADDRESS
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+UNDORST         ; 1. CHECK IF LINE DIRECTORY IS FULL
+                LD      HL, (TOTLINES)
+                LD      DE, MAXLINES
+                CALL    CMPHLDE
+                RET     NC              ; DIRECTORY FULL: REFUSE RESURRECTION
+
+                ; 2. RESERVE SPACE IN MAPPER FOR RESTORED LINE
+                CALL    NEWREC
+                RET     C               ; OOM: CANNOT UNDO DELETION
+
+                ; SAVE RETURNED SEGMENT AND OFFSET
+                LD      (NRSEG), A
+                LD      (NROFF), DE
+
+                ; 3. UPDATE UNDOPTR AND REDOPTR
+                LD      (REDOPTR), IX
+                LD      L, (IX + 0)
+                LD      H, (IX + 1)
+                LD      (UNDOPTR), HL
+
+                ; 4. COPY PAYLOAD (IX + 10) INTO TXPAGE + NROFF
+                ; (PAGE 2 IS BANKED TO NRSEG BY NEWREC)
+                LD      DE, (NROFF)
+                LD      HL, TXPAGE
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DESTINATION
+                PUSH    IX
+                POP     HL
+                LD      BC, UNDOHDR_SZ
+                ADD     HL, BC          ; HL = SOURCE (IX + 10)
+                LD      BC, LINEREC     ; 161 BYTES
+                LDIR
+
+                ; 5. OPEN DIRECTORY SLOT AT (IX + 5) AND FILL IT
+                LD      L, (IX + 5)
+                LD      H, (IX + 6)     ; HL = DOCLINE
+                PUSH    HL
+                CALL    LINEINS
+                POP     HL
+                LD      DE, (NROFF)
+                LD      A, (NRSEG)
+                CALL    DIRWRITE
+
+                ; 6. BUMP TOTLINES
+                LD      HL, (TOTLINES)
+                INC     HL
+                LD      (TOTLINES), HL
+
+                ; 7. RESTORE DOCLINE, CURX, TOPLINE
+                LD      L, (IX + 5)
+                LD      H, (IX + 6)
+                LD      (DOCLINE), HL
+                LD      A, (IX + 7)
+                LD      (CURX), A
+                LD      L, (IX + 8)
+                LD      H, (IX + 9)
+                LD      (TOPLINE), HL
+
+                ; 8. UPDATE CURY, MARK MODIFIED & REDRAW
+                LD      A, #FF
+                LD      (MODIFIED), A
+                CALL    SETCURY
+                CALL    REDRAW
+                CALL    DRWSTAT
+                JP      DRWCUR
+
+
+; --- UNDOKIL                   ----------------------------------------
+
+
+; - UNDOKIL ----------------------------
+; - RE-APPLY LINE DELETION (REDO OF DELETED LINE)
+; - IN:  IX = TRANSACTION ADDRESS
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+UNDOKIL         ; 1. ADVANCE REDOPTR AND UPDATE UNDOPTR
+                LD      (UNDOPTR), IX
+                LD      L, (IX + 2)
+                LD      H, (IX + 3)
+                LD      (REDOPTR), HL
+
+                ; 2. DELETE LINE AT (IX + 5)
+                LD      L, (IX + 5)
+                LD      H, (IX + 6)
+                LD      (DOCLINE), HL
+                CALL    LINEDEL
+
+                ; 3. DECREMENT TOTLINES
+                LD      HL, (TOTLINES)
+                DEC     HL
+                LD      (TOTLINES), HL
+
+                ; 4. CLAMP DOCLINE IF DOCLINE >= TOTLINES
+                LD      HL, (DOCLINE)
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JR      C, .DKLOK
+                DEC     HL
+                LD      (DOCLINE), HL
+
+.DKLOK          ; 5. CURSOR TO COL 0, RESTORE TOPLINE, CURY, REDRAW
+                XOR     A
+                LD      (CURX), A
+                LD      L, (IX + 8)
+                LD      H, (IX + 9)
+                LD      (TOPLINE), HL
+                LD      A, #FF
+                LD      (MODIFIED), A
+                CALL    SETCURY
+                CALL    REDRAW
+                CALL    DRWSTAT
+                JP      DRWCUR
