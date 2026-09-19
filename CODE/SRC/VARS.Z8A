@@ -313,6 +313,17 @@ MNUPTY          DEFW    0               ; ACTIVE MENU YTBL POINTER
 MNUPTS          DEFW    0               ; ACTIVE MENU STBL POINTER
 
 
+; --- UNDO STATE                ----------------------------------------
+
+
+UNDOPTR         DEFW    0               ; POINTER TO MOST RECENT UNDO TRANSACTION (0 = NONE)
+UNDOBOT         DEFW    0               ; POINTER TO OLDEST TRANSACTION (CIRCULAR TAIL)
+UNDONXT         DEFW    0               ; POINTER WHERE NEXT TRANSACTION WILL BE WRITTEN
+REDOPTR         DEFW    0               ; POINTER TO REDO TRANSACTION (0 = NONE)
+UNDOTYP         DEFB    0               ; 1 = COALESCING TEXT INPUT IN PROGRESS
+UNDOLIN         DEFW    0               ; DOCLINE OF ACTIVE COALESCED TRANSACTION
+
+
 ; --- VDP COMMAND BLOCK          ----------------------------------------
 
                 ; STANDARD 15-BYTE BLOCK FOR R#32 TO R#46
@@ -329,6 +340,9 @@ VDP_ARG         EQU     VDPCMBLK + 13 ; BYTE
 VDP_CMD         EQU     VDPCMBLK + 14 ; BYTE
 
 ENDVARS
+
+UNDOBAS         EQU     ENDVARS         ; DYNAMIC BASE OF UNDO RING BUFFER IN TPA
+                ASSERT  UNDOBAS + UNDOSIZ <= TXPAGE ; NEVER OVERFLOW INTO PAGE 2
 
 
                 ; NOTHING MAY BE DECLARED BELOW THIS POINT. THE BUILD EXPECTS

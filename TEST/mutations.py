@@ -857,6 +857,15 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'H23',
         'expect': ['H23/action-keymap-prof'],
     },
+    {
+        'name': 'undo-dispatch',
+        'why': 'Undo action fails to execute when ACTUNDO vector is disconnected',
+        'file': 'ACTION.Z8A',
+        'old': '                DEFW    ACTUNDO         ; 57 (UNDO)',
+        'new': '                DEFW    ACTNONE         ; MUTATION: DISABLE UNDO DISPATCH',
+        'filter': 'U1',
+        'expect': ['U1/undone-state'],
+    },
 ]
 
 

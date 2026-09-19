@@ -63,6 +63,8 @@ KMAPSTD         ; UNMODIFIED CURSORS
                 DEFB    CTRL_K,  MODCTRL, ACCYCKM
                 DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    CTRL_Y,  MODCTRL, ACDELLN
+                DEFB    CTRL_Z,  MODCTRL, ACUNDO
+                DEFB    CTRL_Z,  MODSHFT | MODCTRL, ACREDO
                 DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    ESC,     MODANY,  ACQUIT
                 DEFB    F1KEY,   MODANY,  ACMENU
@@ -138,6 +140,8 @@ KMAPWS          ; WORDSTAR DIAMOND
                 DEFB    CTRL_K,  MODCTRL, ACCYCKM
                 DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    CTRL_W,  MODCTRL, ACTGLWR
+                DEFB    CTRL_Z,  MODCTRL, ACUNDO
+                DEFB    CTRL_Z,  MODSHFT | MODCTRL, ACREDO
                 DEFB    CTRL_Q,  MODCTRL, ACQUIT
                 DEFB    ESC,     MODANY,  ACQUIT
                 DEFB    F1KEY,   MODANY,  ACMENU
@@ -162,6 +166,8 @@ KMAPEMAC        ; EMACS NAVIGATION & EDITING
                 DEFB    CTRL_E,  MODCTRL, ACEOL
                 DEFB    CTRL_D,  MODCTRL, ACDELFW
                 DEFB    CTRL_Y,  MODCTRL, ACDELLN
+                DEFB    CTRL_Z,  MODCTRL, ACUNDO
+                DEFB    CTRL_Z,  MODSHFT | MODCTRL, ACREDO
                 DEFB    CTRL_K,  MODCTRL, ACCYCKM
                 DEFB    CTRL_S,  MODCTRL, ACSAVE
 
@@ -225,6 +231,8 @@ KMAPVIN         ; VI NORMAL MOVEMENT
                 DEFB    'd',     MODNONE, ACVILED
                 DEFB    'y',     MODNONE, ACCOPY
                 DEFB    'p',     MODNONE, ACPAST
+                DEFB    'u',     MODNONE, ACUNDO
+                DEFB    CTRL_R,  MODCTRL, ACREDO
                 DEFB    'G',     MODNONE, ACBOT
 
                 ; UNMODIFIED CURSORS

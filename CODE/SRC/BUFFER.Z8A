@@ -72,7 +72,7 @@ BUFRESET        CALL    SEGTRIM
                 XOR     A
                 LD      (CURX), A
                 LD      (CURY), A
-                RET
+                JP      UNDOINIT
 
 
 ; --- RECBLNK                   ----------------------------------------

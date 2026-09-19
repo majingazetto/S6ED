@@ -66,6 +66,8 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTMNU2         ; 54 (VIEW)
                 DEFW    ACTMNU3         ; 55 (OPTIONS)
                 DEFW    ACTMNU4         ; 56 (HELP)
+                DEFW    ACTUNDO         ; 57 (UNDO)
+                DEFW    ACTREDO         ; 58 (REDO)
 
 
 ; --- ACTNONE                   ----------------------------------------
@@ -91,7 +93,8 @@ ACTNONE         RET
 ; - CLOBBERS: ALL
 ; -
 
-CHKUNSEL        LD      A, (MODKEYS)
+CHKUNSEL        CALL    UNDOCLS
+                LD      A, (MODKEYS)
                 AND     MODSHFT
                 RET     NZ              ; SHIFT PRESSED: PRESERVE SELECTION
                 LD      A, (SELACT)

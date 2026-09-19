@@ -47,6 +47,7 @@ DEFAULT_VARS = [
     ('WINACTV', 1), ('WINX', 2), ('WINY', 2), ('WINW', 2), ('WINH', 2),
     ('WINSEL', 1), ('WINRES', 1), ('WINBST', 1),
     ('MNUID', 1), ('MNUSEL', 1),
+    ('UNDOPTR', 2), ('UNDOBOT', 2), ('REDOPTR', 2), ('UNDOTYP', 1),
 ]
 
 # Byte ranges worth having whole.  The selection records are here because a

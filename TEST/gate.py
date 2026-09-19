@@ -3312,6 +3312,77 @@ class I4ConvertUnixToDos(Case):
         return checks
 
 
+# --- U1  SINGLE-LINE UNDO AND REDO ------------------------------------
+
+
+class U1UndoMod(Case):
+    name = 'U1-undo-mod'
+    desc = 'typing burst coalescing, single-line Undo (Ctrl+Z) and Redo (Ctrl+Shift+Z)'
+    origin = ('Phase U1 Undo subsystem: coalescing input deltas in ring buffer, '
+              'bidirectional symmetrical payload swap, restoring text and cursor')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['HELLO WORLD', 'SECOND LINE'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        # Type burst on Line 0 at col 0
+        t.text('PREFIX ')                 # Line 0 becomes 'PREFIX HELLO WORLD', CURX=7
+        t.snap('typed')
+        # Undo typing burst (Ctrl+Z)
+        t.press('Z', mods=['CTRL'])       # Restores 'HELLO WORLD', CURX=0
+        t.snap('undone')
+        # Redo typing burst (Ctrl+Shift+Z)
+        t.press('Z', mods=['SHIFT', 'CTRL']) # Restores 'PREFIX HELLO WORLD', CURX=7
+        t.snap('redone')
+        # Undo again to return to original state
+        t.press('Z', mods=['CTRL'])       # Restores 'HELLO WORLD', CURX=0
+        t.snap('undone2')
+        # Save to disk
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['HELLO WORLD', 'SECOND LINE'])
+        checks = [
+            # Check boot initial state
+            Check('U1/boot-ptrs',
+                  run.var('boot', 'UNDOPTR') == 0 and run.var('boot', 'REDOPTR') == 0,
+                  'UNDOPTR=0, REDOPTR=0 at boot'),
+            # Check typing burst coalescing
+            Check('U1/typed-state',
+                  run.var('typed', 'CURX') == 7 and run.var('typed', 'UNDOPTR') != 0 and run.var('typed', 'REDOPTR') == 0,
+                  'CURX=7, UNDOPTR active, REDOPTR=0 after typing'),
+            # Check undo restores cursor and chain pointers
+            Check('U1/undone-state',
+                  run.var('undone', 'CURX') == 0 and run.var('undone', 'UNDOPTR') == 0 and run.var('undone', 'REDOPTR') != 0,
+                  'CURX=0, UNDOPTR=0, REDOPTR active after Undo'),
+            # Check redo restores cursor and chain pointers
+            Check('U1/redone-state',
+                  run.var('redone', 'CURX') == 7 and run.var('redone', 'UNDOPTR') != 0 and run.var('redone', 'REDOPTR') == 0,
+                  'CURX=7, UNDOPTR active, REDOPTR=0 after Redo'),
+            # Check second undo restores cursor
+            Check('U1/undone2-curx',
+                  run.var('undone2', 'CURX') == 0,
+                  'CURX=0 after second Undo'),
+            # Check disk content matches original text byte for byte
+            Check('U1/content',
+                  got == want,
+                  'document matches original byte for byte after undo' if got == want else
+                  'got %r, want %r' % (got, want)),
+            # Check TOTLINES unchanged
+            Check('U1/totlines',
+                  run.var('saved', 'TOTLINES') == 2,
+                  'TOTLINES = %s (expected 2)' % run.var('saved', 'TOTLINES')),
+        ]
+        return checks
+
+
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
@@ -3323,7 +3394,8 @@ CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),
          E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit(),
-         I1UnixAuto(), I2DosAuto(), I3ConvertDosToUnix(), I4ConvertUnixToDos()]
+         I1UnixAuto(), I2DosAuto(), I3ConvertDosToUnix(), I4ConvertUnixToDos(),
+         U1UndoMod()]
 
 
 def run(ctx, cases):
