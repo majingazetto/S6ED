@@ -2783,7 +2783,7 @@ MNUENT          LD      A, (FTRSEG)
                 JR      Z, .OINS
                 RET
 
-.OPROF          CALL    ACTCYCMK
+.OPROF          CALL    ACTCYCKM
                 JP      DRWSTAT
 
 .OTAB           LD      A, (TABWIDTH)

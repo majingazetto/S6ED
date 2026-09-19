@@ -846,6 +846,17 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'H23',
         'expect': ['H23/title-switch-xor'],
     },
+    {
+        'name': 'menu-opt-prof',
+        'why': 'Options menu item 0 calls ACTCYCMK instead of ACTCYCKM',
+        'file': 'ACTION.Z8A',
+        'old': """.OPROF          CALL    ACTCYCKM
+                JP      DRWSTAT""",
+        'new': """.OPROF          CALL    ACTCYCMK        ; MUTATION: WRONG DISPATCH
+                JP      DRWSTAT""",
+        'filter': 'H23',
+        'expect': ['H23/action-keymap-prof'],
+    },
 ]
 
 
