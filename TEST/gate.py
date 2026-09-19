@@ -2625,7 +2625,7 @@ class D8Accents(Case):
     # fixed build is byte for byte correct at every one of those gaps.
     GRAPH_ROW = 'AEIOUNW1/'
     GRAPH_PASSES = 4
-    GRAPH_GAP = 0.050
+    GRAPH_GAP = 0.040
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
@@ -3457,6 +3457,227 @@ class U2UndoDel(Case):
         return checks
 
 
+# --- U3  LINE SPLIT UNDO AND REDO (ENTER) -----------------------------
+
+
+class U3UndoSplit(Case):
+    name = 'U3-undo-split'
+    desc = 'line split (Enter), structural Undo (Ctrl+Z) and Redo (Ctrl+Shift+Z)'
+    origin = ('Phase U3 Undo subsystem: structural line split undo/redo, merging '
+              'lines back on Undo via LINEDEL/LINEWRT and re-splitting on Redo')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['FIRST LINE', 'SECOND LINE'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        # Move right 5 columns ('FIRST| LINE')
+        t.press('RIGHT', repeat=5)
+        t.snap('moved')
+        # Press Enter: splits line 0 at col 5
+        t.press('RETURN')
+        t.snap('split')
+        # Undo line split (Ctrl+Z) -> merges line 0 and line 1 back together
+        t.press('Z', mods=['CTRL'])
+        t.snap('undone')
+        # Redo line split (Ctrl+Shift+Z) -> re-splits line 0
+        t.press('Z', mods=['SHIFT', 'CTRL'])
+        t.snap('redone')
+        # Undo line split again -> merges lines back together
+        t.press('Z', mods=['CTRL'])
+        t.snap('undone2')
+        # Save to disk
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['FIRST LINE', 'SECOND LINE'])
+        checks = [
+            # Check boot initial state
+            Check('U3/boot-totlines',
+                  run.var('boot', 'TOTLINES') == 2,
+                  'TOTLINES=2 at boot'),
+            # Check moved to col 5
+            Check('U3/moved-curx',
+                  run.var('moved', 'CURX') == 5,
+                  'CURX=5 after RIGHT x 5'),
+            # Check split increased TOTLINES to 3, DOCLINE to 1, CURX to 0
+            Check('U3/split-totlines',
+                  run.var('split', 'TOTLINES') == 3 and run.var('split', 'DOCLINE') == 1,
+                  'TOTLINES=3, DOCLINE=1 after Enter'),
+            # Check undo restored TOTLINES to 2, DOCLINE to 0, CURX to 5
+            Check('U3/undone-totlines',
+                  run.var('undone', 'TOTLINES') == 2 and run.var('undone', 'DOCLINE') == 0 and run.var('undone', 'CURX') == 5,
+                  'TOTLINES=2, DOCLINE=0, CURX=5 after Undo'),
+            # Check redo increased TOTLINES to 3, DOCLINE to 1
+            Check('U3/redone-totlines',
+                  run.var('redone', 'TOTLINES') == 3 and run.var('redone', 'DOCLINE') == 1,
+                  'TOTLINES=3, DOCLINE=1 after Redo'),
+            # Check second undo restored TOTLINES to 2, DOCLINE to 0, CURX to 5
+            Check('U3/undone2-totlines',
+                  run.var('undone2', 'TOTLINES') == 2 and run.var('undone2', 'DOCLINE') == 0,
+                  'TOTLINES=2, DOCLINE=0 after second Undo'),
+            # Check saved document matches original fixture byte for byte
+            Check('U3/content',
+                  got == want,
+                  'document matches original byte for byte after undo' if got == want else
+                  'got %r, want %r' % (got, want)),
+        ]
+        return checks
+
+
+# --- U4  LINE JOIN UNDO AND REDO (BACKSPACE AT COL 0) -----------------
+
+
+class U4UndoJoin(Case):
+    name = 'U4-undo-join'
+    desc = 'line join (Backspace col 0), structural Undo (Ctrl+Z) and Redo (Ctrl+Shift+Z)'
+    origin = ('Phase U3 Undo subsystem: line join undo/redo in WRAP_DEV, separating '
+              'lines on Undo via NEWREC/LINEINS and re-joining on Redo')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['HELLO ', 'WORLD'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        # Move down to Line 1 at col 0
+        t.press('DOWN')
+        t.snap('down')
+        # Backspace at col 0: joins line 1 into line 0 ('HELLO WORLD')
+        t.press('BS')
+        t.snap('joined')
+        # Undo line join (Ctrl+Z) -> re-separates line 0 and line 1
+        t.press('Z', mods=['CTRL'])
+        t.snap('undone')
+        # Redo line join (Ctrl+Shift+Z) -> re-joins line 1 into line 0
+        t.press('Z', mods=['SHIFT', 'CTRL'])
+        t.snap('redone')
+        # Undo line join again -> re-separates lines
+        t.press('Z', mods=['CTRL'])
+        t.snap('undone2')
+        # Save to disk
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['HELLO ', 'WORLD'])
+        checks = [
+            # Check boot initial state
+            Check('U4/boot-totlines',
+                  run.var('boot', 'TOTLINES') == 2,
+                  'TOTLINES=2 at boot'),
+            # Check down moved to line 1
+            Check('U4/down-docline',
+                  run.var('down', 'DOCLINE') == 1 and run.var('down', 'CURX') == 0,
+                  'DOCLINE=1, CURX=0 after DOWN'),
+            # Check join reduced TOTLINES to 1, DOCLINE to 0, CURX to 6
+            Check('U4/joined-totlines',
+                  run.var('joined', 'TOTLINES') == 1 and run.var('joined', 'DOCLINE') == 0 and run.var('joined', 'CURX') == 6,
+                  'TOTLINES=1, DOCLINE=0, CURX=6 after BS'),
+            # Check undo restored TOTLINES to 2, DOCLINE to 0
+            Check('U4/undone-totlines',
+                  run.var('undone', 'TOTLINES') == 2 and run.var('undone', 'DOCLINE') == 0,
+                  'TOTLINES=2, DOCLINE=0 after Undo'),
+            # Check redo reduced TOTLINES to 1
+            Check('U4/redone-totlines',
+                  run.var('redone', 'TOTLINES') == 1 and run.var('redone', 'DOCLINE') == 0,
+                  'TOTLINES=1, DOCLINE=0 after Redo'),
+            # Check second undo restored TOTLINES to 2
+            Check('U4/undone2-totlines',
+                  run.var('undone2', 'TOTLINES') == 2,
+                  'TOTLINES=2 after second Undo'),
+            # Check saved document matches original fixture byte for byte
+            Check('U4/content',
+                  got == want,
+                  'document matches original byte for byte after undo' if got == want else
+                  'got %r, want %r' % (got, want)),
+        ]
+        return checks
+
+
+# --- U5  UNDO WITH ACTIVE SELECTION (NO INVERTED CHARACTERS) ----------
+
+
+class U5UndoSel(Case):
+    name = 'U5-undo-sel'
+    desc = 'undo cancels active selection cleanly without leaving inverted characters'
+    origin = ('when text is selected and Ctrl+Z is pressed, ACTUNDO did not cancel '
+              'the selection; REDRAW repainted clean text but SELDRAWN remained 1, '
+              'so subsequent cursor movement un-XORed clean text and left inverted characters')
+    fixture_name = 'DOC.TXT'
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['Line 0', 'Line 1: Hello MSX', 'Line 2: MSX2 Screen 6 Text Editor'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        # 1. Type ABC on Line 0 to establish an undo transaction
+        t.press('A')
+        t.press('B')
+        t.press('C')
+        t.snap('typed')
+        # 2. Navigate to Line 2, column 10 ('Screen') and select 3 chars ('ree')
+        t.press('DOWN', repeat=2)
+        t.press('RIGHT', repeat=10)
+        t.press('RIGHT', mods=['SHIFT'], repeat=3)
+        t.snap('selected')
+        # 3. Undo previous typing with Ctrl+Z: must cancel selection cleanly
+        t.press('Z', mods=['CTRL'])
+        t.snap('undone')
+        # 4. Move cursor right: must NOT un-XOR clean text or leave stray pixels
+        t.press('RIGHT')
+        t.snap('after_arrow', vram=True)
+        # 5. Full pure REDRAW via Graph+Down then Graph+Up to compare screen
+        t.press('DOWN', mods=['GRAPH'])
+        t.press('UP', mods=['GRAPH'])
+        t.snap('pure_redraw', vram=True)
+        # 6. Save to disk
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(['Line 0', 'Line 1: Hello MSX', 'Line 2: MSX2 Screen 6 Text Editor'])
+        v1 = run.blob('after_arrow', 'vram')
+        v2 = run.blob('pure_redraw', 'vram')
+        cursor = [(run.var('after_arrow', 'CURX'), run.var('after_arrow', 'CURY'))]
+        diff = vram.diff(v1, v2, ignore_cells=cursor)
+        checks = [
+            # Check selection was active before undo
+            Check('U5/sel-active',
+                  run.var('selected', 'SELACT') == 1 and run.var('selected', 'SELDRAWN') == 1,
+                  'SELACT=1, SELDRAWN=1 when selected'),
+            # Check selection was cleanly cancelled by undo
+            Check('U5/sel-cancelled',
+                  run.var('undone', 'SELACT') == 0 and run.var('undone', 'SELDRAWN') == 0,
+                  'SELACT=0, SELDRAWN=0 after Undo'),
+            # Check no inverted characters or stray pixels in VRAM
+            Check('U5/clean-vram',
+                  not diff,
+                  'screen identical to a full REDRAW, no inverted characters' if not diff else
+                  '%d stray inverted pixels in VRAM' % len(diff)),
+            # Check document matches fixture byte for byte
+            Check('U5/content',
+                  got == want,
+                  'document matches original byte for byte after undo' if got == want else
+                  'got %r, want %r' % (got, want)),
+        ]
+        return checks
+
+
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
@@ -3469,7 +3690,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(),
          E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit(),
          I1UnixAuto(), I2DosAuto(), I3ConvertDosToUnix(), I4ConvertUnixToDos(),
-         U1UndoMod(), U2UndoDel()]
+         U1UndoMod(), U2UndoDel(), U3UndoSplit(), U4UndoJoin(), U5UndoSel()]
 
 
 def run(ctx, cases):

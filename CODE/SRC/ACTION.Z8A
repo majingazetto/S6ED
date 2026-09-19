@@ -647,6 +647,9 @@ ACTDELFW        LD      A, (SELACT)
 ; -
 
 ACTDELLN        CALL    UNDOCLS
+                LD      A, (SELACT)
+                OR      A
+                CALL    NZ, ACTDSEL
                 LD      HL, (TOTLINES)
                 LD      A, H
                 OR      L
@@ -729,7 +732,10 @@ ACTDELLN        CALL    UNDOCLS
 ; -     DESIGN, WHICH WOULD BREAK THE CHAIN ACROSS A BLANK SEPARATOR LINE.
 ; -
 
-ACTNWLIN        ; MODE CHECK: ALGN_ON ALWAYS, ALGN_DEV ONLY IN WRAP_DEV
+ACTNWLIN        LD      A, (SELACT)
+                OR      A
+                CALL    NZ, ACTDLS
+                ; MODE CHECK: ALGN_ON ALWAYS, ALGN_DEV ONLY IN WRAP_DEV
                 LD      A, (AUTOALGN)
                 CP      ALGN_ON
                 JR      Z, .ACTIVE

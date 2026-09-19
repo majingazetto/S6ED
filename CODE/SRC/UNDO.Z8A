@@ -60,6 +60,9 @@ UNDOCLS         XOR     A
 ; -
 
 UNDOREC         LD      C, A            ; C = OP_TYPE
+                LD      A, (UNDOHLD)
+                OR      A
+                RET     NZ              ; SUPPRESSED (DURING REDO)
 
                 ; 1. COMPUTE ALLOCATION ADDRESS IN RING BUFFER
                 LD      HL, (UNDONXT)
@@ -231,6 +234,61 @@ UNDODEL         CALL    UNDOCLS
                 JP      UNDOREC
 
 
+; --- UNDOSPL                   ----------------------------------------
+
+
+; - UNDOSPL ----------------------------
+; - RECORD LINE SPLIT (ENTER) IN UNDO RING BUFFER
+; - IN:  WORKBUF HAS PRE-SPLIT LINE RECORD
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+UNDOSPL         LD      A, (UNDOHLD)
+                OR      A
+                RET     NZ
+                CALL    UNDOCLS
+                LD      A, UNDOT_SPL
+                JP      UNDOREC
+
+
+; --- UNDOJON                   ----------------------------------------
+
+
+; - UNDOJON ----------------------------
+; - RECORD LINE JOIN IN UNDO RING BUFFER
+; - IN:  WORKBUF2 HAS LINE B RECORD (DELETED LINE)
+; -      JOINLA HAS LINE A NUMBER
+; -      JOINCOL HAS SEAM COLUMN
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+UNDOJON         LD      A, (UNDOHLD)
+                OR      A
+                RET     NZ
+                CALL    UNDOCLS
+                LD      HL, WORKBUF2
+                LD      DE, WORKBUF
+                LD      BC, LINEREC
+                LDIR
+                LD      HL, (DOCLINE)
+                PUSH    HL
+                LD      A, (CURX)
+                PUSH    AF
+                LD      HL, (JOINLA)
+                LD      (DOCLINE), HL
+                LD      A, (JOINCOL)
+                LD      (CURX), A
+                LD      A, UNDOT_JON
+                CALL    UNDOREC
+                POP     AF
+                LD      (CURX), A
+                POP     HL
+                LD      (DOCLINE), HL
+                RET
+
+
 ; --- UNDOEVC                   ----------------------------------------
 
 
@@ -375,6 +433,9 @@ UNDOSWP         ; 1. SET TARGET DOCLINE
 ; -
 
 ACTUNDO         CALL    UNDOCLS
+                LD      A, (SELACT)
+                OR      A
+                CALL    NZ, ACTDSEL
                 LD      HL, (UNDOPTR)
                 LD      A, H
                 OR      L
@@ -389,6 +450,10 @@ ACTUNDO         CALL    UNDOCLS
                 JR      Z, .DOMOD
                 CP      UNDOT_DEL
                 JR      Z, .DODEL
+                CP      UNDOT_SPL
+                JR      Z, .DOSPL
+                CP      UNDOT_JON
+                JR      Z, .DOJON
                 RET
 
 .DOMOD          ; RECORD BEING UNDONE BECOMES HEAD OF REDO
@@ -405,6 +470,12 @@ ACTUNDO         CALL    UNDOCLS
 .DODEL          ; REVERSE DELETION: RE-INSERT LINE
                 JP      UNDORST
 
+.DOSPL          ; REVERSE SPLIT: MERGE LINES BACK TOGETHER
+                JP      UNDOSPU
+
+.DOJON          ; REVERSE JOIN: SEPARATE LINES BACK APART
+                JP      UNDOJNU
+
 
 ; --- ACTREDO                   ----------------------------------------
 
@@ -417,6 +488,9 @@ ACTUNDO         CALL    UNDOCLS
 ; -
 
 ACTREDO         CALL    UNDOCLS
+                LD      A, (SELACT)
+                OR      A
+                CALL    NZ, ACTDSEL
                 LD      HL, (REDOPTR)
                 LD      A, H
                 OR      L
@@ -431,6 +505,10 @@ ACTREDO         CALL    UNDOCLS
                 JR      Z, .DOMOD
                 CP      UNDOT_DEL
                 JR      Z, .DODEL
+                CP      UNDOT_SPL
+                JR      Z, .DOSPL
+                CP      UNDOT_JON
+                JR      Z, .DOJON
                 RET
 
 .DOMOD          ; RECORD BEING REDONE BECOMES HEAD OF UNDO
@@ -446,6 +524,12 @@ ACTREDO         CALL    UNDOCLS
 
 .DODEL          ; RE-APPLY DELETION: DELETE LINE AGAIN
                 JP      UNDOKIL
+
+.DOSPL          ; RE-APPLY SPLIT: SPLIT LINE AGAIN
+                JP      REDOSPL
+
+.DOJON          ; RE-APPLY JOIN: JOIN LINES AGAIN
+                JP      REDOJON
 
 
 ; --- UNDORST                   ----------------------------------------
@@ -572,3 +656,234 @@ UNDOKIL         ; 1. ADVANCE REDOPTR AND UPDATE UNDOPTR
                 CALL    REDRAW
                 CALL    DRWSTAT
                 JP      DRWCUR
+
+
+; --- UNDOSPU                   ----------------------------------------
+
+
+; - UNDOSPU ----------------------------
+; - REVERSE LINE SPLIT (MERGE LINES BACK TOGETHER)
+; - IN:  IX = UNDO TRANSACTION ADDRESS
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+UNDOSPU         ; 1. UPDATE UNDOPTR AND REDOPTR
+                LD      (REDOPTR), IX
+                LD      L, (IX + 0)
+                LD      H, (IX + 1)
+                LD      (UNDOPTR), HL
+
+                ; 2. DELETE LINE (DOCLINE + 1) (THE TAIL LINE)
+                LD      L, (IX + 5)
+                LD      H, (IX + 6)
+                INC     HL              ; HL = DOCLINE + 1
+                CALL    LINEDEL
+                LD      HL, (TOTLINES)
+                DEC     HL
+                LD      (TOTLINES), HL
+
+                ; 3. RESTORE PRE-SPLIT LINE AT (IX + 5) FROM PAYLOAD
+                PUSH    IX
+                POP     HL
+                LD      DE, UNDOHDR_SZ
+                ADD     HL, DE          ; HL = IX + 10 (PAYLOAD)
+                LD      DE, WORKBUF
+                LD      BC, LINEREC     ; 161 BYTES
+                LDIR
+                LD      L, (IX + 5)
+                LD      H, (IX + 6)     ; HL = DOCLINE
+                CALL    LINEWRT
+
+                ; 4. RESTORE DOCLINE, CURX, TOPLINE
+                LD      L, (IX + 5)
+                LD      H, (IX + 6)
+                LD      (DOCLINE), HL
+                LD      A, (IX + 7)
+                LD      (CURX), A
+                LD      L, (IX + 8)
+                LD      H, (IX + 9)
+                LD      (TOPLINE), HL
+
+                ; 5. UPDATE CURY, MARK MODIFIED & REDRAW
+                LD      A, #FF
+                LD      (MODIFIED), A
+                CALL    SETCURY
+                CALL    REDRAW
+                CALL    DRWSTAT
+                JP      DRWCUR
+
+
+; --- REDOSPL                   ----------------------------------------
+
+
+; - REDOSPL ----------------------------
+; - RE-APPLY LINE SPLIT (ENTER)
+; - IN:  IX = UNDO TRANSACTION ADDRESS
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+REDOSPL         ; 1. UPDATE UNDOPTR AND REDOPTR
+                LD      (UNDOPTR), IX
+                LD      L, (IX + 2)
+                LD      H, (IX + 3)
+                LD      (REDOPTR), HL
+
+                ; 2. POSITION CURSOR AT THE SPLIT POINT
+                LD      L, (IX + 5)
+                LD      H, (IX + 6)
+                LD      (DOCLINE), HL
+                LD      A, (IX + 7)
+                LD      (CURX), A
+                LD      L, (IX + 8)
+                LD      H, (IX + 9)
+                LD      (TOPLINE), HL
+                CALL    SETCURY
+
+                ; 3. EXECUTE EDNWLIN WITH UNDOHLD = 1
+                LD      A, 1
+                LD      (UNDOHLD), A
+                CALL    EDNWLIN
+                XOR     A
+                LD      (UNDOHLD), A
+
+                ; 4. UPDATE STATUS AND CURSOR
+                CALL    DRWSTAT
+                JP      DRWCUR
+
+
+; --- UNDOJNU                   ----------------------------------------
+
+
+; - UNDOJNU ----------------------------
+; - REVERSE LINE JOIN: RESTORE DELETED LINE B AND TRUNCATE LINE A
+; - IN:  IX = UNDO TRANSACTION ADDRESS
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+UNDOJNU         ; 1. CHECK IF LINE DIRECTORY IS FULL
+                LD      HL, (TOTLINES)
+                LD      DE, MAXLINES
+                CALL    CMPHLDE
+                RET     NC
+
+                ; 2. RESERVE SPACE IN MAPPER FOR RESTORED LINE B
+                CALL    NEWREC
+                RET     C
+                LD      (NRSEG), A
+                LD      (NROFF), DE
+
+                ; 3. UPDATE UNDOPTR AND REDOPTR
+                LD      (REDOPTR), IX
+                LD      L, (IX + 0)
+                LD      H, (IX + 1)
+                LD      (UNDOPTR), HL
+
+                ; 4. TRUNCATE LINE A AT (IX + 5) BACK TO JOINCOL (IX + 7)
+                LD      L, (IX + 5)
+                LD      H, (IX + 6)
+                CALL    LINEREAD        ; READS COMBINED LINE A INTO WORKBUF
+                LD      A, (IX + 7)
+                LD      (WORKBUF), A    ; TRUNCATE LENGTH TO SEAM
+                CALL    RECBL80         ; BLANK TAIL TO SPACES
+                LD      L, (IX + 5)
+                LD      H, (IX + 6)
+                CALL    LINEWRT         ; WRITE TRUNCATED LINE A BACK
+
+                ; 5. COPY PAYLOAD (IX + 10) INTO TXPAGE + NROFF (LINE B)
+                LD      A, (NRSEG)
+                CALL    RECBANK         ; BANK NRSEG BACK INTO PAGE 2
+                LD      DE, (NROFF)
+                LD      HL, TXPAGE
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DESTINATION
+                PUSH    IX
+                POP     HL
+                LD      BC, UNDOHDR_SZ
+                ADD     HL, BC          ; HL = SOURCE (IX + 10)
+                LD      BC, LINEREC     ; 161 BYTES
+                LDIR
+
+                ; 6. OPEN DIRECTORY SLOT AT (IX + 5) + 1 (LINE B) AND FILL IT
+                LD      L, (IX + 5)
+                LD      H, (IX + 6)
+                INC     HL              ; HL = LINE A + 1 (LINE B)
+                PUSH    HL
+                CALL    LINEINS
+                POP     HL
+                LD      DE, (NROFF)
+                LD      A, (NRSEG)
+                CALL    DIRWRITE
+
+                ; 7. BUMP TOTLINES
+                LD      HL, (TOTLINES)
+                INC     HL
+                LD      (TOTLINES), HL
+
+                ; 8. RESTORE DOCLINE, CURX, TOPLINE
+                LD      L, (IX + 5)
+                LD      H, (IX + 6)
+                LD      (DOCLINE), HL
+                LD      A, (IX + 7)
+                LD      (CURX), A
+                LD      L, (IX + 8)
+                LD      H, (IX + 9)
+                LD      (TOPLINE), HL
+
+                ; 9. UPDATE CURY, MARK MODIFIED & REDRAW
+                LD      A, #FF
+                LD      (MODIFIED), A
+                CALL    SETCURY
+                CALL    REDRAW
+                CALL    DRWSTAT
+                JP      DRWCUR
+
+
+; --- REDOJON                   ----------------------------------------
+
+
+; - REDOJON ----------------------------
+; - RE-APPLY LINE JOIN
+; - IN:  IX = UNDO TRANSACTION ADDRESS
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+REDOJON         ; 1. UPDATE UNDOPTR AND REDOPTR
+                LD      (UNDOPTR), IX
+                LD      L, (IX + 2)
+                LD      H, (IX + 3)
+                LD      (REDOPTR), HL
+
+                ; 2. JOIN LINE A AND LINE A + 1 WITH UNDOHLD = 1
+                LD      A, 1
+                LD      (UNDOHLD), A
+                LD      L, (IX + 5)
+                LD      H, (IX + 6)     ; HL = LINE A
+                LD      E, L
+                LD      D, H
+                INC     DE              ; DE = LINE B (LINE A + 1)
+                CALL    JOIN2L
+                XOR     A
+                LD      (UNDOHLD), A
+
+                ; 3. RESTORE CURX AT SEAM
+                LD      A, (IX + 7)
+                LD      (CURX), A
+                LD      L, (IX + 5)
+                LD      H, (IX + 6)
+                LD      (DOCLINE), HL
+                LD      L, (IX + 8)
+                LD      H, (IX + 9)
+                LD      (TOPLINE), HL
+
+                ; 4. UPDATE CURY, MARK MODIFIED & REDRAW
+                LD      A, #FF
+                LD      (MODIFIED), A
+                CALL    SETCURY
+                CALL    REDRAW
+                CALL    DRWSTAT
+                JP      DRWCUR
+

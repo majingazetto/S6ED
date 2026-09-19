@@ -9,7 +9,9 @@
 ; - REDRAW ALL TEXT ROWS (TXRFIRST TO TXRLAST)
 ; -
 
-REDRAW          LD      B, TXRFIRST
+REDRAW          XOR     A
+                LD      (SELDRAWN), A
+                LD      B, TXRFIRST
 .ROWLOOP        PUSH    BC
                 CALL    RENDEROW
                 POP     BC

@@ -322,6 +322,7 @@ UNDONXT         DEFW    0               ; POINTER WHERE NEXT TRANSACTION WILL BE
 REDOPTR         DEFW    0               ; POINTER TO REDO TRANSACTION (0 = NONE)
 UNDOTYP         DEFB    0               ; 1 = COALESCING TEXT INPUT IN PROGRESS
 UNDOLIN         DEFW    0               ; DOCLINE OF ACTIVE COALESCED TRANSACTION
+UNDOHLD         DEFB    0               ; NON-ZERO: SUPPRESS UNDO RECORDING (REDO ACTIVE)
 
 
 ; --- VDP COMMAND BLOCK          ----------------------------------------
