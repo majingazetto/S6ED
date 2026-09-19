@@ -881,6 +881,57 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'U2',
         'expect': ['U2/undone-totlines'],
     },
+    {
+        'name': 'undo-split',
+        'why': 'line split fails to record in undo ringbuffer when UNDOSPL is bypassed',
+        'file': 'EDIT.Z8A',
+        'old': """; 2. LOAD THE LINE THAT IS ABOUT TO BE SPLIT
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                CALL    UNDOSPL""",
+        'new': """; 2. LOAD THE LINE THAT IS ABOUT TO BE SPLIT
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                NOP
+                NOP
+                NOP""",
+        'filter': 'U3',
+        'expect': ['U3/undone-totlines'],
+    },
+    {
+        'name': 'undo-join',
+        'why': 'line join fails to record in undo ringbuffer when UNDOJON is bypassed',
+        'file': 'EDIT.Z8A',
+        'old': """; RECORD JOIN IN UNDO RING BUFFER
+                CALL    UNDOJON
+                LD      HL, (JOINLA)""",
+        'new': """; RECORD JOIN IN UNDO RING BUFFER
+                NOP
+                NOP
+                NOP
+                LD      HL, (JOINLA)""",
+        'filter': 'U4',
+        'expect': ['U4/undone-totlines'],
+    },
+    {
+        'name': 'undo-sel',
+        'why': 'ACTUNDO fails to cancel active selection leaving inverted characters in VRAM',
+        'file': 'UNDO.Z8A',
+        'old': """ACTUNDO         CALL    UNDOCLS
+                LD      A, (SELACT)
+                OR      A
+                CALL    NZ, ACTDSEL""",
+        'new': """ACTUNDO         CALL    UNDOCLS
+                NOP
+                NOP
+                NOP
+                NOP
+                NOP
+                NOP
+                NOP""",
+        'filter': 'U5',
+        'expect': ['U5/sel-cancelled'],
+    },
 ]
 
 

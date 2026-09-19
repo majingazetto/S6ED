@@ -999,6 +999,11 @@ JOIN2L          LD      (JOINLA), HL
                 CP      TEXTCOLS + 1
                 JR      NC, .JNBIG      ; > 80: REJECT
 
+                ; RECORD JOIN IN UNDO RING BUFFER
+                CALL    UNDOJON
+                LD      HL, (JOINLA)
+                CALL    LINEREAD        ; RESTORE WORKBUF = LINE A
+
                 ; APPEND LINE B TEXT & ATTRS IF LEN_B > 0
                 LD      A, (WORKBUF2)
                 OR      A
@@ -1433,6 +1438,7 @@ EDNWLIN         CALL    UNDOCLS
                 ; 2. LOAD THE LINE THAT IS ABOUT TO BE SPLIT
                 LD      HL, (DOCLINE)
                 CALL    LINEREAD
+                CALL    UNDOSPL
 
                 ; 3. TAIL -> WORKBUF2, HEAD TRUNCATED IN PLACE
                 CALL    SPLITL
