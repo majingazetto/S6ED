@@ -1,0 +1,552 @@
+;                                       ****************************************
+;                                       * UI DRIVER (SCREEN 2 / TMS9918)       *
+;                                       ****************************************
+;
+; STATUS BAR ON ROW 23, MENU BAR ON ROW 0.
+; CURSOR AND SELECTION HIGHLIGHTS ARE EXECUTED AS FG/BG COLOR NIBBLE SWAPS
+; IN COLMAP -- ONE BYTE PER CELL -- AND PUSHED TO THE TMS9918 COLOR TABLE
+; (CTBASE) THROUGH COLDMPC, WHICH EXPANDS EACH CELL BACK TO ITS 8 SCANLINES.
+
+
+; --- DRWSTAT                   ----------------------------------------
+
+
+; - DRWSTAT ----------------------------
+; - DRAW / REFRESH STATUS BAR (ROW 23)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DRWSTAT         CALL    BLDSTAT         ; BUILD STRING IN STATBUF
+
+                ; PAD STATBUF WITH SPACES TO 64 CHARACTERS
+                LD      HL, STATBUF
+                LD      B, 0
+.FNDEND         LD      A, (HL)
+                OR      A
+                JR      Z, .PADLP
+                INC     HL
+                INC     B
+                LD      A, B
+                CP      SCRCOLS
+                JR      C, .FNDEND
+                JR      .COMSTAT
+
+                ; RELOAD THE SPACE EVERY PASS: THE BOUND CHECK BELOW
+                ; NEEDS A, SO THE LOOP MUST RE-ENTER AT .PADLP
+.PADLP          LD      A, ' '
+                LD      (HL), A
+                INC     HL
+                INC     B
+                LD      A, B
+                CP      SCRCOLS
+                JR      C, .PADLP
+
+.COMSTAT        CALL    VIDBANK
+
+                ; COMPOSE 32 CELLS INTO PATSHAD + 23 * 256
+                LD      HL, PATSHAD + STBROW * ROWLEN
+                PUSH    HL
+                POP     IX
+                LD      HL, COLMAP + STBROW * CELLROW
+                PUSH    HL
+                POP     IY
+
+                LD      HL, STATBUF
+                LD      B, 32           ; 32 CELLS
+.STATLP         PUSH    BC
+                LD      A, (HL)         ; LEFT CHAR
+                INC     HL
+                LD      C, (HL)         ; RIGHT CHAR
+                INC     HL
+                PUSH    HL
+
+                ; RESOLVE LEFT GLYPH
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      A, H
+                ADD     A, #B0
+                LD      H, A            ; HL = FONT4H + LCHAR * 8
+
+                ; RESOLVE RIGHT GLYPH
+                LD      E, C
+                LD      D, 0
+                EX      DE, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      A, H
+                ADD     A, #B8
+                LD      H, A
+                EX      DE, HL          ; DE = FONT4L + RCHAR * 8
+
+                ; OR 8 SCANLINES
+                LD      B, 8
+.STPLP          LD      A, (DE)
+                OR      (HL)
+                LD      (IX+0), A
+                INC     HL
+                INC     DE
+                INC     IX
+                DJNZ    .STPLP
+
+                ; STATUS BAR USES COLUI (BLACK ON WHITE)
+                LD      A, COLUI
+                LD      (IY+0), A
+                INC     IY
+
+                POP     HL
+                POP     BC
+                DJNZ    .STATLP
+
+                ; DUMP STATUS BAR PATTERNS AND COLORS TO VRAM
+                LD      HL, PATSHAD + STBROW * ROWLEN
+                LD      DE, PGBASE + STBROW * ROWLEN
+                LD      BC, ROWLEN
+                CALL    VDPDUMP
+
+                LD      B, STBROW
+                CALL    COLDUMP
+
+                JP      TXTBANK
+
+
+
+
+; --- BLDSTAT                   ----------------------------------------
+
+
+; - BLDSTAT ----------------------------
+; - BUILD DYNAMIC STATUS BAR TEXT IN STATBUF (64 COLS)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+BLDSTAT         LD      DE, STATBUF
+
+                ; 1. VI MODE INDICATOR
+                LD      A, (KMAPID)
+                CP      KMVI
+                JR      NZ, .NOTVI
+                LD      A, (VIMODE)
+                CP      VIMNORM
+                JR      NZ, .VIINSP
+                LD      HL, .STRVIN
+                CALL    .CPYSTR
+                JR      .DONEVI
+.VIINSP         LD      HL, .STRVII
+                CALL    .CPYSTR
+                JR      .DONEVI
+.NOTVI          LD      HL, .STRSP6
+                CALL    .CPYSTR
+
+.DONEVI         ; 2. MARKUP MODE INDICATOR
+                LD      A, (MKUPMD)
+                OR      A
+                LD      HL, .STRNOMK
+                JR      Z, .PUTMKUP
+                CP      MKUP_MD
+                LD      HL, .STRMD
+                JR      Z, .PUTMKUP
+                LD      HL, .STRLIT
+.PUTMKUP        CALL    .CPYSTR
+
+                ; 3. SELECTION INDICATOR
+                LD      A, (SELACT)
+                OR      A
+                LD      HL, .STRNOSL
+                JR      Z, .PUTSEL
+                LD      HL, .STRSEL
+.PUTSEL         CALL    .CPYSTR
+
+                ; 4. MODIFIED INDICATOR
+                LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .NOTMOD
+                LD      A, '*'
+                LD      (DE), A
+                INC     DE
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
+                JR      .DONEMOD
+.NOTMOD         LD      A, ' '
+                LD      (DE), A
+                INC     DE
+                LD      (DE), A
+                INC     DE
+
+.DONEMOD        ; 5. LN / COL
+                LD      HL, .STRLN
+                CALL    .CPYSTR
+                LD      HL, (DOCLINE)
+                INC     HL
+                LD      B, 5
+                CALL    .CPYNUM
+                LD      A, '/'
+                LD      (DE), A
+                INC     DE
+                LD      HL, (TOTLINES)
+                LD      B, 5
+                CALL    .CPYNUM
+                LD      HL, .STRCOL
+                CALL    .CPYSTR
+                LD      A, (CURX)
+                INC     A
+                LD      L, A
+                LD      H, 0
+                LD      B, 2
+                CALL    .CPYNUM
+
+                ; 6. SEPARATOR + FILENAME
+                LD      HL, .STRSEP
+                CALL    .CPYSTR
+                LD      HL, FILENAME
+                CALL    .CPYSTR
+
+                XOR     A
+                LD      (DE), A
+                RET
+
+.CPYSTR         LD      A, (HL)
+                OR      A
+                RET     Z
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                JR      .CPYSTR
+
+.CPYNUM         PUSH    DE
+                PUSH    BC
+                CALL    B2D16
+                POP     BC
+                POP     DE
+                LD      HL, B2DEND
+                LD      A, L
+                SUB     B
+                LD      L, A
+                JR      NC, .CPYNUM2
+                DEC     H
+.CPYNUM2        LD      A, (HL)
+                CP      ' '
+                JR      NZ, .CPYNUM3
+                LD      A, '0'
+.CPYNUM3        LD      (DE), A
+                INC     HL
+                INC     DE
+                DJNZ    .CPYNUM2
+                RET
+
+.STRSP6         DEFM    "      ", 0
+.STRVIN         DEFM    "[VI-N]", 0
+.STRVII         DEFM    "[VI-I]", 0
+.STRNOMK        DEFM    "      ", 0
+.STRMD          DEFM    "[MD]  ", 0
+.STRLIT         DEFM    "[LIT] ", 0
+.STRNOSL        DEFM    "      ", 0
+.STRSEL         DEFM    "[SEL] ", 0
+.STRLN          DEFM    "Ln ", 0
+.STRCOL         DEFM    " C", 0
+.STRSEP         DEFM    " | ", 0
+
+
+
+
+; --- DRWMENU                   ----------------------------------------
+
+
+; - DRWMENU ----------------------------
+; - DRAW MENU BAR (ROW 0)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DRWMENU         CALL    VIDBANK
+
+                ; FILL ROW 0 WITH MENU BAR STRING
+                LD      HL, .MNUTXT
+                LD      DE, PATSHAD
+                PUSH    DE
+                POP     IX
+                LD      DE, COLMAP
+                PUSH    DE
+                POP     IY
+
+                LD      B, 32
+.MNULP          PUSH    BC
+                LD      A, (HL)
+                INC     HL
+                LD      C, (HL)
+                INC     HL
+                PUSH    HL
+
+                ; RESOLVE LEFT GLYPH
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      A, H
+                ADD     A, #B0
+                LD      H, A
+
+                ; RESOLVE RIGHT GLYPH
+                LD      E, C
+                LD      D, 0
+                EX      DE, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      A, H
+                ADD     A, #B8
+                LD      H, A
+                EX      DE, HL
+
+                LD      B, 8
+.MNUPL          LD      A, (DE)
+                OR      (HL)
+                LD      (IX+0), A
+                INC     HL
+                INC     DE
+                INC     IX
+                DJNZ    .MNUPL
+
+                ; ROW 0 USES COLUI (BLACK ON WHITE)
+                LD      A, COLUI
+                LD      (IY+0), A
+                INC     IY
+
+                POP     HL
+                POP     BC
+                DJNZ    .MNULP
+
+                ; DUMP ROW 0 TO VRAM
+                LD      HL, PATSHAD
+                LD      DE, PGBASE
+                LD      BC, ROWLEN
+                CALL    VDPDUMP
+
+                LD      B, MNUROW
+                CALL    COLDUMP
+
+                JP      TXTBANK
+
+.MNUTXT         DEFM    "S2ED | File  Edit  View  Options  Help                          "
+
+
+
+
+; --- DRWCUR                    ----------------------------------------
+
+
+; - DRWCUR -----------------------------
+; - TOGGLE CURSOR COLOR NIBBLES AT (CURX, CURY)
+; - IN:  NONE (USES CURX, CURY)
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+DRWCUR          PUSH    AF
+                PUSH    BC
+                PUSH    DE
+                PUSH    HL
+
+                CALL    VIDBANK
+
+                ; B = SCREEN ROW (CURY + 1), C = CELL (CURX / 2)
+                LD      A, (CURY)
+                INC     A
+                LD      B, A
+                LD      A, (CURX)
+                SRL     A
+                LD      C, A
+
+                ; HL = COLMAP + ROW * CELLROW + CELL
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = ROW * 32
+                LD      E, C
+                LD      D, 0
+                ADD     HL, DE
+                LD      DE, COLMAP
+                ADD     HL, DE          ; HL = CELL IN COLMAP
+
+                ; SWAP THE FG AND BG NIBBLES OF THE CELL
+                LD      A, (HL)
+                RRCA
+                RRCA
+                RRCA
+                RRCA
+                LD      (HL), A
+
+                ; DE = CTBASE + ROW * ROWLEN + CELL * 8
+                LD      D, B
+                LD      E, 0
+                LD      A, C
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; A = CELL * 8 (<= 248, NO CARRY)
+                LD      E, A
+                PUSH    HL
+                LD      HL, CTBASE
+                ADD     HL, DE
+                EX      DE, HL          ; DE = VRAM DESTINATION
+                POP     HL              ; HL = CELL IN COLMAP
+
+                LD      B, 1
+                CALL    COLDMPC
+
+                CALL    TXTBANK
+
+                POP     HL
+                POP     DE
+                POP     BC
+                POP     AF
+                RET
+
+
+
+
+; --- SELXOR                    ----------------------------------------
+
+
+; - SELXOR -----------------------------
+; - INVERT SELECTION RANGE ON SCREEN ROW B VIA COLOR NIBBLE SWAP
+; - IN:  B = SCREEN ROW (0..21 RELATIVE TO VIEWPORT), D = XA, E = XB
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SELXOR          CALL    VIDBANK
+
+                ; B = SCREEN ROW (ROWS 1..22)
+                LD      A, B
+                INC     A
+                LD      B, A
+
+                ; C = FIRST CELL = XA / 2
+                LD      A, D
+                SRL     A
+                LD      C, A
+
+                ; A = CELL COUNT = (XB - 1) / 2 - C + 1
+                LD      A, E
+                DEC     A
+                SRL     A               ; A = LAST CELL
+                SUB     C
+                JP      C, .SELDON      ; EMPTY RANGE
+                INC     A
+
+                PUSH    BC              ; SAVE ROW AND FIRST CELL
+                PUSH    AF              ; SAVE CELL COUNT
+
+                ; HL = COLMAP + ROW * CELLROW + FIRST CELL
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = ROW * 32
+                LD      E, C
+                LD      D, 0
+                ADD     HL, DE
+                LD      DE, COLMAP
+                ADD     HL, DE          ; HL = FIRST CELL IN COLMAP
+
+                ; SWAP THE FG AND BG NIBBLES OF EVERY CELL IN THE RANGE
+                POP     AF              ; A = CELL COUNT
+                PUSH    AF
+                PUSH    HL              ; SAVE RANGE START
+                LD      B, A
+.SWPLP          LD      A, (HL)
+                RRCA
+                RRCA
+                RRCA
+                RRCA
+                LD      (HL), A
+                INC     HL
+                DJNZ    .SWPLP
+
+                POP     HL              ; HL = RANGE START IN COLMAP
+                POP     AF              ; A = CELL COUNT
+                POP     BC              ; B = ROW, C = FIRST CELL
+                PUSH    AF
+
+                ; DE = CTBASE + ROW * ROWLEN + FIRST CELL * 8
+                LD      D, B
+                LD      E, 0
+                LD      A, C
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; A = FIRST CELL * 8 (<= 248)
+                LD      E, A
+                PUSH    HL
+                LD      HL, CTBASE
+                ADD     HL, DE
+                EX      DE, HL          ; DE = VRAM DESTINATION
+                POP     HL              ; HL = RANGE START IN COLMAP
+
+                POP     AF              ; A = CELL COUNT
+                LD      B, A
+                CALL    COLDMPC
+
+.SELDON         JP      TXTBANK
+
+
+
+
+; --- CHKCLK                    ----------------------------------------
+
+
+; - CHKCLK -----------------------------
+; - POLL REAL-TIME CLOCK (NO-OP FOR BASIC S2 UI)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+CHKCLK          RET
+
+
+
+
+; --- WINPOLL / WINKIL          ----------------------------------------
+
+
+; - WINPOLL ----------------------------
+; - POLL KEYBOARD FOR MODAL DIALOGS
+; - IN:  NONE
+; - OUT: Z  = NO KEY PRESSED, NZ = KEY PRESSED (A = ASCII CODE)
+; - CLOBBERS: ALL
+; -
+
+WINPOLL         CALL    CHKCLK
+                LD      IX, CHSNS
+                CALL    BIOSCALL
+                RET     Z
+                LD      IX, CHGET
+                JP      BIOSCALL
+
+
+
+
+; - WINKIL -----------------------------
+; - FLUSH KEYBOARD BUFFER VIA BIOS KILBUF
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINKIL          LD      IX, KILBUF
+                JP      BIOSCALL

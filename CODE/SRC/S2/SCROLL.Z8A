@@ -1,0 +1,335 @@
+;                                       ****************************************
+;                                       * SCROLL ENGINE (SCREEN 2 / TMS9918)   *
+;                                       ****************************************
+;
+; TEXT AREA OCCUPIES ROWS 1..22 (ROWSVIS = 22).
+; SCROLL OPERATIONS MOVE THE RAM SHADOWS IN VIDSEG -- PATSHAD AT 256 BYTES
+; PER ROW AND COLMAP AT CELLROW BYTES PER ROW -- WITH LDIR / LDDR, PUSH THE
+; MOVED BAND OUT TO VRAM, AND RE-COMPOSE THE NEWLY EXPOSED ROW(S).
+;
+; THE PATTERN BAND GOES OUT IN ONE CONTIGUOUS VDPDUMP BECAUSE SCREEN ROWS ARE
+; 256 CONSECUTIVE BYTES OF THE PATTERN TABLE. THE COLOR BAND GOES ROW BY ROW
+; THROUGH COLBAND, WHICH EXPANDS EACH CELL BACK TO ITS EIGHT SCANLINES.
+
+
+; --- SCROLLDN                  ----------------------------------------
+
+
+; - SCROLLDN ---------------------------
+; - SCROLL TEXT AREA UP ONE ROW (SHOW NEXT LINE AT BOTTOM)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SCROLLDN        LD      C, 1
+
+
+; - SCRLDNN ----------------------------
+; - SCROLL TEXT AREA UP BY C ROWS (1..21)
+; - IN:  C = ROWS (1..21); TOPLINE ALREADY ADVANCED
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SCRLDNN         XOR     A
+                LD      (PREVROW), A    ; CACHE INVALIDATED
+
+                ; K = ROWS THAT SURVIVE THE SCROLL = ROWSVIS - C
+                LD      A, ROWSVIS
+                SUB     C
+                RET     Z
+                RET     C
+                LD      B, A            ; B = K, C = ROWS SCROLLED
+
+                PUSH    BC
+                CALL    VIDBANK
+
+                ; 1. MOVE THE PATTERN BAND UP: K * ROWLEN BYTES
+                POP     BC
+                PUSH    BC
+                LD      A, C
+                INC     A
+                LD      H, A
+                LD      L, 0            ; HL = (1 + C) * ROWLEN
+                LD      DE, PATSHAD
+                ADD     HL, DE          ; HL = SOURCE
+                LD      DE, PATSHAD + ROWLEN
+                LD      C, 0            ; BC = K * ROWLEN
+                LDIR
+
+                ; 2. MOVE THE COLOR BAND UP: K * CELLROW BYTES
+                POP     BC
+                PUSH    BC
+                LD      A, C
+                INC     A
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = (1 + C) * CELLROW
+                LD      DE, COLMAP
+                ADD     HL, DE          ; HL = SOURCE
+                PUSH    HL
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = K * CELLROW
+                LD      B, H
+                LD      C, L            ; BC = BYTE COUNT
+                POP     HL              ; HL = SOURCE
+                LD      DE, COLMAP + CELLROW
+                LDIR
+
+                ; 3. DUMP THE MOVED PATTERN BAND (ROWS 1 .. K)
+                POP     BC
+                PUSH    BC
+                LD      HL, PATSHAD + ROWLEN
+                LD      DE, PGBASE + ROWLEN
+                LD      C, 0            ; BC = K * ROWLEN
+                CALL    VDPDUMP
+
+                ; 4. DUMP THE MOVED COLOR BAND (ROWS 1 .. K)
+                POP     BC
+                PUSH    BC
+                LD      C, B            ; C = LAST ROW = K
+                LD      B, TXRFIRST
+                CALL    COLBAND
+
+                CALL    TXTBANK
+
+                ; 5. RE-COMPOSE THE C EXPOSED ROWS AT THE BOTTOM
+                POP     BC              ; B = K, C = ROWS SCROLLED
+                LD      A, ROWSVIS + 1
+                SUB     C
+                LD      B, A            ; B = FIRST EXPOSED ROW
+.RLOOP          PUSH    BC
+                CALL    RENDEROW
+                POP     BC
+                INC     B
+                LD      A, B
+                CP      TXRLAST + 1
+                JR      NZ, .RLOOP
+                RET
+
+
+
+
+; --- SCRLUPN                   ----------------------------------------
+
+
+; - SCRLUPN ----------------------------
+; - SCROLL TEXT AREA DOWN BY C ROWS (SHOW PREVIOUS LINES AT TOP)
+; - IN:  C = ROWS (1..21); TOPLINE ALREADY MOVED BACK
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SCRLUPN         XOR     A
+                LD      (PREVROW), A    ; CACHE INVALIDATED
+
+                ; K = ROWS THAT SURVIVE THE SCROLL = ROWSVIS - C
+                LD      A, ROWSVIS
+                SUB     C
+                RET     Z
+                RET     C
+                LD      B, A            ; B = K, C = ROWS SCROLLED
+
+                PUSH    BC
+                CALL    VIDBANK
+
+                ; 1. MOVE THE PATTERN BAND DOWN: K * ROWLEN BYTES
+                POP     BC
+                PUSH    BC
+                LD      HL, PATSHAD + (TXRLAST + 1) * ROWLEN - 1
+                LD      D, C
+                LD      E, 0            ; DE = C * ROWLEN
+                OR      A
+                SBC     HL, DE          ; HL = SOURCE END
+                LD      DE, PATSHAD + (TXRLAST + 1) * ROWLEN - 1
+                LD      C, 0            ; BC = K * ROWLEN
+                LDDR
+
+                ; 2. MOVE THE COLOR BAND DOWN: K * CELLROW BYTES
+                POP     BC
+                PUSH    BC
+                LD      L, C
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = C * CELLROW
+                EX      DE, HL          ; DE = C * CELLROW
+                LD      HL, COLMAP + (TXRLAST + 1) * CELLROW - 1
+                OR      A
+                SBC     HL, DE          ; HL = SOURCE END
+                PUSH    HL
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = K * CELLROW
+                LD      B, H
+                LD      C, L            ; BC = BYTE COUNT
+                POP     HL              ; HL = SOURCE END
+                LD      DE, COLMAP + (TXRLAST + 1) * CELLROW - 1
+                LDDR
+
+                ; 3. DUMP THE MOVED PATTERN BAND (ROWS 1 + C .. TXRLAST)
+                POP     BC
+                PUSH    BC
+                LD      A, C
+                INC     A               ; A = FIRST DUMPED ROW
+                LD      D, A
+                LD      E, 0            ; DE = ROW * ROWLEN
+                LD      HL, PGBASE
+                ADD     HL, DE
+                PUSH    HL              ; VRAM DESTINATION
+                LD      HL, PATSHAD
+                ADD     HL, DE          ; HL = SOURCE
+                POP     DE              ; DE = VRAM DESTINATION
+                LD      C, 0            ; BC = K * ROWLEN
+                CALL    VDPDUMP
+
+                ; 4. DUMP THE MOVED COLOR BAND (ROWS 1 + C .. TXRLAST)
+                POP     BC
+                PUSH    BC
+                LD      A, C
+                INC     A
+                LD      B, A            ; B = FIRST ROW
+                LD      C, TXRLAST      ; C = LAST ROW
+                CALL    COLBAND
+
+                CALL    TXTBANK
+
+                ; 5. RE-COMPOSE THE C EXPOSED ROWS AT THE TOP (1 .. C)
+                POP     BC              ; B = K, C = ROWS SCROLLED
+                LD      B, TXRFIRST
+.UPLOOP         PUSH    BC
+                CALL    RENDEROW
+                POP     BC
+                INC     B
+                LD      A, C
+                CP      B
+                JR      NC, .UPLOOP
+                RET
+
+
+
+
+; --- SHIFTDN                   ----------------------------------------
+
+
+; - SHIFTDN ----------------------------
+; - SHIFT SCREEN ROWS BELOW ROW B DOWN ONE ROW
+; - IN:  B = SCREEN ROW OF NEW LINE (1..22)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SHIFTDN         LD      C, 1
+
+
+; - SHIFTDNN ---------------------------
+; - SHIFT SCREEN ROWS BELOW ROW B DOWN BY C ROWS
+; - IN:  B = FIRST ROW THAT MOVES (1..22), C = ROWS TO SHIFT BY (1..21)
+; - OUT: NONE. THE CALLER COMPOSES THE ROWS THE SHIFT EXPOSED.
+; - CLOBBERS: ALL
+; -
+
+SHIFTDNN        ; N = ROWS THAT MOVE = TXRLAST + 1 - C - B
+                LD      A, TXRLAST + 1
+                SUB     C
+                SUB     B
+                RET     Z
+                RET     C
+
+                XOR     A
+                LD      (PREVROW), A    ; CACHE INVALIDATED
+
+                PUSH    BC              ; SAVE FIRST ROW AND SHIFT
+                CALL    VIDBANK
+
+                ; 1. MOVE THE PATTERN BAND DOWN: N * ROWLEN BYTES
+                POP     BC
+                PUSH    BC
+                LD      HL, PATSHAD + (TXRLAST + 1) * ROWLEN - 1
+                LD      D, C
+                LD      E, 0            ; DE = C * ROWLEN
+                OR      A
+                SBC     HL, DE          ; HL = SOURCE END
+                LD      DE, PATSHAD + (TXRLAST + 1) * ROWLEN - 1
+                LD      A, TXRLAST + 1
+                SUB     C
+                SUB     B
+                LD      B, A
+                LD      C, 0            ; BC = N * ROWLEN
+                LDDR
+
+                ; 2. MOVE THE COLOR BAND DOWN: N * CELLROW BYTES
+                POP     BC
+                PUSH    BC
+                LD      L, C
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = C * CELLROW
+                EX      DE, HL          ; DE = C * CELLROW
+                LD      HL, COLMAP + (TXRLAST + 1) * CELLROW - 1
+                OR      A
+                SBC     HL, DE          ; HL = SOURCE END
+                PUSH    HL
+                LD      A, TXRLAST + 1
+                SUB     C
+                SUB     B
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = N * CELLROW
+                LD      B, H
+                LD      C, L            ; BC = BYTE COUNT
+                POP     HL              ; HL = SOURCE END
+                LD      DE, COLMAP + (TXRLAST + 1) * CELLROW - 1
+                LDDR
+
+                ; 3. DUMP ROWS (B + C) .. TXRLAST
+                POP     BC
+                LD      A, B
+                ADD     A, C
+                LD      B, A            ; B = FIRST ROW TO DUMP
+                PUSH    BC
+
+                ; PATTERN BAND: ONE CONTIGUOUS STREAM
+                LD      D, B
+                LD      E, 0            ; DE = ROW * ROWLEN
+                LD      HL, PGBASE
+                ADD     HL, DE
+                PUSH    HL              ; VRAM DESTINATION
+                LD      HL, PATSHAD
+                ADD     HL, DE          ; HL = SOURCE
+                POP     DE              ; DE = VRAM DESTINATION
+                LD      A, TXRLAST + 1
+                SUB     B
+                LD      B, A
+                LD      C, 0            ; BC = ROWS * ROWLEN
+                CALL    VDPDUMP
+
+                ; COLOR BAND: ROW BY ROW
+                POP     BC              ; B = FIRST ROW TO DUMP
+                LD      C, TXRLAST
+                CALL    COLBAND
+
+                JP      TXTBANK

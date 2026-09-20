@@ -3,5 +3,5 @@
 ;                                       ****************************************
 
 
-                INCLUDE CONST_CORE.Z8A
                 INCLUDE CONST_S6.Z8A
+                INCLUDE CONST_CORE.Z8A

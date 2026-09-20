@@ -1,0 +1,395 @@
+;                                       ****************************************
+;                                       * RENDERER (SCREEN 2 / TMS9918)        *
+;                                       ****************************************
+;
+; 64 COLS X 24 ROWS (32 CELLS X 24 ROWS OF 8X8 PATTERNS).
+; EACH CELL HOLDS TWO 4X8 GLYPHS (HIGH NIBBLE FROM FONT4H, LOW NIBBLE FROM
+; FONT4L). COLORS COME FROM THE TMS9918 COLOR TABLE (8 BYTES PER CELL, ONE PER
+; SCANLINE), BUT THE SHADOW KEEPS ONE BYTE PER CELL IN COLMAP AND COLDUMP
+; EXPANDS IT X8 ON THE WAY OUT -- ALL EIGHT SCANLINES OF A CELL ALWAYS CARRY
+; THE SAME COLOR. STYLES (BOLD, ITALIC, CODE) ARE DISPLAYED USING DISTINCT
+; TMS9918 16-COLOR PALETTE ENTRIES (COLBOLD, COLITAL, COLUNDR).
+
+
+; --- REDRAW                    ----------------------------------------
+
+
+; - REDRAW -----------------------------
+; - REDRAW ALL TEXT ROWS (TXRFIRST TO TXRLAST)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+REDRAW          XOR     A
+                LD      (SELDRAWN), A
+                LD      B, TXRFIRST
+.RDLP           PUSH    BC
+                CALL    RENDEROW
+                POP     BC
+                INC     B
+                LD      A, B
+                CP      TXRLAST + 1
+                JR      NZ, .RDLP
+                RET
+
+
+
+
+; --- RENDEROW                  ----------------------------------------
+
+
+; - RENDEROW ---------------------------
+; - RENDER A SINGLE SCREEN ROW (1..22) TO VRAM
+; - IN:  B = SCREEN ROW (1..22)
+; - OUT: NONE. WORKBUF HOLDS THE LINE RECORD.
+; - CLOBBERS: AF, DE, HL (BC PRESERVED)
+; -
+
+RENDEROW        PUSH    BC              ; SAVE B = SCREEN ROW (1..22)
+                XOR     A
+                LD      (PREVROW), A
+
+                ; CALCULATE DOC LINE = TOPLINE + B - TXRFIRST
+                LD      HL, (TOPLINE)
+                LD      A, B
+                SUB     TXRFIRST
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JR      C, .VALID
+
+                ; BEYOND EOF: CLEAR ROW
+                CALL    CLRROW
+                POP     BC
+                RET
+
+.VALID          CALL    LINEREAD
+                CALL    SCANMKUP
+
+                ; RESTORE B = SCREEN ROW. LINEREAD ENDS IN AN LDIR AND
+                ; SCANMKUP CLOBBERS BC, SO COMROW WOULD OTHERWISE COMPOSE
+                ; EVERY ROW ON TOP OF ROW 0.
+                POP     BC
+                PUSH    BC
+
+                ; COMPOSE ROW B INTO SHADOW BUFFERS
+                CALL    VIDBANK
+                CALL    COMROW
+
+                ; RESTORE B = SCREEN ROW FOR VRAM DUMP
+                POP     BC
+                PUSH    BC
+
+                ; DUMP 256 PATTERN BYTES TO VRAM PG TABLE (PGBASE + B * 256)
+                LD      A, B
+                LD      D, A
+                LD      E, 0            ; DE = B * 256
+                LD      HL, PATSHAD
+                ADD     HL, DE          ; HL = SRC: PATSHAD + B * 256
+                EX      DE, HL          ; DE = SRC, HL = B * 256
+                LD      BC, PGBASE
+                ADD     HL, BC          ; HL = VRAM DEST
+                EX      DE, HL          ; HL = SRC, DE = VRAM DEST
+                LD      BC, ROWLEN
+                CALL    VDPDUMP
+
+                ; DUMP THE ROW COLORS (COLMAP -> COLEXP -> CTBASE)
+                POP     BC
+                PUSH    BC
+                CALL    COLDUMP
+
+                CALL    TXTBANK
+                POP     BC
+                RET
+
+
+
+
+; --- CLRROW                    ----------------------------------------
+
+
+; - CLRROW -----------------------------
+; - CLEARS ROW B IN SHADOWS AND VRAM (BLANK CELLS, DEFAULT COLOR)
+; - IN:  B = SCREEN ROW (1..22)
+; - OUT: NONE
+; - CLOBBERS: AF, DE, HL
+; -
+
+CLRROW          PUSH    BC
+                CALL    VIDBANK
+
+                ; 1. CLEAR PATTERN SHADOW (256 BYTES OF 0)
+                LD      A, B
+                LD      D, A
+                LD      E, 0            ; DE = B * 256
+                LD      HL, PATSHAD
+                ADD     HL, DE          ; HL = PATSHAD + B * 256
+                LD      B, 0
+                XOR     A
+.CLP            LD      (HL), A
+                INC     HL
+                DJNZ    .CLP
+
+                ; 2. FILL THE COLOR MAP ROW (32 BYTES OF COLTXT)
+                POP     BC
+                PUSH    BC
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = B * CELLROW
+                LD      DE, COLMAP
+                ADD     HL, DE          ; HL = COLMAP + B * 32
+                LD      B, CELLROW
+                LD      A, COLTXT
+.COLP           LD      (HL), A
+                INC     HL
+                DJNZ    .COLP
+
+                ; 3. DUMP PATTERN SHADOW TO VRAM (PGBASE + B * 256)
+                POP     BC
+                PUSH    BC
+                LD      A, B
+                LD      D, A
+                LD      E, 0            ; DE = B * 256
+                LD      HL, PATSHAD
+                ADD     HL, DE          ; HL = SRC: PATSHAD + B * 256
+                EX      DE, HL          ; DE = SRC, HL = B * 256
+                LD      BC, PGBASE
+                ADD     HL, BC          ; HL = VRAM DEST
+                EX      DE, HL          ; HL = SRC, DE = VRAM DEST
+                LD      BC, ROWLEN
+                CALL    VDPDUMP
+
+                ; 4. DUMP THE ROW COLORS (COLMAP -> COLEXP -> CTBASE)
+                POP     BC
+                PUSH    BC
+                CALL    COLDUMP
+
+                CALL    TXTBANK
+                POP     BC
+                RET
+
+
+
+
+; --- COMROW                    ----------------------------------------
+
+
+; - COMROW -----------------------------
+; - COMPOSES ONE ROW (32 CELLS / 64 COLS) INTO PATSHAD AND COLMAP
+; - IN:  B = SCREEN ROW (0..23), WORKBUF HOLDS LINE RECORD
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL, IX, IY
+; - NOTE: CALLER MUST HAVE VIDSEG BANKED AT PAGE 2
+; -
+
+COMROW          LD      A, B
+                LD      D, A
+                LD      E, 0
+                LD      HL, PATSHAD
+                ADD     HL, DE
+                PUSH    HL
+                POP     IX              ; IX = PATSHAD + ROW * 256
+
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = ROW * CELLROW
+                LD      DE, COLMAP
+                ADD     HL, DE
+                PUSH    HL
+                POP     IY              ; IY = COLMAP + ROW * 32
+
+                LD      B, 0            ; B = CELL INDEX (0..31)
+
+.CELLP          ; GET LEFT CHARACTER AND ATTRIBUTE (COL = 2*B)
+                LD      A, B
+                ADD     A, A            ; A = 2*B
+                LD      E, A
+                LD      A, (WORKBUF)    ; LINE LENGTH
+                CP      E
+                JR      Z, .LBLNK
+                JR      C, .LBLNK
+                ; WITHIN LINE LENGTH
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      A, (HL)         ; A = LEFT CHAR
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+                LD      D, (HL)         ; D = LEFT ATTR
+                JR      .RGET
+
+.LBLNK          LD      A, ' '
+                LD      D, 0
+
+.RGET           ; PUSH LEFT (A, D)
+                PUSH    AF
+                PUSH    DE
+
+                ; GET RIGHT CHARACTER AND ATTRIBUTE (COL = 2*B + 1)
+                LD      A, B
+                ADD     A, A
+                INC     A               ; A = 2*B + 1
+                LD      E, A
+                LD      A, (WORKBUF)
+                CP      E
+                JR      Z, .RBLNK
+                JR      C, .RBLNK
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      C, (HL)         ; C = RIGHT CHAR
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+                LD      E, (HL)         ; E = RIGHT ATTR
+                JR      .COMCL
+
+.RBLNK          LD      C, ' '
+                LD      E, 0
+
+.COMCL          POP     HL              ; H = LEFT ATTR (IN D ORIGINALLY)
+                LD      D, H
+                POP     AF              ; A = LEFT CHAR
+                PUSH    BC              ; SAVE B (CELL COUNTER)
+                CALL    COMCELL
+                POP     BC
+                INC     B
+                LD      A, B
+                CP      32
+                JR      NZ, .CELLP
+                RET
+
+
+
+
+; --- COMCELL                   ----------------------------------------
+
+
+; - COMCELL ----------------------------
+; - COMPOSES ONE CELL (8 PATTERN BYTES + 1 COLOR MAP BYTE)
+; - IN:  A = LCHAR, D = LATTR, C = RCHAR, E = RATTR, IX = PATSHAD, IY = COLMAP
+; - OUT: IX += 8, IY += 1
+; - CLOBBERS: AF, BC, DE, HL, IX, IY
+; -
+
+COMCELL         PUSH    DE              ; SAVE ATTRIBUTES (D=LATTR, E=RATTR)
+
+                ; 1. RESOLVE LEFT GLYPH (FONT4H + LCHAR * 8)
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      A, H
+                ADD     A, #B0          ; HIGH(FONT4H)
+                LD      H, A            ; HL = FONT4H + LCHAR * 8
+
+                ; 2. RESOLVE RIGHT GLYPH (FONT4L + RCHAR * 8)
+                LD      E, C
+                LD      D, 0
+                EX      DE, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      A, H
+                ADD     A, #B8          ; HIGH(FONT4L)
+                LD      H, A
+                EX      DE, HL          ; DE = FONT4L + RCHAR * 8
+
+                ; 3. OR 8 SCANLINES INTO PATSHAD
+                LD      B, 8
+.PATLP          LD      A, (DE)
+                OR      (HL)
+                LD      (IX+0), A
+                INC     HL
+                INC     DE
+                INC     IX
+                DJNZ    .PATLP
+
+                ; 4. MAP ATTRIBUTES TO TMS9918 COLOR
+                POP     DE              ; RESTORE D=LATTR, E=RATTR
+                LD      A, D
+                OR      E               ; A = LATTR | RATTR
+                LD      C, COLTXT       ; DEFAULT COLOR = WHITE ON BLACK
+                BIT     0, A            ; ATRBOLD ?
+                JR      Z, .NOTBD
+                LD      C, COLBOLD
+                JR      .SETCOL
+.NOTBD          BIT     1, A            ; ATRITAL ?
+                JR      Z, .NOTIT
+                LD      C, COLITAL
+                JR      .SETCOL
+.NOTIT          BIT     2, A            ; ATRUNDR ?
+                JR      Z, .SETCOL
+                LD      C, COLUNDR
+
+.SETCOL         ; 5. WRITE ONE COLOR BYTE TO COLMAP
+                LD      (IY+0), C
+                INC     IY
+                RET
+
+
+
+
+; --- RENDIFF                   ----------------------------------------
+
+
+; - RENDIFF ----------------------------
+; - DIFFERENTIAL REPAINT OF SCREEN ROW B
+; - IN:  B = SCREEN ROW (1..22), WORKBUF HOLDS THE NEW RECORD
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+RENDIFF         PUSH    BC
+                LD      A, (PREVROW)
+                CP      B
+                JR      NZ, .MISS
+                LD      HL, (TOPLINE)
+                LD      A, B
+                SUB     TXRFIRST
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                LD      DE, (PREVLIN)
+                CALL    CMPHLDE
+                JR      NZ, .MISS
+
+                ; CACHE HIT: UPDATE ROW AND COMMITTED CACHE
+                POP     BC
+                CALL    RENDEROW
+                LD      HL, WORKBUF
+                LD      DE, PREVBUF
+                LD      BC, WORKSIZ
+                LDIR
+                RET
+
+.MISS           POP     BC
+                CALL    RENDEROW
+                LD      HL, (TOPLINE)
+                LD      A, B
+                SUB     TXRFIRST
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                RET     NC
+                LD      (PREVLIN), HL
+                LD      A, B
+                LD      (PREVROW), A
+                LD      HL, WORKBUF
+                LD      DE, PREVBUF
+                LD      BC, WORKSIZ
+                LDIR
+                RET

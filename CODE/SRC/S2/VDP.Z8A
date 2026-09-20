@@ -1,0 +1,474 @@
+;                                       ****************************************
+;                                       * VDP DRIVER (TMS9918 / SCREEN 2)      *
+;                                       ****************************************
+
+
+; --- REGISTER TABLE            ----------------------------------------
+
+
+                ; TMS9918 INITIAL REGISTERS: SCREEN 2 (GRAPHIC 2)
+REGTBL          DEFB    #02             ; R#0: M2=1 (SCREEN 2)
+                DEFB    #80             ; R#1: 16K VRAM, DISPLAY OFF
+                DEFB    #06             ; R#2: NAME TABLE BASE = #1800
+                DEFB    #FF             ; R#3: COLOR TABLE BASE = #2000 (MASK #FF)
+                DEFB    #03             ; R#4: PATTERN TABLE BASE = #0000 (MASK #03)
+                DEFB    #36             ; R#5: SPRITE ATTR TABLE = #1B00
+                DEFB    #07             ; R#6: SPRITE GEN TABLE = #3800
+                DEFB    COL_BG          ; R#7: BORDER COLOR
+
+
+; --- INITVDP                   ----------------------------------------
+
+
+; - INITVDP ----------------------------
+; - INITIALIZES TMS9918 FOR SCREEN 2 (GRAPHIC 2)
+; - READS VDP PORTS FROM BIOS #0006 AND SETS R#0..R#7
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+INITVDP         ; READ VDP PORTS FROM BIOS ROM (#0006)
+                LD      HL, #0006
+                CALL    RDBIOS
+                LD      (VDPDATA), A
+                INC     A
+                LD      (VDPCTRL), A
+
+                ; SET REGISTERS 0..7 (DISPLAY OFF INITIALLY)
+                LD      HL, REGTBL
+                LD      B, 0
+.REGLP          LD      A, (HL)
+                PUSH    HL
+                PUSH    BC
+                CALL    VDPRSET
+                POP     BC
+                POP     HL
+                INC     HL
+                INC     B
+                LD      A, B
+                CP      8
+                JR      C, .REGLP
+
+                ; CLEAR PATTERN GENERATOR TABLE (6144 BYTES)
+                XOR     A
+                LD      HL, PGBASE
+                LD      BC, PATLEN
+                CALL    VDPFILL
+
+                ; INITIALIZE NAME TABLE (0..255 THREE TIMES)
+                CALL    NTINIT
+
+                ; INITIALIZE COLOR TABLE WITH DEFAULT COLORS
+                CALL    INITCOL
+
+                ; ENABLE DISPLAY (R#1 = #E0: 16K, BLANK=1, IE=1)
+                LD      A, #E0
+                LD      B, 1
+                JP      VDPRSET
+
+
+
+
+; --- VIDBANK / TXTBANK         ----------------------------------------
+
+
+; - VIDBANK ----------------------------
+; - BANKS THE VIDEO SHADOW SEGMENT (VIDSEG) INTO PAGE 2 (#8000-#BFFF)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+VIDBANK         LD      A, (VIDSEG)
+                JP      PUTP2
+
+
+
+
+; - TXTBANK ----------------------------
+; - RESTORES THE CURRENT TEXT SEGMENT (TXSEG) INTO PAGE 2 (#8000-#BFFF)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+TXTBANK         LD      A, (TXSEG)
+                JP      PUTP2
+
+
+
+
+; --- NTINIT                    ----------------------------------------
+
+
+; - NTINIT -----------------------------
+; - FILLS NAME TABLE WITH 0..255 THREE TIMES (ONE PER 8-ROW THIRD)
+; - SO EACH CELL OWNS A UNIQUE PATTERN ENTRY IN SCREEN 2
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+NTINIT          LD      HL, NTBASE
+                CALL    SETWRT
+                LD      A, (VDPDATA)
+                LD      C, A
+                LD      D, 3
+.NT3            LD      B, 0
+                LD      E, 0
+.NTLP           OUT     (C), E
+                INC     E
+                DJNZ    .NTLP
+                DEC     D
+                JR      NZ, .NT3
+                RET
+
+
+
+
+; --- INITCOL                   ----------------------------------------
+
+
+; - INITCOL ----------------------------
+; - INITIALIZES THE COLOR MAP IN VIDSEG AND DUMPS IT TO VRAM
+; - ROW 0 AND ROW 23 GET COLUI (CHROME), ROWS 1..22 GET COLTXT
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+INITCOL         CALL    VIDBANK
+
+                ; FILL THE WHOLE MAP WITH NORMAL TEXT COLOR
+                LD      HL, COLMAP
+                LD      DE, COLMAP + 1
+                LD      BC, CMAPLEN - 1
+                LD      (HL), COLTXT
+                LDIR
+
+                ; ROW 0: UI COLOR
+                LD      HL, COLMAP
+                LD      B, CELLROW
+                LD      A, COLUI
+.IC1            LD      (HL), A
+                INC     HL
+                DJNZ    .IC1
+
+                ; ROW 23: UI COLOR
+                LD      HL, COLMAP + (STBROW * CELLROW)
+                LD      B, CELLROW
+.IC2            LD      (HL), A
+                INC     HL
+                DJNZ    .IC2
+
+                ; DUMP EVERY ROW TO THE VRAM COLOR TABLE (#2000)
+                LD      B, 0
+                LD      C, SCRROWS - 1
+                CALL    COLBAND
+
+                JP      TXTBANK
+
+
+
+
+; --- VDPRSET                   ----------------------------------------
+
+
+; - VDPRSET ----------------------------
+; - WRITES ONE TMS9918 REGISTER AND UPDATES BIOS MIRROR RG0SAV..RG7SAV
+; - IN:  A = DATA VALUE, B = REGISTER NUMBER (0..7)
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+VDPRSET         PUSH    HL
+                PUSH    DE
+                PUSH    BC
+                PUSH    AF
+
+                ; UPDATE BIOS SHADOW REGISTER
+                LD      HL, RG0SAV
+                LD      E, B
+                LD      D, 0
+                ADD     HL, DE
+                LD      (HL), A
+
+                ; WRITE REGISTER VIA CONTROL PORT
+                LD      A, (VDPCTRL)
+                LD      C, A
+                POP     AF
+                DI
+                OUT     (C), A          ; DATA BYTE
+                LD      A, B
+                OR      #80
+                OUT     (C), A          ; REGISTER SELECT (| #80)
+                EI
+
+                POP     BC
+                POP     DE
+                POP     HL
+                RET
+
+
+
+
+; --- SETWRT                    ----------------------------------------
+
+
+; - SETWRT -----------------------------
+; - SETS VRAM WRITE ADDRESS IN TMS9918
+; - RUNS WITH DI TO PROTECT THE TWO CONTROL WRITES FROM ISR CORRUPTION
+; - IN:  HL = 14-BIT VRAM ADDRESS
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+SETWRT          PUSH    BC
+                LD      A, (VDPCTRL)
+                LD      C, A
+                DI
+                OUT     (C), L
+                LD      A, H
+                AND     #3F
+                OR      #40             ; BIT 6 = 1 (WRITE SETUP)
+                OUT     (C), A
+                EI
+                POP     BC
+                RET
+
+
+
+
+; --- SETRD                     ----------------------------------------
+
+
+; - SETRD ------------------------------
+; - SETS VRAM READ ADDRESS IN TMS9918
+; - RUNS WITH DI TO PROTECT THE TWO CONTROL WRITES FROM ISR CORRUPTION
+; - IN:  HL = 14-BIT VRAM ADDRESS
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+SETRD           PUSH    BC
+                LD      A, (VDPCTRL)
+                LD      C, A
+                DI
+                OUT     (C), L
+                LD      A, H
+                AND     #3F             ; BIT 6 = 0 (READ SETUP)
+                OUT     (C), A
+                EI
+                POP     BC
+                RET
+
+
+
+
+; --- VDPDUMP                   ----------------------------------------
+
+
+; - VDPDUMP ----------------------------
+; - DUMPS RAM BUFFER TO VRAM WITH TMS9918 PACING: OUTI; JP NZ (28 T-STATES)
+; - IN:  HL = SRC RAM BUFFER, DE = DST VRAM ADDRESS, BC = BYTE COUNT
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+VDPDUMP         PUSH    BC              ; SAVE BYTE COUNT
+                EX      DE, HL          ; HL = VRAM DESTINATION
+                CALL    SETWRT
+                EX      DE, HL          ; HL = SRC RAM POINTER
+                POP     DE              ; DE = BYTE COUNT
+                LD      A, (VDPDATA)
+                LD      C, A            ; C = VDP DATA PORT
+
+.DUMPLP         LD      A, D
+                OR      A
+                JR      Z, .DUMPTL
+                LD      B, 0            ; 256-BYTE BLOCK
+.DUMP256        OUTI
+                JP      NZ, .DUMP256
+                DEC     D
+                JR      .DUMPLP
+
+.DUMPTL         LD      A, E
+                OR      A
+                RET     Z
+                LD      B, E            ; REMAINING BYTES (< 256)
+.DUMPT          OUTI
+                JP      NZ, .DUMPT
+                RET
+
+
+
+
+; --- COLDMPC                   ----------------------------------------
+
+
+; - COLDMPC ----------------------------
+; - EXPANDS B COLMAP CELLS X8 INTO COLEXP AND DUMPS THEM TO THE COLOR TABLE
+; - SCREEN 2 WANTS ONE COLOR BYTE PER SCANLINE; COLMAP KEEPS ONE PER CELL
+; - IN:  HL = SOURCE IN COLMAP, DE = VRAM DESTINATION, B = CELL COUNT (1..32)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; - NOTE: CALLER MUST HAVE VIDSEG BANKED AT PAGE 2
+; -
+
+COLDMPC         LD      A, B
+                AND     A
+                RET     Z               ; EMPTY RANGE
+                PUSH    DE              ; SAVE VRAM DESTINATION
+                PUSH    AF              ; SAVE CELL COUNT
+
+                LD      DE, COLEXP
+.CEXP           LD      A, (HL)
+                INC     HL
+                LD      (DE), A
+                INC     DE
+                LD      (DE), A
+                INC     DE
+                LD      (DE), A
+                INC     DE
+                LD      (DE), A
+                INC     DE
+                LD      (DE), A
+                INC     DE
+                LD      (DE), A
+                INC     DE
+                LD      (DE), A
+                INC     DE
+                LD      (DE), A
+                INC     DE
+                DJNZ    .CEXP
+
+                ; BYTE COUNT = CELL COUNT * 8 (32 CELLS -> 256, SO 16-BIT)
+                POP     AF
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      B, H
+                LD      C, L            ; BC = BYTE COUNT
+
+                POP     DE              ; DE = VRAM DESTINATION
+                LD      HL, COLEXP
+                JP      VDPDUMP
+
+
+
+
+; --- COLDUMP                   ----------------------------------------
+
+
+; - COLDUMP ----------------------------
+; - DUMPS THE COLORS OF ONE WHOLE SCREEN ROW TO THE COLOR TABLE
+; - IN:  B = SCREEN ROW (0..23)
+; - OUT: NONE
+; - CLOBBERS: AF, DE, HL (BC PRESERVED)
+; - NOTE: CALLER MUST HAVE VIDSEG BANKED AT PAGE 2
+; -
+
+COLDUMP         PUSH    BC
+
+                ; SOURCE = COLMAP + ROW * CELLROW
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = ROW * 32
+                LD      DE, COLMAP
+                ADD     HL, DE
+                PUSH    HL
+
+                ; DESTINATION = CTBASE + ROW * ROWLEN
+                LD      D, B
+                LD      E, 0
+                LD      HL, CTBASE
+                ADD     HL, DE
+                EX      DE, HL          ; DE = VRAM DESTINATION
+
+                POP     HL              ; HL = SOURCE IN COLMAP
+                LD      B, CELLROW
+                CALL    COLDMPC
+
+                POP     BC
+                RET
+
+
+
+
+; --- COLBAND                   ----------------------------------------
+
+
+; - COLBAND ----------------------------
+; - DUMPS THE COLORS OF SCREEN ROWS B..C INCLUSIVE
+; - IN:  B = FIRST ROW, C = LAST ROW
+; - OUT: NONE
+; - CLOBBERS: ALL
+; - NOTE: CALLER MUST HAVE VIDSEG BANKED AT PAGE 2
+; -
+
+COLBAND         LD      A, C
+                CP      B
+                RET     C               ; LAST < FIRST: EMPTY BAND
+                CALL    COLDUMP
+                INC     B
+                JR      COLBAND
+
+
+
+
+; --- VDPFILL                   ----------------------------------------
+
+
+; - VDPFILL ----------------------------
+; - FILLS A VRAM BLOCK WITH A SINGLE BYTE VALUE
+; - IN:  A = FILL VALUE, HL = VRAM ADDRESS, BC = BYTE COUNT
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+VDPFILL         PUSH    AF
+                PUSH    BC
+                CALL    SETWRT
+                LD      A, (VDPDATA)
+                LD      C, A
+                POP     DE              ; DE = COUNT
+                POP     AF              ; A = FILL VALUE
+.FILLP          OUT     (C), A
+                DEC     DE
+                LD      B, A
+                LD      A, D
+                OR      E
+                LD      A, B
+                JR      NZ, .FILLP
+                RET
+
+
+
+
+; --- RDBIOS                    ----------------------------------------
+
+
+; - RDBIOS -----------------------------
+; - READS ONE BYTE FROM THE MAIN BIOS ROM
+; - IN:  HL = ADDRESS
+; - OUT: A  = BYTE READ
+; - CLOBBERS: AF
+; -
+
+RDBIOS          PUSH    BC
+                PUSH    DE
+                PUSH    HL
+                LD      A, (EXPTBL)
+                CALL    RDSLT
+                POP     HL
+                POP     DE
+                POP     BC
+                RET
+

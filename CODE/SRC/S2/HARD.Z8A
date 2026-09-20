@@ -1,0 +1,225 @@
+;                                       ****************************************
+;                                       * HARD CONSTANTS (MSX / TMS9918)       *
+;                                       ****************************************
+
+
+; --- SYSTEM                            ----------------------------------------
+
+
+SYSTEM          EQU     #2D
+PSG_REG         EQU     #A0
+PSG_WRT         EQU     #A1
+PSG_RD          EQU     #A2
+
+
+; --- BIOS                              ----------------------------------------
+
+
+ENASCR_B        EQU     #44
+DISSCR_B        EQU     #41
+WRTVDP_B        EQU     #47
+WRTVRM          EQU     #4D
+FILVRM_B        EQU     #56
+LDIRVM_B        EQU     #5C
+LDIRMV_B        EQU     #59
+CHGMOD          EQU     #5F
+CHGCLR          EQU     #62
+SNSMAT          EQU     #141
+ENASLT          EQU     #24
+RSLREG          EQU     #138
+RDSLT           EQU     #0C
+WRSLT           EQU     #14
+CHPUT           EQU     #A2
+CALSLT          EQU     #1C
+DCOMPR_B        EQU     #20
+KILBUF          EQU     #156
+CHSNS           EQU     #9C
+CHGET           EQU     #9F
+EXTBIOS         EQU     #15F
+SUBROM          EQU     #15C
+CLS             EQU     #00C3
+EXTROM          EQU     #015F
+RDVDP           EQU     #013E
+ERAFNK          EQU     #CC
+DSPFNK          EQU     #CF
+BREAKX          EQU     #B7
+
+
+; --- SYSTEM VARS               ----------------------------------------
+
+
+HTIMI           EQU     #FD9F
+HKEYI           EQU     #FD9A
+CLIKSW          EQU     #F3DB
+SCRMOD          EQU     #FCAF
+LINL40          EQU     #F3AE
+LINLEN          EQU     #F3B0
+FORCLR          EQU     #F3E9
+BAKCLR          EQU     #F3EA
+BDRCLR          EQU     #F3EB
+KANAST          EQU     #FCAC
+KANAMOD         EQU     #FAFC
+RG0SAV          EQU     #F3DF
+RG4SAV          EQU     RG0SAV + 4
+RG6SAV          EQU     RG0SAV + 6
+RG7SAV          EQU     RG0SAV + 7
+RG8SAV          EQU     #FFE7
+RG9SAV          EQU     #FFE8
+EXPTBL          EQU     #FCC1
+SLTTBL          EQU     #FCC5
+RAMAD0          EQU     #F341
+RAMAD1          EQU     #F342
+RAMAD2          EQU     #F343
+RAMAD3          EQU     #F344
+CNSDFG          EQU     #F3DE
+FNKSTR          EQU     #F87F
+REPCNT          EQU     #F3F7
+JIFFY           EQU     #FC9E
+GETPNT          EQU     #F3FA
+STATFL          EQU     #F3E7
+
+CGTABL          EQU     #0004
+
+
+; --- EXTBIO / MAPPER           ----------------------------------------
+
+
+EXTBIO          EQU     #FFCA
+HOKVLD          EQU     #FB20
+ARG             EQU     #F847
+
+MAP_DEV         EQU     4
+MAPFNTBL        EQU     2
+MAPFNVAR        EQU     1
+
+MJALLSEG        EQU     #00
+MJFRESEG        EQU     #03
+MJRDSEG         EQU     #06
+MJWRSEG         EQU     #09
+MJCALSEG        EQU     #0C
+MJCALLS         EQU     #0F
+MJPUTPH         EQU     #12
+MJGETPH         EQU     #15
+MJPUTP0         EQU     #18
+MJGETP0         EQU     #1B
+MJPUTP1         EQU     #1E
+MJGETP1         EQU     #21
+MJPUTP2         EQU     #24
+MJGETP2         EQU     #27
+MJPUTP3         EQU     #2A
+MJGETP3         EQU     #2D
+
+
+; --- BDOS                      ----------------------------------------
+
+
+DOS             EQU     #05
+
+_PARAMS         EQU     #80
+
+_CONIN          EQU     #01
+_CONOUT         EQU     #02
+_DIRIO          EQU     #06
+_INNOE          EQU     #08
+_STROUT         EQU     #09
+_CONST          EQU     #0B
+_BUFIN          EQU     #0A
+
+_FOPEN          EQU     #0F
+_FCLOSE         EQU     #10
+_FMAKE          EQU     #16
+_FDEL           EQU     #13
+_SETDTA         EQU     #1A
+_WRBLK          EQU     #26
+_RDBLK          EQU     #27
+_GDATE          EQU     #2A
+_GTIME          EQU     #2C
+_TERM0          EQU     #00
+
+_OPEN           EQU     #43
+_CREATE         EQU     #44
+_CLOSE          EQU     #45
+_READ           EQU     #48
+_WRITE          EQU     #49
+_SEEK           EQU     #4A
+_DELETE         EQU     #4D
+_DEFAB          EQU     #63
+_DEFER          EQU     #64
+_DOSVER         EQU     #6F
+_FFIRST         EQU     #40
+_TERM           EQU     #62
+
+
+; --- DOS FCB OFFSETS           ----------------------------------------
+
+
+FDRIVE          EQU     0
+FFILNAME        EQU     1
+FFILEXT         EQU     9
+FCURBLK         EQU     12
+FRECSIZ         EQU     14
+FFILSIZ         EQU     16
+FDATE           EQU     20
+FTIME           EQU     22
+FDEVID          EQU     24
+FDIRLOC         EQU     25
+FTOPCLUS        EQU     26
+FLSTCLUS        EQU     28
+FRELLOC         EQU     30
+FCURREC         EQU     32
+FRNDREC         EQU     33
+SIZEFCB         EQU     37
+
+
+; --- ASCII                     ----------------------------------------
+
+
+NUL             EQU     0
+BEL             EQU     #07
+BS              EQU     #08
+TAB             EQU     #09
+LF              EQU     #0A
+CR              EQU     #0D
+ESC             EQU     #1B
+DEL             EQU     #7F
+
+CRIGHT          EQU     #1C
+CLEFT           EQU     #1D
+CUP             EQU     #1E
+CDOWN           EQU     #1F
+
+F1KEY           EQU     #F1
+F2KEY           EQU     #F2
+F3KEY           EQU     #F3
+F4KEY           EQU     #F4
+F5KEY           EQU     #F5
+F10KEY          EQU     #FA
+
+INSKEY          EQU     #12
+HOMEKEY         EQU     #0B
+CLSKEY          EQU     #0C
+SELKEY          EQU     #18
+
+CTRL_A          EQU     #01
+CTRL_B          EQU     #02
+CTRL_C          EQU     #03
+CTRL_D          EQU     #04
+CTRL_E          EQU     #05
+CTRL_F          EQU     #06
+CTRL_G          EQU     #07
+CTRL_I          EQU     #09
+CTRL_K          EQU     #0B
+CTRL_L          EQU     #0C
+CTRL_N          EQU     #0E
+CTRL_O          EQU     #0F
+CTRL_P          EQU     #10
+CTRL_Q          EQU     #11
+CTRL_R          EQU     #12
+CTRL_S          EQU     #13
+CTRL_T          EQU     #14
+CTRL_U          EQU     #15
+CTRL_V          EQU     #16
+CTRL_W          EQU     #17
+CTRL_X          EQU     #18
+CTRL_Y          EQU     #19
+CTRL_Z          EQU     #1A

@@ -884,6 +884,15 @@ ACTSAVE         CALL    FILESAVE
 ; - CLOBBERS: ALL
 ; -
 
+                IFDEF   S2ED
+ACTQUIT         LD      A, (SELACT)
+                OR      A
+                JR      Z, .DOQ
+                JP      ACTDSEL
+.DOQ            JP      TERM
+
+ACTHELP         RET
+                ELSE
 ACTQUIT         LD      A, (SELACT)
                 OR      A
                 JR      Z, .ASKQ
@@ -910,6 +919,7 @@ ACTQUIT         LD      A, (SELACT)
 ACTHELP         LD      A, (FTRSEG)
                 LD      HL, DOABT
                 JP      FCALL
+                ENDIF
 
 
 ; --- ACTCYCKM                  ----------------------------------------
@@ -1207,6 +1217,7 @@ SELEXT          LD      E, (IX + 0)
 ; - CLOBBERS: ALL
 ; -
 
+                IFNDEF  S2ED
 SELXOR          LD      A, E
                 SUB     D
                 LD      L, A
@@ -1245,6 +1256,7 @@ SELXOR          LD      A, E
                 LD      HL, VDPCMBLK
                 LD      A, VDP_LMMV | VDP_XOR
                 JP      LMMV
+                ENDIF
 
 
 ; - SELPAIN ----------------------------
@@ -2691,10 +2703,14 @@ ACTMNU4         LD      A, 4
 ; - CLOBBERS: ALL
 ; -
 
-MNUENT          LD      A, (FTRSEG)
+MNUENT          IFDEF   S2ED
+                RET
+                ELSE
+                LD      A, (FTRSEG)
                 LD      HL, DOMNU
                 CALL    FCALL
                 RET     C               ; CANCELLED: RETURN TO EDITING
+                ENDIF
 
                 ; DISPATCH SELECTED ACTION BASED ON (MNUID)
                 LD      A, (MNUID)
