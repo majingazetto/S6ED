@@ -878,10 +878,18 @@ class _HelpCase(Case):
         ]
 
     def _version(self, ctx):
-        """The version the banner must show, straight from CONST.Z8A."""
-        with open(os.path.join(ctx.src_dir, 'CONST.Z8A')) as fh:
+        """The version the banner must show, straight from CONST.Z8A (or CONST_CORE.Z8A)."""
+        path = ctx.find_src_file('CONST_CORE.Z8A')
+        if not os.path.exists(path):
+            path = ctx.find_src_file('CONST.Z8A')
+        with open(path) as fh:
             src = fh.read()
-        maj = re.search(r"\.MAJOR\s+EQU\s+'(.)'", src).group(1)
+        m_maj = re.search(r"\.MAJOR\s+EQU\s+'(.)'", src)
+        if not m_maj:
+            with open(ctx.find_src_file('CONST.Z8A')) as fh:
+                src = fh.read()
+            m_maj = re.search(r"\.MAJOR\s+EQU\s+'(.)'", src)
+        maj = m_maj.group(1)
         mnr = re.search(r"\.MINOR\s+EQU\s+'(.)'", src).group(1)
         return ('%s.%s' % (maj, mnr)).encode('ascii')
 

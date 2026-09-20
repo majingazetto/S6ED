@@ -42,20 +42,21 @@ class Symbols(object):
             raise RuntimeError('no symbols parsed from %s' % self.sym_path)
 
     def _attribute(self):
-        for name in sorted(os.listdir(self.src_dir)):
-            if not name.endswith('.Z8A'):
-                continue
-            with open(os.path.join(self.src_dir, name), errors='replace') as fh:
-                for line in fh:
-                    m = EQU_RE.match(line)
-                    if m:
-                        self.owner.setdefault(m.group(1), name)
-                        self.is_const[m.group(1)] = True
-                        continue
-                    m = LABEL_RE.match(line)
-                    if m:
-                        self.owner.setdefault(m.group(1), name)
-                        self.is_const.setdefault(m.group(1), False)
+        for root, _, files in os.walk(self.src_dir):
+            for name in sorted(files):
+                if not name.endswith('.Z8A'):
+                    continue
+                with open(os.path.join(root, name), errors='replace') as fh:
+                    for line in fh:
+                        m = EQU_RE.match(line)
+                        if m:
+                            self.owner.setdefault(m.group(1), name)
+                            self.is_const[m.group(1)] = True
+                            continue
+                        m = LABEL_RE.match(line)
+                        if m:
+                            self.owner.setdefault(m.group(1), name)
+                            self.is_const.setdefault(m.group(1), False)
 
     # - accessors -------------------------------------------------------
 

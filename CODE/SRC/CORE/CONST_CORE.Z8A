@@ -1,0 +1,218 @@
+;                                       ****************************************
+;                                       * CORE CONSTANTS                       *
+;                                       ****************************************
+
+
+; --- VERSION                   ----------------------------------------
+
+
+VERSION
+.MAJOR          EQU     '0'
+.MINOR          EQU     '1'
+
+
+; --- CHARACTER ATTRIBUTES      ----------------------------------------
+
+
+                ; ATTR BYTE BIT DEFINITIONS (PER CELL, STORED ALONGSIDE TEXT)
+ATRBOLD         EQU     #01             ; BIT 0
+ATRITAL         EQU     #02             ; BIT 1
+ATRUNDR         EQU     #04             ; BIT 2
+ATRINV          EQU     #08             ; BIT 3  (INVERSE VIDEO)
+ATRFMSK         EQU     #03             ; BITS 0-1 -> FONT VARIANT INDEX
+
+
+; --- TEXT BUFFER / MAPPER      ----------------------------------------
+
+
+DIRSIZ          EQU     3               ; BYTES PER LINE DIRECTORY ENTRY
+                                        ;   [1: SEGMENT] [2: WORD OFFSET]
+LINEREC         EQU     161             ; MAX LINE RECORD: 1 + 80 + 80
+TEXTCOLS        EQU     80              ; MAX CHARS PER LINE
+WORKSIZ         EQU     LINEREC         ; WORK BUFFER SIZE (= MAX RECORD)
+CLIPMAX         EQU     2048            ; MAX CLIPBOARD BUFFER CAPACITY
+
+TXPAGE          EQU     #8000           ; PAGE 2 - TEXT WINDOW (SWITCHED)
+
+                ; LINE DIRECTORY PLACEMENT.
+                ;
+                ; THE DIRECTORY LIVES IN ITS OWN MAPPER SEGMENT (DIRSEG), BANKED
+                ; INTO THE PAGE 2 WINDOW ON DEMAND -- SEE DIRBANK IN BUFFER.Z8A.
+                ; ITS CAPACITY IS FIXED AT ONE SEGMENT AND NO LONGER SHRINKS AS
+                ; THE IMAGE GROWS.
+
+DIRWIN          EQU     TXPAGE          ; PAGE-2 WINDOW THE DIRECTORY BANKS INTO
+MAXLINES        EQU     16384 / DIRSIZ  ; 5461 ENTRIES INSIDE ONE MAPPER SEGMENT
+
+                ; SEGMENT ALLOCATION TYPE (FOR ALL_SEG)
+SEG_USER        EQU     0               ; A=0: ALLOCATE USER SEGMENT
+SEG_SYS         EQU     1               ; A=1: ALLOCATE SYSTEM SEGMENT
+
+MAXSEGS         EQU     32              ; SEGMENTS THE EDITOR WILL TRACK
+                                        ;   1 DIRECTORY + 1 FEATURE + 30 TEXT = 496KB
+WARNLNS         EQU     500             ; BOOT WARNS WHEN THE TEXT CEILING FALLS
+                                        ;   BELOW THIS (IN LINES)
+FREENIL         EQU     #FF             ; FREEHD VALUE MEANING "NO FREE RECORD"
+                                        ;   NO REAL MAPPER SEGMENT EVER TAKES IT
+LINEPSEG        EQU     16384 / LINEREC ; 101 LINE RECORDS PER SEGMENT
+SEGLAST         EQU     (LINEPSEG - 1) * LINEREC
+                                        ; OFFSET OF THE LAST RECORD THAT STILL
+                                        ; FITS WHOLE INSIDE A 16KB SEGMENT
+
+
+; --- UNDO SUBSYSTEM            ----------------------------------------
+
+
+UNDOSIZ         EQU     8192            ; 8 KB UNDO RING BUFFER IN TPA RAM
+UNDOT_MOD       EQU     1               ; OP TYPE: SINGLE-LINE MODIFICATION
+UNDOT_DEL       EQU     2               ; OP TYPE: DELETED LINE
+UNDOT_SPL       EQU     3               ; OP TYPE: LINE SPLIT (ENTER)
+UNDOT_JON       EQU     4               ; OP TYPE: LINE JOIN (BACKSPACE/DEL)
+UNDOHDR_SZ      EQU     10              ; TRANSACTION HEADER SIZE
+UNDOMOD_SZ      EQU     UNDOHDR_SZ + LINEREC ; 171 BYTES PER RECORD
+
+
+; --- S6ED.DAT CONTAINER        ----------------------------------------
+
+
+DATMAX          EQU     8               ; MAX BLOCKS THE CONTAINER TABLE HOLDS
+DATBLEN         EQU     16384           ; HARD LENGTH CAP: THE PAGE 2 WINDOW
+BLK_FTR         EQU     1               ; BLOCK ID OF THE FEATURE SEGMENT
+
+
+; --- LANGUAGE MODES            ----------------------------------------
+
+
+LGNONE          EQU     0
+LANG_Z80        EQU     1
+LGBASIC         EQU     2
+LANG_C          EQU     3
+LGPYTHN         EQU     4
+
+
+; --- MISC                      ----------------------------------------
+
+
+INS_MODE        EQU     1               ; INSERT
+OVR_MODE        EQU     0               ; OVERWRITE
+
+
+; --- WRAP MODES                ----------------------------------------
+
+
+WRAP_DEV        EQU     0               ; DEVELOPER MODE: CLAMP AT COL 79 (NO AUTO-WRAP)
+WRAP_TXT        EQU     1               ; TEXT MODE: SMART WORD-WRAP
+
+
+; --- AUTOALIGN MODES           ----------------------------------------
+
+
+ALGN_OFF        EQU     0               ; ENTER ALWAYS LANDS AT COLUMN 0
+ALGN_ON         EQU     1               ; AUTO-ALIGN ON ENTER, ANY WRAP MODE
+ALGN_DEV        EQU     2               ; AUTO-ALIGN ONLY IN WRAP_DEV
+
+
+; --- MODIFIERS BITMASK         ----------------------------------------
+
+
+MODNONE         EQU     %00000000
+MODSHFT         EQU     %00000001       ; SHIFT (ROW 6 BIT 0)
+MODCTRL         EQU     %00000010       ; CTRL  (ROW 6 BIT 1)
+MODGRPH         EQU     %00000100       ; GRAPH (ROW 6 BIT 2)
+MODANY          EQU     %11111111       ; MATCH ANY MODIFIER STATE
+
+
+; --- ACTION CATALOG IDS        ----------------------------------------
+
+
+ACNONE          EQU     0
+ACMVL           EQU     1
+ACMVR           EQU     2
+ACMVU           EQU     3
+ACMVD           EQU     4
+ACBOL           EQU     5               ; CTRL + <
+ACEOL           EQU     6               ; CTRL + >
+ACTOP           EQU     7               ; CTRL + UP
+ACBOT           EQU     8               ; CTRL + DOWN
+ACWLFT          EQU     9               ; GRAPH + <
+ACWRGT          EQU     10              ; GRAPH + >
+ACDWLFT         EQU     11              ; GRAPH + BS
+ACPGUP          EQU     12              ; GRAPH + UP
+ACPGDN          EQU     13              ; GRAPH + DOWN
+ACDELBK         EQU     14              ; BS
+ACDELFW         EQU     15              ; DEL
+ACDELLN         EQU     16              ; CTRL + Y (OR dd IN VI)
+ACNWLIN         EQU     17              ; CR
+ACOPNBL         EQU     18              ; VI o
+ACOPNAB         EQU     19              ; VI O
+ACTGLIN         EQU     20              ; INS
+ACTGLWR         EQU     21              ; CTRL + W
+ACSAVE          EQU     22              ; F2 / CTRL + S
+ACQUIT          EQU     23              ; ESC / CTRL + Q
+ACHELP          EQU     24              ; F1
+ACCYCKM         EQU     25              ; F5 / CTRL + K
+ACVIINS         EQU     26              ; VI i
+ACVIAPP         EQU     27              ; VI a
+ACVINRM         EQU     28              ; VI ESC
+ACVILED         EQU     29              ; VI LEADER 'd'
+ACSLML          EQU     30              ; SHIFT + <
+ACSLMR          EQU     31              ; SHIFT + >
+ACSLMU          EQU     32              ; SHIFT + UP
+ACSLMD          EQU     33              ; SHIFT + DOWN
+ACSLBOL         EQU     34              ; SHIFT + CTRL + <
+ACSLEOL         EQU     35              ; SHIFT + CTRL + >
+ACSLTOP         EQU     36              ; SHIFT + CTRL + UP
+ACSLBOT         EQU     37              ; SHIFT + CTRL + DOWN
+ACSLWLF         EQU     38              ; SHIFT + GRAPH + <
+ACSLWRT         EQU     39              ; SHIFT + GRAPH + >
+ACSLPGU         EQU     40              ; SHIFT + GRAPH + UP
+ACSLPGD         EQU     41              ; SHIFT + GRAPH + DOWN
+ACSELAL         EQU     42              ; CTRL + A (SELECT ALL)
+ACDSEL          EQU     43              ; DESELECT
+ACDLS           EQU     44              ; DELETE SELECTION
+ACCOPY          EQU     45              ; CTRL + C / VI y (COPY)
+ACCUT           EQU     46              ; CTRL + X / VI x (CUT)
+ACPAST          EQU     47              ; CTRL + V / VI p (PASTE)
+ACTGLBD         EQU     48              ; CTRL + B (TOGGLE BOLD)
+ACTGLIT         EQU     49              ; CTRL + I (TOGGLE ITALIC)
+ACCYCMK         EQU     50              ; F3 / CTRL + T (CYCLE MARKUP MODE)
+ACTABS          EQU     51              ; TAB (INSERT SPACES TO NEXT TAB STOP)
+ACMENU          EQU     52              ; DROP-DOWN MENU FILE (F1 / SELECT / F10)
+ACMNU1          EQU     53              ; DROP-DOWN MENU EDIT (F2)
+ACMNU2          EQU     54              ; DROP-DOWN MENU VIEW (F3)
+ACMNU3          EQU     55              ; DROP-DOWN MENU OPTIONS (F4)
+ACMNU4          EQU     56              ; DROP-DOWN MENU HELP (F5)
+ACUNDO          EQU     57              ; CTRL + Z / VI u (UNDO)
+ACREDO          EQU     58              ; CTRL + Y / VI CTRL+R (REDO)
+ACMAX           EQU     59
+
+MNUCOUNT        EQU     5               ; TOTAL TOP-LEVEL MENUS (FILE, EDIT, VIEW, OPT, HELP)
+
+
+; --- KEYMAP PROFILES           ----------------------------------------
+
+
+KMSTD           EQU     0               ; STANDARD / CUA (DEFAULT)
+KMWS            EQU     1               ; WORDSTAR / TURBO PASCAL
+KMEMACS         EQU     2               ; EMACS
+KMVI            EQU     3               ; VI MODAL
+
+VIMNORM         EQU     0               ; VI NORMAL MODE
+VIMINS          EQU     1               ; VI INSERT MODE
+
+
+; --- MARKUP MODES              ----------------------------------------
+
+
+MKUP_OFF        EQU     0               ; PLAIN TEXT / CODE (NO MARKUP)
+MKUP_MD         EQU     1               ; COMMONMARK (**BOLD**, *ITALIC*, _ITALIC_)
+MKUP_LIT        EQU     2               ; LITE / CHAT (*BOLD*, _ITALIC_)
+MKUP_MAX        EQU     3
+
+
+; --- DEAD KEY STATES           ----------------------------------------
+
+
+DEDNONE         EQU     0               ; NO DEAD KEY PENDING
+DEDACUT         EQU     1               ; ACUTE ACCENT PENDING
+DEDDIAR         EQU     2               ; DIAERESIS PENDING

@@ -23,7 +23,12 @@ DEFB_RE = re.compile(r'\bDEFB\s+(.*)$')
 
 
 def _src_files(src_dir):
-    return sorted(f for f in os.listdir(src_dir) if f.endswith('.Z8A'))
+    res = []
+    for root, _, files in os.walk(src_dir):
+        for f in files:
+            if f.endswith('.Z8A'):
+                res.append(os.path.relpath(os.path.join(root, f), src_dir))
+    return sorted(res)
 
 
 def _strip_comment(line):
@@ -81,7 +86,7 @@ def check_vars_block(ctx):
 
 def check_init_clear(ctx):
     """INIT must zero the whole variable block, VARS..ENDVARS-1."""
-    text = open(os.path.join(ctx.src_dir, 'S6ED.Z8A')).read()
+    text = open(ctx.find_src_file('S6ED.Z8A')).read()
     want = [r'LD\s+HL,\s*VARS\b', r'LD\s+DE,\s*VARS\s*\+\s*1\b',
             r'LD\s+BC,\s*ENDVARS\s*-\s*VARS\s*-\s*1\b',
             r'LD\s+\(HL\),\s*0\b', r'\bLDIR\b']
@@ -100,7 +105,7 @@ def check_layout_asserts(ctx):
     RAM, no code change -- and the build must never let it happen silently
     again.
     """
-    text = open(os.path.join(ctx.src_dir, 'VARS.Z8A')).read()
+    text = open(ctx.find_src_file('VARS.Z8A')).read()
     want = ['SELSTRX == SELSTRL + 2', 'SELENDL == SELSTRL + 3',
             'SELENDX == SELSTRL + 5', 'DRWSTRX == DRWSTRL + 2',
             'DRWENDL == DRWSTRL + 3', 'DRWENDX == DRWSTRL + 5']
@@ -162,7 +167,7 @@ def check_data_placement(ctx):
                     if l.split('#')[0].strip()}
     found = set()
     for fname in _src_files(ctx.src_dir):
-        if fname == 'VARS.Z8A':
+        if os.path.basename(fname) == 'VARS.Z8A':
             continue
         for line in open(os.path.join(ctx.src_dir, fname), errors='replace'):
             m = DATA_RE.match(line)
@@ -269,7 +274,7 @@ def check_feature_discipline(ctx):
     feature_files = ['CFG.Z8A', 'WINDOW.Z8A']
     bad = []
     for fname in feature_files:
-        path = os.path.join(ctx.src_dir, fname)
+        path = ctx.find_src_file(fname)
         if not os.path.exists(path):
             continue
         for n, line in enumerate(open(path, errors='replace'), 1):
@@ -349,7 +354,7 @@ def check_window_discipline(ctx):
     The frame must be painted as HMMV bands (WINBAND) with a WINSHDW shadow.
     .STRVER must compose version dynamically from VERSION.MAJOR and VERSION.MINOR.
     """
-    path = os.path.join(ctx.src_dir, 'WINDOW.Z8A')
+    path = ctx.find_src_file('WINDOW.Z8A')
     if not os.path.exists(path):
         return Check('window-discipline', False, 'WINDOW.Z8A missing')
     src = open(path).read()
