@@ -717,7 +717,11 @@ SKPCOM          LD      A, (HL)
 ; --- CFG DATA                  ----------------------------------------
 
 
+                IFDEF   S2ED
+CFGNAME         DEFM    "S2ED.CFG", 0
+                ELSE
 CFGNAME         DEFM    "S6ED.CFG", 0
+                ENDIF
 KEYPROF         DEFM    "PROFILE", 0
 KEYWRAP         DEFM    "WRAP", 0
 KEYMKUP         DEFM    "MARKUP", 0

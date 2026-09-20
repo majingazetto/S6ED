@@ -1,0 +1,169 @@
+;                                       ****************************************
+;                                       * FONT DRIVER (SCREEN 2 / TMS9918)     *
+;                                       ****************************************
+;
+; 4X8 CHARSET (256 GLYPHS X 8 BYTES, 1BPP, INK IN BITS 7-4 FOR HIGH NIBBLE
+; AND BITS 3-0 FOR LOW NIBBLE).
+;
+; SOURCE: S2ED.FNT, READ FROM DISK AT STARTUP -- EXACTLY 2,048 BYTES LOADED
+; INTO FONT4H (#B000) IN VIDSEG (PAGE 2). FONT4L (#B800) IS DERIVED AT BOOT
+; BY SWAPPING HIGH AND LOW NIBBLES.
+;
+; FALLBACK: IF S2ED.FNT IS MISSING OR CORRUPT, DERIVES THE 4PX FONT FROM
+; THE MSX BIOS ROM CHARSET (CGTABL AT #0004) VIA PAIR-OR COMPRESSION.
+
+
+; --- FONT DATA                 ----------------------------------------
+
+
+FNTNAME         DEFM    "S2ED.FNT", 0
+
+
+
+
+; --- FONTINIT                  ----------------------------------------
+
+
+; - FONTINIT ---------------------------
+; - INITIALIZES 4X8 FONT TABLES IN VIDSEG (FONT4H AND FONT4L)
+; - IN:  NONE
+; - OUT: FNTOK = #FF IF S2ED.FNT USED, 0 IF ROM FALLBACK
+; - CLOBBERS: ALL
+; -
+
+FONTINIT        XOR     A
+                LD      (FNTROMD), A
+                LD      (FNTOK), A
+
+                ; BANK VIDSEG INTO PAGE 2 (#8000-#BFFF)
+                CALL    VIDBANK
+
+                ; ATTEMPT TO OPEN S2ED.FNT
+                LD      HL, FNTNAME
+                CALL    DSKOPEN
+                JR      C, .USEROM
+                LD      (FNTHAND), A
+
+                ; VALIDATE FILE SIZE: MUST BE EXACTLY FNTFSIZ (2048 BYTES)
+                LD      A, D
+                OR      E
+                JR      NZ, .BADSIZ
+                LD      DE, FNTFSIZ
+                OR      A
+                SBC     HL, DE
+                JR      NZ, .BADSIZ
+
+                ; READ 2048 BYTES INTO FONT4H (#B000)
+                LD      A, (FNTHAND)
+                LD      HL, FNTFSIZ
+                LD      DE, FONT4H
+                CALL    DSKREAD
+
+                LD      A, (FNTHAND)
+                CALL    DSKCLOSE
+
+                LD      A, #FF
+                LD      (FNTOK), A
+                JR      .MAKEL
+
+.BADSIZ         LD      A, (FNTHAND)
+                CALL    DSKCLOSE
+                XOR     A
+                LD      (FNTOK), A
+
+.USEROM         CALL    FNTROMI
+                LD      HL, (FNTCGA)
+                LD      DE, FONT4H
+                LD      BC, FNTLEN
+.ROMLP          PUSH    BC
+                PUSH    DE
+                PUSH    HL
+                CALL    RDBIOS
+                CALL    CMPRS4
+                POP     HL
+                POP     DE
+                POP     BC
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                DEC     BC
+                LD      A, B
+                OR      C
+                JR      NZ, .ROMLP
+
+                ; BUILD FONT4L (#B800) BY NIBBLE SWAPPING FONT4H (#B000)
+.MAKEL          LD      HL, FONT4H
+                LD      DE, FONT4L
+                LD      BC, FNTLEN
+.SWPLP          LD      A, (HL)
+                RRCA
+                RRCA
+                RRCA
+                RRCA
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                DEC     BC
+                LD      A, B
+                OR      C
+                JR      NZ, .SWPLP
+
+                ; RESTORE TEXT SEGMENT TO PAGE 2
+                JP      TXTBANK
+
+
+
+
+; --- CMPRS4                    ----------------------------------------
+
+
+; - CMPRS4 -----------------------------
+; - COMPRESSES AN 8-PIXEL SCANLINE BYTE TO A 4-PIXEL HIGH-NIBBLE BYTE
+; - PAIRS ARE OR-ED AT BITS 7|6, 5|4, 3|2, 1|0 -> BITS 7, 6, 5, 4
+; - IN:  A = 8-PIXEL BYTE (%76543210)
+; - OUT: A = 4-PIXEL BYTE (%A6A4A2A0 0000)
+; - CLOBBERS: AF, C
+; -
+
+CMPRS4          LD      C, A
+                SRL     A
+                OR      C
+                LD      C, 0
+                RRA
+                RR      C
+                RRA
+                RRA
+                RR      C
+                RRA
+                RRA
+                RR      C
+                RRA
+                RRA
+                RR      C
+                LD      A, C
+                RET
+
+
+
+
+; --- FNTROMI                   ----------------------------------------
+
+
+; - FNTROMI ----------------------------
+; - RESOLVES ROM CHARSET BASE ADDRESS FROM CGTABL (#0004)
+; - IN:  NONE
+; - OUT: FNTCGA = CHARSET BASE ADDRESS IN BIOS ROM
+; - CLOBBERS: AF, DE, HL
+; -
+
+FNTROMI         DI
+                LD      HL, CGTABL
+                CALL    RDBIOS
+                LD      E, A
+                LD      HL, CGTABL + 1
+                CALL    RDBIOS
+                LD      D, A
+                LD      (FNTCGA), DE
+                EI
+                RET
+

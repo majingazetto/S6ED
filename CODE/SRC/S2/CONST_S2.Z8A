@@ -1,0 +1,88 @@
+;                                       ****************************************
+;                                       * SCREEN 2 CONSTANTS (TMS9918)         *
+;                                       ****************************************
+
+
+; --- SCREEN LAYOUT             ----------------------------------------
+
+
+                ; CHARACTER GRID: 64 COLS X 24 ROWS (2 CHARS PER 8X8 CELL)
+SCRCOLS         EQU     64              ; TEXT AREA COLUMNS
+SCRROWS         EQU     24              ; TEXT AREA ROWS (ROWS 0-23)
+CELLW           EQU     4               ; CELL WIDTH IN PIXELS
+CELLH           EQU     8               ; CELL HEIGHT IN PIXELS
+TEXTCOLS        EQU     64              ; MAX CHARS PER LINE FOR S2
+LINEREC         EQU     1 + TEXTCOLS + TEXTCOLS ; MAX LINE RECORD FOR S2 (129 BYTES)
+
+ROWLEN          EQU     256             ; ONE ROW: 32 CELLS X 8 BYTES = 256 B
+PATLEN          EQU     6144            ; TOTAL SCREEN PATTERN BYTES: 24 X 256 B
+ROWSVIS         EQU     22              ; VISIBLE EDITING ROWS (1..22)
+
+                ; ROWS (IN CHARACTER UNITS)
+MNUROW          EQU     0               ; MENU BAR ROW
+TXRFIRST        EQU     1               ; FIRST TEXT ROW
+TXRLAST         EQU     22              ; LAST TEXT ROW
+STBROW          EQU     23              ; STATUS BAR ROW
+
+
+; --- VRAM MAP (SCREEN 2)       ----------------------------------------
+
+
+PGBASE          EQU     #0000           ; PATTERN GENERATOR TABLE (#0000-#17FF, 6144 B)
+NTBASE          EQU     #1800           ; NAME TABLE (#1800-#1AFF, 768 B)
+CTBASE          EQU     #2000           ; COLOR TABLE (#2000-#37FF, 6144 B)
+SATBASE         EQU     #1B00           ; SPRITE ATTRIBUTE TABLE (#1B00-#1B7F)
+SPGBASE         EQU     #3800           ; SPRITE GENERATOR TABLE (#3800-#3FFF)
+
+
+; --- COLOR DEFINITIONS         ----------------------------------------
+
+                ; TMS9918 16-COLOR PALETTE INDICES:
+                ; 0:TRANSPARENT, 1:BLACK, 2:MED-GREEN, 3:LT-GREEN, 4:DARK-BLUE
+                ; 5:LT-BLUE, 6:DARK-RED, 7:CYAN, 8:MED-RED, 9:LT-RED
+                ; 10:DARK-YELLOW, 11:LT-YELLOW, 12:DARK-GREEN, 13:MAGENTA
+                ; 14:GRAY, 15:WHITE
+
+COL_BG          EQU     1               ; DEFAULT BACKGROUND: BLACK
+COL_FG          EQU     15              ; DEFAULT FOREGROUND: WHITE
+
+                ; SEMANTIC COLORS (BYTE = FG NIBBLE << 4 | BG NIBBLE)
+COLTXT          EQU     #F1             ; NORMAL TEXT: WHITE ON BLACK
+COLUI           EQU     #1F             ; UI CHROME: BLACK ON WHITE (MENU & STATUS)
+COLBOLD         EQU     #B1             ; BOLD / HEADERS: LIGHT YELLOW ON BLACK
+COLITAL         EQU     #71             ; ITALIC: CYAN ON BLACK
+COLUNDR         EQU     #31             ; CODE / UNDERLINE: LIGHT GREEN ON BLACK
+COLMARK         EQU     #E1             ; MARKDOWN DELIMITERS: GRAY ON BLACK
+COLHI           EQU     #B1             ; HIGHLIGHT COLOR
+
+
+; --- PAGE 2 VIDEO SHADOW MAP   ----------------------------------------
+
+                ; VIDSEG AND FTRSEG ARE THE SAME 16 KB SEGMENT: ON A STOCK
+                ; 128 KB MSX-DOS 2 MACHINE THERE IS NO THIRD ONE TO CLAIM
+                ; (MEASURED 2026-09-20 ON A PHILIPS NMS 8250: SEGAVL = 0
+                ; AFTER DIRSEG AND FTRSEG). SO THE COLOR SHADOW HOLDS ONE
+                ; BYTE PER CELL INSTEAD OF THE EIGHT THE COLOR TABLE WANTS
+                ; -- COMCELL WRITES THE SAME BYTE EIGHT TIMES ANYWAY -- AND
+                ; THE 5,376 BYTES THAT FREES HOST THE FEATURE PASSENGER.
+                ;
+                ; WHEN VIDSEG IS BANKED AT PAGE 2 (#8000-#BFFF, 16 KB):
+                ;   #8000  PATSHAD  6144  PATTERN SHADOW, 256 B PER ROW
+                ;   #9800  COLMAP    768  COLOR MAP, 1 BYTE PER CELL
+                ;   #9B00  COLEXP    256  ONE ROW OF COLMAP EXPANDED X8
+                ;   #9C00  FTRBASE  5120  FEATURE PASSENGER CONTAINER
+                ;   #B000  FONT4H   2048  HIGH-NIBBLE FONT
+                ;   #B800  FONT4L   2048  LOW-NIBBLE FONT
+PATSHAD         EQU     #8000           ; PATTERN SHADOW (#8000-#97FF, 6144 B)
+COLMAP          EQU     #9800           ; COLOR MAP      (#9800-#9AFF, 768 B)
+COLEXP          EQU     #9B00           ; ROW COLOR STAGER (#9B00-#9BFF, 256 B)
+FTRBASE         EQU     #9C00           ; FEATURE CONTAINER BASE
+FTRTOP          EQU     #B000           ; FIRST BYTE PAST THE CONTAINER
+FONT4H          EQU     #B000           ; HIGH-NIBBLE FONT (#B000-#B7FF, 2048 B)
+FONT4L          EQU     #B800           ; LOW-NIBBLE FONT  (#B800-#BFFF, 2048 B)
+
+CELLROW         EQU     SCRCOLS / 2     ; 32 CELLS PER SCREEN ROW
+CMAPLEN         EQU     CELLROW * SCRROWS ; 768 BYTES OF COLOR MAP
+
+FNTLEN          EQU     2048            ; 256 GLYPHS X 8 BYTES
+FNTFSIZ         EQU     2048            ; S2ED.FNT FILE SIZE

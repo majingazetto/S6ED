@@ -1,0 +1,368 @@
+; **********************************************
+; * S2ED                                       *
+; * MSX1 / TMS9918 SCREEN 2 TEXT EDITOR        *
+; * 64 COLS X 24 ROWS, 4X8 FONT, DOS2/NEXTOR  *
+; * 2026 CODED BY ARMANDO PEREZ                *
+; **********************************************
+
+                OUTPUT  "S2ED.COM"
+
+                DEFINE  S2ED    1
+
+; --- MACROS                    ----------------------------------------
+
+
+                ; INFINITE LOOP / BREAKPOINT
+                MACRO   BRK
+                DI
+                JP      $
+                ENDM
+
+                ; ORG WITH PADDING (DOES NOT DISCARD CODE)
+                MACRO PADORG ADDR
+                IF $ < ADDR
+                BLOCK ADDR-$
+                ENDIF
+                ORG ADDR
+                ENDM
+
+                ; DEBUG LOG TO OPENMSX DEBUGDEVICE (PORTS #2E / #2F)
+                MACRO   DBG MSG
+                IFDEF   DEBUG
+                CALL    DBGMSG
+                DEFM    MSG, 10, 0
+                ENDIF
+                ENDM
+
+
+; --- CONST / INCLUDES          ----------------------------------------
+
+
+                INCLUDE HARD.Z8A
+                INCLUDE CONST_S2.Z8A
+                INCLUDE CONST_CORE.Z8A
+
+
+; --- DOS PROGRAM               ----------------------------------------
+
+
+                ORG     #100
+                JP      INIT
+
+
+; --- STRINGS                   ----------------------------------------
+
+
+ENODOS2         DEFM    "Requires MSX-DOS 2 or Nextor.$"
+ENOMAP          DEFM    "No mapper manager found.$"
+ENOMEM          DEFM    "Out of mapper memory.$"
+ENO2SEG         DEFM    "S2ED requires 2 free mapper segments.$"
+TXTHLP          DEFM    "S2ED v1.0 - Screen 2 text editor for MSX / TMS9918", 13, 10
+                DEFM    "Requires MSX-DOS 2 or Nextor and 2 free mapper "
+                DEFM    "segments.", 13, 10, 13, 10
+                DEFM    "Usage: S2ED [file] [/V] [/H | /?]", 13, 10, 13, 10
+                DEFM    "  file    file to open (paths allowed: A:/DIR/FILE.TXT)"
+                DEFM    13, 10
+                DEFM    "  /V      verbose startup info and memory stats", 13, 10
+                DEFM    "  /H, /?  show this help and exit", 13, 10, "$"
+
+
+; --- MODULE INCLUDES           ----------------------------------------
+
+
+                INCLUDE BDOS.Z8A
+                INCLUDE GENERIC.Z8A
+                INCLUDE VDP.Z8A
+                INCLUDE FONT.Z8A
+                INCLUDE MAPPER.Z8A
+                INCLUDE BUFFER.Z8A
+                INCLUDE RENDER.Z8A
+                INCLUDE SCROLL.Z8A
+                INCLUDE EDIT.Z8A
+                INCLUDE UNDO.Z8A
+                INCLUDE MARKUP.Z8A
+                INCLUDE ACTION.Z8A
+                INCLUDE KEYMAP.Z8A
+                INCLUDE DISP.Z8A
+                INCLUDE INPUT.Z8A
+                INCLUDE UI.Z8A
+                INCLUDE FILEIO.Z8A
+                INCLUDE PARAMS.Z8A
+                INCLUDE XSEG.Z8A
+
+
+; --- INIT                      ----------------------------------------
+
+
+; - INIT -------------------------------
+; - PROGRAM ENTRY POINT FOR S2ED
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+INIT            DBG     "1: INIT START (S2ED)"
+
+                ; CLEAR VARIABLE BLOCK
+                LD      HL, VARS
+                LD      DE, VARS + 1
+                LD      BC, ENDVARS - VARS - 1
+                LD      (HL), 0
+                LDIR
+
+                ; INITIALIZE DEFAULTS
+                LD      A, INS_MODE
+                LD      (INSMODE), A
+                LD      A, WRAP_DEV
+                LD      (WRAPMODE), A
+                LD      A, MKUP_MD
+                LD      (MKUPMD), A
+                LD      A, 1
+                LD      (SHOWCLK), A
+                LD      A, 4
+                LD      (TABWIDTH), A
+                LD      A, 1
+                LD      (AUTOLOD), A
+
+                ; VDP FREQUENCY (DEFAULT 50HZ PAL)
+                LD      A, (RG9SAV)
+                AND     %00000010
+                LD      A, 60
+                JR      Z, .ISNTSC
+                LD      A, 50
+.ISNTSC         LD      (CLKHZ), A
+                LD      HL, (JIFFY)
+                LD      (CLKJIF), HL
+                XOR     A
+                LD      (CLKPH), A
+                DEC     A
+                LD      (CLKMIN), A
+                XOR     A
+                LD      (KMAPID), A
+                CALL    KMAPSW
+                CALL    KANARST
+
+                LD      (SAVESP), SP
+
+                ; CHECK DOS VERSION
+                DBG     "2: DOSVER"
+                CALL    DOSVER
+                JP      C, .NODOS2
+
+                ; PARSE COMMAND LINE PARAMETERS IN TEXT MODE
+                DBG     "2b: PARAMS"
+                CALL    PARAMS
+
+                ; INITIALIZE MAPPER
+                DBG     "3: MAPINIT"
+                CALL    MAPINIT
+                JP      C, .NOMAP
+
+                ; SAVE DEFAULT MAPPER SEGMENTS
+                DBG     "4: GETP1/GETP2"
+                CALL    GETP1
+                LD      (DEFSEG1), A
+                CALL    GETP2
+                LD      (DEFSEG2), A
+
+                ; CLAIM MANDATORY SEGMENTS (DIRSEG + FTRSEG/VIDSEG)
+                DBG     "4b: SEGRESV"
+                CALL    SEGRESV
+
+                ; S2ED USES SECOND CLAIMED SEGMENT (FTRSEG) AS VIDSEG
+                LD      A, (FTRSEG)
+                LD      (VIDSEG), A
+
+                ; CHECK CONTAINER FILE
+                DBG     "4c: CHKDAT"
+                CALL    CHKDAT
+
+                ; LOAD CONFIGURATION FROM S2ED.CFG (IN TEXT MODE)
+                DBG     "4d: CFGRUN"
+                CALL    CFGRUN
+
+                ; PRESERVE ORIGINAL SCREEN PARAMETERS
+                LD      A, (SCRMOD)
+                LD      (SAVSCRMD), A
+                LD      A, (LINL40)
+                LD      (SAVL40), A
+                LD      A, (LINLEN)
+                LD      (SAVLLEN), A
+                LD      A, (FORCLR)
+                LD      (SAVFORC), A
+                LD      A, (BAKCLR)
+                LD      (SAVBAKC), A
+                LD      A, (BDRCLR)
+                LD      (SAVBDRC), A
+
+                ; INITIALIZE SCREEN 2
+                DBG     "5: SCRINIT"
+                CALL    SCRINIT
+
+                ; INITIALIZE 4X8 FONT
+                DBG     "6: FONTINIT"
+                CALL    FONTINIT
+
+                ; INITIALIZE TEXT BUFFER
+                DBG     "7: BUFINIT"
+                CALL    BUFINIT
+
+                ; LOAD FILE FROM COMMAND LINE IF SPECIFIED
+                DBG     "8: FILELOAD"
+                LD      A, (FILENAME)
+                AND     A
+                JR      Z, .NOARG
+                LD      HL, FILENAME
+                CALL    FILELOAD
+                CALL    REDRAW
+                JR      .READY
+
+.NOARG          DBG     "9b: REDRAW NOARG"
+                CALL    REDRAW
+
+.READY          DBG     "10: CHROME"
+                CALL    DRWMENU
+                CALL    DRWSTAT
+                CALL    DRWCUR
+                LD      A, 1
+                LD      (BLNKPH), A
+                LD      A, (JIFFY)
+                LD      (BLNKCNT), A
+
+                DBG     "11: ENTER MAINLOOP"
+                JP      MAINLOOP
+
+.NODOS2         LD      DE, ENODOS2
+                CALL    STROUT
+                JP      TERM
+
+.NOMAP          LD      DE, ENOMAP
+                CALL    STROUT
+                JP      TERM
+
+
+
+
+; --- ERRMEM / ERRMSG           ----------------------------------------
+
+
+; - ERRMEM / ERRMSG --------------------
+; - ABORT: FATAL BOOT ERROR WITH A MESSAGE
+; - IN:  ERRMSG: DE = '$'-TERMINATED MESSAGE
+; - OUT: DOES NOT RETURN
+; - CLOBBERS: ALL
+; -
+
+ERRMEM          LD      DE, ENOMEM
+ERRMSG          LD      A, (SCRRDY)
+                AND     A
+                JR      Z, .SAY
+                PUSH    DE
+                XOR     A               ; SCREEN 0
+                LD      IX, CHGMOD
+                CALL    BIOSCALL
+                XOR     A
+                LD      (SCRRDY), A
+                POP     DE
+
+.SAY            CALL    STROUT
+                JP      TERM
+
+
+
+
+; --- SCRINIT                   ----------------------------------------
+
+
+; - SCRINIT ----------------------------
+; - INITIALIZE TMS9918 SCREEN 2 AND CLEAR DISPLAY
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SCRINIT         CALL    INITVDP
+                LD      A, #FF
+                LD      (SCRRDY), A
+
+                ; DISABLE KEY CLICK
+                XOR     A
+                LD      (CLIKSW), A
+
+                ; ERASE FUNCTION KEYS AND MAP THEM
+                LD      IX, ERAFNK
+                CALL    BIOSCALL
+                CALL    SETFNKY
+
+                ; FLUSH KEYBOARD BUFFER
+                LD      IX, KILBUF
+                JP      BIOSCALL
+
+
+
+
+; --- RSTPAL / SETPAL           ----------------------------------------
+
+
+; - RSTPAL / SETPAL --------------------
+; - NO-OP ON TMS9918 (PALETTE IS FIXED 16 COLORS)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+RSTPAL          RET
+SETPAL          RET
+
+PALDATA         DEFB    #00, #00, #77, #07, #17, #02, #70, #07
+
+
+
+
+; --- VARS                      ----------------------------------------
+
+
+                OUTEND
+
+                INCLUDE VARS.Z8A
+
+
+; --- S2ED.DAT                  ----------------------------------------
+
+                ; S2ED.DAT MULTI-SEGMENT FEATURE CONTAINER
+                OUTPUT  "S2ED.DAT"
+
+; --- FILE HEADER (16 BYTES) -------------------------------------------
+
+DATHDRS:
+                DEFM    "S2ED"          ; 0..3: MAGIC ID (4 BYTES)
+                DEFW    1               ; 4..5: FORMAT VERSION 1 (16-BIT LE)
+                DEFB    #1A             ; 6:    DOS EOF MARKER (STOPS TYPE)
+                DEFB    1               ; 7:    NUMBER OF BLOCKS IN TABLE (1)
+                DEFW    16              ; 8..9: OFFSET TO BLOCK TABLE (16)
+                DEFS    6, 0            ; 10..15: RESERVED EXPANSION PADDING
+
+; --- BLOCK DESCRIPTOR TABLE (8 BYTES PER BLOCK) -----------------------
+
+; BLOCK 0: RESIDENT FEATURE SEGMENT (FTRSEG)
+                DEFB    1               ; 0: BLOCK ID (1 = FTRSEG)
+                DEFB    1               ; 1: FLAGS (1 = MANDATORY)
+                DEFW    FTRBASE         ; 2..3: LOAD ADDRESS IN PAGE 2
+                DEFW    BLK0LEN         ; 4..5: PAYLOAD LENGTH IN BYTES
+                DEFW    BLK0OFF         ; 6..7: ABSOLUTE OFFSET IN S2ED.DAT
+
+BLK0OFF         EQU     $ - DATHDRS
+
+; --- BLOCK 0 PAYLOAD (PHASE FTRBASE) ----------------------------------
+
+                PHASE   FTRBASE
+
+BLK0STR:
+                INCLUDE CFG.Z8A
+BLK0END:
+
+                DEPHASE
+
+BLK0LEN         EQU     BLK0END - BLK0STR
+FTRBLEN         EQU     BLK0LEN
+                ASSERT  BLK0LEN <= DATBLEN      ; TOTAL FEATURE SEGMENT BUDGET

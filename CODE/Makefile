@@ -53,6 +53,21 @@ DSKFILE			= S6ED.DSK
 DSKTOOL			= ../../msxtools/bin/dsktool
 DSKBASE			= $(RES_DIR)/DOS2.DSK
 
+# --- S2 (Screen 2 TMS9918) Targets -------------------------------------
+SOURCE_S2		= S2ED.Z8A
+OUTPUT_S2		= S2ED.COM
+FNTFILE_S2		= S2ED.FNT
+DATFILE_S2		= S2ED.DAT
+DSKFILE_S2		= S2ED.DSK
+LSTFILE_S2		= S2ED.lst
+SYMFILE_S2		= S2ED.sym
+
+INCLUDES_S2 		= -I.	\
+			  -I$(RES_DIR) \
+			  -I$(SRC_DIR) \
+			  -I$(SRC_DIR)/CORE \
+			  -I$(SRC_DIR)/S2 \
+
 # -	 All Target --------------------------------------------------------------
 
 all: build dsk
@@ -60,7 +75,8 @@ all: build dsk
 # -	 Clean Target ------------------------------------------------------------
 
 clean:
-	@$(RM) -R $(OUTPUT) $(DATFILE) $(LSTFILE) $(SYMFILE) $(DSKFILE) $(FNTFILE)
+	@$(RM) -R $(OUTPUT) $(DATFILE) $(LSTFILE) $(SYMFILE) $(DSKFILE) $(FNTFILE) \
+		$(OUTPUT_S2) $(DATFILE_S2) $(LSTFILE_S2) $(SYMFILE_S2) $(DSKFILE_S2) $(FNTFILE_S2)
 
 build: $(OUTPUT) $(DATFILE) $(FNTFILE)
 
@@ -82,6 +98,40 @@ $(DSKFILE): $(DSKCONT)
 	@cp $(DSKBASE) $(DSKFILE)
 	@$(DSKTOOL) D $(DSKFILE) $(DSKCONT)
 	@$(DSKTOOL) A $(DSKFILE) $(DSKCONT)
+
+# -	 S2 Targets --------------------------------------------------------------
+
+s2: build-s2 dsk-s2
+
+build-s2: $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2)
+
+$(DATFILE_S2): $(OUTPUT_S2)
+	@if [ ! -f $(DATFILE_S2) ]; then \
+		$(ASM) --lst=$(LSTFILE_S2) --sym=$(SYMFILE_S2) $(INCLUDES_S2) $(DEFINES) $(SRC_DIR)/$(SOURCE_S2); \
+	fi
+
+$(OUTPUT_S2): $(ALL_SOURCES_GEN)
+	@$(ASM) --lst=$(LSTFILE_S2) --sym=$(SYMFILE_S2) $(INCLUDES_S2) $(DEFINES) $(SRC_DIR)/$(SOURCE_S2)
+
+$(FNTFILE_S2): $(RES_DIR)/FONTS_S2.BIN
+	@cp $< $@
+
+$(RES_DIR)/FONTS_S2.BIN: $(RES_DIR)/FONT4X8.PNG $(RES_DIR)/fontcheck_s2.py
+	python3 $(RES_DIR)/fontcheck_s2.py $< --out $@
+
+dsk-s2: $(DSKFILE_S2)
+
+CFGFILE_S2		= S2ED.CFG
+DSKCONT_S2		= $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) TEST.TXT $(CFGFILE_S2)
+
+$(DSKFILE_S2): $(DSKCONT_S2) AUTOEXEC_S2.BAT
+	@cp $(DSKBASE) $(DSKFILE_S2)
+	@$(DSKTOOL) D $(DSKFILE_S2) $(DSKCONT_S2) AUTOEXEC.BAT
+	@$(DSKTOOL) A $(DSKFILE_S2) $(DSKCONT_S2)
+	@cp AUTOEXEC.BAT AUTOEXEC.S6.TMP
+	@cp AUTOEXEC_S2.BAT AUTOEXEC.BAT
+	@$(DSKTOOL) A $(DSKFILE_S2) AUTOEXEC.BAT
+	@mv AUTOEXEC.S6.TMP AUTOEXEC.BAT
 
 # -	 Build Target ------------------------------------------------------------
 
@@ -109,6 +159,12 @@ run: build dsk
 # Minimum-spec check: stock 128 kB Philips NMS 8250
 run128: build dsk
 	m2d2 128k $(DSKFILE)
+
+run-s2: build-s2 dsk-s2
+	m2d2 $(DSKFILE_S2)
+
+run-s2-128: build-s2 dsk-s2
+	m2d2 128k $(DSKFILE_S2)
 
 # Nextor 2.1 check: Nextor standalone kernel on 2 MB
 run-nextor: build dsk
