@@ -25,12 +25,18 @@ class Context(object):
         self.sym = symbols.load(self.code_dir)
         return self.sym
 
+    # The directories the S6ED build actually includes, in the Makefile's
+    # order.  A recursive walk is wrong now that SRC holds two targets:
+    # UI.Z8A and SCROLL.Z8A exist in both S6/ and S2/, os.walk order is
+    # filesystem-dependent, and a mutation that lands in the S2 copy is
+    # never compiled into S6ED.COM -- it fails silently as "anchor not
+    # found" at best and as an uncaught mutation at worst.
+    SRC_PATH = ('', 'CORE', 'S6')
+
     def find_src_file(self, filename):
-        """Find a source file by basename, searching self.src_dir recursively."""
-        direct = os.path.join(self.src_dir, filename)
-        if os.path.exists(direct):
-            return direct
-        for root, _, files in os.walk(self.src_dir):
-            if filename in files:
-                return os.path.join(root, filename)
-        return direct
+        """Find a source file by basename along the S6ED include path."""
+        for sub in self.SRC_PATH:
+            candidate = os.path.join(self.src_dir, sub, filename)
+            if os.path.exists(candidate):
+                return candidate
+        return os.path.join(self.src_dir, filename)
