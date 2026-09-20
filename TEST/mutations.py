@@ -524,8 +524,8 @@ SELTMPXB        EQU     SELTMPXB2""")],
     },
     {
         'name': 'c1-datlen',
-        'why': 'DATLOAD does not bound LENGTH or LOADADDR to the page-2 '
-               'window: a 16,385-byte payload writes past #C000 into the '
+        'why': 'DATLOAD does not bound LENGTH or LOADADDR to the container '
+               'window: a 16,385-byte payload writes past FTRTOP into the '
                'DOS area and the stack',
         'file': 'XSEG.Z8A',
         'old': """                LD      HL, (DATBLK + 4)
@@ -535,19 +535,21 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 LD      DE, DATBLEN + 1
                 OR      A
                 SBC     HL, DE
-                JP      NC, .ERRCOR     ; LENGTH > 16384
+                JP      NC, .ERRCOR     ; LENGTH > DATBLEN
+                LD      HL, (DATBLK + 2)
+                LD      DE, FTRBASE
+                OR      A
+                SBC     HL, DE
+                JP      C, .ERRCOR      ; LOADADDR BELOW THE WINDOW
+                LD      HL, FTRTOP
                 LD      DE, (DATBLK + 2)
-                LD      A, D
-                AND     #C0
-                CP      #80
-                JP      NZ, .ERRCOR     ; LOADADDR OUTSIDE THE PAGE 2 WINDOW
-                LD      HL, #C000
                 OR      A
                 SBC     HL, DE          ; HL = ROOM LEFT IN THE WINDOW
+                JP      C, .ERRCOR      ; LOADADDR PAST THE WINDOW
                 LD      DE, (DATBLK + 4)
                 OR      A
                 SBC     HL, DE
-                JP      C, .ERRCOR      ; PAYLOAD OVERFLOWS #C000""",
+                JP      C, .ERRCOR      ; PAYLOAD OVERFLOWS FTRTOP""",
         'new': """                NOP                     ; MUTATION: NO LENGTH OR WINDOW BOUNDS""",
         'filter': 'H14',
         'expect': ['H14/corrupt-printed'],

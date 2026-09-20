@@ -10,7 +10,7 @@
 ; - FCALL ------------------------------
 ; - CALL ROUTINE IN FEATURE SEGMENT AT PAGE 2
 ; - IN:  A  = TARGET FEATURE SEGMENT
-; -      HL = ENTRY ADDRESS (#8000-#BFFF)
+; -      HL = ENTRY ADDRESS INSIDE THE CONTAINER WINDOW
 ; - OUT: PRESERVES TARGET RETURN VALUES (AF, BC, DE, HL)
 ; - CLOBBERS: NONE (BEYOND TARGET REGISTERS)
 ; -
@@ -146,7 +146,7 @@ CHKDAT          LD      HL, DATNAME
 ; - THE WHOLE DESCRIPTOR TABLE INSIDE THE FILE. SHARED BY CHKDAT (TEXT
 ; - MODE PRE-CHECK) AND DATLOAD (THE REAL LOAD).
 
-DATHCHK         ; MAGIC: "S6ED"
+DATHCHK         ; MAGIC: "S6ED" OR "S2ED"
                 LD      HL, DATHDR
                 LD      A, (HL)
                 CP      'S'
@@ -154,8 +154,10 @@ DATHCHK         ; MAGIC: "S6ED"
                 INC     HL
                 LD      A, (HL)
                 CP      '6'
+                JR      Z, .ISNUM
+                CP      '2'
                 JR      NZ, .BAD
-                INC     HL
+.ISNUM          INC     HL
                 LD      A, (HL)
                 CP      'E'
                 JR      NZ, .BAD
@@ -258,8 +260,8 @@ BLKSEG          LD      B, A            ; B = BLKID WANTED
 ; - READS THE 16-BYTE HEADER AND THE FULL DESCRIPTOR TABLE, THEN LOADS
 ; - EACH BLOCK INDEPENDENTLY: SEEK TO DATAOFF, MAP THE TARGET SEGMENT,
 ; - READ LENGTH BYTES AT LOADADDR. EVERY DESCRIPTOR IS VALIDATED BEFORE
-; - ANY WRITE: BLKID MUST BE KNOWN, LENGTH IN [1..16384], LOADADDR INSIDE
-; - THE PAGE 2 WINDOW WITH LOADADDR + LENGTH <= #C000, AND THE PAYLOAD
+; - ANY WRITE: BLKID MUST BE KNOWN, LENGTH IN [1..DATBLEN], LOADADDR INSIDE
+; - THE CONTAINER WINDOW WITH LOADADDR + LENGTH <= FTRTOP, AND THE PAYLOAD
 ; - INSIDE THE FILE. A LYING CONTAINER CANNOT WRITE OUTSIDE PAGE 2.
 
 DATLOAD         LD      HL, DATNAME
@@ -330,10 +332,11 @@ DATLOAD         LD      HL, DATNAME
                 JP      C, .ERRCOR      ; UNKNOWN BLOCK ID
                 LD      (DATSEG), A
 
-                ; BOUNDS: LENGTH IN [1..16384], LOADADDR IN [#8000,#C000),
-                ; LOADADDR + LENGTH <= #C000. A LYING DESCRIPTOR MUST NEVER
-                ; WRITE OUTSIDE THE PAGE 2 WINDOW -- PAST #C000 SIT THE DOS
-                ; AREA AND THE STACK.
+                ; BOUNDS: LENGTH IN [1..DATBLEN], LOADADDR IN [FTRBASE,
+                ; FTRTOP), LOADADDR + LENGTH <= FTRTOP. A LYING DESCRIPTOR
+                ; MUST NEVER WRITE OUTSIDE THE CONTAINER WINDOW -- PAST IT
+                ; SIT THE DOS AREA AND THE STACK ON S6ED, AND THE FONT
+                ; TABLES AND THE VIDEO SHADOWS ON S2ED.
                 LD      HL, (DATBLK + 4)
                 LD      A, H
                 OR      L
@@ -341,19 +344,21 @@ DATLOAD         LD      HL, DATNAME
                 LD      DE, DATBLEN + 1
                 OR      A
                 SBC     HL, DE
-                JP      NC, .ERRCOR     ; LENGTH > 16384
+                JP      NC, .ERRCOR     ; LENGTH > DATBLEN
+                LD      HL, (DATBLK + 2)
+                LD      DE, FTRBASE
+                OR      A
+                SBC     HL, DE
+                JP      C, .ERRCOR      ; LOADADDR BELOW THE WINDOW
+                LD      HL, FTRTOP
                 LD      DE, (DATBLK + 2)
-                LD      A, D
-                AND     #C0
-                CP      #80
-                JP      NZ, .ERRCOR     ; LOADADDR OUTSIDE THE PAGE 2 WINDOW
-                LD      HL, #C000
                 OR      A
                 SBC     HL, DE          ; HL = ROOM LEFT IN THE WINDOW
+                JP      C, .ERRCOR      ; LOADADDR PAST THE WINDOW
                 LD      DE, (DATBLK + 4)
                 OR      A
                 SBC     HL, DE
-                JP      C, .ERRCOR      ; PAYLOAD OVERFLOWS #C000
+                JP      C, .ERRCOR      ; PAYLOAD OVERFLOWS FTRTOP
 
                 ; THE PAYLOAD MUST LIVE INSIDE THE FILE, PAST THE TABLE
                 LD      A, (DATHDR + 7)
@@ -440,10 +445,17 @@ CFGRUN          CALL    DATLOAD
                 LD      HL, CFGLOAD
                 JP      FCALL
 
+                IFDEF   S2ED
+DATNAME         DEFM    "S2ED.DAT", 0
+ENODAT          DEFM    "S2ED.DAT not found.", 13, 10, "$"
+ENODCOR         DEFM    "S2ED.DAT corrupt.", 13, 10, "$"
+ESEGOV          DEFM    "S2ED internal: segment stack overflow.$"
+                ELSE
 DATNAME         DEFM    "S6ED.DAT", 0
 ENODAT          DEFM    "S6ED.DAT not found.", 13, 10, "$"
 ENODCOR         DEFM    "S6ED.DAT corrupt.", 13, 10, "$"
 ESEGOV          DEFM    "S6ED internal: segment stack overflow.$"
+                ENDIF
 
                 ; BLOCK ID -> SEGMENT VARIABLE PAIRS, 0-TERMINATED
 BLKTBL          DEFB    BLK_FTR

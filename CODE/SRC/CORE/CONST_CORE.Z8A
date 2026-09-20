@@ -27,8 +27,6 @@ ATRFMSK         EQU     #03             ; BITS 0-1 -> FONT VARIANT INDEX
 
 DIRSIZ          EQU     3               ; BYTES PER LINE DIRECTORY ENTRY
                                         ;   [1: SEGMENT] [2: WORD OFFSET]
-LINEREC         EQU     161             ; MAX LINE RECORD: 1 + 80 + 80
-TEXTCOLS        EQU     80              ; MAX CHARS PER LINE
 WORKSIZ         EQU     LINEREC         ; WORK BUFFER SIZE (= MAX RECORD)
 CLIPMAX         EQU     2048            ; MAX CLIPBOARD BUFFER CAPACITY
 
@@ -76,7 +74,7 @@ UNDOMOD_SZ      EQU     UNDOHDR_SZ + LINEREC ; 171 BYTES PER RECORD
 
 
 DATMAX          EQU     8               ; MAX BLOCKS THE CONTAINER TABLE HOLDS
-DATBLEN         EQU     16384           ; HARD LENGTH CAP: THE PAGE 2 WINDOW
+DATBLEN         EQU     FTRTOP - FTRBASE ; HARD LENGTH CAP: THE CONTAINER WINDOW
 BLK_FTR         EQU     1               ; BLOCK ID OF THE FEATURE SEGMENT
 
 
