@@ -441,15 +441,15 @@ DATHDRS:
 ; BLOCK 0: RESIDENT FEATURE SEGMENT (FTRSEG)
                 DEFB    1               ; 0: BLOCK ID (1 = FTRSEG)
                 DEFB    1               ; 1: FLAGS (1 = MANDATORY)
-                DEFW    #8000           ; 2..3: LOAD ADDRESS IN PAGE 2
+                DEFW    FTRBASE         ; 2..3: LOAD ADDRESS IN PAGE 2
                 DEFW    BLK0LEN         ; 4..5: PAYLOAD LENGTH IN BYTES
                 DEFW    BLK0OFF         ; 6..7: ABSOLUTE OFFSET IN S6ED.DAT
 
 BLK0OFF         EQU     $ - DATHDRS
 
-; --- BLOCK 0 PAYLOAD (PHASE #8000) ------------------------------------
+; --- BLOCK 0 PAYLOAD (PHASE FTRBASE) ----------------------------------
 
-                PHASE   #8000
+                PHASE   FTRBASE
 
 BLK0STR:
                 INCLUDE CFG.Z8A
@@ -464,4 +464,4 @@ BLK0END:
 
 BLK0LEN         EQU     BLK0END - BLK0STR
 FTRBLEN         EQU     BLK0LEN
-                ASSERT  BLK0LEN <= 16384        ; TOTAL FEATURE SEGMENT BUDGET
+                ASSERT  BLK0LEN <= DATBLEN      ; TOTAL FEATURE SEGMENT BUDGET

@@ -11,6 +11,8 @@ SCRCOLS         EQU     80              ; TEXT AREA COLUMNS
 SCRROWS         EQU     24              ; TEXT AREA ROWS (ROWS 1-24)
 CELLW           EQU     6               ; CELL WIDTH IN PIXELS
 CELLH           EQU     8               ; CELL HEIGHT IN PIXELS
+TEXTCOLS        EQU     80              ; MAX CHARS PER LINE FOR S6
+LINEREC         EQU     1 + TEXTCOLS + TEXTCOLS ; MAX LINE RECORD: 1 + 80 + 80 = 161
 
                 ; PIXEL LAYOUT. THE 80 X 6 PX TEXT AREA IS CENTRED IN THE
                 ; 512 PX LINE WITH A 16 PX MARGIN ON EACH SIDE. 16 PX IS 4
@@ -87,6 +89,15 @@ FNORM_SY        EQU     (VR_FNORM - VR_DISP) / 128     ; = 256
 FBOLD_SY        EQU     (VR_FBOLD - VR_DISP) / 128     ; = 320
 FITAL_SY        EQU     (VR_FITAL - VR_DISP) / 128     ; = 384
 FBI_SY          EQU     (VR_FBI   - VR_DISP) / 128     ; = 448
+
+
+; --- FEATURE CONTAINER         ----------------------------------------
+
+
+                ; S6ED GIVES THE WHOLE PAGE 2 WINDOW TO THE PASSENGERS: THE
+                ; SCREEN 6 SHADOWS LIVE IN VRAM, NOT IN A MAPPER SEGMENT.
+FTRBASE         EQU     #8000           ; FEATURE CONTAINER BASE
+FTRTOP          EQU     #C000           ; FIRST BYTE PAST THE CONTAINER
 
 
 ; --- PALETTE                   ----------------------------------------
