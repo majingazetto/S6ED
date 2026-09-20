@@ -31,6 +31,8 @@ ALL_SOURCES_GEN	= $(shell find $(SRC_DIR) -type f -name "*.Z8A" ! -wholename "*.
 INCLUDES 		= -I.	\
 			  -I$(RES_DIR) \
 			  -I$(SRC_DIR) \
+			  -I$(SRC_DIR)/CORE \
+			  -I$(SRC_DIR)/S6 \
 
 DEFINES			= -DON=1 -DOFF=0
 

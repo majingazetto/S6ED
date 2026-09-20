@@ -24,3 +24,13 @@ class Context(object):
     def reload_symbols(self):
         self.sym = symbols.load(self.code_dir)
         return self.sym
+
+    def find_src_file(self, filename):
+        """Find a source file by basename, searching self.src_dir recursively."""
+        direct = os.path.join(self.src_dir, filename)
+        if os.path.exists(direct):
+            return direct
+        for root, _, files in os.walk(self.src_dir):
+            if filename in files:
+                return os.path.join(root, filename)
+        return direct

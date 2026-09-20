@@ -1,0 +1,105 @@
+;                                       ****************************************
+;                                       * SCREEN 6 CONSTANTS (V9938)           *
+;                                       ****************************************
+
+
+; --- SCREEN LAYOUT             ----------------------------------------
+
+
+                ; CHARACTER GRID
+SCRCOLS         EQU     80              ; TEXT AREA COLUMNS
+SCRROWS         EQU     24              ; TEXT AREA ROWS (ROWS 1-24)
+CELLW           EQU     6               ; CELL WIDTH IN PIXELS
+CELLH           EQU     8               ; CELL HEIGHT IN PIXELS
+
+                ; PIXEL LAYOUT. THE 80 X 6 PX TEXT AREA IS CENTRED IN THE
+                ; 512 PX LINE WITH A 16 PX MARGIN ON EACH SIDE. 16 PX IS 4
+                ; BYTES IN SCREEN 6, SO EVERY EVEN COLUMN STARTS ON A BYTE
+                ; BOUNDARY AND THE BYTE COMMANDS (HMMV, HMMM, YMMM) CAN
+                ; ADDRESS IT. THE LINE NUMBER GUTTER AND THE SCROLLBAR THAT
+                ; USED TO FILL THESE 32 PX WERE REMOVED (SEE DEV/DESIGN.MD,
+                ; LAYOUT).
+MARGPX          EQU     16              ; SIDE MARGIN: (512 - 480) / 2
+TXAREAPX        EQU     480             ; TEXT AREA WIDTH (80 X 6PX)
+TXORG_X         EQU     MARGPX          ; TEXT AREA X ORIGIN
+TXORG_Y         EQU     CELLH           ; TEXT AREA Y ORIGIN (SKIP MENU ROW 0)
+SCRTOTY         EQU     212             ; TOTAL SCREEN HEIGHT IN PIXELS
+
+                ; ROWS (IN CHARACTER UNITS)
+MNUROW          EQU     0               ; MENU BAR ROW
+TXRFIRST        EQU     1               ; FIRST TEXT ROW
+TXRLAST         EQU     24              ; LAST TEXT ROW
+STBROW          EQU     25              ; STATUS BAR ROW
+STBTX_X         EQU     6               ; STATUS BAR TEXT ORIGIN X
+STBTX_Y         EQU     202             ; STATUS BAR TEXT ORIGIN Y (BAR IS 200..211)
+
+
+; --- VRAM MAP                  ----------------------------------------
+
+
+                ; EACH FONT TABLE NEEDS 8 KB OF ADDRESS SPAN, NOT 4 KB: A
+                ; GLYPH ROW IS 8 SCANLINES AND A VRAM LINE IS 128 BYTES, SO ONE
+                ; TABLE COVERS 64 VRAM LINES. THE OLD #7000 / #8000 / #9000 /
+                ; #A000 MAP PUT THE BASES 4 KB APART AND EVERY TABLE RAN OVER
+                ; THE NEXT ONE.
+
+VR_DISP         EQU     #00000          ; DISPLAY BITMAP (128 B/LINE X 212 LINES)
+
+                ; #06A00-#07FFF IS FREE AND MUST STAY CLEAR: THOSE ARE DISPLAY
+                ; LINES 212-255, NOT VISIBLE TODAY BUT EXPOSED BY AN R#23
+                ; HARDWARE SCROLL. THE BIOS SCREEN 6 SPRITE TABLES STILL SIT IN
+                ; THAT BAND; THEY ARE NEVER FETCHED BECAUSE SCRINIT DISABLES
+                ; SPRITES (R#8 SPD=1), AND MOVING THEM ABOVE #10000 BELONGS TO
+                ; THE R#23 WORK, NOT HERE.
+
+VR_FNORM        EQU     #08000          ; FONT: NORMAL       SY 256
+VR_FBOLD        EQU     #0A000          ; FONT: BOLD         SY 320
+VR_FITAL        EQU     #0C000          ; FONT: ITALIC       SY 384
+VR_FBI          EQU     #0E000          ; FONT: BOLD+ITALIC  SY 448
+VR_WINBF        EQU     #10000          ; WINDOW BACKGROUND BUFFER BASE (SY 512)
+WINBUF_Y        EQU     512             ; OFF-SCREEN VRAM WINDOW BUFFER BASE Y
+WINCOMP_Y       EQU     768             ; OFF-SCREEN VRAM COMPOSITION BUFFER BASE Y
+WINSHDW         EQU     4               ; WINDOW DROP SHADOW OFFSET/WIDTH (PX).
+                                        ; 4 PX KEEPS WINX+WINW A MULTIPLE OF 4
+                                        ; AND EVERY SHADOW BAR BYTE-ALIGNED
+                                        ; (HMMV); THE SAVE/SHOW RECT GROWS TO
+                                        ; (WINW+WINSHDW) X (WINH+WINSHDW)
+
+MNUX_FIL        EQU     48              ; FILE MENU X
+MNUY_FIL        EQU     8               ; FILE MENU Y
+MNUW_FIL        EQU     144             ; FILE MENU WIDTH
+MNUH_FIL        EQU     60              ; FILE MENU HEIGHT
+MNUTX_FL        EQU     54              ; FILE MENU TEXT X (52 + 2)
+MNUBX_FL        EQU     52              ; FILE MENU BAR X (48 + 4)
+MNUBW_FL        EQU     136             ; FILE MENU BAR WIDTH (144 - 8)
+MNUCNT_F        EQU     7               ; TOTAL ITEMS IN FILE MENU
+
+FONTSIZ         EQU     2048            ; 256 GLYPHS X 8 BYTES, 1BPP (SOURCE)
+FNTFSIZ         EQU     FONTSIZ * 4     ; S6ED.FNT: THE FOUR VARIANTS, EXACTLY
+
+                ; FONT TABLE GEOMETRY (ALL TABLES IDENTICAL STRUCTURE)
+                ;   32 GLYPHS PER ROW -> 8 ROWS (256 TOTAL)
+                ;   GLYPH N: SX = (N % 32) * 8,  SY = TABLE_SY + (N / 32) * 8
+                ;   TABLE_SY = (VR_FXXX - VR_DISP) / 128
+                ;   ONE TABLE = 64 VRAM LINES X 128 BYTES = 8 KB OF SPAN; THE
+                ;   32 GLYPHS OF A ROW LIVE IN THE LEFT 64 BYTES OF EACH LINE.
+FNORM_SY        EQU     (VR_FNORM - VR_DISP) / 128     ; = 256
+FBOLD_SY        EQU     (VR_FBOLD - VR_DISP) / 128     ; = 320
+FITAL_SY        EQU     (VR_FITAL - VR_DISP) / 128     ; = 384
+FBI_SY          EQU     (VR_FBI   - VR_DISP) / 128     ; = 448
+
+
+; --- PALETTE                   ----------------------------------------
+
+
+                ; COLOR INDICES (SCREEN 6, 4 COLORS)
+COL_BG          EQU     0               ; BACKGROUND
+COL_FG          EQU     1               ; NORMAL TEXT (AND INVERSE CURSOR/SELECT)
+COL_UI          EQU     2               ; UI CHROME (GUTTERS, MENU, STATUS)
+COL_HI          EQU     3               ; HIGHLIGHT / ACCENT / SYNTAX
+
+                ; BYTE PATTERNS (SCREEN 6, 4 PIXELS PER BYTE FOR HMMV)
+CLR_BG          EQU     #00             ; 4 PIXELS OF COLOR 0 (%00000000)
+CLR_FG          EQU     #55             ; 4 PIXELS OF COLOR 1 (%01010101)
+CLR_UI          EQU     #AA             ; 4 PIXELS OF COLOR 2 (%10101010)
+CLR_HI          EQU     #FF             ; 4 PIXELS OF COLOR 3 (%11111111)

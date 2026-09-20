@@ -947,7 +947,7 @@ class Applied(object):
         edits = [(self.mut['file'], self.mut['old'], self.mut['new'])]
         edits += self.mut.get('also', [])
         for fname, old, new in edits:
-            path = os.path.join(self.ctx.src_dir, fname)
+            path = self.ctx.find_src_file(fname)
             if path not in self.backups:
                 self.backups[path] = path + '.mutbak'
                 shutil.copy(path, self.backups[path])
