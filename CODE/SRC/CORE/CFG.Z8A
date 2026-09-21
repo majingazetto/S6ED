@@ -503,26 +503,36 @@ PARSEOL         LD      A, (HL)
 ; - PARSALN ----------------------------
 ; - PARSE AUTOALIGN VALUE (OFF, ON, DEV)
 ; - IN:  HL = POINTER TO VALUE
-; - OUT: NONE
-; - CLOBBERS: AF, DE
+; - OUT: NONE. AN UNKNOWN VALUE LEAVES AUTOALGN AT ITS DEFAULT.
+; - CLOBBERS: AF, HL (THE CALLER RESTORES HL FROM THE STACK)
 ; -
 
 PARSALN         LD      A, (HL)
                 CALL    UPCASE
-                SUB     #44             ; 'D'
-                RET     C
-                CP      #0C             ; 12 ENTRIES
-                RET     NC
-                LD      DE, ALNTBL
-                ADD     A, E
-                LD      E, A
-                ADC     A, D
-                SUB     E
-                LD      D, A
-                LD      A, (DE)
-                CP      #FF
-                RET     Z
-                LD      (AUTOALGN), A
+                CP      'D'
+                JR      Z, .ALNDEV
+
+                ; OFF AND ON SHARE THEIR FIRST LETTER, SO THE ONE-LETTER
+                ; TABLE THE OTHER KEYS USE CANNOT TELL THEM APART: IT SENT
+                ; BOTH TO ITS 'O' SLOT AND AUTOALIGN=OFF TURNED AUTO-ALIGN
+                ; ON.  THE SECOND LETTER DECIDES.
+                CP      'O'
+                RET     NZ              ; UNKNOWN VALUE: KEEP THE DEFAULT
+                INC     HL
+                LD      A, (HL)
+                CALL    UPCASE
+                CP      'N'
+                JR      Z, .ALNON
+                CP      'F'
+                RET     NZ
+                LD      A, ALGN_OFF
+                JR      .ALNSET
+
+.ALNON          LD      A, ALGN_ON
+                JR      .ALNSET
+
+.ALNDEV         LD      A, ALGN_DEV
+.ALNSET         LD      (AUTOALGN), A
                 RET
 
 
@@ -586,9 +596,6 @@ PRFTBL          DEFB    #02, #FF, #FF, #FF, #FF, #FF, #FF, #FF
                 DEFB    #FF, #03, #01
 
 MKPTBL          DEFB    #02, #01, #FF, #00
-
-ALNTBL          DEFB    ALGN_DEV, #FF, ALGN_OFF, #FF, #FF, #FF, #FF, #FF
-                DEFB    #FF, #FF, #FF, ALGN_ON
 
 THMIDX          DEFB    #01, #FF, #FF, #00, #FF, #FF, #02, #FF
                 DEFB    #FF, #FF, #FF, #03, #04
