@@ -211,7 +211,10 @@ EDPSHWR         CALL    UNDOCLS
 
                 ; 2. DECIDE WHICH HALF KEEPS THE CURSOR **BEFORE** SPLITTING,
                 ;    WHILE THE WHOLE LINE IS STILL COHERENT IN WORKBUF.
-                LD      A, (CURX)
+                ;    EFFCURX, NOT CURX: THE LINE IS FULL BY DEFINITION HERE,
+                ;    SO THE CURSOR IS PARKED ON ITS LAST COLUMN AND THE EDIT
+                ;    IS AN APPEND.
+                CALL    EFFCURX
                 CP      B
                 JR      NC, .PWTAIL     ; CURX >= SPLIT: CURSOR RIDES THE WORD
 
@@ -1530,17 +1533,45 @@ EDNWLIN         CALL    UNDOCLS
                 RET
 
 
+; --- EFFCURX                   ----------------------------------------
+
+
+; - EFFCURX ----------------------------
+; - THE COLUMN THE CURSOR REALLY MEANS, FOR AN EDIT TAKEN AT THE CURSOR.
+; - ON EVERY LINE BUT A FULL ONE, "AT THE END" IS CURX == LENGTH -- GETMAXC
+; - LETS THE CURSOR PARK ONE PAST THE LAST CHARACTER.  A FULL LINE HAS NO
+; - SUCH COLUMN, SO GETMAXC CLAMPS TO TEXTCOLS - 1 AND "AT THE END" AND "ON
+; - THE LAST CHARACTER" BECOME THE SAME POSITION.  AN EDIT TAKEN AT THE
+; - CLAMPED COLUMN THEREFORE LANDS ONE PLACE TOO EARLY: MEASURED, TYPING X
+; - AT THE END OF A FULL LINE ENDING IN "HELLO" WRAPPED IT AS "HELLxO", AND
+; - A SPACE AT THE MARGIN CARRIED THE "O" DOWN INSTEAD OF BREAKING AFTER IT.
+; - IN:  WORKBUF = THE LINE THE EDIT IS TAKEN ON
+; - OUT: A = CURX, OR TEXTCOLS WHEN THE LINE IS FULL AND THE CURSOR IS
+; -      PARKED ON ITS LAST COLUMN
+; - CLOBBERS: AF
+; -
+
+EFFCURX         LD      A, (WORKBUF)    ; LINE LENGTH
+                CP      TEXTCOLS
+                LD      A, (CURX)       ; DOES NOT TOUCH THE FLAGS
+                RET     C               ; NOT FULL: THE CURSOR MEANS ITSELF
+                CP      TEXTCOLS - 1
+                RET     NZ              ; NOT PARKED AT THE MARGIN
+                INC     A               ; A = TEXTCOLS: PAST THE LAST COLUMN
+                RET
+
+
 ; --- SPLITL                    ----------------------------------------
 
 
 ; - SPLITL -----------------------------
-; - SPLIT WORKBUF AT THE CURSOR COLUMN
+; - SPLIT WORKBUF AT THE COLUMN THE CURSOR MEANS (SEE EFFCURX)
 ; - OUT: WORKBUF2 = THE TAIL AS A COMPLETE LINE RECORD
-; -      WORKBUF  = TRUNCATED TO CURX CHARACTERS
+; -      WORKBUF  = TRUNCATED TO THAT MANY CHARACTERS
 ; - CLOBBERS: ALL
 ; -
 
-SPLITL          LD      A, (CURX)
+SPLITL          CALL    EFFCURX
 
 
 ; - SPLITLA ----------------------------
