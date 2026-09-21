@@ -341,6 +341,121 @@ COMCELL         PUSH    DE              ; SAVE ATTRIBUTES (D=LATTR, E=RATTR)
 
 
 
+; --- PATINV                    ----------------------------------------
+
+
+; - PATINV -----------------------------
+; - INVERT A COLUMN RANGE ON ONE SCREEN ROW AND PUSH IT TO VRAM
+; - XORS THE FOUR PIXEL COLUMNS EACH TEXT COLUMN OWNS INSIDE ITS CELL, SO A
+; - SPACE BECOMES A SOLID 4 PX BLOCK AND A GLYPH ITS NEGATIVE.
+; - THIS IS WHAT THE CURSOR AND THE SELECTION USE INSTEAD OF SWAPPING THE
+; - CELL'S COLOR NIBBLES. THE COLOR TABLE ADDRESSES 8X1 SLICES, SO A COLOR
+; - SWAP CANNOT INVERT HALF A CELL: IT PAINTED TWO COLUMNS AT A TIME, AND
+; - SELDIFF'S ONE-COLUMN DELTAS LANDED ON THE SAME CELL TWICE AND CANCELLED.
+; - IN:  H = SCREEN ROW (0..23), C = FIRST COLUMN (0..63), B = COLUMN COUNT
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL, IX
+; - NOTE: CALLER MUST HAVE VIDSEG BANKED AT PAGE 2
+; -
+
+PATINV          LD      A, B
+                AND     A
+                RET     Z               ; EMPTY RANGE
+
+                ; FIRST CELL AND THE NUMBER OF CELLS THE RANGE TOUCHES
+                LD      A, C
+                SRL     A
+                LD      E, A            ; E = FIRST CELL
+                LD      A, C
+                ADD     A, B
+                DEC     A               ; A = LAST COLUMN
+                SRL     A               ; A = LAST CELL
+                SUB     E
+                INC     A
+                LD      D, A            ; D = CELL COUNT
+
+                PUSH    DE              ; SAVE CELL COUNT AND FIRST CELL
+                LD      A, H
+                PUSH    AF              ; SAVE SCREEN ROW
+
+                ; IX = PATSHAD + ROW * ROWLEN
+                LD      D, H
+                LD      E, 0
+                LD      HL, PATSHAD
+                ADD     HL, DE
+                PUSH    HL
+                POP     IX
+
+.PXLP           ; E = MASK FOR THIS COLUMN'S HALF OF ITS CELL
+                LD      A, C
+                AND     1
+                LD      E, #F0
+                JR      Z, .PXHAVE
+                LD      E, #0F
+
+.PXHAVE         ; HL = IX + (COLUMN / 2) * 8
+                LD      A, C
+                SRL     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; A = CELL * 8 (<= 248, NO CARRY)
+                PUSH    IX
+                POP     HL
+                PUSH    DE              ; KEEP THE MASK
+                LD      D, 0
+                LD      E, A
+                ADD     HL, DE
+                POP     DE              ; E = MASK AGAIN
+
+                PUSH    BC
+                LD      B, 8
+.PXBYTE         LD      A, (HL)
+                XOR     E
+                LD      (HL), A
+                INC     HL
+                DJNZ    .PXBYTE
+                POP     BC
+
+                INC     C
+                DJNZ    .PXLP
+
+                ; DUMP THE CELLS THE RANGE TOUCHED
+                POP     AF              ; A = SCREEN ROW
+                POP     DE              ; D = CELL COUNT, E = FIRST CELL
+                PUSH    DE
+
+                LD      H, A
+                LD      A, E
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; A = FIRST CELL * 8
+                LD      L, A            ; HL = ROW * ROWLEN + FIRST CELL * 8
+                PUSH    HL
+
+                LD      DE, PATSHAD
+                ADD     HL, DE          ; HL = SOURCE
+                POP     DE              ; DE = OFFSET
+                PUSH    HL
+                LD      HL, PGBASE
+                ADD     HL, DE
+                EX      DE, HL          ; DE = VRAM DESTINATION
+                POP     HL              ; HL = SOURCE
+
+                POP     BC              ; B = CELL COUNT
+                PUSH    HL
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = BYTE COUNT
+                LD      B, H
+                LD      C, L
+                POP     HL              ; HL = SOURCE
+                JP      VDPDUMP
+
+
+
+
 ; --- RENDIFF                   ----------------------------------------
 
 

@@ -3,9 +3,11 @@
 ;                                       ****************************************
 ;
 ; STATUS BAR ON ROW 23, MENU BAR ON ROW 0.
-; CURSOR AND SELECTION HIGHLIGHTS ARE EXECUTED AS FG/BG COLOR NIBBLE SWAPS
-; IN COLMAP -- ONE BYTE PER CELL -- AND PUSHED TO THE TMS9918 COLOR TABLE
-; (CTBASE) THROUGH COLDMPC, WHICH EXPANDS EACH CELL BACK TO ITS 8 SCANLINES.
+; CURSOR AND SELECTION HIGHLIGHTS GO THROUGH PATINV, WHICH XORS THE FOUR
+; PIXEL COLUMNS A TEXT COLUMN OWNS INSIDE ITS CELL. THEY USED TO SWAP THE
+; CELL'S COLOR NIBBLES INSTEAD, BUT THE COLOR TABLE ADDRESSES 8X1 SLICES AND
+; CANNOT INVERT HALF A CELL: THE CURSOR COVERED TWO CHARACTERS, AND SELDIFF'S
+; ONE-COLUMN DELTAS LANDED ON THE SAME CELL TWICE AND CANCELLED EACH OTHER.
 
 
 ; --- DRWSTAT                   ----------------------------------------
@@ -356,58 +358,22 @@ DRWCUR          PUSH    AF
                 PUSH    BC
                 PUSH    DE
                 PUSH    HL
+                PUSH    IX
 
                 CALL    VIDBANK
 
-                ; B = SCREEN ROW (CURY + 1), C = CELL (CURX / 2)
+                ; ONE COLUMN AT (CURX, CURY + 1)
                 LD      A, (CURY)
                 INC     A
-                LD      B, A
+                LD      H, A            ; H = SCREEN ROW (1..22)
                 LD      A, (CURX)
-                SRL     A
-                LD      C, A
-
-                ; HL = COLMAP + ROW * CELLROW + CELL
-                LD      L, B
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL          ; HL = ROW * 32
-                LD      E, C
-                LD      D, 0
-                ADD     HL, DE
-                LD      DE, COLMAP
-                ADD     HL, DE          ; HL = CELL IN COLMAP
-
-                ; SWAP THE FG AND BG NIBBLES OF THE CELL
-                LD      A, (HL)
-                RRCA
-                RRCA
-                RRCA
-                RRCA
-                LD      (HL), A
-
-                ; DE = CTBASE + ROW * ROWLEN + CELL * 8
-                LD      D, B
-                LD      E, 0
-                LD      A, C
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A            ; A = CELL * 8 (<= 248, NO CARRY)
-                LD      E, A
-                PUSH    HL
-                LD      HL, CTBASE
-                ADD     HL, DE
-                EX      DE, HL          ; DE = VRAM DESTINATION
-                POP     HL              ; HL = CELL IN COLMAP
-
+                LD      C, A            ; C = COLUMN
                 LD      B, 1
-                CALL    COLDMPC
+                CALL    PATINV
 
                 CALL    TXTBANK
 
+                POP     IX
                 POP     HL
                 POP     DE
                 POP     BC
@@ -421,87 +387,29 @@ DRWCUR          PUSH    AF
 
 
 ; - SELXOR -----------------------------
-; - INVERT SELECTION RANGE ON SCREEN ROW B VIA COLOR NIBBLE SWAP
+; - INVERT SELECTION RANGE ON SCREEN ROW B
 ; - IN:  B = SCREEN ROW (0..21 RELATIVE TO VIEWPORT), D = XA, E = XB
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-SELXOR          CALL    VIDBANK
+SELXOR          LD      A, E
+                SUB     D               ; A = COLUMN COUNT
+                RET     Z               ; EMPTY RANGE
+                RET     C
 
-                ; B = SCREEN ROW (ROWS 1..22)
+                PUSH    AF              ; SAVE COLUMN COUNT
+                CALL    VIDBANK
+
                 LD      A, B
-                INC     A
-                LD      B, A
+                INC     A               ; SCREEN ROW = B + 1 (1..22)
+                LD      C, D            ; C = FIRST COLUMN
+                LD      H, A            ; H = SCREEN ROW
+                POP     AF
+                LD      B, A            ; B = COLUMN COUNT
+                CALL    PATINV
 
-                ; C = FIRST CELL = XA / 2
-                LD      A, D
-                SRL     A
-                LD      C, A
-
-                ; A = CELL COUNT = (XB - 1) / 2 - C + 1
-                LD      A, E
-                DEC     A
-                SRL     A               ; A = LAST CELL
-                SUB     C
-                JP      C, .SELDON      ; EMPTY RANGE
-                INC     A
-
-                PUSH    BC              ; SAVE ROW AND FIRST CELL
-                PUSH    AF              ; SAVE CELL COUNT
-
-                ; HL = COLMAP + ROW * CELLROW + FIRST CELL
-                LD      L, B
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL          ; HL = ROW * 32
-                LD      E, C
-                LD      D, 0
-                ADD     HL, DE
-                LD      DE, COLMAP
-                ADD     HL, DE          ; HL = FIRST CELL IN COLMAP
-
-                ; SWAP THE FG AND BG NIBBLES OF EVERY CELL IN THE RANGE
-                POP     AF              ; A = CELL COUNT
-                PUSH    AF
-                PUSH    HL              ; SAVE RANGE START
-                LD      B, A
-.SWPLP          LD      A, (HL)
-                RRCA
-                RRCA
-                RRCA
-                RRCA
-                LD      (HL), A
-                INC     HL
-                DJNZ    .SWPLP
-
-                POP     HL              ; HL = RANGE START IN COLMAP
-                POP     AF              ; A = CELL COUNT
-                POP     BC              ; B = ROW, C = FIRST CELL
-                PUSH    AF
-
-                ; DE = CTBASE + ROW * ROWLEN + FIRST CELL * 8
-                LD      D, B
-                LD      E, 0
-                LD      A, C
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A            ; A = FIRST CELL * 8 (<= 248)
-                LD      E, A
-                PUSH    HL
-                LD      HL, CTBASE
-                ADD     HL, DE
-                EX      DE, HL          ; DE = VRAM DESTINATION
-                POP     HL              ; HL = RANGE START IN COLMAP
-
-                POP     AF              ; A = CELL COUNT
-                LD      B, A
-                CALL    COLDMPC
-
-.SELDON         JP      TXTBANK
+                JP      TXTBANK
 
 
 
