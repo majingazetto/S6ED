@@ -71,8 +71,8 @@ FILELOAD        PUSH    HL
                 CALL    RECBANK
                 
                 LD      A, (CURLLEN)
-                CP      80
-                JP      NC, .SKIP       ; TRUNCATE
+                CP      TEXTCOLS
+                JP      NC, .SKIP       ; TRUNCATE AT THE RECORD'S TEXT WIDTH
                 
                 LD      HL, TXPAGE + 1  ; SKIP LEN BYTE
                 LD      DE, (LINEOFF)
@@ -104,8 +104,8 @@ FILELOAD        PUSH    HL
                 LD      E, A            ; E = COUNT OF SPACES
 
 .TABSP          LD      A, (CURLLEN)
-                CP      80
-                JR      NC, .SKIP       ; TRUNCATE AT 80 COLS
+                CP      TEXTCOLS
+                JR      NC, .SKIP       ; TRUNCATE AT THE RECORD'S TEXT WIDTH
 
                 LD      A, (APPSEG)
                 CALL    RECBANK
@@ -227,13 +227,13 @@ STORLINE        ; REFUSE IF THE LINE DIRECTORY IS FULL. EDNWLIN AND EDPSHWR
                 LD      A, (CURLLEN)
                 LD      (HL), A         ; WRITE LEN
                 
-                ; PAD UNUSED CHARS (CURLLEN..79) WITH SPACE (#20)
+                ; PAD UNUSED CHARS (CURLLEN..TEXTCOLS-1) WITH SPACE (#20)
                 PUSH    HL
                 INC     HL              ; HL = TXPAGE + LINEOFF + 1
                 LD      E, A
                 LD      D, 0
                 ADD     HL, DE          ; HL = TXPAGE + LINEOFF + 1 + CURLLEN
-                LD      A, TEXTCOLS     ; 80
+                LD      A, TEXTCOLS
                 SUB     E
                 JR      Z, .PADEND
                 LD      B, A
@@ -242,15 +242,19 @@ STORLINE        ; REFUSE IF THE LINE DIRECTORY IS FULL. EDNWLIN AND EDPSHWR
                 DJNZ    .PADLP
 .PADEND         POP     HL
 
-                ; CLEAR ATTRS (80 BYTES AT TXPAGE + LINEOFF + 81)
+                ; CLEAR THE ATTRIBUTE HALF. THESE THREE FIGURES ARE THE
+                ; RECORD LAYOUT AND MUST COME FROM TEXTCOLS: AS LITERAL
+                ; 81 / 79 THEY LEFT THE FIRST 16 ATTRIBUTE BYTES OF EVERY
+                ; S2 RECORD UNCLEARED -- WHICH RENDERED AS RANDOM BOLD --
+                ; AND RAN 32 BYTES PAST THE END OF THE RECORD.
                 PUSH    HL
-                LD      DE, 81          ; 1 (LEN) + 80 (TEXT)
+                LD      DE, 1 + TEXTCOLS
                 ADD     HL, DE          ; HL = ATTR START
                 LD      (HL), 0
                 LD      D, H
                 LD      E, L
                 INC     DE
-                LD      BC, 79
+                LD      BC, TEXTCOLS - 1
                 LDIR
                 POP     HL
 
