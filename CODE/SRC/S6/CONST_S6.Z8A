@@ -9,6 +9,7 @@
                 ; CHARACTER GRID
 SCRCOLS         EQU     80              ; TEXT AREA COLUMNS
 SCRROWS         EQU     24              ; TEXT AREA ROWS (ROWS 1-24)
+ROWSVIS         EQU     SCRROWS         ; DOCUMENT LINES ON SCREEN AT ONCE
 CELLW           EQU     6               ; CELL WIDTH IN PIXELS
 CELLH           EQU     8               ; CELL HEIGHT IN PIXELS
 TEXTCOLS        EQU     80              ; MAX CHARS PER LINE FOR S6

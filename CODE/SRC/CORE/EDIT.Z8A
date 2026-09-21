@@ -297,7 +297,7 @@ EDPSHWR         CALL    UNDOCLS
                 JR      NZ, .PWHOLD
 
                 LD      A, (CURY)
-                CP      SCRROWS - 1     ; 23
+                CP      ROWSVIS - 1
                 JR      Z, .PWBOT
 
                 INC     A
@@ -326,7 +326,7 @@ EDPSHWR         CALL    UNDOCLS
 .PWHOLD         ; PAINTING IS DEFERRED, BUT THE VIEWPORT STILL HAS TO FOLLOW
                 ; THE NEW LINE WHEN IT LANDS BELOW THE LAST ROW.
                 LD      A, (CURY)
-                CP      SCRROWS - 1     ; 23
+                CP      ROWSVIS - 1
                 JP      NZ, SETCURY
                 LD      HL, (TOPLINE)
                 INC     HL
@@ -1484,7 +1484,7 @@ EDNWLIN         CALL    UNDOCLS
                 LD      (DOCLINE), HL
 
                 LD      A, (CURY)
-                CP      SCRROWS - 1     ; 23
+                CP      ROWSVIS - 1
                 JR      Z, .NWATBOT
 
                 ; NOT AT BOTTOM: CURY INCREMENTS
@@ -1789,7 +1789,7 @@ EDMOVROW        CP      CDOWN
                 SBC     HL, DE
                 LD      (TOPLINE), HL
                 LD      A, E
-                CP      SCRROWS
+                CP      ROWSVIS
                 JP      NC, REDRAW      ; A PAGE OR MORE: NOTHING ON SCREEN SURVIVES
                 LD      C, A
                 JP      SCRLUPN
@@ -1802,7 +1802,7 @@ EDMOVROW        CP      CDOWN
                 RET     NC              ; AT BOTTOM OF DOCUMENT
                 LD      (DOCLINE), HL
                 LD      A, (CURY)
-                CP      SCRROWS - 1     ; 23
+                CP      ROWSVIS - 1
                 JR      Z, .SCRLDN
                 INC     A
                 LD      (CURY), A
@@ -1835,7 +1835,7 @@ EDMOVROW        CP      CDOWN
                 ADD     HL, DE
                 LD      (TOPLINE), HL
                 LD      A, E
-                CP      SCRROWS
+                CP      ROWSVIS
                 JP      NC, REDRAW
                 LD      C, A
                 JP      SCRLDNN
