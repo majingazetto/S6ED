@@ -407,25 +407,25 @@ ACTDWLFT        LD      A, (CURX)
 
                 LD      A, (DWFROM)
                 LD      C, A
-                LD      A, TEXTCOLS     ; 80
-                SUB     C               ; A = 80 - DWFROM
+                LD      A, TEXTCOLS
+                SUB     C               ; A = TEXTCOLS - DWFROM
                 JR      Z, .NOSHFTT
                 LD      C, A
                 LD      B, 0            ; BC = COUNT
                 LDIR
 
-.NOSHFTT        ; 2. SHIFT ATTRIBUTES (WORKBUF + 81)
+.NOSHFTT        ; 2. SHIFT ATTRIBUTES (ATTRIBUTE HALF OF THE RECORD)
                 LD      A, (DWTO)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 81
+                LD      HL, WORKBUF + 1 + TEXTCOLS
                 ADD     HL, DE
                 EX      DE, HL          ; DE = DEST
 
                 LD      A, (DWFROM)
                 LD      L, A
                 LD      H, 0
-                LD      BC, WORKBUF + 81
+                LD      BC, WORKBUF + 1 + TEXTCOLS
                 ADD     HL, BC          ; HL = SRC
 
                 LD      A, (DWFROM)
@@ -437,11 +437,11 @@ ACTDWLFT        LD      A, (CURX)
                 LD      B, 0
                 LDIR
 
-.NOSHFTA        ; 3. CLEAR VACATED TAIL IN TEXT (K BYTES AT 80 - K)
+.NOSHFTA        ; 3. CLEAR VACATED TAIL IN TEXT (K BYTES AT THE END)
                 LD      A, (DWK)
                 LD      C, A
                 LD      A, TEXTCOLS
-                SUB     C               ; A = 80 - K
+                SUB     C               ; A = TEXTCOLS - K
                 LD      E, A
                 LD      D, 0
                 LD      HL, WORKBUF + 1
@@ -451,14 +451,14 @@ ACTDWLFT        LD      A, (CURX)
                 INC     HL
                 DJNZ    .BLKTXT
 
-                ; 4. CLEAR VACATED TAIL IN ATTRS (K BYTES AT 80 - K)
+                ; 4. CLEAR VACATED TAIL IN ATTRS (K BYTES AT THE END)
                 LD      A, (DWK)
                 LD      C, A
                 LD      A, TEXTCOLS
                 SUB     C
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 81
+                LD      HL, WORKBUF + 1 + TEXTCOLS
                 ADD     HL, DE
                 LD      B, C
 .BLKATR         LD      (HL), 0
@@ -1154,7 +1154,7 @@ SELNORM         LD      HL, (DOCLINE)
 ; -           SELSTRL.. AND DRWSTRL.. ARE BOTH LAID OUT THIS WAY.
 ; - OUT: CY = 1  THE LINE HAS NO SELECTED CELLS
 ; -      CY = 0  D = XA (FIRST COLUMN), E = XB (ONE PAST THE LAST), XB > XA.
-; -              ON A LINE THAT IS NOT THE END LINE XB = MIN(LEN + 1, 80), SO
+; -              OFF THE END LINE XB = MIN(LEN + 1, TEXTCOLS), SO
 ; -              THE LINE BREAK SHOWS AS ONE CELL AND AN EMPTY LINE AS ONE TOO.
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
@@ -1182,7 +1182,7 @@ SELEXT          LD      E, (IX + 0)
                 LD      B, 0
                 JR      NZ, .XASET
                 LD      B, (IX + 2)
-.XASET          ; XB = ENDX ON THE END LINE, ELSE MIN(LEN + 1, 80)
+.XASET          ; XB = ENDX ON THE END LINE, ELSE MIN(LEN + 1, TEXTCOLS)
                 LD      E, (IX + 3)
                 LD      D, (IX + 4)
                 PUSH    HL
@@ -1691,7 +1691,7 @@ ACTDLS          LD      A, (SELACT)
                 LD      A, (SELENDX)
                 LD      C, A
                 LD      A, TEXTCOLS
-                SUB     C               ; A = 80 - ENDX
+                SUB     C               ; A = TEXTCOLS - ENDX
                 JR      Z, .NOSHFT
                 LD      C, A
                 LD      B, 0
@@ -1701,14 +1701,14 @@ ACTDLS          LD      A, (SELACT)
                 LD      A, (SELSTRX)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 81
+                LD      HL, WORKBUF + 1 + TEXTCOLS
                 ADD     HL, DE
                 EX      DE, HL
 
                 LD      A, (SELENDX)
                 LD      L, A
                 LD      H, 0
-                LD      BC, WORKBUF + 81
+                LD      BC, WORKBUF + 1 + TEXTCOLS
                 ADD     HL, BC
 
                 LD      A, (SELENDX)
@@ -1740,7 +1740,7 @@ ACTDLS          LD      A, (SELACT)
                 SUB     C
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 81
+                LD      HL, WORKBUF + 1 + TEXTCOLS
                 ADD     HL, DE
                 LD      B, C
 .BLKATR2        LD      (HL), 0
@@ -1838,13 +1838,13 @@ ACTDLS          LD      A, (SELACT)
                 LD      A, (SELENDX)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF2 + 81
+                LD      HL, WORKBUF2 + 1 + TEXTCOLS
                 ADD     HL, DE          ; HL = SRC ATTR
                 PUSH    HL              ; SAVE SRC ATTR
                 LD      A, (SELSTRX)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 81
+                LD      HL, WORKBUF + 1 + TEXTCOLS
                 ADD     HL, DE
                 EX      DE, HL          ; DE = DEST ATTR
                 POP     HL              ; HL = SRC ATTR
@@ -1861,7 +1861,7 @@ ACTDLS          LD      A, (SELACT)
 .NOTAIL         LD      A, (SELSTRX)
                 LD      (WORKBUF), A
 
-.SAVESTR        ; CLEAR TAIL OF WORKBUF (FROM LEN TO 80)
+.SAVESTR        ; CLEAR TAIL OF WORKBUF (FROM LEN TO THE END)
                 LD      A, (WORKBUF)
                 LD      E, A
                 LD      D, 0
@@ -1878,7 +1878,7 @@ ACTDLS          LD      A, (SELACT)
 .NOTBLKT        LD      A, (WORKBUF)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 81
+                LD      HL, WORKBUF + 1 + TEXTCOLS
                 ADD     HL, DE
                 LD      A, TEXTCOLS
                 SUB     E
@@ -2013,7 +2013,7 @@ ACTCOPY         LD      A, (SELACT)
                 ; K = XB - XA
                 SUB     (HL)
                 NEG                     ; A = K
-                LD      C, A            ; C = K (1..80)
+                LD      C, A            ; C = K (1..TEXTCOLS)
 
                 ; CLAMP K TO REMAINING CLIPBOARD SPACE (CLIPMAX - CPYCNT)
                 LD      HL, CLIPMAX
@@ -2540,7 +2540,7 @@ APPLSEL         LD      (STYLMASK), A
                 ; COUNT = XB - XA
                 SUB     (HL)
                 NEG                     ; A = COUNT
-                LD      B, A            ; B = COUNT (1..80)
+                LD      B, A            ; B = COUNT (1..TEXTCOLS)
 
                 LD      A, (STYLXA)
                 LD      E, A
