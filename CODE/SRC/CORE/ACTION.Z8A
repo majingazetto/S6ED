@@ -236,15 +236,15 @@ ACTBOT          CALL    CHKUNSEL
                 LD      HL, (TOTLINES)
                 DEC     HL
                 LD      (DOCLINE), HL
-                LD      DE, SCRROWS
+                LD      DE, ROWSVIS
                 CALL    CMPHLDE
                 JR      C, .SHRTDOC
                 LD      HL, (TOTLINES)
-                LD      DE, SCRROWS
+                LD      DE, ROWSVIS
                 OR      A
                 SBC     HL, DE
                 LD      (TOPLINE), HL
-                LD      A, SCRROWS - 1
+                LD      A, ROWSVIS - 1
                 LD      (CURY), A
                 JR      .REDBOT
 .SHRTDOC        LD      HL, 0
@@ -528,7 +528,7 @@ ACTPGUP         CALL    CHKUNSEL
                 LD      A, H
                 OR      L
                 JR      Z, .PGUTOP
-                LD      DE, SCRROWS
+                LD      DE, ROWSVIS
                 OR      A
                 SBC     HL, DE
                 JR      NC, .PGUSET
@@ -574,7 +574,7 @@ ACTPGDN         CALL    CHKUNSEL
                 INC     A
                 LD      C, A            ; C = PAGES
 .PAGE           LD      HL, (TOPLINE)
-                LD      DE, SCRROWS
+                LD      DE, ROWSVIS
                 ADD     HL, DE
                 EX      DE, HL          ; DE = TARGET TOP
                 LD      HL, (TOTLINES)
@@ -584,7 +584,7 @@ ACTPGDN         CALL    CHKUNSEL
                 EX      DE, HL
                 LD      (TOPLINE), HL
                 LD      HL, (DOCLINE)
-                LD      DE, SCRROWS
+                LD      DE, ROWSVIS
                 ADD     HL, DE
                 LD      (DOCLINE), HL
                 DEC     C
@@ -1281,7 +1281,7 @@ SELPAIN         LD      IX, SELSTRL
                 POP     BC
 .NEXT           INC     B
                 LD      A, B
-                CP      SCRROWS
+                CP      ROWSVIS
                 JR      C, .ROWLP
                 RET
 
@@ -1382,7 +1382,7 @@ SELDIFF         LD      B, 0
 
 .NEXT           INC     B
                 LD      A, B
-                CP      SCRROWS
+                CP      ROWSVIS
                 JP      C, .ROWLP
                 RET
 
@@ -1498,7 +1498,7 @@ ACTSLMU         CALL    SELBEG
 
 ACTSLMD         CALL    SELBEG
                 LD      A, (CURY)
-                CP      SCRROWS - 1
+                CP      ROWSVIS - 1
                 CALL    Z, SELPRE       ; BOTTOM ROW: THE MOVE SCROLLS, UN-XOR FIRST
                 CALL    ACTMVD
                 JP      SELPOST
@@ -2570,7 +2570,7 @@ APPLSEL         LD      (STYLMASK), A
                 OR      A
                 JR      NZ, .APLCHKN    ; L - TOPLINE >= 256
                 LD      A, L
-                CP      SCRROWS         ; 24
+                CP      ROWSVIS
                 JR      NC, .APLCHKN    ; OFF SCREEN BELOW
                 INC     A               ; SCREEN ROW = A + 1 (1..24)
                 LD      B, A

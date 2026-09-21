@@ -148,14 +148,14 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 ADD     HL, DE
                 LD      (TOPLINE), HL
                 LD      A, E
-                CP      SCRROWS""",
+                CP      ROWSVIS""",
         'new': """                LD      HL, (TOPLINE)
                 ADD     HL, DE
                 NOP                     ; MUTATION: TOPLINE NOT ADVANCED
                 NOP
                 NOP
                 LD      A, E
-                CP      SCRROWS""",
+                CP      ROWSVIS""",
         'filter': 'F2',
         'expect': ['F2/burst-collapsed'],
     },
