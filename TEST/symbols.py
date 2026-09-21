@@ -23,9 +23,14 @@ LOCAL_RE = re.compile(r'^(\.[A-Z0-9]{1,15})(\s|$)')
 class Symbols(object):
     """Parsed sjasmplus .sym, plus which source file defined each global."""
 
-    def __init__(self, sym_path, src_dir):
+    def __init__(self, sym_path, src_dir, src_path=('', 'CORE', 'S6')):
         self.sym_path = sym_path
         self.src_dir = src_dir
+        # Attribution follows the target's INCLUDE PATH, never a recursive
+        # walk: UI.Z8A and SCROLL.Z8A exist in both S6/ and S2/, and os.walk
+        # order is filesystem-dependent, so a walk attributes labels to
+        # whichever copy it happens to reach first.
+        self.src_path = src_path
         self.addr = {}
         self.owner = {}          # global label -> source file basename
         self.is_const = {}       # global label -> True when defined with EQU
@@ -42,8 +47,11 @@ class Symbols(object):
             raise RuntimeError('no symbols parsed from %s' % self.sym_path)
 
     def _attribute(self):
-        for root, _, files in os.walk(self.src_dir):
-            for name in sorted(files):
+        for sub in self.src_path:
+            root = os.path.join(self.src_dir, sub)
+            if not os.path.isdir(root):
+                continue
+            for name in sorted(os.listdir(root)):
                 if not name.endswith('.Z8A'):
                     continue
                 with open(os.path.join(root, name), errors='replace') as fh:
@@ -81,9 +89,9 @@ class Symbols(object):
                 and not self.is_const.get(n, False) and n in self.addr}
 
 
-def load(code_dir):
-    return Symbols(os.path.join(code_dir, 'S6ED.sym'),
-                   os.path.join(code_dir, 'SRC'))
+def load(code_dir, prefix='S6ED', src_path=('', 'CORE', 'S6')):
+    return Symbols(os.path.join(code_dir, prefix + '.sym'),
+                   os.path.join(code_dir, 'SRC'), src_path)
 
 
 if __name__ == '__main__':
