@@ -10,6 +10,65 @@ import os
 import shutil
 
 MUTATIONS = [
+    {
+        'name': 'g8-alntbl',
+        'why': 'PARSALN dispatches on the first letter of the value again, so '
+               'OFF and ON collide on O and AUTOALIGN=OFF turns auto-align ON',
+        'file': 'CFG.Z8A',
+        'old': """                CP      'O'
+                RET     NZ              ; UNKNOWN VALUE: KEEP THE DEFAULT
+                INC     HL
+                LD      A, (HL)
+                CALL    UPCASE
+                CP      'N'
+                JR      Z, .ALNON
+                CP      'F'
+                RET     NZ
+                LD      A, ALGN_OFF
+                JR      .ALNSET""",
+        'new': """                CP      'O'                 ; MUTATION: ONE LETTER ONLY
+                RET     NZ
+                JR      .ALNON""",
+        'filter': 'G8',
+        'expect': ['G8/compact/autoalign'],
+    },
+    {
+        'name': 'd11-splitl',
+        'why': 'SPLITL splits at the raw CURX, so a space at the right margin '
+               'of a full line carries its last character down instead of '
+               'breaking after it',
+        'file': 'EDIT.Z8A',
+        'old': 'SPLITL          CALL    EFFCURX',
+        'new': 'SPLITL          LD      A, (CURX)   ; MUTATION: RAW COLUMN',
+        'filter': 'D11',
+        'expect': ['D11/space/content'],
+    },
+    {
+        'name': 'd11-pushwrap',
+        'why': 'EDPSHWR measures the cursor with the raw CURX, so the '
+               'character that forces the wrap lands one place too early '
+               'inside the word that moved down',
+        'file': 'EDIT.Z8A',
+        'old': """                CALL    EFFCURX
+                CP      B""",
+        'new': """                LD      A, (CURX)       ; MUTATION: RAW COLUMN
+                CP      B""",
+        'filter': 'D11',
+        'expect': ['D11/push/content'],
+    },
+    {
+        'name': 's2-pushwrap',
+        'why': 'the same raw-column push-wrap seen on the 64-column record, '
+               'with the screen checked as well as the document',
+        'target': 'S2ED',
+        'file': 'EDIT.Z8A',
+        'old': """                CALL    EFFCURX
+                CP      B""",
+        'new': """                LD      A, (CURX)       ; MUTATION: RAW COLUMN
+                CP      B""",
+        'filter': 'S2-9',
+        'expect': ['S2-9/push/content', 'S2-9/push/screen'],
+    },
     # --- SUITE S2 (MSX1 / SCREEN 2) -----------------------------------
     #
     # These run on the S2 target: a different binary, a different gate and a
@@ -355,8 +414,9 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 'd2-enter',
         'why': 'EDNWLIN always splits at column 0',
         'file': 'EDIT.Z8A',
-        'old': """SPLITL          LD      A, (CURX)""",
-        'new': """SPLITL          XOR     A               ; MUTATION: ALWAYS SPLIT AT COL 0""",
+        # Re-anchored 2026-09-21: SPLITL takes its column through EFFCURX now.
+        'old': """SPLITL          CALL    EFFCURX""",
+        'new': """SPLITL          XOR     A               ; MUTATION: SPLIT AT COL 0""",
         'filter': 'D2',
         'expect': ['D2/content'],
     },

@@ -567,8 +567,75 @@ class S28RenderPure(S2Case):
         return checks
 
 
+# --- S2-9  THE RIGHT MARGIN -------------------------------------------
+
+
+class S29Margin(S2Case):
+    name = 'S2-9-margin'
+    desc = 'an edit at the right margin of a FULL line is an append'
+    origin = ('the same CORE defect D11-margin covers, seen on the 64-column '
+               'record and with the screen checked as well as the document: '
+               'the cursor cannot park past the last column of a full line, '
+               'so an edit taken at the clamped column landed one place too '
+               'early -- typing X on a line ending in HELLO wrapped it as '
+               '"HELLxO", and a space at the margin carried the "O" down.')
+    TAIL = 'HELLO'
+    LINE = 'A' * (pattern.COLS - len(TAIL) - 1) + ' ' + TAIL
+    LINES = [LINE, 'SECOND LINE']
+    variants = ('push', 'space')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('RIGHT', mods=['CTRL'])         # ACEOL: clamps to COLS - 1
+        t.snap('ateol')
+        t.press('X' if variant == 'push' else 'SPACE')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('done', vram='pat')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            pre = 'S2-9/%s' % variant
+            checks.append(Check('%s/clamped' % pre,
+                                run.var('ateol', 'CURX') == pattern.COLS - 1,
+                                'ACEOL leaves CURX = %s on a full line'
+                                % run.var('ateol', 'CURX')))
+            if variant == 'push':
+                want = [self.LINE[:pattern.COLS - len(self.TAIL)],
+                        self.TAIL + 'x', 'SECOND LINE']
+                curx = len(self.TAIL) + 1
+            else:
+                want = [self.LINE, '', 'SECOND LINE']
+                curx = 0
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            lines = (got or b'').decode('ascii', 'replace').split('\r\n')
+            while lines and lines[-1] == '':
+                lines.pop()
+            checks.append(Check('%s/content' % pre, lines == want,
+                                'document breaks correctly' if lines == want
+                                else 'got %r' % (lines[:2],)))
+            checks.append(Check('%s/curx' % pre,
+                                run.var('done', 'CURX') == curx,
+                                'CURX = %s (expected %d)'
+                                % (run.var('done', 'CURX'), curx)))
+            pat = run.blob('done', 'pat')
+            if pat is not None:
+                bad = pattern.mismatched_rows(
+                    pat, font(ctx), want, run.var('done', 'TOPLINE'),
+                    cursor=(pattern.TXRFIRST + run.var('done', 'CURY'), curx))
+                checks.append(Check('%s/screen' % pre, not bad,
+                                    'the screen shows the broken text'
+                                    if not bad else 'rows differ: %s' % bad[:4]))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
-         S26DelType(), S27EnterBot(), S28RenderPure()]
+         S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin()]
 
 
 def run(ctx, cases=None):

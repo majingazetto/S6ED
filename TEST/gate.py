@@ -445,21 +445,52 @@ class G7Selection(Case):
 
 class G8Config(Case):
     name = 'G8-config'
-    desc = 'every S6ED.CFG key parsed with spaces around the ='
+    desc = 'every S6ED.CFG key parsed, spaced form, and both ends of each range'
     origin = ('CFGVAL matched the key as a bare prefix, so "TABWIDTH = 8" with '
               'spaces failed and the whole line was ignored -- reported as '
-              '"the CFG is ignored"')
-    cfg = ("; spaced form, trailing comments, CRLF\r\n"
-           "PROFILE = VI\r\n"
-           "WRAP  =  TXT\r\n"
-           "MARKUP = LIT\r\n"
-           "CLOCK = 0\r\n"
-           "TABWIDTH = 8\r\n"
-           "EOL = UNIX\r\n"
-           "AUTOALIGN = ON\r\n"
-           "THEME = AMBER\r\n")
-    # THMAMBR in CFG.Z8A
+              '"the CFG is ignored".  The second variant exists because one '
+              'value per key is not coverage: PARSALN dispatched on the FIRST '
+              'letter of the value, OFF and ON collide there, and the table '
+              'sent both to ALGN_ON -- so AUTOALIGN=OFF turned auto-align on '
+              'and the case that only ever tried ON never noticed.')
+    # Spaced form, trailing comments, CRLF -- and every value different from
+    # the other variant's, so each parser is exercised at both ends.
+    SPACED = ("; spaced form, trailing comments, CRLF\r\n"
+              "PROFILE = VI\r\n"
+              "WRAP  =  TXT\r\n"
+              "MARKUP = LIT\r\n"
+              "CLOCK = 0\r\n"
+              "TABWIDTH = 8\r\n"
+              "EOL = UNIX\r\n"
+              "AUTOALIGN = ON\r\n"
+              "THEME = AMBER\r\n")
+    COMPACT = ("PROFILE=STD\n"
+               "WRAP=DEV\n"
+               "MARKUP=MD\n"
+               "CLOCK=1\n"
+               "TABWIDTH=2\n"
+               "EOL=DOS\n"
+               "AUTOALIGN=OFF\n"
+               "THEME=GREEN\n")
+    # THMAMBR and THMGRN in CFG.Z8A
     AMBER = [0x00, 0x00, 0x70, 0x04, 0x20, 0x01, 0x70, 0x06]
+    GREEN = [0x00, 0x00, 0x11, 0x07, 0x00, 0x02, 0x40, 0x07]
+
+    variants = ('spaced', 'compact')
+
+    WANT = {
+        'spaced': ([('KMAPID', 3, 'PROFILE=VI'), ('WRAPMODE', 1, 'WRAP=TXT'),
+                    ('MKUPMD', 2, 'MARKUP=LIT'), ('SHOWCLK', 0, 'CLOCK=0'),
+                    ('TABWIDTH', 8, 'TABWIDTH=8'), ('SAVEEOL', 1, 'EOL=UNIX'),
+                    ('AUTOALGN', 1, 'AUTOALIGN=ON')], AMBER),
+        'compact': ([('KMAPID', 0, 'PROFILE=STD'), ('WRAPMODE', 0, 'WRAP=DEV'),
+                     ('MKUPMD', 1, 'MARKUP=MD'), ('SHOWCLK', 1, 'CLOCK=1'),
+                     ('TABWIDTH', 2, 'TABWIDTH=2'), ('SAVEEOL', 0, 'EOL=DOS'),
+                     ('AUTOALGN', 0, 'AUTOALIGN=OFF')], GREEN),
+    }
+
+    def config(self, ctx, variant=None):
+        return self.SPACED if variant == 'spaced' else self.COMPACT
 
     def fixture(self, ctx, variant=None):
         return crlf(numbered(5))
@@ -470,24 +501,24 @@ class G8Config(Case):
         return t
 
     def verify(self, ctx, runs):
-        run = one(runs)
-        want = [('KMAPID', 3, 'PROFILE=VI'), ('WRAPMODE', 1, 'WRAP=TXT'),
-                ('MKUPMD', 2, 'MARKUP=LIT'), ('SHOWCLK', 0, 'CLOCK=0'),
-                ('TABWIDTH', 8, 'TABWIDTH=8'), ('SAVEEOL', 1, 'EOL=UNIX'),
-                ('AUTOALGN', 1, 'AUTOALIGN=ON')]
-        checks = [Check('G8/%s' % why.split('=')[0].lower(),
-                        run.var('boot', name) == value,
-                        '%s -> %s = %s' % (why, name, run.var('boot', name)))
-                  for name, value, why in want]
-        pal = run.snaps.get('boot', {}).get('PALDATA')
-        checks.append(Check('G8/theme', pal == self.AMBER,
-                            'PALDATA = %s' % (' '.join('%02X' % b for b in pal)
-                                              if pal else '?')))
-        vdp = run.blob('boot', 'pal')
-        checks.append(Check('G8/vdp-palette',
-                            vdp is not None and list(vdp[:8]) == self.AMBER,
-                            'VDP palette registers 0-3 match the theme'
-                            if vdp else 'no palette dump'))
+        checks = []
+        for variant, run in sorted(runs.items()):
+            want, theme = self.WANT[variant]
+            checks += [Check('G8/%s/%s' % (variant, why.split('=')[0].lower()),
+                             run.var('boot', name) == value,
+                             '%s -> %s = %s' % (why, name,
+                                                run.var('boot', name)))
+                       for name, value, why in want]
+            pal = run.snaps.get('boot', {}).get('PALDATA')
+            checks.append(Check('G8/%s/theme' % variant, pal == theme,
+                                'PALDATA = %s'
+                                % (' '.join('%02X' % b for b in pal)
+                                   if pal else '?')))
+            vdp = run.blob('boot', 'pal')
+            checks.append(Check('G8/%s/vdp-palette' % variant,
+                                vdp is not None and list(vdp[:8]) == theme,
+                                'VDP palette registers 0-3 match the theme'
+                                if vdp else 'no palette dump'))
         return checks
 
 
@@ -2786,6 +2817,85 @@ class D10Markup(Case):
         return checks
 
 
+# --- D11 THE RIGHT MARGIN ---------------------------------------------
+
+
+class D11Margin(Case):
+    name = 'D11-margin'
+    desc = 'an edit at the right margin of a FULL line is an append, not an insert'
+    origin = ('On every line but a full one the cursor can park one past the '
+              'last character, and GETMAXC says so.  A full line has no such '
+              "column, so GETMAXC clamps to TEXTCOLS - 1 and \"at the end\" "
+              'and "on the last character" become the same position -- after '
+              'which every edit taken at the clamped column landed one place '
+              'too early.  Measured on a full line ending in HELLO: typing X '
+              'wrapped it as "HELLxO", and a space at the margin carried the '
+              '"O" down to the new line instead of breaking after it.  Both '
+              'targets, because EDPSHWR and SPLITL are in CORE.')
+    # WRAP=TXT is the whole point; AUTOALIGN off so the cursor column after a
+    # break is unambiguous.
+    cfg = ("PROFILE=STD\nWRAP=TXT\nMARKUP=OFF\nCLOCK=0\n"
+           "TABWIDTH=4\nEOL=AUTO\nAUTOALIGN=OFF\n")
+    COLS = 80                       # S6ED's TEXTCOLS
+    TAIL = 'HELLO'
+    LINE = 'A' * (COLS - len(TAIL) - 1) + ' ' + TAIL
+    LINES = [LINE, 'SECOND LINE']
+    variants = ('push', 'space')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('RIGHT', mods=['CTRL'])         # ACEOL: clamps to COLS - 1
+        t.snap('ateol')
+        t.press('X' if variant == 'push' else 'SPACE')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('done')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            pre = 'D11/%s' % variant
+            checks.append(Check('%s/clamped' % pre,
+                                run.var('ateol', 'CURX') == self.COLS - 1,
+                                'ACEOL leaves CURX = %s on a full line'
+                                % run.var('ateol', 'CURX')))
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            lines = (got or b'').decode('ascii', 'replace').split('\r\n')
+            while lines and lines[-1] == '':
+                lines.pop()
+            if variant == 'push':
+                # The trailing word moves down and the new character goes
+                # AFTER it, with the cursor one past what was typed.  The
+                # head keeps the separating space -- that is existing
+                # behaviour and not what this case is about.
+                # keymatrixdown without SHIFT types lowercase.
+                want = [self.LINE[:self.COLS - len(self.TAIL)],
+                        self.TAIL + 'x',
+                        'SECOND LINE']
+                curx = len(self.TAIL) + 1
+            else:
+                # A space at the margin is just a line break: the head keeps
+                # every one of its characters and the new line is empty.
+                want = [self.LINE, '', 'SECOND LINE']
+                curx = 0
+            checks.append(Check('%s/content' % pre, lines == want,
+                                'document breaks correctly' if lines == want
+                                else 'got %r' % (lines[:2],)))
+            checks.append(Check('%s/curx' % pre,
+                                run.var('done', 'CURX') == curx,
+                                'CURX = %s (expected %d)'
+                                % (run.var('done', 'CURX'), curx)))
+            checks.append(Check('%s/totlines' % pre,
+                                run.var('done', 'TOTLINES') == 3,
+                                'TOTLINES = %s (expected 3)'
+                                % run.var('done', 'TOTLINES')))
+        return checks
+
+
 # --- E1  MULTI-LINE CUT -----------------------------------------------
 
 
@@ -3695,7 +3805,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          H19QuitDialog(), H20QuitDirty(), H21Shadow(), H22FileMenu(), H23MenuNav(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
-         D7Tabs(), D8Accents(), D9Kana(), D10Markup(),
+         D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(),
          E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit(),
          I1UnixAuto(), I2DosAuto(), I3ConvertDosToUnix(), I4ConvertUnixToDos(),
          U1UndoMod(), U2UndoDel(), U3UndoSplit(), U4UndoJoin(), U5UndoSel()]
