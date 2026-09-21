@@ -891,13 +891,28 @@ ACTQUIT         LD      A, (SELACT)
                 JP      ACTDSEL
 .DOQ            JP      TERM
 
-ACTHELP         RET
+
+; --- ACTHELP                   ----------------------------------------
+
+
+; - ACTHELP ----------------------------
+; - DISPLAY ABOUT DIALOG (F5 > HELP, UNTIL THE MENU SYSTEM LANDS IN W4)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTHELP         ; FTR-BUDGET: S6ED ~9,600 FREE, S2ED ~200 FREE (2026-09-21)
+                LD      A, (FTRSEG)
+                LD      HL, DOABT
+                JP      FCALL
                 ELSE
 ACTQUIT         LD      A, (SELACT)
                 OR      A
                 JR      Z, .ASKQ
                 JP      ACTDSEL
-.ASKQ           LD      A, (FTRSEG)
+.ASKQ           ; FTR-BUDGET: S6ED ~9,600 FREE, S2ED ~200 FREE (2026-09-21)
+                LD      A, (FTRSEG)
                 LD      HL, DOQIT
                 CALL    FCALL
                 LD      A, (WINRES)
@@ -916,7 +931,8 @@ ACTQUIT         LD      A, (SELACT)
 ; - CLOBBERS: ALL
 ; -
 
-ACTHELP         LD      A, (FTRSEG)
+ACTHELP         ; FTR-BUDGET: S6ED ~9,600 FREE, S2ED ~200 FREE (2026-09-21)
+                LD      A, (FTRSEG)
                 LD      HL, DOABT
                 JP      FCALL
                 ENDIF
@@ -2704,8 +2720,13 @@ ACTMNU4         LD      A, 4
 ; -
 
 MNUENT          IFDEF   S2ED
+                ; THE HELP ENTRY OPENS ABOUT DIRECTLY UNTIL DOMNU LANDS (W4)
+                LD      A, (MNUID)
+                CP      MNUCOUNT - 1
+                JP      Z, ACTHELP
                 RET
                 ELSE
+                ; FTR-BUDGET: S6ED ~9,600 FREE, S2ED ~200 FREE (2026-09-21)
                 LD      A, (FTRSEG)
                 LD      HL, DOMNU
                 CALL    FCALL

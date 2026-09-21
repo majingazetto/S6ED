@@ -696,9 +696,138 @@ class S210Theme(S2Case):
         return checks
 
 
+# --- S2-11  THE ABOUT DIALOG OPENS AND LEAVES NOTHING BEHIND ------------
+
+
+class S211About(S2Case):
+    name = 'S2-11-about'
+    desc = ('F5 opens the About dialog through the FTRBASE window engine, '
+            'and closing it restores the screen byte for byte')
+    origin = ('phase W1 of the S2 window engine (DEV/SPEC_S2ED_WINDOW_MENU.md): '
+              'with no command engine and no off-screen VRAM, windows compose '
+              'in the RAM shadows and the background is saved to a buffer at '
+              'the top of FTRBASE.  A save or restore off by one cell leaves '
+              'the document under the dialog permanently corrupted.')
+    LINES = ['%02d %s' % (i, 'WINDOW ENGINE TEST LINE ABCDEFGHIJ')
+             for i in range(10)]
+    # DOABT geometry in S2/WINDOW.Z8A, in cell units
+    WINR, WINC, WINNR, WINNC = 6, 9, 11, 13
+    COLSHDW = 0x11
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram='patcol')
+        t.press('F5')                           # HELP entry -> About (W1 wiring)
+        t.snap('dialog', vram='patcol', at='WINPOLL')
+        t.press('RETURN')
+        t.snap('closed', vram='patcol')
+        return t
+
+    def cells_of(self, dump, row, cells):
+        """The set of colour bytes each cell carries across its 8 scanlines."""
+        crow = pattern.colour_row(dump[0x2000:], row)
+        return [set(crow[c * 8:(c + 1) * 8]) for c in cells]
+
+    def text_cells(self, fnt, text):
+        """Expected pattern bytes of `text`, one 8-byte cell per char pair."""
+        high, low = fnt
+        out = []
+        for i in range(0, len(text), 2):
+            l, r = ord(text[i]), ord(text[i + 1])
+            out.append(bytes(high[l * 8 + y] | low[r * 8 + y]
+                             for y in range(8)))
+        return out
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        boot = run.blob('boot', 'patcol')
+        dlg = run.blob('dialog', 'patcol')
+        closed = run.blob('closed', 'patcol')
+        if boot is None or dlg is None or closed is None:
+            return [Check('S2-11/dump', False, 'missing VRAM dump')]
+        checks = [
+            Check('S2-11/winactv-open',
+                  run.var('dialog', 'WINACTV') == 1,
+                  'WINACTV = %s while the dialog is open'
+                  % run.var('dialog', 'WINACTV')),
+            Check('S2-11/winactv-closed',
+                  run.var('closed', 'WINACTV') == 0,
+                  'WINACTV = %s after the dialog closes'
+                  % run.var('closed', 'WINACTV')),
+        ]
+
+        # Every window cell carries VCOLUI on all 8 scanlines
+        bad = [(r, c) for r in range(self.WINR, self.WINR + self.WINNR)
+               for c, v in enumerate(self.cells_of(dlg, r, range(
+                   self.WINC, self.WINC + self.WINNC)), start=self.WINC)
+               if v != {pattern.COLUI}]
+        checks.append(Check('S2-11/window-colour', not bad,
+                            'every window cell is VCOLUI (#1F)' if not bad else
+                            'cells not VCOLUI: %s' % bad[:6]))
+
+        # The shadow margin: right column rows WINR+1..WINR+WINNR and bottom
+        # row cells WINC+1..WINC+WINNC, all COLSHDW (#11)
+        bad = [(r, self.WINC + self.WINNC)
+               for r in range(self.WINR + 1, self.WINR + self.WINNR + 1)
+               for v in self.cells_of(dlg, r, [self.WINC + self.WINNC])
+               if v != {self.COLSHDW}]
+        bad += [(self.WINR + self.WINNR, c)
+                for c, v in enumerate(self.cells_of(
+                    dlg, self.WINR + self.WINNR,
+                    range(self.WINC + 1, self.WINC + self.WINNC + 1)),
+                    start=self.WINC + 1)
+                if v != {self.COLSHDW}]
+        checks.append(Check('S2-11/shadow', not bad,
+                            'right and bottom shadow cells are #11'
+                            if not bad else 'cells not shadowed: %s'
+                            % bad[:6]))
+
+        # The title cuts the top edge: "About S2ED" at row WINR, one cell in
+        fnt = font(ctx)
+        trow = pattern.row_of(dlg[:0x2000], self.WINR)
+        bad = [self.WINC + 1 + i
+               for i, want in enumerate(self.text_cells(fnt, 'About S2ED'))
+               if trow[(self.WINC + 1 + i) * 8:(self.WINC + 2 + i) * 8] != want]
+        checks.append(Check('S2-11/title-text', not bad,
+                            'title "About S2ED" rendered from the RAM font'
+                            if not bad else 'title cells differ: %s' % bad))
+
+        # Body line: "S2ED - MSX1 64-Col" at row WINR+2, char col 20
+        brow = pattern.row_of(dlg[:0x2000], self.WINR + 2)
+        bad = [10 + i
+               for i, want in enumerate(self.text_cells(
+                   fnt, 'S2ED - MSX1 64-Col'))
+               if brow[(10 + i) * 8:(11 + i) * 8] != want]
+        checks.append(Check('S2-11/body-text', not bad,
+                            'body "S2ED - MSX1 64-Col" rendered'
+                            if not bad else 'body cells differ: %s' % bad))
+
+        # Restore: identical to boot, except the blinking cursor column
+        currow = pattern.TXRFIRST + (run.var('closed', 'CURY') or 0)
+        curcol = run.var('closed', 'CURX') or 0
+        bad = []
+        for row in range(pattern.ROWS):
+            cols = pattern.differing_columns(pattern.row_of(closed, row),
+                                             pattern.row_of(boot, row))
+            cols = [c for c in cols
+                    if not (row == currow and c == curcol)]
+            if cols:
+                bad.append((row, cols))
+        checks.append(Check('S2-11/restore-patterns', not bad,
+                            'patterns restored byte for byte' if not bad else
+                            'stray cells: %s' % bad[:6]))
+        checks.append(Check('S2-11/restore-colours',
+                            closed[0x2000:] == boot[0x2000:],
+                            'colour table restored byte for byte'))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
-         S210Theme()]
+         S210Theme(), S211About()]
 
 
 def run(ctx, cases=None):

@@ -12,6 +12,8 @@ import re
 import struct
 import subprocess
 
+import symbols
+from context import TARGETS
 from result import Check
 
 DATA_RE = re.compile(r'^([A-Z][A-Z0-9_]*)\s+(DEFB|DEFW|DEFS|DEFM)\b')
@@ -458,12 +460,62 @@ def check_window_discipline(ctx):
                  'IX-clean, vsync, bands, shadow, clip, WINUPD)')
 
 
+def check_ftr_budget(ctx):
+    """Every FCALL into FTRBASE must acknowledge BOTH targets' budgets.
+
+    The window/menu system leaves the two FTRBASE containers in radically
+    different states -- S6ED with ~9,600 B free, S2ED with ~200 B once the
+    menus land (DEV/SPEC_S2ED_FTRBASE_GUARD.md).  A shared passenger that
+    fits on one target can silently overflow the other.  Three layers form
+    the net: the FTR-BUDGET comment required at every FCALL site in CORE,
+    the ASSERT FTRFREE >= 128 in both root sources, and the FTRFREE value
+    itself, read back from each .sym file when one exists.
+    """
+    bad = []
+    core = os.path.join(ctx.src_dir, 'CORE')
+    for fname in sorted(os.listdir(core)):
+        if not fname.endswith('.Z8A'):
+            continue
+        lines = open(os.path.join(core, fname),
+                     errors='replace').read().splitlines()
+        for n, line in enumerate(lines):
+            code = _strip_comment(line)
+            if not re.search(r'\b(?:CALL|JP)\s+FCALL\b', code):
+                continue
+            near = lines[max(0, n - 5):n + 6]
+            if not any('FTR-BUDGET' in l for l in near):
+                bad.append('CORE/%s:%d FCALL without FTR-BUDGET comment'
+                           % (fname, n + 1))
+    for root in ('S6ED.Z8A', 'S2ED.Z8A'):
+        text = open(os.path.join(ctx.src_dir, root),
+                    errors='replace').read()
+        if not re.search(r'^FTRFREE\s+EQU\b', text, re.M):
+            bad.append('%s does not define FTRFREE' % root)
+        if not re.search(r'\bASSERT\s+FTRFREE\s*>=\s*128\b', text):
+            bad.append('%s does not ASSERT FTRFREE >= 128' % root)
+    for prefix in ('S6ED', 'S2ED'):
+        symfile = os.path.join(ctx.code_dir, prefix + '.sym')
+        if not os.path.exists(symfile):
+            continue
+        sym = symbols.load(ctx.code_dir, prefix, TARGETS[prefix])
+        free = sym.get('FTRFREE')
+        if free is None:
+            bad.append('%s.sym has no FTRFREE' % prefix)
+        elif free < 128:
+            bad.append('%s FTRFREE = %d (< 128)' % (prefix, free))
+    return Check('ftr-budget', not bad,
+                 '; '.join(bad) if bad else
+                 'every FCALL documented, FTRFREE >= 128 asserted on both '
+                 'targets')
+
+
 ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_layout_asserts, check_record_exclusive, check_target_params,
        check_data_placement,
        check_label_style,
        check_number_notation, check_defb_width, check_page1_hooks,
-       check_assets, check_feature_discipline, check_window_discipline]
+       check_assets, check_feature_discipline, check_window_discipline,
+       check_ftr_budget]
 
 
 def run(ctx):

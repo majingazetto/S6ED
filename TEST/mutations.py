@@ -975,7 +975,8 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 'wq-direct',
         'why': 'ACTQUIT jumps straight to TERM without asking (pre-3b behaviour)',
         'file': 'ACTION.Z8A',
-        'old': """.ASKQ           LD      A, (FTRSEG)
+        'old': """.ASKQ           ; FTR-BUDGET: S6ED ~9,600 FREE, S2ED ~200 FREE (2026-09-21)
+                LD      A, (FTRSEG)
                 LD      HL, DOQIT
                 CALL    FCALL""",
         'new': """.ASKQ           JP      TERM            ; MUTATION: QUIT WITHOUT ASKING""",

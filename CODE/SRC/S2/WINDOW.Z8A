@@ -1,0 +1,832 @@
+;                                       ****************************************
+;                                       * WINDOW ENGINE (SCREEN 2 / TMS9918)   *
+;                                       ****************************************
+;
+; WINDOWS COMPOSE DIRECTLY IN THE RAM SHADOWS (PATSHAD + COLMAP): THE TMS9918
+; HAS NO COMMAND ENGINE AND NO OFF-SCREEN VRAM, SO THE S6ED BLIT ARCHITECTURE
+; IS REPLACED BY SHADOW WRITES PLUS ROW DUMPS. THE BACKGROUND UNDER THE WINDOW
+; IS SAVED TO WSVBUF (TOP OF THE FEATURE CONTAINER) AND RESTORED ON CLOSE.
+;
+; GEOMETRY IS IN CELL UNITS: WINR/WINC ARE THE TOP-LEFT CORNER, WINNR/WINNC
+; THE SIZE. THE WINDOW OCCUPIES WINNR ROWS X WINNC CELLS; THE DROP SHADOW
+; ADDS ONE COLUMN ON THE RIGHT AND ONE ROW AT THE BOTTOM, SO SAVE, RESTORE
+; AND DUMP ALL SPAN (WINNR+1) X (WINNC+1).
+;
+; ALL ROUTINES RUN PHASED IN FTRBASE (PAGE 2) VIA FCALL. FTRSEG AND VIDSEG
+; ARE THE SAME SEGMENT ON S2ED, SO THE SHADOWS AND THE FONT TABLES ARE
+; DIRECTLY ADDRESSABLE, AND THE PAGE-1 PRIMITIVES (VDPDUMP, COLDMPC,
+; WINPOLL, WINKIL) CALL AS USUAL. THE CODE MUST NEVER BANK: NO VIDBANK,
+; NO TXTBANK, NO PUTP2.
+
+
+; --- WINOPEN                   ----------------------------------------
+
+
+; - WINOPEN ----------------------------
+; - OPEN WINDOW: CLAMP GEOMETRY, SAVE BACKGROUND, DRAW BOX + TITLE, DUMP
+; - IN:  HL = ASCIIZ TITLE STRING (0 = NONE)
+; -      USES WINR, WINC, WINNR, WINNC
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINOPEN         PUSH    HL              ; TITLE
+
+                ; FLUSH KEYBOARD BUFFER
+                CALL    WINKIL
+
+                ; MARK MODAL WINDOW ACTIVE
+                LD      A, 1
+                LD      (WINACTV), A
+
+                ; ERASE CURSOR IF CURRENTLY VISIBLE. DRWCUR BANKS VIDSEG
+                ; AND THEN TXSEG; UNDER FCALL TXSEG IS FTRSEG, WHICH IS
+                ; VIDSEG, SO PAGE 2 NEVER MOVES.
+                LD      A, (BLNKPH)
+                AND     A
+                JR      Z, .NOCUR
+                CALL    DRWCUR
+                XOR     A
+                LD      (BLNKPH), A
+
+.NOCUR          ; CLAMP WINC <= CELLROW-3: WINNC >= 2 AND THE SHADOW
+                ; COLUMN MUST FIT (WINC + WINNC <= CELLROW - 1)
+                LD      A, (WINC)
+                CP      CELLROW - 2
+                JR      C, .WCOK
+                LD      A, CELLROW - 3
+                LD      (WINC), A
+.WCOK           ; CLAMP WINNC: MIN 2, MAX CELLROW-1-WINC
+                LD      A, (WINNC)
+                CP      2
+                JR      NC, .WCMIN
+                LD      A, 2
+.WCMIN          LD      B, A
+                LD      A, CELLROW - 1
+                LD      HL, WINC
+                SUB     (HL)            ; A = MAX WIDTH
+                CP      B
+                JR      NC, .WCMAX
+                LD      B, A
+.WCMAX          LD      A, B
+                LD      (WINNC), A
+
+                ; CLAMP WINR <= SCRROWS-3: WINNR >= 2 AND THE SHADOW
+                ; ROW MUST FIT (WINR + WINNR <= SCRROWS - 1)
+                LD      A, (WINR)
+                CP      SCRROWS - 2
+                JR      C, .WROK
+                LD      A, SCRROWS - 3
+                LD      (WINR), A
+.WROK           ; CLAMP WINNR: MIN 2, MAX SCRROWS-1-WINR
+                LD      A, (WINNR)
+                CP      2
+                JR      NC, .WRMIN
+                LD      A, 2
+.WRMIN          LD      B, A
+                LD      A, SCRROWS - 1
+                LD      HL, WINR
+                SUB     (HL)            ; A = MAX HEIGHT
+                CP      B
+                JR      NC, .WRMAX
+                LD      B, A
+.WRMAX          LD      A, B
+                LD      (WINNR), A
+
+                ; CLAMP SIZE: (WINNR+1)*(WINNC+1)*9 <= WSVMAX, SHRINKING
+                ; THE LARGER DIMENSION UNTIL THE SAVE BUFFER HOLDS IT
+.SZLP           LD      A, (WINNR)
+                INC     A
+                LD      B, A            ; B = ROWS (SHADOW INCLUDED)
+                LD      A, (WINNC)
+                INC     A               ; A = CELLS (SHADOW INCLUDED)
+                LD      HL, 0
+                LD      D, 0
+                LD      E, A
+.MULLP          ADD     HL, DE
+                DJNZ    .MULLP          ; HL = ROWS * CELLS
+                LD      DE, WSVMAX / 9
+                OR      A
+                SBC     HL, DE
+                JR      C, .SZOK        ; FITS THE SAVE BUFFER
+                LD      A, (WINNR)
+                LD      B, A
+                LD      A, (WINNC)
+                CP      B               ; WINNC VS WINNR
+                LD      HL, WINNC
+                JR      NC, .SHR        ; WINNC >= WINNR: SHRINK WIDTH
+                LD      HL, WINNR
+.SHR            DEC     (HL)
+                JR      .SZLP
+
+.SZOK           ; TEXT CLIP: GLYPHS END LEFT OF THE RIGHT BORDER
+                LD      A, (WINC)
+                LD      B, A
+                LD      A, (WINNC)
+                ADD     A, B
+                DEC     A
+                ADD     A, A
+                LD      (WINCLIM), A    ; (WINC+WINNC-1)*2, EXCLUSIVE
+
+                ; SAVE BACKGROUND, SHADOW MARGIN INCLUDED
+                CALL    WSAVE
+
+                ; DRAW WINDOW BOX AND TITLE INTO THE SHADOWS
+                POP     HL
+                CALL    WBOX
+
+                ; DARKEN THE SHADOW MARGIN IN THE COLOR MAP
+                CALL    WSHDW
+
+                ; PUSH THE REGION TO VRAM
+                JP      WDUMP
+
+
+; --- WINCLOS                   ----------------------------------------
+
+
+; - WINCLOS ----------------------------
+; - CLOSE WINDOW: RESTORE BACKGROUND FROM WSVBUF AND REDUMP THE REGION
+; - IN:  NONE (USES WINR, WINC, WINNR, WINNC)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; - NOTE: THE CURSOR IS NOT REDRAWN HERE; MAINLOOP'S .DRAWCUR DOES IT
+; -       WHEN THE DISPATCHED KEY RETURNS.
+; -
+
+WINCLOS         XOR     A
+                LD      (WINACTV), A
+                CALL    WRSTOR
+                JP      WDUMP
+
+
+; --- WSAVE                     ----------------------------------------
+
+
+; - WSAVE ------------------------------
+; - SAVE THE WINDOW REGION (SHADOW MARGIN INCLUDED) TO WSVBUF:
+; - FIRST THE PATTERN SLICES, THEN THE COLOR SLICES
+; - IN:  NONE (USES WINR, WINC, WINNR, WINNC)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WSAVE           LD      DE, WSVBUF
+                LD      A, (WINR)
+                LD      B, A            ; B = ROW
+                LD      A, (WINNR)
+                INC     A
+                LD      C, A            ; C = ROWS LEFT
+.SVPLP          PUSH    BC
+                LD      A, #80          ; HIGH(PATSHAD)
+                ADD     A, B
+                LD      H, A
+                LD      A, (WINC)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A            ; HL = PATSHAD + ROW*256 + WINC*8
+                LD      A, (WINNC)
+                INC     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      C, A
+                LD      B, 0            ; BC = (WINNC+1)*8
+                LDIR                    ; DE ADVANCES THROUGH WSVBUF
+                POP     BC
+                INC     B
+                DEC     C
+                JR      NZ, .SVPLP
+
+                ; COLOR SLICES FOLLOW THE PATTERNS
+                LD      A, (WINR)
+                LD      B, A
+                LD      A, (WINNR)
+                INC     A
+                LD      C, A
+.SVCLP          PUSH    BC
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = ROW*32
+                LD      A, (WINC)
+                ADD     A, L
+                LD      L, A
+                JR      NC, .SVCNC
+                INC     H
+.SVCNC          PUSH    DE
+                LD      DE, COLMAP
+                ADD     HL, DE          ; HL = COLMAP + ROW*32 + WINC
+                POP     DE
+                LD      A, (WINNC)
+                INC     A
+                LD      C, A
+                LD      B, 0            ; BC = WINNC+1
+                LDIR
+                POP     BC
+                INC     B
+                DEC     C
+                JR      NZ, .SVCLP
+                RET
+
+
+; --- WRSTOR                    ----------------------------------------
+
+
+; - WRSTOR -----------------------------
+; - RESTORE THE WINDOW REGION FROM WSVBUF INTO THE SHADOWS (NO VRAM)
+; - IN:  NONE (USES WINR, WINC, WINNR, WINNC)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WRSTOR          LD      HL, WSVBUF
+                LD      A, (WINR)
+                LD      B, A
+                LD      A, (WINNR)
+                INC     A
+                LD      C, A
+.RSPLP          PUSH    BC
+                LD      A, #80          ; HIGH(PATSHAD)
+                ADD     A, B
+                LD      D, A
+                LD      A, (WINC)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      E, A            ; DE = DST PATTERN SLICE
+                LD      A, (WINNC)
+                INC     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      C, A
+                LD      B, 0
+                LDIR                    ; HL ADVANCES THROUGH WSVBUF
+                POP     BC
+                INC     B
+                DEC     C
+                JR      NZ, .RSPLP
+
+                ; COLOR SLICES
+                LD      A, (WINR)
+                LD      B, A
+                LD      A, (WINNR)
+                INC     A
+                LD      C, A
+.RSCLP          PUSH    BC
+                PUSH    HL              ; SAVE RUNNING SOURCE
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = ROW*32
+                LD      A, (WINC)
+                ADD     A, L
+                LD      L, A
+                JR      NC, .RSCNC
+                INC     H
+.RSCNC          LD      DE, COLMAP
+                ADD     HL, DE          ; HL = DST
+                EX      DE, HL          ; DE = DST
+                POP     HL              ; HL = SRC
+                LD      A, (WINNC)
+                INC     A
+                LD      C, A
+                LD      B, 0
+                LDIR
+                POP     BC
+                INC     B
+                DEC     C
+                JR      NZ, .RSCLP
+                RET
+
+
+; --- WBOX                      ----------------------------------------
+
+
+; - WBOX -------------------------------
+; - DRAW THE WINDOW FRAME, BODY FILL AND TITLE INTO THE SHADOWS
+; - THE FRAME IS RAW PATTERNS: TOP/BOTTOM EDGES ARE #FF ON SCANLINE 0/7,
+; - SIDE BORDERS #C0 / #03, CORNERS THE UNION OF BOTH. EVERY WINDOW CELL
+; - CARRIES VCOLUI. THE TITLE CUTS THE TOP EDGE: ITS CELLS ARE CLEARED
+; - BEFORE THE TEXT GOES IN.
+; - IN:  HL = ASCIIZ TITLE STRING (0 = NONE)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WBOX            PUSH    HL              ; TITLE
+
+                ; 1. COLORS: FILL THE WINDOW RECT WITH VCOLUI
+                LD      A, (WINR)
+                LD      B, A            ; B = ROW
+                LD      A, (WINNR)
+                LD      C, A            ; C = ROWS LEFT
+.CRLP           PUSH    BC
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = ROW*32
+                LD      A, (WINC)
+                ADD     A, L
+                LD      L, A
+                JR      NC, .CRNC
+                INC     H
+.CRNC           LD      DE, COLMAP
+                ADD     HL, DE
+                LD      A, (WINNC)
+                LD      B, A
+                LD      A, (VCOLUI)
+.CFILL          LD      (HL), A
+                INC     HL
+                DJNZ    .CFILL
+                POP     BC
+                INC     B
+                DEC     C
+                JR      NZ, .CRLP
+
+                ; 2. PATTERNS: CLEAR THE RECT
+                LD      A, (WINR)
+                LD      B, A
+                LD      A, (WINNR)
+                LD      C, A
+.PRLP           PUSH    BC
+                LD      A, #80          ; HIGH(PATSHAD)
+                ADD     A, B
+                LD      H, A
+                LD      A, (WINC)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A            ; HL = FIRST CELL OF THE ROW
+                LD      A, (WINNC)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      B, A            ; B = WINNC*8 BYTES
+                XOR     A
+.PFILL          LD      (HL), A
+                INC     HL
+                DJNZ    .PFILL
+                POP     BC
+                INC     B
+                DEC     C
+                JR      NZ, .PRLP
+
+                ; 3. VERTICAL BORDERS: LEFT #C0, RIGHT #03, EVERY ROW.
+                ;    THE EDGES BELOW FIX THE CORNERS' SCANLINE 0 AND 7.
+                LD      A, (WINR)
+                LD      B, A
+                LD      A, (WINNR)
+                LD      C, A
+.VRLP           PUSH    BC
+                LD      A, #80          ; HIGH(PATSHAD)
+                ADD     A, B
+                LD      H, A
+                LD      A, (WINC)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A            ; LEFT CELL
+                LD      B, 8
+                LD      A, #C0
+.LBOR           LD      (HL), A
+                INC     HL
+                DJNZ    .LBOR
+                LD      A, (WINNC)
+                DEC     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE          ; RIGHT CELL
+                LD      B, 8
+                LD      A, #03
+.RBOR           LD      (HL), A
+                INC     HL
+                DJNZ    .RBOR
+                POP     BC
+                INC     B
+                DEC     C
+                JR      NZ, .VRLP
+
+                ; 4. TOP EDGE: SCANLINE 0 OF EVERY CELL
+                LD      A, (WINR)
+                ADD     A, #80          ; HIGH(PATSHAD)
+                LD      H, A
+                LD      A, (WINC)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A
+                LD      A, (WINNC)
+                LD      B, A
+                LD      DE, 8
+                LD      A, #FF
+.TEDG           LD      (HL), A
+                ADD     HL, DE
+                DJNZ    .TEDG
+
+                ; 5. BOTTOM EDGE: SCANLINE 7 OF EVERY CELL
+                LD      A, (WINR)
+                LD      B, A
+                LD      A, (WINNR)
+                ADD     A, B
+                DEC     A               ; LAST WINDOW ROW
+                ADD     A, #80          ; HIGH(PATSHAD)
+                LD      H, A
+                LD      A, (WINC)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, 7            ; SCANLINE 7 OF THE FIRST CELL
+                LD      L, A
+                LD      A, (WINNC)
+                LD      B, A
+                LD      A, #FF
+.BEDG           LD      (HL), A
+                ADD     HL, DE
+                DJNZ    .BEDG
+
+                ; 6. TITLE OVER THE TOP EDGE, ONE CELL IN
+                POP     HL              ; TITLE
+                LD      A, H
+                OR      L
+                RET     Z               ; NO TITLE
+                PUSH    HL
+                LD      A, (WINR)
+                ADD     A, #80          ; HIGH(PATSHAD)
+                LD      H, A
+                LD      A, (WINC)
+                INC     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A            ; CELL WINC+1 OF THE TOP ROW
+                LD      A, (WINNC)
+                SUB     2
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      B, A            ; (WINNC-2)*8 BYTES
+                XOR     A
+.TCLR           LD      (HL), A
+                INC     HL
+                DJNZ    .TCLR
+                POP     HL
+                LD      A, (WINR)
+                LD      B, A
+                LD      A, (WINC)
+                INC     A
+                ADD     A, A
+                LD      C, A            ; CHAR COL = (WINC+1)*2
+                LD      A, (VCOLUI)
+                JP      WINPUTS
+
+
+; --- WSHDW                     ----------------------------------------
+
+
+; - WSHDW ------------------------------
+; - DARKEN THE SHADOW MARGIN: THE COLUMN RIGHT OF THE WINDOW AND THE ROW
+; - BELOW IT GET COLSHDW IN THE COLOR MAP. THE PATTERNS UNDERNEATH ARE
+; - UNTOUCHED -- BLACK INK ON BLACK HIDES THEM, WHICH IS ALL A SHADOW IS.
+; - IN:  NONE (USES WINR, WINC, WINNR, WINNC)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WSHDW           ; RIGHT COLUMN: ROWS WINR+1..WINR+WINNR, CELL WINC+WINNC
+                LD      A, (WINR)
+                INC     A
+                LD      B, A            ; B = ROW
+                LD      A, (WINNR)
+                LD      C, A            ; C = ROWS LEFT
+.RSLP           PUSH    BC
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = ROW*32
+                LD      A, (WINC)
+                LD      E, A
+                LD      A, (WINNC)
+                ADD     A, E            ; A = WINC+WINNC
+                ADD     A, L
+                LD      L, A
+                JR      NC, .RSNC
+                INC     H
+.RSNC           LD      DE, COLMAP
+                ADD     HL, DE
+                LD      A, COLSHDW
+                LD      (HL), A
+                POP     BC
+                INC     B
+                DEC     C
+                JR      NZ, .RSLP
+
+                ; BOTTOM ROW: ROW WINR+WINNR, CELLS WINC+1..WINC+WINNC
+                LD      A, (WINR)
+                LD      B, A
+                LD      A, (WINNR)
+                ADD     A, B            ; A = SHADOW ROW
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      A, (WINC)
+                INC     A
+                ADD     A, L
+                LD      L, A
+                JR      NC, .BSNC
+                INC     H
+.BSNC           LD      DE, COLMAP
+                ADD     HL, DE
+                LD      A, (WINNC)
+                LD      B, A            ; B = WINNC CELLS
+                LD      A, COLSHDW
+.BSLP           LD      (HL), A
+                INC     HL
+                DJNZ    .BSLP
+                RET
+
+
+; --- WDUMP                     ----------------------------------------
+
+
+; - WDUMP ------------------------------
+; - PUSH THE WINDOW REGION (SHADOW MARGIN INCLUDED) FROM THE SHADOWS TO
+; - VRAM, ONE ROW AT A TIME: PATTERN SLICE VIA VDPDUMP, COLOR SLICE VIA
+; - COLDMPC
+; - IN:  NONE (USES WINR, WINC, WINNR, WINNC)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WDUMP           LD      A, (WINR)
+                LD      B, A            ; B = ROW
+                LD      A, (WINNR)
+                INC     A
+                LD      C, A            ; C = ROWS LEFT
+.DROW           PUSH    BC
+                ; PATTERN SLICE
+                LD      A, #80          ; HIGH(PATSHAD)
+                ADD     A, B
+                LD      H, A
+                LD      A, (WINC)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A            ; HL = SRC
+                LD      D, B
+                LD      E, L            ; DE = VRAM DEST (PGBASE = #0000)
+                LD      A, (WINNC)
+                INC     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      C, A
+                LD      B, 0            ; BC = (WINNC+1)*8
+                CALL    VDPDUMP
+                ; COLOR SLICE
+                POP     BC
+                PUSH    BC
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = ROW*32
+                LD      A, (WINC)
+                ADD     A, L
+                LD      L, A
+                JR      NC, .DNC
+                INC     H
+.DNC            LD      DE, COLMAP
+                ADD     HL, DE          ; HL = SRC IN COLMAP
+                LD      A, B
+                ADD     A, #20          ; HIGH(CTBASE)
+                LD      D, A
+                LD      A, (WINC)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      E, A            ; DE = CTBASE + ROW*256 + WINC*8
+                LD      A, (WINNC)
+                INC     A
+                LD      B, A            ; B = WINNC+1 CELLS
+                CALL    COLDMPC
+                POP     BC
+                INC     B
+                DEC     C
+                JR      NZ, .DROW
+                RET
+
+
+; --- WINPUTC / WINPUTS         ----------------------------------------
+
+
+; - WINPUTC ----------------------------
+; - COMPOSE ONE 4X8 CHARACTER INTO A WINDOW CELL: THE GLYPH REPLACES ITS
+; - OWN NIBBLE OF EVERY SCANLINE (THE OTHER HALF OF THE CELL SURVIVES),
+; - AND THE CELL'S COLOR MAP BYTE IS SET
+; - IN:  B = SCREEN ROW (0..23), C = CHAR COLUMN (0..63)
+; -      A = CHARACTER, E = COLOR BYTE
+; - OUT: NONE
+; - CLOBBERS: AF, DE, HL, IX (BC PRESERVED)
+; -
+
+WINPUTC         PUSH    BC              ; ROW/COL FOR THE CALLER
+                LD      D, E            ; D = COLOR
+                LD      E, A            ; E = CHAR
+
+                ; CELL PATTERN ADDRESS -> IX
+                LD      A, #80          ; HIGH(PATSHAD)
+                ADD     A, B
+                LD      H, A
+                LD      L, 0            ; HL = PATSHAD + ROW*256
+                LD      A, C
+                SRL     A               ; A = CELL, CF = 1 IF RIGHT COLUMN
+                PUSH    AF              ; SAVE THE HALF
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A            ; HL = PATSHAD + ROW*256 + CELL*8
+                PUSH    HL
+                POP     IX
+
+                ; COLOR BYTE: COLMAP + ROW*32 + CELL
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = ROW*32
+                LD      A, C
+                SRL     A
+                ADD     A, L
+                LD      L, A
+                JR      NC, .CNC
+                INC     H
+.CNC            LD      A, H
+                ADD     A, #98          ; HIGH(COLMAP)
+                LD      H, A
+                LD      A, D
+                LD      (HL), A         ; COLOR BYTE
+
+                ; GLYPH ADDRESS -> HL
+                LD      L, E
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = CHAR*8
+                POP     AF              ; CF = HALF
+                JR      C, .RGHT
+                LD      A, H
+                ADD     A, #B0          ; HIGH(FONT4H)
+                LD      H, A            ; HL = FONT4H + CHAR*8
+                LD      D, #0F          ; KEEP THE RIGHT GLYPH OF THE CELL
+                JR      .MRGE
+.RGHT           LD      A, H
+                ADD     A, #B8          ; HIGH(FONT4L)
+                LD      H, A            ; HL = FONT4L + CHAR*8
+                LD      D, #F0          ; KEEP THE LEFT GLYPH
+.MRGE           LD      B, 8
+.MRLP           LD      A, (IX+0)
+                AND     D
+                OR      (HL)
+                LD      (IX+0), A
+                INC     HL
+                INC     IX
+                DJNZ    .MRLP
+                POP     BC
+                RET
+
+
+; - WINPUTS ----------------------------
+; - WRITE AN ASCIIZ STRING INTO THE SHADOWS AT (ROW, COL), CLIPPED AT
+; - WINCLIM (EXCLUSIVE, SET BY WINOPEN) OR AT THE RIGHT SCREEN EDGE
+; - IN:  B = SCREEN ROW, C = CHAR COLUMN, HL = ASCIIZ, A = COLOR BYTE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINPUTS         LD      E, A            ; E = COLOR
+.WSLP           LD      A, (HL)
+                OR      A
+                RET     Z
+                PUSH    HL
+                PUSH    DE              ; KEEP THE COLOR ACROSS WINPUTC
+                CALL    WINPUTC         ; KEEPS BC
+                POP     DE
+                POP     HL
+                INC     HL
+                INC     C
+                LD      A, (WINCLIM)
+                OR      A
+                JR      NZ, .LIM
+                LD      A, SCRCOLS
+.LIM            CP      C               ; LIMIT VS NEXT COLUMN
+                RET     C
+                RET     Z
+                JR      .WSLP
+
+
+; --- DIALOGS                   ----------------------------------------
+
+
+; - DOABT ------------------------------
+; - DISPLAY THE ABOUT S2ED MODAL DIALOG
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DOABT           LD      A, 6
+                LD      (WINR), A
+                LD      A, 9
+                LD      (WINC), A
+                LD      A, 11
+                LD      (WINNR), A
+                LD      A, 13
+                LD      (WINNC), A
+                LD      HL, .TITABT
+                CALL    WINOPEN
+
+                LD      B, 8
+                LD      C, 20
+                LD      HL, .STRHDR
+                LD      A, (VCOLUI)
+                CALL    WINPUTS
+
+                LD      B, 9
+                LD      C, 20
+                LD      HL, .STRSUB
+                LD      A, (VCOLUI)
+                CALL    WINPUTS
+
+                LD      B, 11
+                LD      C, 20
+                LD      HL, .STRDSP
+                LD      A, (VCOLUI)
+                CALL    WINPUTS
+
+                LD      B, 12
+                LD      C, 20
+                LD      HL, .STRFNT
+                LD      A, (VCOLUI)
+                CALL    WINPUTS
+
+                LD      B, 13
+                LD      C, 20
+                LD      HL, .STRMEM
+                LD      A, (VCOLUI)
+                CALL    WINPUTS
+
+                LD      B, 15
+                LD      C, 27
+                LD      HL, .BTNOK
+                LD      A, (VCOLUI)
+                CALL    WINPUTS
+
+                ; REDUMP THE WINDOW ROWS WITH THE TEXT IN
+                CALL    WDUMP
+
+                ; MODAL KEY LOOP
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+                CP      13              ; ENTER
+                JR      Z, .DONE
+                CP      ' '             ; SPACE
+                JR      Z, .DONE
+                CP      27              ; ESC
+                JR      Z, .DONE
+                JR      .KEYLP
+
+.DONE           JP      WINCLOS
+
+.TITABT         DEFM    "About S2ED", 0
+.STRHDR         DEFM    "S2ED - MSX1 64-Col", 0
+.STRSUB         DEFM    "Text Editor", 0
+.STRDSP         DEFM    "Display: 64x24", 0
+.STRFNT         DEFM    "Font: 4x8 custom", 0
+.STRMEM         DEFM    "Memory: DOS2/Nextor", 0
+.BTNOK          DEFM    "[  OK  ]", 0
