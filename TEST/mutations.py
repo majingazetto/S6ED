@@ -203,6 +203,18 @@ MUTATIONS = [
         'expect': ['S2-5/scrolled-rows'],
     },
     {
+        'name': 's2-theme-default',
+        'why': 'S2THMBR carries the DARK data, so THEME=AMBER loads the '
+               'default theme: the vars say white-on-black and the VRAM '
+               'colour table agrees, while the config claims amber',
+        'target': 'S2ED',
+        'file': 'VDP.Z8A',
+        'old': "S2THMBR         DEFB    #A1, #1A, #B1, #71, #31, #E1, 1       ; AMBER",
+        'new': "S2THMBR         DEFB    #F1, #1F, #B1, #71, #31, #E1, 1       ; MUTATION: DARK DATA",
+        'filter': 'S2-10',
+        'expect': ['S2-10/theme-vars', 'S2-10/text-amber', 'S2-10/chrome-amber'],
+    },
+    {
         'name': 's2-rendiff-hit',
         'why': 'the differential painter takes its cache-hit path and repaints '
                'nothing.  MEASURED: this passes render-pure -- the stale row '

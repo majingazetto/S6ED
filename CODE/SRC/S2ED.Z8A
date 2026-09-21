@@ -177,8 +177,12 @@ INIT            DBG     "1: INIT START (S2ED)"
                 DBG     "4c: CHKDAT"
                 CALL    CHKDAT
 
+                ; LOAD DEFAULT THEME COLORS (BEFORE CFG PARSING)
+                DBG     "4d: THMLOAD"
+                CALL    THMLOAD
+
                 ; LOAD CONFIGURATION FROM S2ED.CFG (IN TEXT MODE)
-                DBG     "4d: CFGRUN"
+                DBG     "4e: CFGRUN"
                 CALL    CFGRUN
 
                 ; PRESERVE ORIGINAL SCREEN PARAMETERS
@@ -305,14 +309,23 @@ SCRINIT         CALL    INITVDP
 
 
 ; - RSTPAL / SETPAL --------------------
-; - NO-OP ON TMS9918 (PALETTE IS FIXED 16 COLORS)
+; - RSTPAL: NO-OP ON TMS9918 (FIXED 16-COLOR PALETTE, NOTHING TO RESTORE)
+; - SETPAL: APPLIES THE THEME VARIABLES (BORDER + FULL COLOR REINIT)
+; -   NO-OP BEFORE SCRINIT: INITVDP AND INITCOL READ THE VARIABLES AT
+; -   BOOT, AND THE VDP PORTS ARE NOT KNOWN UNTIL INITVDP RUNS
 ; - IN:  NONE
 ; - OUT: NONE
-; - CLOBBERS: NONE
+; - CLOBBERS: NONE (RSTPAL) / ALL (SETPAL)
 ; -
 
 RSTPAL          RET
-SETPAL          RET
+SETPAL          LD      A, (SCRRDY)
+                AND     A
+                RET     Z
+                LD      A, (VCOLBG)
+                LD      B, 7
+                CALL    VDPRSET
+                JP      INITCOL
 
 PALDATA         DEFB    #00, #00, #77, #07, #17, #02, #70, #07
 

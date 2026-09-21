@@ -63,7 +63,7 @@ DEFAULT_VARS = [
 # what tells a corrupted painted range from an honest one.
 BYTE_VARS = [
     ('SELSTRL', 6), ('DRWSTRL', 6), ('CLKBUF', 6), ('PALDATA', 8),
-    ('STATBUF', 80),
+    ('STATBUF', 80), ('VCOLTXT', 7),
 ]
 
 HOOK_ADDR = 0xFD9F      # H.TIMI: nothing of ours may ever live behind it

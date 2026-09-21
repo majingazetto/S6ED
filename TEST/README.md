@@ -97,6 +97,8 @@ is caught only by `S2-8/matches-document`. Measured, 2026-09-21.
 | `S2-6-deltype` | round 3: `EDDELBK` / `EDDELCHR` ran to a literal 79 and poisoned the last text column, after which typing was refused |
 | `S2-7-enterbot` | round 3: `EDNWLIN` repainted the split head at a literal row 23 -- the status bar |
 | `S2-8-renderpure` | the general net: edits, then a forced REDRAW, compared both ways |
+| `S2-9-margin` | the right margin: a full line clamps the cursor to its last column, so an edit there is an append, not an insert one place early |
+| `S2-10-theme` | the theme integration: `THEME=` rewrites `VCOLTXT..VCOLBG`, and text, chrome and border follow |
 
 Two traps this suite met while being built, both worth knowing before adding a
 case:
