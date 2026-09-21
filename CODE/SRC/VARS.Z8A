@@ -315,6 +315,19 @@ MNUITMC         DEFB    0               ; ACTIVE MENU ITEM COUNT
 MNUPTY          DEFW    0               ; ACTIVE MENU YTBL POINTER
 MNUPTS          DEFW    0               ; ACTIVE MENU STBL POINTER
 
+                ; S2ED WINDOW GEOMETRY, IN CELL UNITS (32 CELLS X 24 ROWS).
+                ; S6ED USES THE PIXEL VARIABLES ABOVE INSTEAD. S2ED ONLY:
+                ; DECLARING THEM FOR BOTH WOULD SHIFT UNDOBAS AND BREAK THE
+                ; S6ED.COM BYTE-IDENTITY GUARD.
+                IFDEF   S2ED
+WINR            DEFB    0               ; WINDOW TOP ROW (0..23)
+WINC            DEFB    0               ; WINDOW LEFT CELL (0..31)
+WINNR           DEFB    0               ; WINDOW HEIGHT IN ROWS
+WINNC           DEFB    0               ; WINDOW WIDTH IN CELLS
+WINCLIM         DEFB    0               ; WINPUTS: RIGHT TEXT CLIP, EXCLUSIVE
+                                        ;   CHAR COLUMN (SET BY WINOPEN, 0=64)
+                ENDIF
+
 
 ; --- UNDO STATE                ----------------------------------------
 

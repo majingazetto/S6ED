@@ -50,6 +50,7 @@ All Z80 assembly code for S6ED is built with the **sjasmplus** assembler (see `C
 * **DEFB width:** Maximum 8 byte values per `DEFB` line.
 * **Variable placement:** All variables must reside in `VARS.Z8A`, inside the block between the `VARS` and `ENDVARS` symbols (RAM right past the `.COM` image, zeroed by `INIT`). `TEST/static.py` `check_vars_block` enforces both the placement and the zeroing.
 * **Page 1 Hook Protection:** Never install hooks (such as `H.TIMI` or `H.KEYI`) pointing into Page 1 (`#4000-#7FFF`), as mapper banking can page out the target code and crash the machine.
+* **FTRBASE budget is target-dependent and radically different.** S6ED (`FTRBASE=#8000`, `FTRTOP=#C000`): 16,384 B total, ~11,600 B free. S2ED (`FTRBASE=#9C00`, `FTRTOP=#B000`): 5,120 B total minus the 1,536 B `WSVBUF` window save buffer at its top, ~1,500 B free after the W1 window engine — and ~200 B once the menu subsystem lands. Any new FTRBASE passenger MUST verify it fits on BOTH targets. The build enforces `ASSERT FTRFREE >= 128` in both root sources; the static `ftr-budget` check requires a `; FTR-BUDGET: ...` comment within ±5 lines of every `FCALL` in `CORE/*.Z8A`. Check `FTRFREE` in the `.sym` files. See `DEV/SPEC_S2ED_FTRBASE_GUARD.md`.
 
 ---
 
