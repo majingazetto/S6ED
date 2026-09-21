@@ -3,7 +3,8 @@
 #	* (c) 2024 - 2025 Armando Pérez            						    	*
 #	*************************************************************************
 
-.PHONY: build run clean check gate test selftest testall
+.PHONY: build run clean check gate test test-s2 selftest testall \
+        run-s2 run-s2-1mb run-s2-msx2 run-s2-msx2-128
 
 # 	=========================================================================
 # 	CONSTANTS
@@ -160,10 +161,27 @@ run: build dsk
 run128: build dsk
 	m2d2 128k $(DSKFILE)
 
+# S2ED's target is an MSX1, so that is what `run-s2` gives you.  MSX-DOS 2
+# does not run on an MSX1 (the kernel halts at #4005), so m1d2 boots a Nextor
+# kernel on a Sony HB-20P with slot 3 expanded into a 128 kB mapper plus a disk
+# interface: a real TMS9918-class VDP, and SEGTOT 8 / SEGAVL 0 -- the same
+# segment budget as a stock NMS 8250.
 run-s2: build-s2 dsk-s2
+	m1d2 $(DSKFILE_S2)
+
+# Same machine with a 1 MB mapper: for debugging WITHOUT the segment ceiling,
+# never for concluding that something fits.
+run-s2-1mb: build-s2 dsk-s2
+	m1d2 1mb $(DSKFILE_S2)
+
+# The MSX2 machines run S2ED too (it is a DOS program, and Screen 2 exists on a
+# V9938).  Useful only to compare the S2 driver against the S6 one on identical
+# hardware -- the VDP is wrong and the mapper is roomy, so neither is the
+# machine to judge S2ED on.
+run-s2-msx2: build-s2 dsk-s2
 	m2d2 $(DSKFILE_S2)
 
-run-s2-128: build-s2 dsk-s2
+run-s2-msx2-128: build-s2 dsk-s2
 	m2d2 128k $(DSKFILE_S2)
 
 # Nextor 2.1 check: Nextor standalone kernel on 2 MB
@@ -195,6 +213,10 @@ check:
 
 gate:
 	@$(TESTDIR)/runtests.py --gate
+
+# Suite S2: the MSX1 / SCREEN 2 gate, on Custom_MSX1_DOS2 under Nextor.
+test-s2:
+	@$(TESTDIR)/runtests.py --s2
 
 test:
 	@$(TESTDIR)/runtests.py
