@@ -133,7 +133,7 @@ CLRROW          PUSH    BC
                 INC     HL
                 DJNZ    .CLP
 
-                ; 2. FILL THE COLOR MAP ROW (32 BYTES OF COLTXT)
+                ; 2. FILL THE COLOR MAP ROW (32 BYTES OF VCOLTXT)
                 POP     BC
                 PUSH    BC
                 LD      L, B
@@ -146,7 +146,7 @@ CLRROW          PUSH    BC
                 LD      DE, COLMAP
                 ADD     HL, DE          ; HL = COLMAP + B * 32
                 LD      B, CELLROW
-                LD      A, COLTXT
+                LD      A, (VCOLTXT)
 .COLP           LD      (HL), A
                 INC     HL
                 DJNZ    .COLP
@@ -316,25 +316,26 @@ COMCELL         PUSH    DE              ; SAVE ATTRIBUTES (D=LATTR, E=RATTR)
                 INC     IX
                 DJNZ    .PATLP
 
-                ; 4. MAP ATTRIBUTES TO TMS9918 COLOR
+                ; 4. MAP ATTRIBUTES TO THEME COLOR
                 POP     DE              ; RESTORE D=LATTR, E=RATTR
                 LD      A, D
                 OR      E               ; A = LATTR | RATTR
-                LD      C, COLTXT       ; DEFAULT COLOR = WHITE ON BLACK
-                BIT     0, A            ; ATRBOLD ?
+                LD      C, A            ; C = ATTRS
+                LD      A, (VCOLTXT)    ; DEFAULT COLOR
+                BIT     0, C            ; ATRBOLD ?
                 JR      Z, .NOTBD
-                LD      C, COLBOLD
+                LD      A, (VCOLBOLD)
                 JR      .SETCOL
-.NOTBD          BIT     1, A            ; ATRITAL ?
+.NOTBD          BIT     1, C            ; ATRITAL ?
                 JR      Z, .NOTIT
-                LD      C, COLITAL
+                LD      A, (VCOLITAL)
                 JR      .SETCOL
-.NOTIT          BIT     2, A            ; ATRUNDR ?
+.NOTIT          BIT     2, C            ; ATRUNDR ?
                 JR      Z, .SETCOL
-                LD      C, COLUNDR
+                LD      A, (VCOLUNDR)
 
 .SETCOL         ; 5. WRITE ONE COLOR BYTE TO COLMAP
-                LD      (IY+0), C
+                LD      (IY+0), A
                 INC     IY
                 RET
 

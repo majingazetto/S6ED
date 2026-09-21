@@ -96,8 +96,8 @@ DRWSTAT         CALL    BLDSTAT         ; BUILD STRING IN STATBUF
                 INC     IX
                 DJNZ    .STPLP
 
-                ; STATUS BAR USES COLUI (BLACK ON WHITE)
-                LD      A, COLUI
+                ; STATUS BAR USES THE UI THEME COLOR
+                LD      A, (VCOLUI)
                 LD      (IY+0), A
                 INC     IY
 
@@ -319,8 +319,8 @@ DRWMENU         CALL    VIDBANK
                 INC     IX
                 DJNZ    .MNUPL
 
-                ; ROW 0 USES COLUI (BLACK ON WHITE)
-                LD      A, COLUI
+                ; ROW 0 USES THE UI THEME COLOR
+                LD      A, (VCOLUI)
                 LD      (IY+0), A
                 INC     IY
 

@@ -540,7 +540,9 @@ PARSALN         LD      A, (HL)
 
 
 ; - PARSTHM ----------------------------
-; - PARSE THEME NAME AND LOAD PALDATA
+; - PARSE THEME NAME AND LOAD THE THEME COLORS
+; - S6ED: 8-BYTE V9938 PALETTE TABLES (4 COLORS, R/G/B) INTO PALDATA
+; - S2ED: 7-BYTE TMS9918 COLOR TABLES (FG<<4|BG) INTO VCOLTXT..VCOLBG
 ; - IN:  HL = POINTER TO VALUE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
@@ -550,6 +552,35 @@ PARSTHM         LD      A, (HL)
                 CALL    UPCASE
                 SUB     #41             ; 'A'
                 RET     C
+                IFDEF   S2ED
+                CP      #08             ; 8 ENTRIES (A-H)
+                RET     NC
+                LD      DE, S2TIDX
+                ADD     A, E
+                LD      E, A
+                ADC     A, D
+                SUB     E
+                LD      D, A
+                LD      A, (DE)
+                CP      #FF
+                RET     Z
+                ADD     A, A
+                LD      E, A
+                LD      D, #00
+                LD      HL, S2TPTR
+                ADD     HL, DE
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)
+                EX      DE, HL
+                ; FALL THROUGH TO .CPYTHM
+.CPYTHM         LD      DE, VCOLTXT
+                LD      BC, 7
+                LDIR
+                LD      A, #FF
+                LD      (PALDIRT), A
+                RET
+                ELSE
                 CP      #0D             ; 13 ENTRIES
                 RET     NC
                 LD      DE, THMIDX
@@ -586,6 +617,7 @@ PARSTHM         LD      A, (HL)
                 LD      A, #FF
                 LD      (PALDIRT), A
                 RET
+                ENDIF
 
 
 ; --- CFG PARSER TABLES         ----------------------------------------
@@ -597,10 +629,16 @@ PRFTBL          DEFB    #02, #FF, #FF, #FF, #FF, #FF, #FF, #FF
 
 MKPTBL          DEFB    #02, #01, #FF, #00
 
+                IFDEF   S2ED
+                ; A=AMBER, B=BLUE, D=DARK, G=GREEN (ELSE #FF = NO THEME)
+S2TIDX          DEFB    #01, #03, #FF, #00, #FF, #FF, #02, #FF
+S2TPTR          DEFW    S2THDKR, S2THMBR, S2THGRN, S2THBLU
+                ELSE
 THMIDX          DEFB    #01, #FF, #FF, #00, #FF, #FF, #02, #FF
                 DEFB    #FF, #FF, #FF, #03, #04
 
 THMPTR          DEFW    THMDEFT, THMAMBR, THMGRN, THMLGHT, THMMSX, THMMONO
+                ENDIF
 
 CLKTBL          DEFB    #00, #01
 
@@ -747,6 +785,7 @@ KEYCHIS         DEFM    "COLOR_HI", 0
 
 ; --- THEMES                    ----------------------------------------
 
+                IFNDEF  S2ED
                 ; 8 BYTES EACH: 4 COLORS * 2 BYTES (V9938 FORMAT)
                 ; BYTE 1: (R << 4) | B,  BYTE 2: G
 THMDEFT         DEFB    #00, #00, #77, #07, #17, #02, #70, #07
@@ -755,3 +794,4 @@ THMGRN          DEFB    #00, #00, #11, #07, #00, #02, #40, #07
 THMMSX          DEFB    #15, #01, #77, #07, #27, #04, #70, #07
 THMLGHT         DEFB    #77, #07, #00, #00, #55, #05, #06, #02
 THMMONO         DEFB    #00, #00, #77, #07, #44, #04, #77, #07
+                ENDIF

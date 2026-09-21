@@ -634,8 +634,71 @@ class S29Margin(S2Case):
         return checks
 
 
+# --- S2-10  THEMES RECOLOR TEXT AND CHROME ------------------------------
+
+
+class S210Theme(S2Case):
+    name = 'S2-10-theme'
+    desc = 'THEME=AMBER loads S2THMBR into VCOLTXT..VCOLBG and reaches VRAM'
+    origin = ('the theme integration itself: the TMS9918 palette is fixed, '
+              'so a theme is a choice of WHICH of the 16 colours fills each '
+              'role, carried in seven RAM bytes.  THMLOAD plants the default, '
+              'PARSTHM rewrites them on THEME=, and COMCELL, CLRROW, INITCOL, '
+              'DRWSTAT and DRWMENU read them instead of the old immediates.  '
+              'A copy that never lands leaves the editor in the default theme '
+              'with the config claiming amber.')
+    AMBER = [0xA1, 0x1A, 0xB1, 0x71, 0x31, 0xE1, 1]     # S2THMBR
+    LINES = ['AMBER ON THIS LINE', 'SECOND LINE']
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def config(self, ctx, variant=None):
+        return self.cfg + 'THEME=AMBER\n'
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram='patcol', vars_=[('RG7SAV', 1)])
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        dump = run.blob('boot', 'patcol')
+        if dump is None:
+            return [Check('S2-10/dump', False, 'no VRAM dump')]
+        got = run.var('boot', 'VCOLTXT')
+        checks = [
+            Check('S2-10/theme-vars', got == self.AMBER,
+                  'VCOLTXT..VCOLBG hold S2THMBR' if got == self.AMBER else
+                  'VCOLTXT..VCOLBG = %s (expected %s)'
+                  % (got, ['#%02X' % b for b in self.AMBER])),
+            Check('S2-10/border', run.var('boot', 'RG7SAV') == self.AMBER[6],
+                  'R#7 border = %s (expected %d)'
+                  % (run.var('boot', 'RG7SAV'), self.AMBER[6])),
+        ]
+        col = dump[0x2000:]
+        wrong = []
+        for row in range(pattern.TXRFIRST, pattern.TXRLAST + 1):
+            _, colours = pattern.uniform_colour_cells(col, row)
+            if colours != {self.AMBER[0]}:
+                wrong.append((row, sorted('#%02X' % c for c in colours)))
+        checks.append(Check('S2-10/text-amber', not wrong,
+                            'every text cell is #A1 (dark yellow on black)'
+                            if not wrong else 'rows: %s' % wrong[:4]))
+        wrong = []
+        for row in (pattern.MNUROW, pattern.STBROW):
+            _, colours = pattern.uniform_colour_cells(col, row)
+            if colours != {self.AMBER[1]}:
+                wrong.append((row, sorted('#%02X' % c for c in colours)))
+        checks.append(Check('S2-10/chrome-amber', not wrong,
+                            'menu and status bars are #1A (black on amber)'
+                            if not wrong else 'rows: %s' % wrong[:4]))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
-         S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin()]
+         S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
+         S210Theme()]
 
 
 def run(ctx, cases=None):
