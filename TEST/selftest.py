@@ -9,9 +9,24 @@ failure of the self-test, not as a catch.
 """
 
 import gate
+import gate_s2
 import mutations
 import static
 from result import Check
+
+
+def _ctx_for(ctx, mut):
+    """The context a mutation is measured in.
+
+    A mutation in shared CORE code may be aimed at either target: `target`
+    picks which binary is built and which gate is run.  The sources are the
+    same tree either way -- that is the point of CORE.
+    """
+    target = mut.get('target', 'S6ED')
+    if target == ctx.target:
+        return ctx
+    sibling = ctx.for_target(target)
+    return sibling
 
 
 def run(ctx, name_filter='', baseline=None):
@@ -39,14 +54,23 @@ def run(ctx, name_filter='', baseline=None):
                                 % ', '.join(stale)))
             continue
         try:
-            with mutations.Applied(ctx, mut):
-                checks.append(_one(ctx, mut))
+            # Apply through the TARGET's context: find_src_file resolves along
+            # that target's include path, and RENDER.Z8A / UI.Z8A / SCROLL.Z8A
+            # exist in both S6/ and S2/.
+            mctx = _ctx_for(ctx, mut)
+            with mutations.Applied(mctx, mut):
+                checks.append(_one(mctx, mut))
         except Exception as exc:                          # noqa: BLE001
             checks.append(Check('mut/%s' % mut['name'], False,
                                 'could not apply: %s' % exc))
-    # The sources are back: rebuild so the tree is left exactly as found.
+    # The sources are back: rebuild BOTH targets so the tree is left exactly
+    # as found.  This matters more than it looks -- a gate run does not build,
+    # so a stale .COM from the last mutation is read as if it were the clean
+    # one, and three "reproductions" of a phantom regression came from exactly
+    # that (2026-09-21).
     static.check_build_clean(ctx)
     ctx.reload_symbols()
+    static.check_build_clean(ctx.for_target('S2ED'))
     return checks
 
 
@@ -75,24 +99,35 @@ def _stale(mut, base):
 
 def _baseline(ctx, muts):
     """Verdicts on the CLEAN build for everything these mutations expect."""
-    build = static.check_build_clean(ctx)
-    if not build.ok:
-        return {}
-    ctx.reload_symbols()
-    return _verdicts(ctx, muts)
+    out = {}
+    for target in sorted({m.get('target', 'S6ED') for m in muts}):
+        tctx = _ctx_for(ctx, {'target': target})
+        build = static.check_build_clean(tctx)
+        if not build.ok:
+            continue
+        tctx.reload_symbols()
+        out.update(_verdicts(tctx,
+                             [m for m in muts
+                              if m.get('target', 'S6ED') == target]))
+    return out
 
 
 def _verdicts(ctx, muts):
     out = {}
-    for fn in static.ALL:
-        if fn is static.check_build_clean:
-            continue
-        chk = fn(ctx)
-        out[chk.name] = not chk.counts_as_failure
+    # The static checks only describe S6ED (they read its .sym and its image),
+    # so they are measured once, on that target.
+    if ctx.target == 'S6ED':
+        for fn in static.ALL:
+            if fn is static.check_build_clean:
+                continue
+            chk = fn(ctx)
+            out[chk.name] = not chk.counts_as_failure
     filters = {m['filter'].upper() for m in muts}
-    cases = [c for c in gate.CASES
+    catalog = gate_s2.CASES if ctx.target == 'S2ED' else gate.CASES
+    runner = gate_s2.run if ctx.target == 'S2ED' else gate.run
+    cases = [c for c in catalog
              if any(f in c.name.upper() for f in filters)]
-    for chk in gate.run(ctx, cases):
+    for chk in runner(ctx, cases):
         out[chk.name] = not chk.counts_as_failure
     return out
 

@@ -55,22 +55,23 @@ class Case(object):
         files = {}
         cfg = self.config(ctx, variant)
         if cfg is not None:
-            files['S6ED.CFG'] = cfg
+            files[ctx.prefix + '.CFG'] = cfg
         doc = self.fixture(ctx, variant)
         if doc is not None:
             files[self.fixture_name] = doc
         cmd = self.autoexec
         if cmd is None:
-            cmd = ('S6ED %s' % self.fixture_name) if doc is not None else 'S6ED'
+            cmd = ('%s %s' % (ctx.prefix, self.fixture_name)
+                   if doc is not None else ctx.prefix)
         files['AUTOEXEC.BAT'] = cmd + '\r\n'
         return files
 
     def disk_copies(self, ctx):
-        out = [os.path.join(ctx.code_dir, 'S6ED.COM')]
+        out = [os.path.join(ctx.code_dir, ctx.prefix + '.COM')]
         if self.with_font:
-            out.append(os.path.join(ctx.code_dir, 'S6ED.FNT'))
+            out.append(os.path.join(ctx.code_dir, ctx.prefix + '.FNT'))
         if self.with_dat:
-            out.append(os.path.join(ctx.code_dir, 'S6ED.DAT'))
+            out.append(os.path.join(ctx.code_dir, ctx.prefix + '.DAT'))
         return out
 
     # - behaviour ------------------------------------------------------

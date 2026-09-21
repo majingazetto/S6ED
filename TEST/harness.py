@@ -25,6 +25,14 @@ SEGSIZE = 16384
 MACH_128K = ('Philips_NMS_8250', 'msxdos2')
 MACH_2MB = ('Boosted_MSX2_EN', 'msxdos2')
 MACH_JP = ('Boosted_MSX2+_JP', 'msxdos2')
+# S2ED's target: a real TMS9918-class VDP.  MSX-DOS 2 does not run on an MSX1
+# (measured: the kernel halts with PC pinned at #4005), so the DOS 2-class
+# kernel is Nextor, whose standalone ASCII16 ROM adopts the machine's own disk
+# interface.  Custom_MSX1_DOS2 is a Sony HB-20P with slot 3 expanded into a
+# 128 kB mapper plus a Sony HBD-20W interface -- SEGTOT 8, SEGAVL 0, the same
+# segment budget as the NMS 8250.  See ~/.local/bin/m1d2.
+MACH_MSX1 = ('Custom_MSX1_DOS2', 'nextor')
+MACH_MSX1_1M = ('Custom_MSX1_DOS2_1M', 'nextor')
 
 # Variables every snapshot carries.  Cheap, and having them on a failing run is
 # the difference between a diagnosis and another session.
@@ -36,7 +44,7 @@ DEFAULT_VARS = [
     ('TABWIDTH', 1), ('AUTOALGN', 1), ('KMAPID', 1), ('MKUPMD', 1),
     ('SAVEEOL', 1), ('CLKPH', 1), ('CLKHZ', 1), ('SCRRDY', 1),
     ('SHOWCLK', 1), ('CLKMIN', 1), ('KMAPID', 1), ('VIMODE', 1),
-    ('FNTOK', 1), ('FNTROMD', 1),
+    ('FNTOK', 1), ('FNTROMD', 1), ('BLNKPH', 1), ('BLNKCNT', 1),
     ('SAVSCRMD', 1), ('SAVL40', 1), ('SAVLLEN', 1),
     ('SAVFORC', 1), ('SAVBAKC', 1), ('SAVBDRC', 1),
     ('SCRMOD', 1), ('LINLEN', 1), ('LINL40', 1),
@@ -147,7 +155,7 @@ class Session(object):
         TOTLINES = 7109 with a garbage SEGTBL.  The gate has to assert that the
         bytes at the breakpoint address are still ours.
         """
-        com = os.path.join(self.ctx.code_dir, 'S6ED.COM')
+        com = os.path.join(self.ctx.code_dir, self.ctx.prefix + '.COM')
         with open(com, 'rb') as fh:
             image = fh.read()
         off = addr - 0x100
@@ -304,6 +312,15 @@ class Session(object):
                 addr, length, kind = 0, 8 * 128, 'menu'
             elif spec['vram'] == 'font':
                 addr, length, kind = 0x8000, 32768, 'font'
+            elif spec['vram'] == 'pat':
+                # Screen 2 pattern generator: 24 rows of 256 bytes, row r at
+                # r * 256, cell c at r * 256 + c * 8.
+                addr, length, kind = 0x0000, 6144, 'pat'
+            elif spec['vram'] == 'col':
+                # Screen 2 colour table, same addressing, at #2000.
+                addr, length, kind = 0x2000, 6144, 'col'
+            elif spec['vram'] == 'patcol':
+                addr, length, kind = 0x0000, 0x2000 + 6144, 'patcol'
             elif spec['vram'] == 'text':
                 # Text-mode name table (screens 0/1, linear from #0000):
                 # boot banners and switch output, for cases that never
@@ -362,9 +379,11 @@ class Session(object):
         with open(script, 'w') as fh:
             fh.write(self.tcl(timeline))
 
-        machine, ext = self.case.machine
-        cmd = ['openmsx', '-machine', machine, '-ext', ext,
-               '-diska', dsk, '-script', script]
+        machine, exts = self.case.machine[0], self.case.machine[1:]
+        cmd = ['openmsx', '-machine', machine]
+        for ext in exts:
+            cmd += ['-ext', ext]
+        cmd += ['-diska', dsk, '-script', script]
         run = Run(self.case, self.dir)
         # openMSX's own output goes to FILES, never to pipes: with a pipe it
         # stalls before the machine boots (measured: 0% CPU, empty log, looks
@@ -395,7 +414,7 @@ class Session(object):
                     int(v) for v in value.split()]
         for (_, label, spec) in timeline.snaps:
             for kind in ('vram', 'menu', 'dir', 'image', 'pal', 'font',
-                         'text'):
+                         'text', 'pat', 'col', 'patcol'):
                 path = os.path.join(self.dir, '%s.%s' % (label, kind))
                 if os.path.exists(path):
                     run.files[(label, kind)] = path

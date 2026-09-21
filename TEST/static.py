@@ -153,6 +153,54 @@ def check_record_exclusive(ctx):
                  '%d block records own every byte they span' % len(RECORDS))
 
 
+# Buffers whose layout is 1 length byte + TEXTCOLS text + TEXTCOLS attributes.
+# An offset into one of them is a target parameter, never a number.
+LAYOUT_BUFS = ('WORKBUF', 'WORKBUF2', 'PREVBUF')
+LAYOUT_OFF_RE = re.compile(
+    r'\b(%s)\s*\+\s*(\d+)' % '|'.join(LAYOUT_BUFS))
+# Immediates that are S6ED's geometry spelled out: the line width and the
+# column and row indices derived from it.  In CORE they are always wrong.
+GEOM_IMM_RE = re.compile(
+    r'\b(?:CP|SUB|LD\s+(?:A|B|C|D|E|H|L|BC|DE|HL)\s*,)\s*'
+    r'(23|24|63|64|65|79|80|81|128|129|159|160|161)\b')
+
+
+def check_target_params(ctx):
+    """Shared CORE code may not spell out a target's geometry as a number.
+
+    This has now cost three rounds.  FILELOAD carried 80 / 81 / 79 and gave
+    S2ED garbage attributes down the left of every line; EDDELBK and EDDELCHR
+    carried `CP 79` and `WORKBUF + 80` and dragged an attribute byte into the
+    last text column, after which EDINSCHR refuses every keystroke on that
+    line because the record looks full; EDNWLIN carried `LD B, 23` and
+    repainted the split head over the status bar.  Every one of them is
+    invisible in a single-target tree and silent in a second one.
+
+    Offsets into a line record derive from TEXTCOLS, viewport bounds from
+    ROWSVIS.  Only the length byte (+0) and the first text column (+1, +2)
+    may be written as numbers.
+    """
+    bad = []
+    core = os.path.join(ctx.src_dir, 'CORE')
+    for fname in sorted(os.listdir(core)):
+        if not fname.endswith('.Z8A'):
+            continue
+        for n, line in enumerate(open(os.path.join(core, fname),
+                                      errors='replace'), 1):
+            code = _strip_comment(line)
+            for m in LAYOUT_OFF_RE.finditer(code):
+                if int(m.group(2)) > 2:
+                    bad.append('CORE/%s:%d %s + %s'
+                               % (fname, n, m.group(1), m.group(2)))
+            m = GEOM_IMM_RE.search(code)
+            if m:
+                bad.append('CORE/%s:%d immediate %s'
+                           % (fname, n, m.group(1)))
+    return Check('target-params', not bad, '; '.join(bad[:8]) if bad else
+                 'CORE derives every record offset from TEXTCOLS and every '
+                 'viewport bound from ROWSVIS')
+
+
 def check_data_placement(ctx):
     """Mutable state belongs in VARS.Z8A; anything else needs classifying.
 
@@ -333,7 +381,8 @@ def check_build_clean(ctx):
     """The build itself: 0 errors, 0 warnings, every ASSERT satisfied."""
     # -B: force the assembly even when nothing changed, so every ASSERT in
     # the sources is actually evaluated on every run.
-    r = subprocess.run(['make', '-B', 'build'], cwd=ctx.code_dir,
+    target = 'build' if ctx.prefix == 'S6ED' else 'build-s2'
+    r = subprocess.run(['make', '-B', target], cwd=ctx.code_dir,
                        capture_output=True, text=True)
     tail = (r.stdout + r.stderr).strip().splitlines()
     summary = next((l for l in tail if l.startswith('Errors:')), '')
@@ -410,7 +459,8 @@ def check_window_discipline(ctx):
 
 
 ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
-       check_layout_asserts, check_record_exclusive, check_data_placement,
+       check_layout_asserts, check_record_exclusive, check_target_params,
+       check_data_placement,
        check_label_style,
        check_number_notation, check_defb_width, check_page1_hooks,
        check_assets, check_feature_discipline, check_window_discipline]

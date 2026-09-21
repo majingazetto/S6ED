@@ -1,16 +1,17 @@
-# S6ED regression suite
+# SXED regression suite (S6ED + S2ED)
 
 ```
 make check       # T0 only: static invariants, no emulator          ~0.2 s
-make gate        # the Gate: the headless openMSX sessions           ~30 s
-make test        # both -- run before calling an integration done    ~30 s
-make selftest    # put each historical defect back, prove it is caught ~35 s
-make testall     # all three in one run, every check printed         ~75 s
+make gate        # the S6 Gate: headless openMSX on an MSX2          ~30 s
+make test-s2     # the S2 Gate: headless openMSX on an MSX1          ~14 s
+make test        # static + both gates -- before calling a job done  ~45 s
+make selftest    # put each historical defect back, prove it is caught
+make testall     # all of it in one run, every check printed
 ```
 
 All of them from `CODE/`. Or directly:
-`TEST/runtests.py [--all|--static|--gate|--selftest] [-k NAME]`. Exit code is 0
-only when every check passes.
+`TEST/runtests.py [--all|--static|--gate|--s2|--selftest] [-k NAME]`. Exit code
+is 0 only when every check passes.
 
 Nothing short-circuits: every section asked for runs to the end and every check
 is printed, pass or fail, so one `make testall` shows the whole picture. The
@@ -45,7 +46,9 @@ Every new test or code change must satisfy the four rules documented in [`AGENTS
 |---|---|
 | `runtests.py` | driver and CLI |
 | `static.py` | T0 checks: build, image end, variable placement, record layout, lints |
-| `gate.py` | the eleven runtime cases |
+| `gate.py` | the S6ED runtime cases (Screen 6, MSX2) |
+| `gate_s2.py` | the S2ED runtime cases (Screen 2, MSX1) |
+| `pattern.py` | Screen 2 expectation computed from `S2ED.FNT` + the document |
 | `cases.py` | case base class, fixture helpers |
 | `harness.py` | one openMSX session: disk, generated `.tcl`, run, dumps |
 | `keys.py` | MSX key matrix and the input timeline |
@@ -55,7 +58,63 @@ Every new test or code change must satisfy the four rules documented in [`AGENTS
 | `data_baseline.txt` | data defined outside `VARS.Z8A`, reviewed and classified |
 | `out/` | per-case disks, scripts, logs and dumps (gitignored) |
 
-## The Gate
+## Two targets, one harness
+
+`CORE/` is shared between S6ED and S2ED, so a change to it has to be checked on
+both. A `Context` carries the target: the file-name prefix, the `.sym`, the
+assembler include path (which is also how the harness resolves a source file --
+`RENDER.Z8A`, `UI.Z8A` and `SCROLL.Z8A` exist in both `S6/` and `S2/`) and the
+openMSX machine. A mutation may name `'target': 'S2ED'` and is then applied,
+built and measured over there.
+
+**The S2 gate is verified differently, and it is the stronger method.** The S6
+gate's general case, `G7/render-pure`, forces a full `REDRAW` and diffs the
+screen against itself: that proves the differential painters agree with the
+bulk painter, and nothing about whether either is right. On Screen 2 the whole
+pipeline is closed-form --
+
+    cell(c) = FONT4H[text[2c]] | FONT4L[text[2c + 1]]
+    FONT4L  = FONT4H with the nibbles swapped
+
+-- so `pattern.py` **computes** the pattern table the VDP should be holding
+from `S2ED.FNT` and the document text, and the case compares byte for byte. No
+golden images, so nothing can be blessed by accident.
+
+That difference is not theoretical: `mut/s2-rendiff-hit` (the differential
+painter's cache-hit path repaints nothing) **passes `render-pure`** -- the stale
+row survives the forced REDRAW, so the two screens are identically wrong -- and
+is caught only by `S2-8/matches-document`. Measured, 2026-09-21.
+
+### The S2 cases
+
+| Case | Derived from |
+|---|---|
+| `S2-1-render` | round 1: `RENDEROW` called `COMROW` with `B` destroyed, so every row composed on top of row 0 |
+| `S2-2-attrs` | round 2: `FILELOAD` cleared the attribute half from the S6 offset, leaving 16 dirty bytes per record -- the yellow bands |
+| `S2-3-cursor` | round 2: a colour-nibble swap cannot invert half a cell, so the cursor covered two characters |
+| `S2-4-select` | round 2: the same cause seen through `SELDIFF`, whose one-column deltas cancelled each other out |
+| `S2-5-band` | round 2: `CORE` bounded the cursor with `SCRROWS` where it meant `ROWSVIS` |
+| `S2-6-deltype` | round 3: `EDDELBK` / `EDDELCHR` ran to a literal 79 and poisoned the last text column, after which typing was refused |
+| `S2-7-enterbot` | round 3: `EDNWLIN` repainted the split head at a literal row 23 -- the status bar |
+| `S2-8-renderpure` | the general net: edits, then a forced REDRAW, compared both ways |
+
+Two traps this suite met while being built, both worth knowing before adding a
+case:
+
+* **The cursor blinks.** `MAINLOOP` toggles `BLNKPH` every 20 JIFFY ticks. The
+  first version of `S2-3` sampled five times at an even spacing that worked out
+  to exactly two toggles, so every sample landed in the same phase and the case
+  failed against a cursor that was working. Samples are now unevenly spaced,
+  each is checked against its own `BLNKPH`, and the last one is taken right
+  after a keystroke, which ends in `.DRAWCUR` and leaves the cursor up by
+  construction.
+* **An operation that ends in `REDRAW` blinds the sample.** `S2-8` originally
+  ended with BACKSPACE at column 0, which in `WRAP_TXT` cascades `REFLOW` and
+  finishes with a full repaint microseconds before the snapshot -- a mutation
+  that dropped a scroll's VRAM push went straight through it. The timeline now
+  ends with a mid-document split.
+
+## The S6 Gate
 
 Every case names the defect it was derived from in its `origin` field.
 
@@ -155,6 +214,28 @@ until the mutation is caught on every run -- D8 does both, and the comment on
 the case records what was measured. If a later change to MAINLOOP moves the
 phase, `make selftest` will say NOT CAUGHT: that is the signal to re-tune the
 timeline, not to delete the case.
+
+## The trap that costs the most time
+
+`make selftest` **mutates the sources in place** and restores them in
+`__exit__`. Kill the run -- `pkill`, Ctrl-C, a timeout -- and the tree is left
+mutated with a `.mutbak` beside it. And `--gate` **does not build**, so a gate
+run afterwards reads whatever `.COM` is on disk, which after any `make testall`
+is the binary of the *last mutation*. On 2026-09-21 those two together produced
+three identical "reproductions" of a regression in `E4` and `E7` that did not
+exist: `mut/e4-selall-del` had survived in `ACTSELAL`.
+
+After an interrupted self-test, before believing any gate result:
+
+```sh
+git status                       # sources clean?
+find . -name '*.mutbak'          # nothing left behind?
+cd CODE && make build dsk s2     # rebuild; --gate will not do it for you
+```
+
+A worktree is no escape: one created outside the workspace cannot find
+`msxtools/bin/dsktool`, and one that has not been built reports **PASS**, so a
+bisect in it measures nothing at all.
 
 ## Known limits
 

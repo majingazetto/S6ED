@@ -10,6 +10,185 @@ import os
 import shutil
 
 MUTATIONS = [
+    # --- SUITE S2 (MSX1 / SCREEN 2) -----------------------------------
+    #
+    # These run on the S2 target: a different binary, a different gate and a
+    # different machine, from the same CORE sources.  `target` says which.
+    {
+        'name': 's2-render-brow',
+        'why': 'RENDEROW calls COMROW with B destroyed, so every text row '
+               'composes on top of row 0',
+        'target': 'S2ED',
+        'file': 'RENDER.Z8A',
+        'old': """                ; RESTORE B = SCREEN ROW. LINEREAD ENDS IN AN LDIR AND
+                ; SCANMKUP CLOBBERS BC, SO COMROW WOULD OTHERWISE COMPOSE
+                ; EVERY ROW ON TOP OF ROW 0.
+                POP     BC
+                PUSH    BC""",
+        'new': """                ; MUTATION: B IS NOT RESTORED BEFORE COMROW""",
+        'filter': 'S2-1',
+        'expect': ['S2-1/rows'],
+    },
+    {
+        'name': 's2-attr-clear',
+        'why': 'FILELOAD clears the attribute half from the S6 offset, so the '
+               'first 16 attribute bytes of every S2 record stay dirty and '
+               'render as bold (the yellow bands)',
+        'target': 'S2ED',
+        'file': 'FILEIO.Z8A',
+        'old': """                LD      DE, 1 + TEXTCOLS
+                ADD     HL, DE          ; HL = ATTR START""",
+        'new': """                LD      DE, 81          ; MUTATION: THE S6 LITERAL
+                ADD     HL, DE          ; HL = ATTR START""",
+        'filter': 'S2-2',
+        'expect': ['S2-2/text-colour'],
+    },
+    {
+        'name': 's2-cursor-cell',
+        'why': 'the inversion covers the WHOLE cell instead of one text '
+               'column -- a two-character cursor, and consecutive selection '
+               'deltas that cancel each other out',
+        'target': 'S2ED',
+        'file': 'RENDER.Z8A',
+        'old': """                LD      E, #F0
+                JR      Z, .PXHAVE
+                LD      E, #0F""",
+        'new': """                LD      E, #FF          ; MUTATION: WHOLE CELL
+                JR      Z, .PXHAVE
+                LD      E, #FF""",
+        'filter': 'S2-3',
+        'expect': ['S2-3/one-column'],
+    },
+    {
+        'name': 's2-sel-cell',
+        'why': 'the same whole-cell inversion seen through the selection: '
+               'SELDIFF extends one column at a time, so two deltas land on '
+               'one cell and their XORs cancel, leaving residue behind',
+        'target': 'S2ED',
+        'file': 'RENDER.Z8A',
+        'old': """                LD      E, #F0
+                JR      Z, .PXHAVE
+                LD      E, #0F""",
+        'new': """                LD      E, #FF          ; MUTATION: WHOLE CELL
+                JR      Z, .PXHAVE
+                LD      E, #FF""",
+        'filter': 'S2-4',
+        'expect': ['S2-4/range'],
+    },
+    {
+        'name': 's2-band-rows',
+        'why': 'the cursor is bounded by SCRROWS (the physical screen) where '
+               'it means ROWSVIS (the text band), so it walks two rows below '
+               'the painted band before the viewport scrolls',
+        'target': 'S2ED',
+        'file': 'EDIT.Z8A',
+        'old': """                LD      A, (CURY)
+                CP      ROWSVIS - 1
+                JR      Z, .SCRLDN""",
+        'new': """                LD      A, (CURY)
+                CP      SCRROWS - 1     ; MUTATION: PHYSICAL, NOT VISIBLE
+                JR      Z, .SCRLDN""",
+        'filter': 'S2-5',
+        'expect': ['S2-5/cury'],
+    },
+    {
+        'name': 's2-delbk-79',
+        'why': 'EDDELBK walks its shift loop to a literal 79, dragging an '
+               'attribute byte into the last text column -- after which '
+               'EDINSCHR sees a full record and refuses every keystroke',
+        'target': 'S2ED',
+        'file': 'EDIT.Z8A',
+        'old': """.SHIFTLP        LD      A, B
+                CP      TEXTCOLS - 1""",
+        'new': """.SHIFTLP        LD      A, B
+                CP      79              ; MUTATION: THE S6 LITERAL""",
+        'also': [('EDIT.Z8A',
+                  """.BLANKLS        LD      HL, WORKBUF + TEXTCOLS
+                LD      (HL), ' '       ; BLANK LAST TEXT COL
+                LD      HL, WORKBUF + TEXTCOLS + TEXTCOLS""",
+                  """.BLANKLS        LD      HL, WORKBUF + 80
+                LD      (HL), ' '       ; BLANK LAST TEXT COL
+                LD      HL, WORKBUF + 80 + TEXTCOLS""")],
+        'filter': 'S2-6',
+        'expect': ['S2-6/bs-dev/line'],
+    },
+    {
+        'name': 's2-enterbot-23',
+        'why': 'EDNWLIN repaints the shortened head at a literal row 23, '
+               'which on S2 is the status bar',
+        'target': 'S2ED',
+        'file': 'EDIT.Z8A',
+        'old': """                LD      B, ROWSVIS - 1
+                CALL    RENDEROW""",
+        'new': """                LD      B, 23           ; MUTATION: THE S6 LITERAL
+                CALL    RENDEROW""",
+        'filter': 'S2-7',
+        'expect': ['S2-7/head-repainted'],
+    },
+    {
+        'name': 's2-scroll-nodump',
+        'why': 'SCRLUPN moves the shadow bands and never pushes the pattern '
+               'band to VRAM -- the round-1 defect: the shadows are right and '
+               'the screen is a scroll behind',
+        'target': 'S2ED',
+        'file': 'SCROLL.Z8A',
+        'old': """                LD      HL, PATSHAD + ROWLEN
+                LD      DE, PGBASE + ROWLEN
+                LD      C, 0            ; BC = K * ROWLEN
+                CALL    VDPDUMP""",
+        'new': """                LD      HL, PATSHAD + ROWLEN
+                LD      DE, PGBASE + ROWLEN
+                LD      C, 0            ; BC = K * ROWLEN
+                                        ; MUTATION: BAND NEVER PUSHED TO VRAM""",
+        'filter': 'S2-5',
+        'expect': ['S2-5/scrolled-rows'],
+    },
+    {
+        'name': 's2-rendiff-hit',
+        'why': 'the differential painter takes its cache-hit path and repaints '
+               'nothing.  MEASURED: this passes render-pure -- the stale row '
+               'survives a full REDRAW, so comparing the screen against the '
+               'screen sees two identical wrong pictures.  Only the '
+               'comparison against the table computed from the font and the '
+               'document catches it, which is the whole argument for this '
+               'suite.',
+        'target': 'S2ED',
+        'file': 'RENDER.Z8A',
+        'old': """                ; CACHE HIT: UPDATE ROW AND COMMITTED CACHE
+                POP     BC
+                CALL    RENDEROW""",
+        'new': """                ; CACHE HIT: UPDATE ROW AND COMMITTED CACHE
+                POP     BC
+                                        ; MUTATION: CACHE HIT REPAINTS NOTHING""",
+        'filter': 'S2-8',
+        'expect': ['S2-8/matches-document'],
+    },
+    {
+        # Round 2 fixed the same class in FILEIO.Z8A and stopped there.  This
+        # is what was left in ACTDWLFT and ACTDLS: the attribute half of the
+        # record addressed as "+ 81", right for a 1+80+80 record and 16 bytes
+        # past the text on a 1+64+64 one.
+        'name': 't0-layout-off',
+        'why': 'CORE addresses the attribute half of a line record as + 81',
+        'file': 'ACTION.Z8A',
+        'old': 'LD      HL, WORKBUF + 1 + TEXTCOLS\n                ADD     HL, DE\n                EX      DE, HL          ; DE = DEST\n\n                LD      A, (DWFROM)',
+        'new': 'LD      HL, WORKBUF + 81\n                ADD     HL, DE\n                EX      DE, HL          ; DE = DEST\n\n                LD      A, (DWFROM)',
+        'filter': 'T0',
+        'expect_static': ['target-params'],
+    },
+    {
+        # EDDELBK / EDDELCHR walked the shift loop to a hard 79 and blanked
+        # WORKBUF + 80.  On S2ED that drags attribute byte 0 into the last
+        # text column, after which EDINSCHR sees a full record and silently
+        # refuses every keystroke on that line.
+        'name': 't0-geom-imm',
+        'why': 'CORE bounds a record loop with the literal 79',
+        'file': 'EDIT.Z8A',
+        'old': '.SHIFTLP        LD      A, B\n                CP      TEXTCOLS - 1',
+        'new': '.SHIFTLP        LD      A, B\n                CP      79',
+        'filter': 'T0',
+        'expect_static': ['target-params'],
+    },
     {
         'name': 'g2-dcreate',
         'why': 'DOS 2 _CREATE refuses an existing file when B bit 7 is set',
