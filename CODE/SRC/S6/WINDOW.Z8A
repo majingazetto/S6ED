@@ -1125,3 +1125,427 @@ DOQIT           LD      HL, 156
 .STRWRN         DEFM    "Unsaved changes!", 0
 .BTNYES         DEFM    "[  YES  ]", 0
 .BTNNO          DEFM    "[  NO  ]", 0
+
+
+; --- WINEDIT                   ----------------------------------------
+
+
+; - WINEDIT ----------------------------
+; - MODAL TEXT INPUT FIELD. RUNS ITS OWN KEY LOOP AND RETURNS WHEN THE
+; - USER ACCEPTS OR CANCELS. THE CALLER HAS ALREADY OPENED THE WINDOW.
+; - IN:  B = FIELD RELATIVE Y, C = FIELD RELATIVE X (PIXELS, X MULTIPLE
+; -          OF 4 SO THE BOX AND ITS WINUPD STAY BYTE ALIGNED)
+; -      D = FIELD WIDTH IN CHARACTERS (1..INPMAX)
+; -      E = CHARACTER CLASS (ED_DIGIT ONLY, FOR NOW)
+; - OUT: CY = 1: CANCELLED.  CY = 0: ACCEPTED, (INPBUF) IS ASCIIZ AND
+; -      (INPLEN) ITS LENGTH
+; - CLOBBERS: ALL
+; -
+; - THE FOCUS HAS THREE POSITIONS -- THE FIELD, OK, CANCEL -- BECAUSE
+; - SPACE MAY ONLY ACTIVATE THE FOCUSED CONTROL AND THE FIELD IS ONE. WITH
+; - TWO POSITIONS SPACE WOULD HAVE TO MEAN "ACCEPT" WHILE SOMEBODY IS
+; - TYPING INTO THE FIELD, WHICH IS FINE FOR DIGITS AND WRONG THE DAY A
+; - CLASS ACCEPTS A SPACE.
+; -
+; - THE BUTTONS BELONG TO THE CALLER AND ARE PAINTED BY EDBTNS, WHICH
+; - READS (WINSEL). THERE IS ONE DIALOG WITH A FIELD PER TARGET TODAY; THE
+; - DAY THERE ARE TWO, EDBTNS BECOMES A POINTER PARAMETER.
+; -
+
+WINEDIT         LD      A, B
+                LD      (EDROW), A
+                LD      A, C
+                LD      (EDCOL), A
+                LD      A, D
+                LD      (EDWID), A
+                LD      A, E
+                CP      ED_DIGIT
+                SCF
+                RET     NZ              ; CLASS NOT IMPLEMENTED: REFUSE
+
+                XOR     A
+                LD      (INPLEN), A
+                LD      (INPBUF), A     ; ASCIIZ, EMPTY
+                LD      (WINSEL), A     ; ED_FFLD
+                CALL    EDBOX           ; THE BORDER, ONCE
+                CALL    EDFLD
+                CALL    EDBTNS
+                CALL    WINSHOW
+
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+
+                CP      ESC
+                JP      Z, .CANCEL
+                CP      CR
+                JP      Z, .ACCEPT
+                CP      ' '
+                JP      Z, .SPACE
+                CP      TAB
+                JR      Z, .NEXT
+                CP      CRIGHT
+                JR      Z, .NEXT
+                CP      CLEFT
+                JR      Z, .PREV
+
+                ; FIELD KEYS ONLY REACH THE FIELD WHEN IT HAS THE FOCUS
+                LD      C, A
+                LD      A, (WINSEL)
+                OR      A
+                JR      NZ, .KEYLP
+                LD      A, C
+                CP      BS
+                JR      Z, .BS
+                CP      '0'
+                JR      C, .KEYLP
+                CP      '9' + 1
+                JR      NC, .KEYLP
+
+                ; APPEND, IF THERE IS ROOM
+                LD      B, A            ; B = DIGIT
+                LD      A, (INPLEN)
+                LD      C, A
+                LD      A, (EDWID)
+                CP      C
+                JR      Z, .KEYLP       ; FULL: IGNORED, SILENTLY
+                LD      HL, INPBUF
+                LD      E, C
+                LD      D, 0
+                ADD     HL, DE
+                LD      (HL), B
+                INC     HL
+                LD      (HL), 0
+                LD      A, C
+                INC     A
+                LD      (INPLEN), A
+                JR      .REFLD
+
+.BS             LD      A, (INPLEN)
+                OR      A
+                JR      Z, .KEYLP
+                DEC     A
+                LD      (INPLEN), A
+                LD      E, A
+                LD      D, 0
+                LD      HL, INPBUF
+                ADD     HL, DE
+                LD      (HL), 0
+
+.REFLD          CALL    EDFLD           ; THE FIELD BOX, NOT THE WHOLE WINDOW
+                CALL    EDBLIT
+                JR      .KEYLP
+
+.NEXT           LD      A, (WINSEL)
+                INC     A
+                CP      3
+                JR      C, .SETFOC
+                XOR     A
+                JR      .SETFOC
+.PREV           LD      A, (WINSEL)
+                OR      A
+                JR      NZ, .PREVD
+                LD      A, 3
+.PREVD          DEC     A
+.SETFOC         LD      (WINSEL), A
+                CALL    EDFLD           ; THE CARET COMES AND GOES WITH FOCUS
+                CALL    EDBTNS
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.SPACE          LD      A, (WINSEL)
+                OR      A
+                JP      Z, .KEYLP       ; THE FIELD HAS IT: SPACE IS NOT A KEY
+
+.ACCEPT         LD      A, (WINSEL)
+                CP      ED_FCAN
+                JR      Z, .CANCEL
+                LD      A, (INPLEN)
+                OR      A
+                JR      Z, .CANCEL      ; AN EMPTY FIELD CANCELS
+                RET                     ; CY = 0 FROM THE OR
+
+.CANCEL         SCF
+                RET
+
+
+; - EDGEOM -----------------------------
+; - THE FIELD BOX, DERIVED FROM THE FIELD ITSELF: IT STARTS FOUR PIXELS
+; - LEFT AND TWO ABOVE THE TEXT AND HOLDS EDWID + 1 CHARACTERS, THE EXTRA
+; - ONE BEING WHERE THE CARET STANDS WHEN THE FIELD IS FULL.
+; - IN:  NONE (USES EDROW, EDCOL, EDWID)
+; - OUT: HL = BOX RELATIVE X, DE = BOX RELATIVE Y, BC = BOX WIDTH
+; - CLOBBERS: AF
+; -
+
+EDGEOM          LD      A, (EDWID)
+                INC     A
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL          ; *2
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL          ; *4
+                ADD     HL, DE          ; *6 PIXELS PER CHARACTER
+                LD      DE, 8
+                ADD     HL, DE
+                LD      B, H
+                LD      C, L            ; BC = (EDWID + 1) * 6 + 8
+                LD      A, (EDROW)
+                SUB     2
+                LD      E, A
+                LD      D, 0            ; DE = BOX RELATIVE Y
+                LD      A, (EDCOL)
+                SUB     4
+                LD      L, A
+                LD      H, 0            ; HL = BOX RELATIVE X
+                RET
+
+
+; - EDBOX ------------------------------
+; - DRAW THE FIELD BORDER INTO THE COMPOSITION BUFFER. ONCE PER DIALOG:
+; - EDBLIT RE-SENDS IT WITH EVERY FIELD REPAINT ANYWAY.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+EDBOX           CALL    EDGEOM
+                PUSH    BC
+                PUSH    DE
+                LD      DE, (WINX)
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                POP     DE
+                LD      HL, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                POP     BC
+                LD      H, B
+                LD      L, C
+                LD      (VDP_NX), HL
+                LD      HL, 12
+                LD      (VDP_NY), HL
+                LD      A, COL_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                JP      LMMV
+
+
+; - EDFLD ------------------------------
+; - PAINT THE FIELD CONTENTS INTO THE COMPOSITION BUFFER: CLEAR THE
+; - INTERIOR, BLIT WHAT HAS BEEN TYPED, AND PUT THE CARET AT THE INSERTION
+; - POINT WHEN THE FIELD HAS THE FOCUS.
+; - IN:  NONE (USES EDROW, EDCOL, EDWID, INPBUF, INPLEN, WINSEL)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+EDFLD           ; 1. INTERIOR, ONE PIXEL INSIDE THE BORDER
+                CALL    EDGEOM
+                INC     HL
+                PUSH    BC
+                PUSH    DE
+                LD      DE, (WINX)
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                POP     DE
+                INC     DE
+                LD      HL, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                POP     BC
+                LD      H, B
+                LD      L, C
+                DEC     HL
+                DEC     HL
+                LD      (VDP_NX), HL
+                LD      HL, 10
+                LD      (VDP_NY), HL
+                LD      A, COL_BG
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; 2. WHAT HAS BEEN TYPED
+                LD      A, (EDCOL)
+                LD      L, A
+                LD      H, 0
+                LD      DE, (WINX)
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DX
+                LD      A, (EDROW)
+                LD      L, A
+                LD      H, 0
+                LD      BC, WINCOMP_Y
+                ADD     HL, BC
+                LD      B, H
+                LD      C, L            ; BC = DY
+                LD      HL, INPBUF
+                XOR     A               ; VARIANT 0 (NORMAL)
+                CALL    WINSTR
+
+                ; 3. THE CARET, ONLY WHILE THE FIELD HAS THE FOCUS
+                LD      A, (WINSEL)
+                OR      A
+                RET     NZ
+                LD      A, (INPLEN)
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL
+                ADD     HL, DE          ; INPLEN * 6
+                LD      A, (EDCOL)
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                LD      DE, (WINX)
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                LD      A, (EDROW)
+                LD      L, A
+                LD      H, 0
+                LD      DE, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                LD      HL, 5
+                LD      (VDP_NX), HL
+                LD      HL, 8
+                LD      (VDP_NY), HL
+                LD      A, COL_HI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                JP      LMMV
+
+
+; - EDBLIT -----------------------------
+; - SEND THE FIELD BOX TO THE SCREEN. A KEYSTROKE PAYS FOR THE BOX, NOT
+; - FOR THE WINDOW.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+EDBLIT          CALL    WINVSY
+                CALL    EDGEOM
+                LD      A, 12
+                JP      WINUPD
+
+
+; --- DOGOTO                    ----------------------------------------
+
+
+; - DOGOTO -----------------------------
+; - GO TO LINE. COLLECTS A LINE NUMBER; IT DOES NOT JUMP. THE JUMP IS
+; - GOTOLN'S, IN PAGE 1, BECAUSE IT WRITES TOPLINE AND CALLS REDRAW.
+; - IN:  NONE
+; - OUT: CY = 1: CANCELLED.  CY = 0: HL = THE LINE TYPED, 1-BASED AND
+; -      UNCLAMPED -- CLAMPING NEEDS TOTLINES AND BELONGS WITH THE JUMP
+; - CLOBBERS: ALL
+; -
+
+DOGOTO          LD      HL, 156
+                LD      (WINX), HL
+                LD      HL, 70
+                LD      (WINY), HL
+                LD      HL, 200
+                LD      (WINW), HL
+                LD      HL, 72
+                LD      (WINH), HL
+                LD      HL, .TITGO
+                CALL    WINOPEN
+
+                ; "Line number (1-NNNN):" IN THREE PIECES. B2D16 HANDS BACK
+                ; HL AT THE FIRST DIGIT AND C THE COUNT, SO NO PROMPT BUFFER
+                ; IS NEEDED -- ONLY A TERMINATOR WRITTEN INTO ITS OWN BUFFER,
+                ; WHICH IT DOCUMENTS AS FREE TO MODIFY.
+                LD      HL, .STRPR1
+                LD      B, 0
+                LD      C, 0
+                XOR     A
+                CALL    WINPRN
+
+                LD      HL, (TOTLINES)
+                CALL    B2D16
+                LD      B, 0
+                PUSH    HL
+                PUSH    BC
+                ADD     HL, BC
+                LD      (HL), 0
+                POP     BC
+                POP     HL
+                PUSH    BC              ; KEEP THE DIGIT COUNT
+                LD      B, 0
+                LD      C, 15
+                XOR     A
+                CALL    WINPRN
+                POP     BC
+                LD      A, C
+                ADD     A, 15
+                LD      C, A            ; RIGHT AFTER THE DIGITS
+                LD      B, 0
+                LD      HL, .STRPR2
+                XOR     A
+                CALL    WINPRN
+
+                LD      B, 34           ; FIELD RELATIVE Y
+                LD      C, 80           ; FIELD RELATIVE X, MULTIPLE OF 4
+                LD      D, INPMAX
+                LD      E, ED_DIGIT
+                CALL    WINEDIT
+
+                PUSH    AF
+                CALL    WINCLOS
+                POP     AF
+                RET     C               ; CANCELLED
+
+                LD      HL, INPBUF
+                CALL    ATOI16
+                OR      A               ; CY = 0: ACCEPTED
+                RET
+
+.TITGO          DEFM    "Go to Line", 0
+.STRPR1         DEFM    "Line number (1-", 0
+.STRPR2         DEFM    "):", 0
+
+
+; - EDBTNS -----------------------------
+; - PAINT THE TWO BUTTONS IN THE STYLE (WINSEL) ASKS FOR. THE WIDGET CALLS
+; - THIS BY NAME: THERE IS ONE DIALOG WITH A FIELD PER TARGET TODAY.
+; - IN:  NONE (USES WINSEL)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+EDBTNS          LD      HL, .BTNOK
+                LD      DE, 36
+                LD      BC, 50
+                LD      A, (WINSEL)
+                CP      ED_FOK
+                LD      A, 0
+                JR      NZ, .PAINT1
+                INC     A               ; STYLE 1: SELECTED
+.PAINT1         CALL    WINBTS
+
+                LD      HL, .BTNCAN
+                LD      DE, 108
+                LD      BC, 50
+                LD      A, (WINSEL)
+                CP      ED_FCAN
+                LD      A, 0
+                JR      NZ, .PAINT2
+                INC     A
+.PAINT2         JP      WINBTS
+
+.BTNOK          DEFM    "[  OK  ]", 0
+.BTNCAN         DEFM    "[CANCEL]", 0

@@ -308,3 +308,57 @@ REFNKEY         LD      HL, FNKSTR
                 RET
 
 
+
+
+; --- ATOI16                    ----------------------------------------
+
+
+; - ATOI16 -----------------------------
+; - PARSE AN ASCIIZ DECIMAL STRING INTO A 16-BIT VALUE, SATURATING
+; - IN:  HL = ASCIIZ STRING
+; - OUT: HL = VALUE, SATURATED AT 65535. A NON-DIGIT ENDS THE SCAN
+; - CLOBBERS: AF, BC, DE, HL
+; -
+; - CFG.Z8A'S GETNUM CANNOT SERVE HERE: IT IS IFNDEF S2ED AND IT LIVES IN
+; - THE FEATURE CONTAINER, WHILE THIS RUNS IN PAGE 1 ON BOTH TARGETS.
+; -
+
+ATOI16          LD      DE, 0           ; DE = ACCUMULATOR
+.LOOP           LD      A, (HL)
+                SUB     '0'
+                JR      C, .DONE        ; BELOW '0': DONE
+                CP      10
+                JR      NC, .DONE       ; ABOVE '9': DONE
+                INC     HL
+                PUSH    HL
+                LD      B, A            ; B = DIGIT
+                ; DE = DE * 10, SATURATING
+                LD      H, D
+                LD      L, E
+                ADD     HL, HL
+                JR      C, .SAT
+                ADD     HL, HL
+                JR      C, .SAT
+                ADD     HL, DE
+                JR      C, .SAT
+                ADD     HL, HL
+                JR      C, .SAT
+                LD      E, B
+                LD      D, 0
+                ADD     HL, DE          ; + DIGIT
+                JR      C, .SAT
+                EX      DE, HL          ; DE = NEW ACCUMULATOR
+                POP     HL
+                JR      .LOOP
+.SAT            POP     HL
+                LD      DE, #FFFF
+                ; SKIP WHAT IS LEFT SO THE SCAN STILL ENDS CLEANLY
+.SATLP          LD      A, (HL)
+                SUB     '0'
+                JR      C, .DONE
+                CP      10
+                JR      NC, .DONE
+                INC     HL
+                JR      .SATLP
+.DONE           EX      DE, HL
+                RET

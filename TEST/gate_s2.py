@@ -1714,6 +1714,16 @@ class S217MenuNav(S2Case):
         t.snap('opts', at='WINPOLL')
         t.press('RETURN')
         t.snap('profile')
+
+        # An EDIT menu action.  Nothing had ever pressed one, which is how five
+        # of the six shipped calling the action ID instead of the routine
+        # (ACCUT is EQU 46, so CALL ACCUT was CALL #002E, into the DOS zero
+        # page).  Select All is the cheapest of them to observe.
+        t.wait(1.0)
+        t.press('F2')
+        t.wait(1.0)
+        t.press('A')
+        t.snap('selall')
         return t
 
     def verify(self, ctx, runs):
@@ -1774,6 +1784,11 @@ class S217MenuNav(S2Case):
                                 'was' if not bad else
                                 'cells differ: %s' % bad[:6]))
 
+        sel = run.var('selall', 'SELACT')
+        checks.append(Check('S2-17/edit-action', sel == 1,
+                            'Edit > Select All reaches the routine and not '
+                            'the action ID (SELACT=%s)' % sel))
+
         was, now = run.var('boot', 'KMAPID'), run.var('profile', 'KMAPID')
         checks.append(Check('S2-17/action',
                             run.var('opts', 'MNUID') == 3 and
@@ -1784,11 +1799,224 @@ class S217MenuNav(S2Case):
         return checks
 
 
+
+# --- S2-18  GO TO LINE ------------------------------------------------
+
+
+class S218Goto(S2Case):
+    name = 'S2-18-goto'
+    desc = ('Ctrl+G opens a field, digits and Backspace edit it, ENTER jumps '
+            'and clamps, ESC leaves everything where it was')
+    origin = ('the first window with an input field.  The viewport maths is '
+              'the round-3 defect class waiting to happen: centring with '
+              'SCRROWS instead of ROWSVIS is right on S6ED and two rows wrong '
+              'here, which is exactly what mut/goto-scrrows injects and what '
+              'only this gate can see.')
+    LINES = ['%03d GO TO LINE FIXTURE' % i for i in range(100)]
+    WINR, WINC, WINNR, WINNC = 8, 8, 7, 15
+    FLDROW, FLDCOL = 11, 20
+    ROWSVIS = 22
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def digits(self, t, s):
+        for ch in s:
+            t.press(ch)
+
+    def timeline(self, ctx, variant=None):
+        """Every step opens with a wait, and that is not padding.
+
+        A snapshot stops emulated time while Tcl reads its sixty variables,
+        and a keystroke whose down AND up both land inside that window is
+        never sampled by the keyboard ISR -- it simply does not happen.  The
+        drift accumulates across a long case: measured here, the ninth
+        dialog's RETURN was swallowed while a second one right after it
+        worked perfectly.  The wait gives each step a clean frame to start on.
+        """
+        t = Timeline()
+        t.snap('boot', vram='patcol')
+
+        # 1. Ctrl+G opens the dialog with an empty field
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.snap('open', vram='patcol', at='WINPOLL')
+
+        # 2. Two digits land in the field
+        t.wait(1.0)
+        self.digits(t, '42')
+        t.snap('typed', vram='patcol', at='WINPOLL')
+
+        # 3. ENTER jumps and centres
+        t.wait(1.0)
+        t.press('RETURN')
+        t.snap('jumped', vram='patcol')
+
+        # 4. ESC leaves everything alone
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        self.digits(t, '88')
+        t.press('ESC')
+        t.snap('cancel', vram='patcol')
+
+        # 5. Past the end clamps to the last line
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        self.digits(t, '999')
+        t.press('RETURN')
+        t.snap('high')
+
+        # 6. A line inside the viewport must not move it.  It has to be one
+        #    that centring WOULD move, or the check cannot tell them apart.
+        #    Line 90 is NOT such a line: centring it lands on the same TOPLINE
+        #    the clamp already forced.  Line 85 is.
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        self.digits(t, '85')
+        t.press('RETURN')
+        t.snap('nearby')
+
+        # 7. Zero clamps to the first line
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        t.press('0')
+        t.press('RETURN')
+        t.snap('low')
+
+        # 8. SPACE is not an accept while the field has the focus:
+        #    7, SPACE, 7 must read 77, not jump on the space
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        t.press('7')
+        t.press('SPACE')
+        t.press('7')
+        t.press('RETURN')
+        t.snap('space')
+
+        # 9. Backspace really removes: 5, 0, BS -> line 5, not 50
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        self.digits(t, '50')
+        t.press('BS')
+        t.press('RETURN')
+        t.snap('backspace')
+
+        # 10. ENTER on an empty field cancels
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        t.press('RETURN')
+        t.snap('empty')
+
+        # 11. The Edit menu reaches the same dialog
+        t.wait(1.0)
+        t.press('F2')
+        t.wait(1.0)
+        t.press('G')
+        t.snap('menu', at='WINPOLL')
+        t.wait(1.0)
+        t.press('ESC')
+        t.snap('done')
+        return t
+
+    def text_cells(self, fnt, text):
+        high, low = fnt
+        return [bytes(high[ord(text[i]) * 8 + y] | low[ord(text[i + 1]) * 8 + y]
+                      for y in range(8))
+                for i in range(0, len(text), 2)]
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        boot = run.blob('boot', 'patcol')
+        opened = run.blob('open', 'patcol')
+        typed = run.blob('typed', 'patcol')
+        jumped = run.blob('jumped', 'patcol')
+        cancel = run.blob('cancel', 'patcol')
+        if None in (boot, opened, typed, jumped, cancel):
+            return [Check('S2-18/dump', False, 'missing VRAM dump')]
+        fnt = font(ctx)
+        half = self.ROWSVIS // 2
+        last = len(self.LINES) - 1
+        maxtop = len(self.LINES) - self.ROWSVIS
+
+        geom = tuple(run.var('open', v)
+                     for v in ('WINR', 'WINC', 'WINNR', 'WINNC'))
+        checks = [
+            Check('S2-18/open',
+                  run.var('open', 'WINACTV') == 1 and
+                  geom == (self.WINR, self.WINC, self.WINNR, self.WINNC),
+                  'Ctrl+G opens the Go to Line window (WINACTV=%s, geometry '
+                  '%s)' % (run.var('open', 'WINACTV'), geom)),
+            Check('S2-18/displayed', opened != boot,
+                  'the screen changes while the dialog is open'),
+        ]
+
+        # The field shows what was typed, the caret after it, spaces beyond --
+        # against the font, not against a picture.
+        row = pattern.row_of(typed, self.FLDROW)
+        want = self.text_cells(fnt, '42_   ')
+        c0 = self.FLDCOL // 2
+        bad = [c0 + i for i, w in enumerate(want)
+               if row[(c0 + i) * 8:(c0 + i + 1) * 8] != w]
+        checks.append(Check('S2-18/field', not bad and
+                            run.var('typed', 'INPLEN') == 2,
+                            'the field reads "42" with the caret after it'
+                            if not bad else 'cells differ: %s' % bad))
+
+        # The jump, and the centring that has to derive from ROWSVIS.
+        def where(label):
+            return (run.var(label, 'DOCLINE'), run.var(label, 'TOPLINE'),
+                    run.var(label, 'CURY'), run.var(label, 'CURX'))
+
+        got = where('jumped')
+        exp = (41, 41 - half, half, 0)
+        checks.append(Check('S2-18/centred', got == exp,
+                            'line 42 lands centred on the band '
+                            '(DOCLINE,TOPLINE,CURY,CURX) = %s' % (got,)
+                            if got == exp else '%s, expected %s' % (got, exp)))
+
+        # ESC: nothing moved and the screen came back byte for byte.
+        currow = pattern.TXRFIRST + (run.var('jumped', 'CURY') or 0)
+        curcol = run.var('jumped', 'CURX') or 0
+        bad = restored(cancel, jumped, currow, curcol)
+        checks.append(Check('S2-18/cancel',
+                            not bad and where('cancel') == exp,
+                            'ESC changes nothing, on screen or in the document'
+                            if not bad else 'cells differ: %s' % bad[:6]))
+
+        for label, want in (('high', (last, maxtop, last - maxtop, 0)),
+                            ('nearby', (84, maxtop, 84 - maxtop, 0)),
+                            ('low', (0, 0, 0, 0)),
+                            ('space', (76, 76 - half, half, 0)),
+                            ('backspace', (4, 0, 4, 0)),
+                            ('empty', (4, 0, 4, 0))):
+            got = where(label)
+            checks.append(Check('S2-18/%s' % label, got == want,
+                                '%s -> %s' % (label, (got,))
+                                if got == want else
+                                '%s, expected %s' % (got, want)))
+
+        mgeom = tuple(run.var('menu', v)
+                      for v in ('WINR', 'WINC', 'WINNR', 'WINNC'))
+        checks.append(Check('S2-18/menu',
+                            mgeom == (self.WINR, self.WINC,
+                                      self.WINNR, self.WINNC),
+                            'Edit > Go to Line opens the same window (%s)'
+                            % (mgeom,)))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
          S213ShadowCfg(), S214Markup(), S215Quit(),
-         S216Menu(), S217MenuNav()]
+         S216Menu(), S217MenuNav(), S218Goto()]
 
 
 def run(ctx, cases=None):

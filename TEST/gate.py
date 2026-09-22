@@ -1954,7 +1954,22 @@ class H23MenuNav(Case):
         t.press('RETURN')
         t.snap('after_prof_exec')
 
+        # 6b. An EDIT menu action.  Nothing had ever pressed one, which is how
+        # five of the six shipped calling the action ID instead of the routine
+        # (ACCUT is EQU 46, so CALL ACCUT was CALL #002E, into the DOS zero
+        # page).  Select All is the cheapest of them to observe.
+        t.wait(1.0)
+        t.press('F2')
+        t.wait(1.0)
+        t.press('A')
+        t.snap('after_selall')
+        # Drop the selection again: step 7 compares the screen against boot,
+        # and an inverted document is an honest difference.
+        t.wait(1.0)
+        t.press('LEFT')
+
         # 7. Open File menu and ESC cancels cleanly
+        t.wait(1.0)
         t.press('F1')
         t.press('ESC')
         t.snap('after_cancel', vram=True)
@@ -2071,6 +2086,12 @@ class H23MenuNav(Case):
                run.var('edit_item3_up', 'MNUSEL'))))
 
         # 7. Action Keymap Profile execution via Options menu (Item 0)
+        checks.append(Check(
+            'H23/edit-action',
+            run.var('after_selall', 'SELACT') == 1,
+            'Edit > Select All reaches the routine and not the action ID '
+            '(SELACT=%s)' % run.var('after_selall', 'SELACT')))
+
         checks.append(Check(
             'H23/action-keymap-prof',
             run.var('opts_menu_prof', 'MNUID') == 3 and
@@ -3832,6 +3853,216 @@ class U5UndoSel(Case):
         return checks
 
 
+
+class H24GoToLine(Case):
+    name = 'H24-goto-line'
+    desc = ('Ctrl+G opens a field, digits and Backspace edit it, ENTER jumps '
+            'and clamps, ESC leaves everything where it was')
+    origin = ('the first window with an input field.  Its viewport maths is '
+              'shared with S2ED, where the band is 22 rows and not 24, so a '
+              'literal or a SCRROWS here is wrong on the other target -- the '
+              'round-3 defect class.')
+    LINES = ['%03d GO TO LINE FIXTURE' % i for i in range(100)]
+    WINX, WINY, WINW, WINH = 156, 70, 200, 72
+    ROWSVIS = 24
+    # The field box, in absolute pixels: rel (76, 32), 44 x 12
+    FLDX, FLDY, FLDW, FLDH = 156 + 76, 70 + 32, 44, 12
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def digits(self, t, s):
+        for ch in s:
+            t.press(ch)
+
+    def timeline(self, ctx, variant=None):
+        """Every step opens with a wait, and that is not padding.
+
+        A snapshot stops emulated time while Tcl reads its sixty variables,
+        and a keystroke whose down AND up both land inside that window is
+        never sampled by the keyboard ISR -- it simply does not happen.  The
+        drift accumulates across a long case: measured here, the ninth
+        dialog's RETURN was swallowed while a second one right after it
+        worked perfectly.  The wait gives each step a clean frame to start on.
+        """
+        t = Timeline()
+        t.snap('boot', vram=True)
+
+        # 1. Ctrl+G opens the dialog with an empty field
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.snap('open', vram=True, at='WINPOLL')
+
+        # 2. Two digits land in the field
+        t.wait(1.0)
+        self.digits(t, '42')
+        t.snap('typed', vram=True, at='WINPOLL')
+
+        # 3. ENTER jumps and centres
+        t.wait(1.0)
+        t.press('RETURN')
+        t.snap('jumped', vram=True)
+
+        # 4. ESC leaves everything alone
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        self.digits(t, '88')
+        t.press('ESC')
+        t.snap('cancel', vram=True)
+
+        # 5. Past the end clamps to the last line
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        self.digits(t, '999')
+        t.press('RETURN')
+        t.snap('high')
+
+        # 6. A line inside the viewport must not move it.  It has to be one
+        #    that centring WOULD move, or the check cannot tell them apart.
+        #    Line 90 is NOT such a line: centring it lands on the same TOPLINE
+        #    the clamp already forced.  Line 85 is.
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        self.digits(t, '85')
+        t.press('RETURN')
+        t.snap('nearby')
+
+        # 7. Zero clamps to the first line
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        t.press('0')
+        t.press('RETURN')
+        t.snap('low')
+
+        # 8. SPACE is not an accept while the field has the focus:
+        #    7, SPACE, 7 must read 77, not jump on the space
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        t.press('7')
+        t.press('SPACE')
+        t.press('7')
+        t.press('RETURN')
+        t.snap('space')
+
+        # 9. Backspace really removes: 5, 0, BS -> line 5, not 50
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        self.digits(t, '50')
+        t.press('BS')
+        t.press('RETURN')
+        t.snap('backspace')
+
+        # 10. ENTER on an empty field cancels
+        t.wait(1.0)
+        t.press('G', mods=['CTRL'])
+        t.wait(1.0)
+        t.press('RETURN')
+        t.snap('empty')
+
+        # 11. The Edit menu reaches the same dialog
+        t.wait(1.0)
+        t.press('F2')
+        t.wait(1.0)
+        t.press('G')
+        t.snap('menu', at='WINPOLL')
+        t.wait(1.0)
+        t.press('ESC')
+        t.snap('done')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        v_boot = run.blob('boot', 'vram')
+        v_open = run.blob('open', 'vram')
+        v_typed = run.blob('typed', 'vram')
+        v_jump = run.blob('jumped', 'vram')
+        v_cancel = run.blob('cancel', 'vram')
+        if None in (v_boot, v_open, v_typed, v_jump, v_cancel):
+            return [Check('H24/dump', False, 'missing VRAM dump')]
+        half = self.ROWSVIS // 2
+        last = len(self.LINES) - 1
+        maxtop = len(self.LINES) - self.ROWSVIS
+
+        geom = tuple(run.var('open', v)
+                     for v in ('WINX', 'WINY', 'WINW', 'WINH'))
+        checks = [
+            Check('H24/open',
+                  run.var('open', 'WINACTV') == 1 and
+                  geom == (self.WINX, self.WINY, self.WINW, self.WINH) and
+                  run.var('open', 'INPLEN') == 0,
+                  'Ctrl+G opens the Go to Line window with an empty field '
+                  '(WINACTV=%s, geometry %s, INPLEN=%s)'
+                  % (run.var('open', 'WINACTV'), geom,
+                     run.var('open', 'INPLEN'))),
+            Check('H24/displayed', v_open != v_boot,
+                  'the screen changes while the dialog is open'),
+        ]
+
+        # Typing repaints the field box and nothing else.
+        fl = vram.TEXT_FIRST_LINE
+        changed = [(x, y) for (x, y) in vram.diff(v_open, v_typed)
+                   if not (self.FLDX <= x < self.FLDX + self.FLDW and
+                           self.FLDY <= y < self.FLDY + self.FLDH)]
+        inside = [(x, y) for (x, y) in vram.diff(v_open, v_typed)
+                  if (self.FLDX <= x < self.FLDX + self.FLDW and
+                      self.FLDY <= y < self.FLDY + self.FLDH)]
+        checks.append(Check('H24/field',
+                            inside and not changed and
+                            run.var('typed', 'INPLEN') == 2,
+                            'two digits repaint the field box and only it '
+                            '(%d pixels, INPLEN=%s)'
+                            % (len(inside), run.var('typed', 'INPLEN'))
+                            if not changed else
+                            'pixels changed outside the field: %s'
+                            % changed[:6]))
+
+        def where(label):
+            return (run.var(label, 'DOCLINE'), run.var(label, 'TOPLINE'),
+                    run.var(label, 'CURY'), run.var(label, 'CURX'))
+
+        got = where('jumped')
+        exp = (41, 41 - half, half, 0)
+        checks.append(Check('H24/centred', got == exp,
+                            'line 42 lands centred on the band '
+                            '(DOCLINE,TOPLINE,CURY,CURX) = %s' % (got,)
+                            if got == exp else '%s, expected %s' % (got, exp)))
+
+        cursor = [(run.var('jumped', 'CURX') or 0,
+                   run.var('jumped', 'CURY') or 0)]
+        d = vram.diff(v_jump, v_cancel, ignore_cells=cursor)
+        checks.append(Check('H24/cancel', not d and where('cancel') == exp,
+                            'ESC changes nothing, on screen or in the document'
+                            if not d else '%d pixels differ' % len(d)))
+
+        for label, want in (('high', (last, maxtop, last - maxtop, 0)),
+                            ('nearby', (84, maxtop, 84 - maxtop, 0)),
+                            ('low', (0, 0, 0, 0)),
+                            ('space', (76, 76 - half, half, 0)),
+                            ('backspace', (4, 0, 4, 0)),
+                            ('empty', (4, 0, 4, 0))):
+            got = where(label)
+            checks.append(Check('H24/%s' % label, got == want,
+                                '%s -> %s' % (label, (got,))
+                                if got == want else
+                                '%s, expected %s' % (got, want)))
+
+        mgeom = tuple(run.var('menu', v)
+                      for v in ('WINX', 'WINY', 'WINW', 'WINH'))
+        checks.append(Check('H24/menu',
+                            mgeom == (self.WINX, self.WINY,
+                                      self.WINW, self.WINH),
+                            'Edit > Go to Line opens the same window (%s)'
+                            % (mgeom,)))
+        return checks
+
+
+
 CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
@@ -3839,6 +4070,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          H11DatTruncHdr(), H12DatTruncTbl(), H13DatLenZero(), H14DatLenOver(),
          H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(), H18WindowRobustness(),
          H19QuitDialog(), H20QuitDirty(), H21Shadow(), H22FileMenu(), H23MenuNav(),
+         H24GoToLine(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(),

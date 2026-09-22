@@ -106,6 +106,7 @@ is caught only by `S2-8/matches-document`. Measured, 2026-09-21.
 | `S2-15-quit` | W2: `ACTQUIT` went straight to `TERM`, so ESC threw the document away without asking |
 | `S2-16-menu` | W4: `MNUENT` was the last `IFDEF S2ED` in the menu path -- SELECT and F1..F5 opened nothing, and the item indices have to match S6ED's because the dispatch below them is shared |
 | `S2-17-menu-nav` | W4: switching menus is a close, a re-highlight and an open; miss the un-highlight and the inverted titles pile up along the bar, which no check that only looks at the window can see |
+| `S2-18-goto` | the first window with an input field.  Its viewport maths centres on `ROWSVIS / 2`, which is 11 here and 12 on S6ED, so `mut/goto-scrrows` is a mutation only this gate can catch |
 
 Two traps this suite met while being built, both worth knowing before adding a
 case:
@@ -117,6 +118,17 @@ case:
   each is checked against its own `BLNKPH`, and the last one is taken right
   after a keystroke, which ends in `.DRAWCUR` and leaves the cursor up by
   construction.
+* **A snapshot stops emulated time, and a keystroke can disappear into it.**
+  The Tcl breakpoint handler reads sixty variables with the machine halted, so
+  no VBLANK happens while it runs -- and the keyboard ISR only samples the
+  matrix on a VBLANK. A `keymatrixdown` / `keymatrixup` pair that both land
+  inside that window is **never seen**: the key did not fail, it did not
+  happen. Snapshots wait for a breakpoint while keys fire on absolute times, so
+  the drift accumulates down a long case. Measured while building `S2-18`: the
+  RETURN closing the ninth dialog vanished, deterministically, and a second
+  RETURN pressed immediately after it worked. Both goto cases now open every
+  step with `t.wait(1.0)` and say so in a comment, because it reads like
+  padding and is not.
 * **A `WINPOLL` gate samples whichever modal got there first.** The breakpoint
   is armed at a moment in the timeline and fires at the next hit, and every
   modal loop polls `WINPOLL` continuously -- so a snapshot armed between two
