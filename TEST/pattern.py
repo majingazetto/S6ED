@@ -32,7 +32,19 @@ PATLEN = ROWLEN * ROWS  # 6144
 MNUROW, TXRFIRST, TXRLAST, STBROW = 0, 1, 22, 23
 ROWSVIS = TXRLAST - TXRFIRST + 1        # 22 document lines on screen
 
-COLTXT, COLUI, COLBOLD = 0xF1, 0x1F, 0xB1
+# The DARK theme, which is what a case with no THEME= line runs under.  These
+# mirror the COL* EQUs in S2/CONST_S2.Z8A and the first row of the theme table
+# in S2/VDP.Z8A; a theme is a choice of WHICH of the 16 fixed colours fills
+# each role, so the roles are named here, never the colours.
+# The chrome surface is one colour, as in S6ED: menu bar, status bar and
+# window body all wear it.  The accent carries the window title and buttons.
+COLTXT, COLBOLD = 0xF1, 0xB1
+COLUI = COLSTAT = COLWIN = 0xF4
+COLHI, COLBSEL = 0xB4, 0x4B
+# A shadow cell keeps the document's pattern and flattens its colour, so it is
+# only visible where it differs from the document background.  Black-on-black
+# worked on MSX alone, whose document is blue; every theme now names its own.
+COLSHDW = 0x44
 
 
 def load_font(ctx):

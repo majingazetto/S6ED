@@ -1,0 +1,5 @@
+Hello MSX World!
+This is a test of S2ED.
+MSX Screen 2 Text Editor
+64 columns x 24 rows.
+With colours!!

@@ -429,7 +429,8 @@ WINBAND         PUSH    AF              ; COLOR
 ; - COMPOSITION BUFFER. THE FRAME IS PAINTED AS FULL-WIDTH HMMV BANDS
 ; - PLUS TWO 1-PX LMMV SLIVERS FOR THE SIDE BORDERS: NO OVERDRAW, ALL
 ; - BULK WORK IN BYTE MODE (~2.5X FASTER THAN THE OLD LMMV RECTANGLES).
-; - THE 4-PX SHADOW (COL_BG) HUGS THE RIGHT AND BOTTOM EDGES; THE TWO
+; - THE 4-PX SHADOW (SHDWCLR, CLR_BG BY DEFAULT) HUGS THE RIGHT AND BOTTOM
+; - EDGES; THE TWO
 ; - CORNER STRIPS OF THE SHADOW MARGIN ARE COPIED FROM THE SAVED
 ; - BACKGROUND SO THE EXTENDED SHOW RECT BLITS NO STALE DATA. WINSAV
 ; - MUST HAVE RUN FIRST (WINOPEN ORDER).
@@ -495,7 +496,7 @@ WINBOX          PUSH    HL
                 LD      (VDP_NX), HL
                 LD      HL, (WINH)
                 LD      (VDP_NY), HL
-                LD      A, CLR_BG
+                LD      A, (SHDWCLR)
                 LD      (VDP_CLR), A
                 XOR     A
                 LD      (VDP_ARG), A
@@ -515,7 +516,7 @@ WINBOX          PUSH    HL
                 LD      (VDP_NX), HL
                 LD      HL, WINSHDW
                 LD      (VDP_NY), HL
-                LD      A, CLR_BG
+                LD      A, (SHDWCLR)
                 LD      (VDP_CLR), A
                 XOR     A
                 LD      (VDP_ARG), A

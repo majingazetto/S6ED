@@ -123,15 +123,22 @@ $(RES_DIR)/FONTS_S2.BIN: $(RES_DIR)/FONT4X8.PNG $(RES_DIR)/fontcheck_s2.py
 dsk-s2: $(DSKFILE_S2)
 
 CFGFILE_S2		= S2ED.CFG
-DSKCONT_S2		= $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) TEST.TXT $(CFGFILE_S2)
+DSKCONT_S2		= $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2)
 
-$(DSKFILE_S2): $(DSKCONT_S2) AUTOEXEC_S2.BAT
+# TEST.TXT and AUTOEXEC.BAT ship under names the S6ED disk uses too, and
+# dsktool takes the on-disk name from the host file, so the S2 variants are
+# swapped in around the add and put straight back.  The sample document is a
+# different one: it talks about 64 columns and Screen 2.
+$(DSKFILE_S2): $(DSKCONT_S2) TEST_S2.TXT AUTOEXEC_S2.BAT
 	@cp $(DSKBASE) $(DSKFILE_S2)
-	@$(DSKTOOL) D $(DSKFILE_S2) $(DSKCONT_S2) AUTOEXEC.BAT
+	@$(DSKTOOL) D $(DSKFILE_S2) $(DSKCONT_S2) TEST.TXT AUTOEXEC.BAT
 	@$(DSKTOOL) A $(DSKFILE_S2) $(DSKCONT_S2)
+	@cp TEST.TXT TEST.S6.TMP
 	@cp AUTOEXEC.BAT AUTOEXEC.S6.TMP
+	@cp TEST_S2.TXT TEST.TXT
 	@cp AUTOEXEC_S2.BAT AUTOEXEC.BAT
-	@$(DSKTOOL) A $(DSKFILE_S2) AUTOEXEC.BAT
+	@$(DSKTOOL) A $(DSKFILE_S2) TEST.TXT AUTOEXEC.BAT
+	@mv TEST.S6.TMP TEST.TXT
 	@mv AUTOEXEC.S6.TMP AUTOEXEC.BAT
 
 # -	 Build Target ------------------------------------------------------------

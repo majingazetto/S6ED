@@ -327,7 +327,10 @@ SETPAL          LD      A, (SCRRDY)
                 CALL    VDPRSET
                 JP      INITCOL
 
-PALDATA         DEFB    #00, #00, #77, #07, #17, #02, #70, #07
+                ; NO PALDATA HERE. THE V9938 PALETTE BLOCK S6ED KEEPS AT THIS
+                ; POINT WAS CARRIED OVER AND READ BY NOTHING ON A TMS9918;
+                ; THE COLOR_* CFG KEYS THAT WROTE INTO IT ARE GONE TOO, SO A
+                ; COLOR IS CHOSEN BY THEME AND ONLY BY THEME.
 
 
 

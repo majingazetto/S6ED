@@ -137,7 +137,7 @@ NTINIT          LD      HL, NTBASE
 
 ; - INITCOL ----------------------------
 ; - INITIALIZES THE COLOR MAP IN VIDSEG AND DUMPS IT TO VRAM
-; - ROW 0 AND ROW 23 GET VCOLUI (CHROME), ROWS 1..22 GET VCOLTXT
+; - ROW 0 GETS VCOLUI, ROW 23 VCOLSTAT, ROWS 1..22 VCOLTXT
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
@@ -161,9 +161,10 @@ INITCOL         CALL    VIDBANK
                 INC     HL
                 DJNZ    .IC1
 
-                ; ROW 23: UI COLOR
+                ; ROW 23: STATUS BAR COLOR
                 LD      HL, COLMAP + (STBROW * CELLROW)
                 LD      B, CELLROW
+                LD      A, (VCOLSTAT)
 .IC2            LD      (HL), A
                 INC     HL
                 DJNZ    .IC2
@@ -185,11 +186,35 @@ INITCOL         CALL    VIDBANK
                 ;  1 BLACK         5 LIGHT BLUE   9 LIGHT RED    13 MAGENTA
                 ;  2 MED GREEN     6 DARK RED    10 DARK YELLOW  14 GRAY
                 ;  3 LIGHT GREEN   7 CYAN        11 LIGHT YELLOW 15 WHITE
-                ; 7 BYTES EACH: TXT, UI, BOLD, ITAL, UNDR, MARK, BORDER
-S2THDKR         DEFB    #F1, #1F, #B1, #71, #31, #E1, 1       ; DARK
-S2THGRN         DEFB    #21, #12, #31, #71, #B1, #E1, 1       ; GREEN
-S2THMBR         DEFB    #A1, #1A, #B1, #71, #31, #E1, 1       ; AMBER
-S2THBLU         DEFB    #F4, #4F, #B4, #74, #34, #E4, 4       ; BLUE
+                ; VCOLNUM (11) BYTES EACH, IN THE ORDER VARS.Z8A DECLARES:
+                ;   TXT, UI, BOLD, ITAL, UNDR, MARK, BORDER, STAT, WIN, HI,
+                ;   BSEL, SHDW
+                ; BORDER IS A BARE PALETTE INDEX FOR R#7; EVERY OTHER BYTE IS
+                ; FG << 4 | BG.
+                ;
+                ; THE CHROME SURFACE (UI, STAT, WIN) IS DELIBERATELY ONE
+                ; COLOR PER THEME, AS IN S6ED, WHERE THE MENU BAR, THE STATUS
+                ; BAR AND THE WINDOW BODY ARE ALL COL_UI. THE ROLES STAY
+                ; SEPARATE SO A THEME *MAY* SPLIT THEM -- S2 HAS 16 COLORS
+                ; WHERE S6 HAS 4 -- BUT NOTHING REQUIRES IT TO.
+                ;
+                ; WHAT A MUTATION SWAPS MUST DIFFER, THOUGH: STAT AND WIN
+                ; FROM TXT (CHROME IS NOT DOCUMENT) AND HI FROM WIN (THE
+                ; ACCENT IS NOT THE SURFACE) AND BSEL FROM HI (FOCUS IS NOT
+                ; THE UNFOCUSED ACCENT), OR THE GATE CANNOT SEE IT.
+                ;
+                ; SHDW IS THE ONE COLOR THAT IS NOT FREE: A SHADOW CELL KEEPS
+                ; THE DOCUMENT'S PATTERN AND FLATTENS ITS COLOR, SO IT MUST
+                ; DIFFER FROM THE DOCUMENT BACKGROUND OR IT IS INVISIBLE.
+                ; BLACK-ON-BLACK ONLY WORKED ON MSX, WHOSE DOCUMENT IS BLUE.
+S2THDKR         DEFB    #F1, #F4, #B1, #71, #31, #E1, 1, #F4  ; DARK
+                DEFB    #F4, #B4, #4B, #44
+S2THGRN         DEFB    #21, #2C, #31, #71, #B1, #E1, 1, #2C  ; GREEN
+                DEFB    #2C, #3C, #C3, #CC
+S2THMBR         DEFB    #A1, #A6, #B1, #71, #31, #E1, 1, #A6  ; AMBER
+                DEFB    #A6, #B6, #6B, #66
+S2THMSX         DEFB    #F4, #F5, #B4, #74, #34, #E4, 4, #F5  ; MSX
+                DEFB    #F5, #B5, #5B, #11
 
 
 
@@ -197,7 +222,7 @@ S2THBLU         DEFB    #F4, #4F, #B4, #74, #34, #E4, 4       ; BLUE
 
 
 ; - THMLOAD ----------------------------
-; - LOADS THE DEFAULT THEME (DARK) INTO VCOLTXT..VCOLBG (7 BYTES)
+; - LOADS THE DEFAULT THEME (DARK) INTO VCOLTXT.. (VCOLNUM BYTES)
 ; - PURE RAM: INITVDP APPLIES THE BORDER AND INITCOL THE REST, BOTH
 ; - READ THE VARIABLES, SO CFG OVERRIDES LAND WITHOUT A REAPPLY
 ; - IN:  NONE
@@ -207,7 +232,7 @@ S2THBLU         DEFB    #F4, #4F, #B4, #74, #34, #E4, 4       ; BLUE
 
 THMLOAD         LD      HL, S2THDKR     ; DEFAULT THEME
                 LD      DE, VCOLTXT
-                LD      BC, 7
+                LD      BC, VCOLNUM
                 LDIR
                 RET
 
