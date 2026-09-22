@@ -1,0 +1,562 @@
+;                                       ****************************************
+;                                       * MENU — DROP-DOWN MENUS (TMS9918)     *
+;                                       ****************************************
+;
+; THE FIVE TOP-LEVEL MENUS OF THE ROW 0 BAR, IN CELL COORDINATES. THE ITEM
+; INDICES, THE ITEM COUNTS AND THE SEPARATOR POSITIONS ARE THE SAME AS S6ED'S:
+; THE DISPATCH THAT RUNS AFTERWARDS LIVES IN CORE/ACTION.Z8A AND IS SHARED, SO
+; ONLY THE STRINGS AND THE GEOMETRY MAY DIFFER BETWEEN THE TWO TARGETS.
+;
+; THREE THINGS ARE DONE DIFFERENTLY FROM S6/MENU.Z8A, ALL OF THEM HARDWARE:
+;
+;   - THE TITLE IN ROW 0 IS HIGHLIGHTED WITH PATINV, WHICH XORS THE FOUR PIXEL
+;     COLUMNS EACH CHARACTER OWNS INSIDE ITS CELL. IT IS THE SAME PRIMITIVE THE
+;     CURSOR AND THE SELECTION USE, AND IT IS ITS OWN INVERSE, SO ONE CALL
+;     HIGHLIGHTS AND THE NEXT UN-HIGHLIGHTS. A COLOR SWAP COULD NOT DO IT: A
+;     CELL IS TWO CHARACTERS AND THE TITLES DO NOT START ON EVEN COLUMNS.
+;
+;   - THE SELECTED ITEM WEARS VCOLBSEL, THE INVERSE ACCENT, EXACTLY AS THE
+;     FOCUSED BUTTON OF DOQIT DOES. ON A TMS9918 A CELL IS ONE FG|BG BYTE, SO
+;     FOCUS IS A BAR, NEVER A BORDER DRAWN INSIDE A CELL.
+;
+;   - A SELECTION CHANGE REDRAWS EVERY ITEM AND PUSHES THE WHOLE WINDOW WITH
+;     WDUMP (~22 MS), AS DOQIT ALREADY DOES FOR ITS TWO BUTTONS. THERE IS NO
+;     COMMAND ENGINE TO SUB-BLIT ONE ROW WITH, AND THE CONTAINER IS THE SCARCE
+;     RESOURCE HERE, NOT THE MILLISECONDS.
+;
+; THE DROPDOWN CARRIES THE MENU'S NAME IN ITS TITLE BAR. WBOX PAINTS THAT ROW
+; FOR EVERY WINDOW, SO USING IT COSTS NOTHING AND LEAVES WBOX UNTOUCHED.
+;
+; ALL OF THIS RUNS PHASED IN FTRBASE (PAGE 2) VIA FCALL, SO IT MUST NEVER BANK.
+
+
+; --- DOMNU                     ----------------------------------------
+
+
+; - DOMNU ------------------------------
+; - MAIN ENTRY POINT FOR DROP-DOWN MENUS (FILE, EDIT, VIEW, OPT, HELP)
+; - IN:  (MNUID) = INITIAL MENU (0..4)
+; - OUT: CY = 1: CANCELLED (ESC / SELECT)
+; -      CY = 0: ACCEPTED, D = (MNUID) (0..4), E = (MNUSEL)
+; - CLOBBERS: ALL
+; -
+
+DOMNU           LD      A, (MNUID)
+                CP      MNUCOUNT
+                JR      C, .INITOK
+                XOR     A
+                LD      (MNUID), A      ; CLAMP TO 0 (FILE)
+.INITOK         XOR     A
+                LD      (MNUSEL), A     ; DEFAULT SELECTION = 0
+
+                CALL    MNUTITL         ; HIGHLIGHT TITLE IN ROW 0
+                CALL    MNULOAD
+                CALL    MNUOPEN
+
+                ; MODAL KEY LOOP
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+
+                CP      ESC
+                JP      Z, .CANCEL
+                CP      SELKEY
+                JP      Z, .CANCEL
+
+                CP      CR
+                JP      Z, .ACCEPT
+                CP      ' '
+                JP      Z, .ACCEPT
+
+                CP      CUP
+                JP      Z, .UP
+                CP      CDOWN
+                JP      Z, .DOWN
+                CP      CRIGHT
+                JP      Z, .RIGHT
+                CP      CLEFT
+                JP      Z, .LEFT
+
+                ; F1..F5 SWITCH DIRECTLY TO THEIR MENU
+                CP      F1KEY
+                JR      C, .ACCEL
+                CP      F5KEY + 1
+                JR      NC, .ACCEL
+                SUB     F1KEY
+                JP      MNUSWCH
+
+.RIGHT          LD      A, (MNUID)
+                INC     A
+                CP      MNUCOUNT
+                JR      C, .RGHTOK
+                XOR     A               ; WRAP 4 -> 0
+.RGHTOK         JP      MNUSWCH
+
+.LEFT           LD      A, (MNUID)
+                OR      A
+                JR      NZ, .LFTOK
+                LD      A, MNUCOUNT
+.LFTOK          DEC     A               ; WRAP 0 -> 4
+                JP      MNUSWCH
+
+                ; ACCELERATOR: THE ACTIVE MENU'S [KEY, ITEM] TABLE, CASE
+                ; FOLDED, TERMINATED BY #00
+.ACCEL          CP      'a'
+                JR      C, .ACCUP
+                CP      'z' + 1
+                JR      NC, .ACCUP
+                SUB     #20             ; FOLD TO UPPERCASE
+.ACCUP          LD      C, A            ; C = KEY
+                LD      A, (MNUID)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; A = MNUID * 8
+                ADD     A, 6            ; ACCL POINTER FIELD
+                LD      E, A
+                LD      D, 0
+                LD      HL, .MNUTBL
+                ADD     HL, DE
+                LD      A, (HL)
+                INC     HL
+                LD      H, (HL)
+                LD      L, A            ; HL = ACCELERATOR TABLE
+.ACCLP          LD      A, (HL)
+                OR      A
+                JP      Z, .KEYLP       ; END OF TABLE: KEY IGNORED
+                INC     HL
+                CP      C
+                JR      Z, .ACCHIT
+                INC     HL
+                JR      .ACCLP
+.ACCHIT         LD      A, (HL)
+                LD      (MNUSEL), A
+                JP      .ACCEPT
+
+.DOWN           LD      A, (MNUSEL)
+                LD      C, A            ; C = OLD SELECTION
+                INC     A
+                LD      HL, MNUITMC
+                CP      (HL)
+                JR      C, .DWNCHK
+                XOR     A               ; WRAP TO 0
+.DWNCHK         CALL    MNUCHKS
+                JR      NZ, .MOVE
+                INC     A               ; SKIP SEPARATOR
+                JR      .MOVE
+
+.UP             LD      A, (MNUSEL)
+                LD      C, A            ; C = OLD SELECTION
+                OR      A
+                JR      NZ, .UPDEC
+                LD      A, (MNUITMC)
+.UPDEC          DEC     A
+                CALL    MNUCHKS
+                JR      NZ, .MOVE
+                DEC     A               ; SKIP SEPARATOR
+
+.MOVE           CP      C               ; SAME SELECTION?
+                JP      Z, .KEYLP
+                LD      (MNUSEL), A
+                CALL    MNUDRAW
+                CALL    WDUMP
+                JP      .KEYLP
+
+.CANCEL         CALL    WINCLOS
+                CALL    MNUTITL         ; UN-HIGHLIGHT TITLE
+                SCF                     ; CY = 1 (CANCELLED)
+                RET
+
+.ACCEPT         CALL    WINCLOS
+                CALL    MNUTITL         ; UN-HIGHLIGHT TITLE
+                LD      A, (MNUID)
+                LD      D, A            ; D = MNUID
+                LD      A, (MNUSEL)
+                LD      E, A            ; E = MNUSEL
+                OR      A               ; CY = 0 (ACCEPTED)
+                RET
+
+                ; TITLE SPANS IN ROW 0, AS PAIRS [CHAR COLUMN, WIDTH]. THEY
+                ; MUST MATCH .MNUTXT IN S2/UI.Z8A:
+                ; "S2ED | File  Edit  View  Options  Help"
+.TITX           DEFB    #07, #04, #0D, #04, #13, #04, #19, #07
+                DEFB    #22, #04
+
+                ; DROPDOWN TITLES, ONE POINTER PER MENU
+.TITP           DEFW    .T0, .T1, .T2, .T3, .T4
+
+.T0             DEFM    "File", 0
+.T1             DEFM    "Edit", 0
+.T2             DEFM    "View", 0
+.T3             DEFM    "Options", 0
+.T4             DEFM    "Help", 0
+
+                ; 8 BYTES PER MENU RECORD:
+                ; [WINC(1B), WINNC(1B), WINNR(1B), ITEMCNT(1B),
+                ;  PTR_STBL(2B), PTR_ACCL(2B)]
+                ;
+                ; WINNR IS ITEMCNT + 2: THE TITLE BAR ROW AND THE BOTTOM
+                ; BORDER ROW. WINNC IS 12 FOR EVERY MENU BECAUSE THE SAVE
+                ; BUFFER BINDS THE WIDEST ONE: EDIT HAS 10 ITEMS, SO WITH THE
+                ; SHADOW MARGIN IT SAVES 13 X 13 CELLS AND WSVMAX / 9 IS 170.
+                ; THAT LEAVES WINNC - 2 = 10 CELLS = 20 CHARACTERS OF TEXT.
+
+.MNUTBL         ; MENU 0: FILE
+                DEFB    #03, #0C, #08, #06
+                DEFW    .STBL0, .ACC0
+
+                ; MENU 1: EDIT
+                DEFB    #06, #0C, #0C, #0A
+                DEFW    .STBL1, .ACC1
+
+                ; MENU 2: VIEW
+                DEFB    #09, #0C, #07, #05
+                DEFW    .STBL2, .ACC2
+
+                ; MENU 3: OPTIONS
+                DEFB    #0C, #0C, #08, #06
+                DEFW    .STBL3, .ACC3
+
+                ; MENU 4: HELP
+                DEFB    #11, #0C, #05, #03
+                DEFW    .STBL4, .ACC4
+
+; --- MENU 0 (FILE) ---
+.STBL0          DEFW    .S00, .S01, .S02, .S03, 0, .S05
+.ACC0           DEFB    'N', #00, 'O', #01, 'S', #02, 'A', #03
+                DEFB    'Q', #05, #00
+
+.S00            DEFM    "New               ^N", 0
+.S01            DEFM    "Open...           ^O", 0
+.S02            DEFM    "Save              ^S", 0
+.S03            DEFM    "Save As...", 0
+.S05            DEFM    "Quit              ^Q", 0
+
+; --- MENU 1 (EDIT) ---
+.STBL1          DEFW    .S10, .S11, .S12, .S13, 0, .S15, .S16, 0
+                DEFW    .S18, .S19
+.ACC1           DEFB    'X', #00, 'C', #01, 'V', #02, 'Y', #03
+                DEFB    'A', #05, 'D', #06, 'G', #08, 'F', #09
+                DEFB    #00
+
+.S10            DEFM    "Cut               ^X", 0
+.S11            DEFM    "Copy              ^C", 0
+.S12            DEFM    "Paste             ^V", 0
+.S13            DEFM    "Delete Line       ^Y", 0
+.S15            DEFM    "Select All        ^A", 0
+.S16            DEFM    "Deselect", 0
+.S18            DEFM    "Go to Line...     ^G", 0
+.S19            DEFM    "Find...           ^F", 0
+
+; --- MENU 2 (VIEW) ---
+.STBL2          DEFW    .S20, .S21, 0, .S23, .S24
+.ACC2           DEFB    'W', #00, 'M', #01, 'C', #03, 'R', #04
+                DEFB    #00
+
+.S20            DEFM    "Word Wrap         ^W", 0
+.S21            DEFM    "Markup Style      ^T", 0
+.S23            DEFM    "Show Clock", 0
+.S24            DEFM    "Redraw Screen", 0
+
+; --- MENU 3 (OPTIONS) ---
+.STBL3          DEFW    .S30, .S31, .S32, .S33, 0, .S35
+.ACC3           DEFB    'P', #00, 'T', #01, 'E', #02, 'I', #03
+                DEFB    'S', #05, #00
+
+.S30            DEFM    "Keymap Profile    ^K", 0
+.S31            DEFM    "Tab Width", 0
+.S32            DEFM    "Line Endings", 0
+.S33            DEFM    "Insert Mode      Ins", 0
+.S35            DEFM    "Save Settings", 0
+
+; --- MENU 4 (HELP) ---
+.STBL4          DEFW    .S40, 0, .S42
+.ACC4           DEFB    'K', #00, 'A', #02, #00
+
+.S40            DEFM    "Keyboard Help...", 0
+.S42            DEFM    "About S2ED...", 0
+
+
+; --- MNUSWCH                   ----------------------------------------
+
+
+; - MNUSWCH ----------------------------
+; - SWITCH HORIZONTALLY TO ANOTHER MENU: CLOSE THE OPEN WINDOW, MOVE THE
+; - TITLE HIGHLIGHT, OPEN THE NEW ONE. THE CLOSE COMES FIRST SO THE
+; - BACKGROUND IS RESTORED BEFORE THE NEXT WINDOW SAVES IT.
+; - IN:  A = TARGET MENU ID (0..4)
+; - OUT: NONE (RETURNS INTO THE MODAL LOOP)
+; - CLOBBERS: ALL
+; -
+
+MNUSWCH         LD      C, A            ; C = TARGET
+                LD      A, (MNUID)
+                CP      C
+                JP      Z, DOMNU.KEYLP  ; SAME MENU: IGNORE
+
+                PUSH    BC
+                CALL    WINCLOS
+                CALL    MNUTITL         ; UN-HIGHLIGHT THE OLD TITLE
+                POP     BC
+
+                LD      A, C
+                LD      (MNUID), A
+                XOR     A
+                LD      (MNUSEL), A
+
+                CALL    MNUTITL         ; HIGHLIGHT THE NEW TITLE
+                CALL    MNULOAD
+                CALL    MNUOPEN
+                JP      DOMNU.KEYLP
+
+
+; --- MNULOAD                   ----------------------------------------
+
+
+; - MNULOAD ----------------------------
+; - LOAD WINDOW GEOMETRY AND THE ITEM TABLE OF THE ACTIVE (MNUID)
+; - IN:  NONE (USES MNUID)
+; - OUT: WINR, WINC, WINNR, WINNC, MNUITMC, MNUPTS SET
+; - CLOBBERS: AF, DE, HL
+; -
+
+MNULOAD         LD      A, (MNUID)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; A = MNUID * 8
+                LD      E, A
+                LD      D, 0
+                LD      HL, DOMNU.MNUTBL
+                ADD     HL, DE
+
+                LD      A, (HL)
+                LD      (WINC), A
+                INC     HL
+                LD      A, (HL)
+                LD      (WINNC), A
+                INC     HL
+                LD      A, (HL)
+                LD      (WINNR), A
+                INC     HL
+                LD      A, (HL)
+                LD      (MNUITMC), A
+                INC     HL
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)
+                LD      (MNUPTS), DE    ; ITEM STRING TABLE
+
+                LD      A, 1            ; THE BAR OWNS ROW 0
+                LD      (WINR), A
+                RET
+
+
+; --- MNUOPEN                   ----------------------------------------
+
+
+; - MNUOPEN ----------------------------
+; - OPEN THE ACTIVE MENU'S WINDOW, PAINT ITS ITEMS AND PUSH IT TO VRAM
+; - IN:  NONE (USES MNUID AND THE GEOMETRY MNULOAD SET)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+MNUOPEN         LD      A, (MNUID)
+                ADD     A, A
+                LD      E, A
+                LD      D, 0
+                LD      HL, DOMNU.TITP
+                ADD     HL, DE
+                LD      A, (HL)
+                INC     HL
+                LD      H, (HL)
+                LD      L, A            ; HL = DROPDOWN TITLE
+                CALL    WINOPEN
+                CALL    MNUDRAW
+                JP      WDUMP
+
+
+; --- MNUTITL                   ----------------------------------------
+
+
+; - MNUTITL ----------------------------
+; - TOGGLE THE HIGHLIGHT OF THE ACTIVE MENU'S TITLE IN ROW 0. PATINV XORS
+; - THE PIXEL COLUMNS THE TITLE OWNS AND PUSHES THE ROW, SO CALLING IT
+; - TWICE LEAVES THE BAR EXACTLY AS IT WAS.
+; - IN:  NONE (USES MNUID)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL, IX
+; -
+
+MNUTITL         LD      A, (MNUID)
+                ADD     A, A            ; TWO BYTES PER SPAN
+                LD      E, A
+                LD      D, 0
+                LD      HL, DOMNU.TITX
+                ADD     HL, DE
+                LD      C, (HL)         ; C = FIRST CHAR COLUMN
+                INC     HL
+                LD      B, (HL)         ; B = COLUMN COUNT
+                LD      H, MNUROW
+                JP      PATINV
+
+
+; --- MNUDRAW                   ----------------------------------------
+
+
+; - MNUDRAW ----------------------------
+; - PAINT EVERY ITEM OF THE ACTIVE MENU INTO THE SHADOWS
+; - IN:  NONE (USES MNUITMC, MNUSEL)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+MNUDRAW         LD      C, 0            ; C = ITEM COUNTER
+.LOOP           LD      A, (MNUSEL)
+                CP      C
+                LD      B, 0            ; STYLE = UNSELECTED
+                JR      NZ, .NOTSEL
+                LD      B, 1            ; STYLE = SELECTED
+.NOTSEL         LD      A, C
+                PUSH    BC
+                CALL    MNUPNT
+                POP     BC
+                INC     C
+                LD      A, (MNUITMC)
+                CP      C
+                JR      NZ, .LOOP
+                RET
+
+
+; --- MNUCHKS                   ----------------------------------------
+
+
+; - MNUCHKS ----------------------------
+; - IS ITEM A A SEPARATOR? A SEPARATOR IS A NULL STRING POINTER
+; - IN:  A = ITEM INDEX
+; - OUT: Z = 1: SEPARATOR, Z = 0: REGULAR ITEM. A PRESERVED
+; - CLOBBERS: F
+; -
+
+MNUCHKS         PUSH    BC
+                PUSH    DE
+                PUSH    HL
+                LD      C, A            ; C = ITEM INDEX
+                ADD     A, A            ; WORD OFFSET
+                LD      E, A
+                LD      D, 0
+                LD      HL, (MNUPTS)
+                ADD     HL, DE
+                LD      A, (HL)
+                INC     HL
+                OR      (HL)            ; Z = 1 IF BOTH BYTES ARE ZERO
+                LD      A, C            ; LD DOES NOT TOUCH THE FLAGS
+                POP     HL
+                POP     DE
+                POP     BC
+                RET
+
+
+; --- MNUPNT                    ----------------------------------------
+
+
+; - MNUPNT -----------------------------
+; - PAINT ONE ITEM INTO THE SHADOWS. THE COLOR OF THE WHOLE CONTENT SPAN IS
+; - LAID DOWN FIRST SO THE SELECTION BAR REACHES THE BORDERS WHATEVER THE
+; - STRING'S LENGTH; A SEPARATOR IS SCANLINE 3 OF THAT SPAN.
+; - IN:  A = ITEM INDEX, B = STYLE (0 = UNSELECTED, 1 = SELECTED)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+MNUPNT          PUSH    BC
+                LD      C, A            ; C = ITEM INDEX
+                LD      A, (WINR)
+                INC     A
+                ADD     A, C
+                LD      (MNUTMPY), A    ; SCREEN ROW OF THE ITEM
+
+                LD      A, C
+                ADD     A, A            ; WORD OFFSET
+                LD      E, A
+                LD      D, 0
+                LD      HL, (MNUPTS)
+                ADD     HL, DE
+                LD      A, (HL)
+                INC     HL
+                LD      H, (HL)
+                LD      L, A
+                LD      (MNUTMPP), HL   ; ITEM STRING
+                POP     BC              ; B = STYLE
+                LD      A, H
+                OR      L
+                JR      Z, .SEP
+
+                LD      A, B
+                OR      A
+                LD      A, (VCOLWIN)
+                JR      Z, .COLOK
+                LD      A, (VCOLBSEL)   ; THE SELECTED ITEM: INVERSE ACCENT
+.COLOK          CALL    .BAR
+
+                LD      A, (MNUTMPY)
+                LD      B, A            ; B = ROW
+                LD      A, (WINC)
+                INC     A
+                ADD     A, A
+                LD      C, A            ; C = FIRST CONTENT CHAR COLUMN
+                LD      HL, (MNUTMPP)
+                LD      A, D            ; D = COLOR, KEPT BY .BAR
+                JP      WINPUTS
+
+.SEP            LD      A, (VCOLWIN)
+                CALL    .BAR
+
+                ; THE LINE ITSELF: SCANLINE 3 OF EVERY CONTENT CELL
+                LD      A, (MNUTMPY)
+                ADD     A, #80          ; HIGH(PATSHAD)
+                LD      H, A
+                LD      A, (WINC)
+                INC     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, 3
+                LD      L, A
+                LD      A, (WINNC)
+                SUB     2
+                LD      B, A
+                LD      DE, 8
+                LD      A, #FF
+.SLIN           LD      (HL), A
+                ADD     HL, DE
+                DJNZ    .SLIN
+                RET
+
+; - .BAR: FILL THE CONTENT CELLS OF (MNUTMPY) WITH THE COLOR IN A, WHICH
+; - COMES BACK IN D FOR THE TEXT THAT FOLLOWS
+
+.BAR            LD      D, A
+                LD      A, (MNUTMPY)
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = ROW * 32
+                LD      A, (WINC)
+                INC     A
+                ADD     A, L
+                LD      L, A
+                JR      NC, .BARNC
+                INC     H
+.BARNC          LD      A, H
+                ADD     A, #98          ; HIGH(COLMAP)
+                LD      H, A
+                LD      A, (WINNC)
+                SUB     2
+                LD      B, A
+                LD      A, D
+.BARFIL         LD      (HL), A
+                INC     HL
+                DJNZ    .BARFIL
+                RET

@@ -1,6 +1,6 @@
 # S2ED Window & Menu System — Design Specification
 
-> **Status:** Approved 2026-09-21. W1 done (branch `feat/s2ed-window-engine`): window engine + `DOABT` + guards, gate cases S2-11 and S2-12. W2/W4/W5 pending.
+> **Status:** Approved 2026-09-21. **W1, W2, W3 and W4 done; W5 rolled into each of them** (a phase without its gate case was never going to be finished separately). W1 `feat/s2ed-window-engine`: window engine + `DOABT` + guards, cases S2-11/S2-12. W2 `feat/s2ed-quit-dialog`: `DOQIT`, case S2-15. W4 `feat/s2ed-menu-dropdown`: `S2/MENU.Z8A`, cases S2-16/S2-17 and seven mutations. See §14 for what W4 shipped differently from this document.
 >
 > **Amended 2026-09-22.** Two things changed after W1 shipped. The dialog is **dark with a white frame** (`VCOLTXT` fill, `VCOLUI` only for the button bar): drawn in ink on a white fill the frame sat exactly on the boundary with the black document and had zero contrast — it was rendered correctly and invisible. And the background save buffer **left the container for the TPA** (§8), which is where the rest of the budget for W2/W4 comes from.
 
@@ -345,7 +345,7 @@ All well within interactive limits. The user will see an instant popup.
 | **W2** | `DOQIT` — Quit confirmation dialog |
 | **W3** | `DOABT` — About dialog |
 | **W4** | Menu dropdown subsystem (`S2/MENU.Z8A`) + `MNUENT` wiring |
-| **W5** | Suite S2 test cases (S2-11, S2-12, S2-13) |
+| **W5** | Suite S2 test cases — done inside each phase, not after it |
 
 ---
 
@@ -378,3 +378,50 @@ All well within interactive limits. The user will see an instant popup.
 | Coordinates | Pixels (512 wide) | Cells (32 wide) |
 | Button border | `LMMV` rectangle | Color swap on cell boundary |
 | Partial update (`WINUPD`) | `HMMM` sub-rectangle | Dump specific rows only |
+
+
+---
+
+## 14. W4 as built (2026-09-22)
+
+Measured on the branch `feat/s2ed-menu-dropdown`. `S2/MENU.Z8A` costs **1,168
+bytes** of the container: `BLK0LEN` 2,264 → 3,432, `FTRFREE` 2,856 → **1,688**.
+`S6ED.COM` is **byte-identical** across the change (`a64a9e95…`), which is the
+proof that collapsing the last `IFDEF S2ED` emitted nothing new on that target.
+
+Five things differ from §6 above, each for a reason worth keeping:
+
+1. **The dropdown carries its menu's name in the title bar.** S6ED's have no
+   title because its frame does not impose one; `WBOX` paints that row for
+   every S2 window, so using it costs nothing and leaves `WBOX` untouched.
+
+2. **Every menu is 12 cells wide and items are at most 20 characters**, because
+   the save buffer binds: `WSVMAX / 9 = 170` cell-slots and Edit's ten items
+   make a 13 × 13 region with the shadow margin. So the accelerators read `^N`
+   rather than `Ctrl+N`. Raising `WSVMAX` would have cost TPA for nothing.
+
+3. **Accelerators are a table**, `[key, item]` pairs terminated by `#00`, one
+   per menu, folded to uppercase at the point of comparison — about 90 bytes
+   against the ~250 S6ED spends on `CP`/`JR` chains, which matters here and
+   does not there.
+
+4. **A selection change repaints every item and pushes the whole window**
+   (`MNUDRAW` + `WDUMP`, ~22 ms), as `DOQIT` already does for its two buttons.
+   There is no command engine to sub-blit one row with, and no `WINUPD` was
+   written for S2.
+
+5. **No new variables.** `MNUID`, `MNUSEL`, `MNUITMC`, `MNUPTS`, `MNUTMPY` and
+   `MNUTMPP` already existed and mean the same thing on both targets; the
+   accelerator pointer is re-derived from the record instead of cached, which
+   keeps `VARS.Z8A` — and therefore `S6ED.COM` — untouched.
+
+**The item indices, the item counts and the separator positions are identical
+to S6ED's**, because the dispatch that runs after `DOMNU` returns lives in
+`CORE/ACTION.Z8A` and is shared. Only the strings and the geometry may differ.
+That is a constraint no reader of two source files can enforce, and it is what
+`S2-16-menu` measures.
+
+**What W4 moved:** About is no longer on F5 — F5 opens the Help menu and `A`
+picks About, exactly as on S6ED. Three W1/W2 cases pressed F5 and went on
+sampling happily at the next `WINPOLL`, which was now the dropdown's; see the
+`WINPOLL` gate trap in `TEST/README.md`.

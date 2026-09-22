@@ -53,6 +53,10 @@ DEFAULT_VARS = [
     ('SWTVERB', 1), ('SEGTOT', 1), ('SEGAVL', 1), ('SEGLNS', 2),
     ('FTRSEG', 1), ('HOMESEG', 1), ('SEGSP', 1),
     ('WINACTV', 1), ('WINX', 2), ('WINY', 2), ('WINW', 2), ('WINH', 2),
+    # S2ED's window geometry, in cells.  Absent from the S6ED symbol table,
+    # and a name the table does not carry is simply skipped -- which is what
+    # lets one list serve both targets.
+    ('WINR', 1), ('WINC', 1), ('WINNR', 1), ('WINNC', 1),
     ('WINSEL', 1), ('WINRES', 1), ('WINBST', 1),
     ('MNUID', 1), ('MNUSEL', 1),
     ('UNDOPTR', 2), ('UNDOBOT', 2), ('REDOPTR', 2), ('UNDOTYP', 1),
