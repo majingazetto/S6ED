@@ -317,9 +317,11 @@ WRSTOR          LD      HL, WSVBUF
 ; - DRAW THE WINDOW FRAME, BODY FILL AND TITLE INTO THE SHADOWS
 ; - THE FRAME IS RAW PATTERNS: TOP/BOTTOM EDGES ARE #FF ON SCANLINE 0/7,
 ; - SIDE BORDERS #C0 / #03, CORNERS THE UNION OF BOTH. EVERY WINDOW CELL
-; - CARRIES VCOLTXT, SO THE DARK FILL MAKES THE FRAME PATTERNS READ AS
-; - WHITE LINES. THE TITLE CUTS THE TOP EDGE: ITS CELLS ARE CLEARED
-; - BEFORE THE TEXT GOES IN.
+; - CARRIES VCOLWIN, EXCEPT THE TOP ROW, WHICH IS THE TITLE BAR AND
+; - CARRIES VCOLHI. THE FILL IS DARK AND THE FRAME PATTERNS ARE DRAWN
+; - IN INK, SO THEY READ AS LIGHT LINES. THE TITLE CUTS THE TOP EDGE:
+; - ITS CELLS ARE CLEARED BEFORE THE TEXT GOES IN, AND A SEPARATOR LINE
+; - CLOSES THE BAR ALONG SCANLINE 7 OF THAT ROW.
 ; - IN:  HL = ASCIIZ TITLE STRING (0 = NONE)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
@@ -327,7 +329,7 @@ WRSTOR          LD      HL, WSVBUF
 
 WBOX            PUSH    HL              ; TITLE
 
-                ; 1. COLORS: FILL THE WINDOW RECT WITH VCOLTXT
+                ; 1. COLORS: VCOLWIN, TOP ROW VCOLHI (TITLE BAR)
                 LD      A, (WINR)
                 LD      B, A            ; B = ROW
                 LD      A, (WINNR)
@@ -347,9 +349,15 @@ WBOX            PUSH    HL              ; TITLE
                 INC     H
 .CRNC           LD      DE, COLMAP
                 ADD     HL, DE
+                LD      A, (WINR)
+                CP      B               ; B IS STILL THE ROW HERE
+                LD      A, (VCOLWIN)
+                JR      NZ, .CFILS
+                LD      A, (VCOLHI)     ; TOP ROW: TITLE BAR
+.CFILS          LD      C, A            ; HOLD IT WHILE B TAKES WINNC
                 LD      A, (WINNC)
                 LD      B, A
-                LD      A, (VCOLTXT)
+                LD      A, C
 .CFILL          LD      (HL), A
                 INC     HL
                 DJNZ    .CFILL
@@ -467,7 +475,7 @@ WBOX            PUSH    HL              ; TITLE
                 POP     HL              ; TITLE
                 LD      A, H
                 OR      L
-                RET     Z               ; NO TITLE
+                JR      Z, .SEP         ; NO TITLE, BUT STILL A TITLE BAR
                 PUSH    HL
                 ; SPAN: THE TITLE STARTS AT CHAR COLUMN (WINC+1)*2 AND
                 ; WINPUTS CLIPS IT AT WINCLIM (OR THE RIGHT SCREEN EDGE
@@ -519,8 +527,32 @@ WBOX            PUSH    HL              ; TITLE
                 INC     A
                 ADD     A, A
                 LD      C, A            ; CHAR COL = (WINC+1)*2
-                LD      A, (VCOLTXT)
-                JP      WINPUTS
+                LD      A, (VCOLHI)
+                CALL    WINPUTS
+
+                ; 7. SEPARATOR UNDER THE TITLE BAR: SCANLINE 7 OF EVERY CELL
+                ;    OF THE TOP ROW. IT GOES IN *AFTER* THE TITLE, BECAUSE
+                ;    WINPUTC OVERWRITES ALL EIGHT SCANLINES OF A CELL RATHER
+                ;    THAN OR-ING INTO IT, SO A LINE DRAWN FIRST WOULD BE
+                ;    WIPED EXACTLY WHERE THE TITLE SITS. IT SPANS THE BORDER
+                ;    CELLS TOO, AS S6ED'S COL_HI SEPARATOR DOES.
+.SEP            LD      A, (WINR)
+                ADD     A, #80          ; HIGH(PATSHAD)
+                LD      H, A
+                LD      A, (WINC)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, 7            ; SCANLINE 7 OF CELL WINC
+                LD      L, A
+                LD      DE, 8
+                LD      A, (WINNC)
+                LD      B, A
+                LD      A, #FF
+.SEPLP          LD      (HL), A
+                ADD     HL, DE
+                DJNZ    .SEPLP
+                RET
 
 
 ; --- WSHDW                     ----------------------------------------
@@ -528,14 +560,18 @@ WBOX            PUSH    HL              ; TITLE
 
 ; - WSHDW ------------------------------
 ; - DARKEN THE SHADOW MARGIN: THE COLUMN RIGHT OF THE WINDOW AND THE ROW
-; - BELOW IT GET COLSHDW IN THE COLOR MAP. THE PATTERNS UNDERNEATH ARE
+; - BELOW IT GET VCOLSHDW IN THE COLOR MAP. THE PATTERNS UNDERNEATH ARE
 ; - UNTOUCHED -- BLACK INK ON BLACK HIDES THEM, WHICH IS ALL A SHADOW IS.
 ; - IN:  NONE (USES WINR, WINC, WINNR, WINNC)
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
 
-WSHDW           ; RIGHT COLUMN: ROWS WINR+1..WINR+WINNR, CELL WINC+WINNC
+WSHDW           LD      A, (SHDWOFF)
+                OR      A
+                RET     NZ              ; SHADOW=OFF: LEAVE THE MARGIN ALONE
+
+                ; RIGHT COLUMN: ROWS WINR+1..WINR+WINNR, CELL WINC+WINNC
                 LD      A, (WINR)
                 INC     A
                 LD      B, A            ; B = ROW
@@ -559,7 +595,7 @@ WSHDW           ; RIGHT COLUMN: ROWS WINR+1..WINR+WINNR, CELL WINC+WINNC
                 INC     H
 .RSNC           LD      DE, COLMAP
                 ADD     HL, DE
-                LD      A, COLSHDW
+                LD      A, (VCOLSHDW)
                 LD      (HL), A
                 POP     BC
                 INC     B
@@ -588,7 +624,7 @@ WSHDW           ; RIGHT COLUMN: ROWS WINR+1..WINR+WINNR, CELL WINC+WINNC
                 ADD     HL, DE
                 LD      A, (WINNC)
                 LD      B, A            ; B = WINNC CELLS
-                LD      A, COLSHDW
+                LD      A, (VCOLSHDW)
 .BSLP           LD      (HL), A
                 INC     HL
                 DJNZ    .BSLP
@@ -802,37 +838,37 @@ DOABT           LD      A, 6
                 LD      B, 8
                 LD      C, 20
                 LD      HL, .STRHDR
-                LD      A, (VCOLTXT)
+                LD      A, (VCOLWIN)
                 CALL    WINPUTS
 
                 LD      B, 9
                 LD      C, 20
                 LD      HL, .STRSUB
-                LD      A, (VCOLTXT)
+                LD      A, (VCOLWIN)
                 CALL    WINPUTS
 
                 LD      B, 11
                 LD      C, 20
                 LD      HL, .STRDSP
-                LD      A, (VCOLTXT)
+                LD      A, (VCOLWIN)
                 CALL    WINPUTS
 
                 LD      B, 12
                 LD      C, 20
                 LD      HL, .STRFNT
-                LD      A, (VCOLTXT)
+                LD      A, (VCOLWIN)
                 CALL    WINPUTS
 
                 LD      B, 13
                 LD      C, 20
                 LD      HL, .STRMEM
-                LD      A, (VCOLTXT)
+                LD      A, (VCOLWIN)
                 CALL    WINPUTS
 
                 LD      B, 15
                 LD      C, 27
                 LD      HL, .BTNOK
-                LD      A, (VCOLUI)     ; INVERSE BAR: THE BUTTON ON THE DARK DIALOG
+                LD      A, (VCOLBSEL)   ; THE FOCUSED BUTTON: INVERSE ACCENT
                 CALL    WINPUTS
 
                 ; REDUMP THE WINDOW ROWS WITH THE TEXT IN

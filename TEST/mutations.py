@@ -209,10 +209,11 @@ MUTATIONS = [
                'colour table agrees, while the config claims amber',
         'target': 'S2ED',
         'file': 'VDP.Z8A',
-        'old': "S2THMBR         DEFB    #A1, #1A, #B1, #71, #31, #E1, 1       ; AMBER",
-        'new': "S2THMBR         DEFB    #F1, #1F, #B1, #71, #31, #E1, 1       ; MUTATION: DARK DATA",
+        'old': "S2THMBR         DEFB    #A1, #A6, #B1, #71, #31, #E1, 1, #A6  ; AMBER",
+        'new': "S2THMBR         DEFB    #F1, #F4, #B1, #71, #31, #E1, 1, #F4  ; MUTATION: DARK DATA",
         'filter': 'S2-10',
-        'expect': ['S2-10/theme-vars', 'S2-10/text-amber', 'S2-10/chrome-amber'],
+        'expect': ['S2-10/amber/vars', 'S2-10/amber/text',
+                   'S2-10/amber/menu', 'S2-10/amber/status'],
     },
     {
         'name': 's2-rendiff-hit',
@@ -258,6 +259,145 @@ MUTATIONS = [
         'new': 'WSVBUF          EQU     UNDOBAS',
         'filter': 'S2-12',
         'expect': ['S2-12/content'],
+    },
+    {
+        # The chrome split of 2026-09-22.  Before it the menu bar, the status
+        # bar, the dialog body and the dialog button all came out of two role
+        # bytes, so "theming the status bar" was not a thing you could do.
+        'name': 's2-role-stat',
+        'why': 'DRWSTAT paints the status bar in the document text role, so '
+               'the bar stops being chrome and no theme can move it',
+        'target': 'S2ED',
+        'file': 'UI.Z8A',
+        'old': """                ; STATUS BAR HAS ITS OWN ROLE, DISTINCT FROM THE MENU BAR
+                LD      A, (VCOLSTAT)""",
+        'new': """                ; MUTATION: THE BAR IS NOT CHROME ANY MORE
+                LD      A, (VCOLTXT)""",
+        'filter': 'S2-10',
+        'expect': ['S2-10/amber/status'],
+    },
+    {
+        'name': 's2-role-win',
+        'why': 'WBOX fills the dialog body with the document text role, so a '
+               'dialog is a patch of document and cannot be themed apart',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      A, (VCOLWIN)
+                JR      NZ, .CFILS""",
+        'new': """                LD      A, (VCOLTXT)    ; MUTATION: BODY = DOCUMENT
+                JR      NZ, .CFILS""",
+        'filter': 'S2-11',
+        'expect': ['S2-11/window-colour'],
+    },
+    {
+        'name': 's2-role-wtit',
+        'why': 'WBOX paints the top row as body, so there is no title bar '
+               'band and the accent never reaches the screen',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      A, (WINR)
+                CP      B               ; B IS STILL THE ROW HERE
+                LD      A, (VCOLWIN)
+                JR      NZ, .CFILS
+                LD      A, (VCOLHI)     ; TOP ROW: TITLE BAR
+.CFILS          LD      C, A            ; HOLD IT WHILE B TAKES WINNC""",
+        'new': """                LD      A, (VCOLWIN)    ; MUTATION: NO TITLE BAR
+.CFILS          LD      C, A            ; HOLD IT WHILE B TAKES WINNC""",
+        'filter': 'S2-11',
+        'expect': ['S2-11/window-colour'],
+    },
+    {
+        'name': 's2-role-btn',
+        'why': 'the OK button loses its focus role and wears the plain '
+               'accent, so nothing on the dialog shows where the focus is',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': '                LD      A, (VCOLBSEL)   ; THE FOCUSED BUTTON: INVERSE ACCENT',
+        'new': '                LD      A, (VCOLHI)     ; MUTATION: NO FOCUS',
+        'filter': 'S2-11',
+        'expect': ['S2-11/window-colour'],
+    },
+    {
+        # S6ED closes its title band with a COL_HI separator.  On S2 the line
+        # has to go in AFTER the title, because WINPUTC overwrites all eight
+        # scanlines of a cell -- drawn first it survives everywhere except
+        # under the title, which is the half anyone would notice.
+        'name': 's2-wbox-sep',
+        'why': 'the title bar has no separator closing it, so the dialog '
+               'header runs into the body',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      A, (WINNC)
+                LD      B, A
+                LD      A, #FF
+.SEPLP          LD      (HL), A""",
+        'new': """                LD      A, (WINNC)
+                LD      B, A
+                LD      A, #00          ; MUTATION: NO SEPARATOR
+.SEPLP          LD      (HL), A""",
+        'filter': 'S2-11',
+        'expect': ['S2-11/title-separator'],
+    },
+    {
+        # PARSTHM dispatches on the FIRST LETTER, which is how AUTOALIGN=OFF
+        # once turned auto-align on.  MSX is index 12: with the old A-H table
+        # the value is rejected and the editor silently stays on DARK.
+        'name': 's2-theme-idx',
+        'why': 'the theme index table stops at H again, so THEME=MSX is '
+               'rejected in silence and the default theme stays',
+        'target': 'S2ED',
+        'file': 'CFG.Z8A',
+        'old': '                CP      #0D             ; 13 ENTRIES (A-M): MSX IS INDEX 12',
+        'new': '                CP      #08             ; MUTATION: A-H ONLY',
+        'filter': 'S2-10',
+        'expect': ['S2-10/msx/vars'],
+    },
+    {
+        # The last hardcoded colour in the target.  A shadow cell keeps the
+        # document's pattern and flattens its colour, so black-on-black is a
+        # shadow only where the document is not black -- which was true of
+        # exactly one of the four themes.
+        'name': 's2-role-shdw',
+        'why': 'the drop shadow goes back to a hardcoded black, which is '
+               'invisible on every theme whose document background is black',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """.RSNC           LD      DE, COLMAP
+                ADD     HL, DE
+                LD      A, (VCOLSHDW)""",
+        'new': """.RSNC           LD      DE, COLMAP
+                ADD     HL, DE
+                LD      A, #11          ; MUTATION: HARDCODED BLACK SHADOW""",
+        'filter': 'S2-11',
+        'expect': ['S2-11/shadow'],
+    },
+    {
+        'name': 's2-shadow-off',
+        'why': 'WSHDW ignores SHADOW=OFF and recolours the margin anyway, so '
+               'the key cannot turn the shadow off',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """WSHDW           LD      A, (SHDWOFF)
+                OR      A
+                RET     NZ              ; SHADOW=OFF: LEAVE THE MARGIN ALONE""",
+        'new': """WSHDW           LD      A, (SHDWOFF)
+                OR      A               ; MUTATION: SHADOW=OFF IGNORED""",
+        'filter': 'S2-13',
+        'expect': ['S2-13/off/margin'],
+    },
+    {
+        'name': 's2-shadow-hex',
+        'why': 'PARSSHD parses the colour digit and never stores it, so '
+               'SHADOW=<hex> is accepted in silence and discarded -- the '
+               'shape the COLOR_* keys had on S2ED before they were removed',
+        'target': 'S2ED',
+        'file': 'CFG.Z8A',
+        'old': """                OR      C               ; FLATTEN: N << 4 | N
+                LD      (VCOLSHDW), A""",
+        'new': """                OR      C               ; FLATTEN: N << 4 | N
+                                        ; MUTATION: VALUE NEVER STORED""",
+        'filter': 'S2-13',
+        'expect': ['S2-13/colour/margin'],
     },
     {
         'name': 's2-wbox-rframe',
@@ -352,24 +492,6 @@ MUTATIONS = [
                 XOR     A""",
         'filter': 'S2-11',
         'expect': ['S2-11/top-edge'],
-    },
-    {
-        'name': 's2-wbox-uicol',
-        'why': 'WBOX fills the window rect with VCOLUI again: a white dialog '
-               'whose black frame patterns vanish against the black boundary '
-               '-- the approved design is a dark window with a white frame',
-        'target': 'S2ED',
-        'file': 'WINDOW.Z8A',
-        'old': """                LD      A, (WINNC)
-                LD      B, A
-                LD      A, (VCOLTXT)
-.CFILL          LD      (HL), A""",
-        'new': """                LD      A, (WINNC)
-                LD      B, A
-                LD      A, (VCOLUI)     ; MUTATION: LIGHT DIALOG FILL
-.CFILL          LD      (HL), A""",
-        'filter': 'S2-11',
-        'expect': ['S2-11/window-colour'],
     },
     {
         # Round 2 fixed the same class in FILEIO.Z8A and stopped there.  This
@@ -885,8 +1007,15 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['G13/homeseg-idle'],
     },
     {
+        # What executes at #8000 when the payload lands elsewhere is
+        # UNINITIALISED MAPPER RAM, so the observable is undefined by nature:
+        # sometimes an editor that reached MAINLOOP unconfigured, sometimes a
+        # session that never gets there.  Pinning it to the first outcome is
+        # why this stopped being caught on 2026-09-22 after an unrelated
+        # change moved the payload -- expect_any states the real contract.
         'name': 'f2-datload',
-        'why': 'DATLOAD loads feature payload at wrong address in page 2',
+        'why': 'DATLOAD loads feature payload at wrong address in page 2, so '
+               'the FCALL enters uninitialised segment RAM',
         'file': 'XSEG.Z8A',
         'old': """                LD      A, (DATHAND)
                 LD      HL, (DATBLK + 4)
@@ -897,7 +1026,7 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 LD      DE, #9000       ; MUTATION: LOAD AT WRONG ADDRESS
                 CALL    DSKREAD""",
         'filter': 'G13',
-        'expect': ['G13/cfg-applied'],
+        'expect_any': ['G13/cfg-applied', 'G13-feature-residency'],
     },
     {
         'name': 'f2-datmagic',
@@ -1057,7 +1186,9 @@ SELTMPXB        EQU     SELTMPXB2""")],
     },
     {
         'name': 'c3-shadow',
-        'why': 'the shadow bars are painted in highlight color, not background',
+        'why': 'the shadow bars ignore SHADOW= and are hardcoded to the '
+               'highlight colour, so the key cannot move them and the '
+               'default stops being the background',
         'file': 'WINDOW.Z8A',
         'old': """                LD      HL, WINCOMP_Y + WINSHDW
                 LD      (VDP_DY), HL
@@ -1065,7 +1196,7 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 LD      (VDP_NX), HL
                 LD      HL, (WINH)
                 LD      (VDP_NY), HL
-                LD      A, CLR_BG""",
+                LD      A, (SHDWCLR)""",
         'new': """                LD      HL, WINCOMP_Y + WINSHDW
                 LD      (VDP_DY), HL
                 LD      HL, WINSHDW
@@ -1074,7 +1205,7 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 LD      (VDP_NY), HL
                 LD      A, CLR_HI       ; MUTATION: SHADOW IN HIGHLIGHT""",
         'filter': 'H21',
-        'expect': ['H21/shadow-right'],
+        'expect': ['H21/bg/shadow-right', 'H21/ui/shadow-right'],
     },
     {
         'name': 'c3-winupd',

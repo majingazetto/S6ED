@@ -1570,11 +1570,20 @@ class H20QuitDirty(Case):
 
 class H21Shadow(Case):
     name = 'H21-window-shadow'
-    desc = ('Quit dialog casts a 4 px COL_BG shadow over the text below it; '
-            'shadow corners show the saved background; close restores everything')
+    desc = ('Quit dialog casts a 4 px shadow, CLR_BG by default and the colour '
+            'SHADOW= names otherwise; corners show the saved background; '
+            'close restores everything')
     origin = ('Fase C3: the save/show rect grew to (WINW+4)x(WINH+4) and the '
               'corner strips are copied from the saved background so the '
-              'extended blit carries no stale composition data')
+              'extended blit carries no stale composition data.  The SHADOW= '
+              'variant is 2026-09-22: the bars were painted in CLR_BG, the '
+              'document background, so on a black document the shadow was '
+              'invisible and only showed by erasing the text it covered -- '
+              'which is exactly what this case used to assert and nothing '
+              'else.  Screen 6 has four colours on screen and all four are '
+              'spoken for, so the shadow can only borrow one; the key says '
+              'which, and BG (the default) is what "no shadow" looks like.')
+    variants = ('bg', 'ui')
 
     # Quit dialog at (156,74), 200x64, shadow 4 px:
     #   right bar   x 356..359, y 78..141
@@ -1590,6 +1599,9 @@ class H21Shadow(Case):
         # 230 px bottom with the S6ED font's 'X' glyph)
         return crlf(['X' * 70] * 20)
 
+    def config(self, ctx, variant=None):
+        return self.cfg + ('SHADOW=UI\n' if variant == 'ui' else '')
+
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot', vram=True)
@@ -1600,50 +1612,57 @@ class H21Shadow(Case):
         return t
 
     def verify(self, ctx, runs):
-        run = one(runs)
+        checks = []
+        for variant, run in sorted(runs.items()):
+            checks += self.verify_one(variant, run)
+        return checks
+
+    def verify_one(self, variant, run):
         v_boot = run.blob('boot', 'vram')
         v_dlg = run.blob('dlg', 'vram')
         v_closed = run.blob('closed', 'vram')
         fl = vram.TEXT_FIRST_LINE
+        tag = 'H21/%s' % variant
 
-        def ink(buf, rect):
+        def off(buf, rect, ground):
+            """Pixels of a box that are NOT `ground`."""
             if buf is None:
                 return None
             x0, y0, w, h = rect
             return sum(sum(r) for r in
                        vram.ink_mask(buf, x0, y0, w=w, h=h,
-                                     ground=vram.COL_BG, first_line=fl))
+                                     ground=ground, first_line=fl))
 
         checks = []
-        boot_right = ink(v_boot, self.RIGHTBAR)
-        checks.append(Check(
-            'H21/shadow-right',
-            boot_right and ink(v_dlg, self.RIGHTBAR) == 0,
-            'right shadow bar hides the text under it (ink %s -> 0)' % boot_right
-            if boot_right else
-            'fixture left no ink under the right bar — test proves nothing'))
-
-        boot_bottom = ink(v_boot, self.BOTBAR)
-        checks.append(Check(
-            'H21/shadow-bottom',
-            boot_bottom and ink(v_dlg, self.BOTBAR) == 0,
-            'bottom shadow bar hides the text under it (ink %s -> 0)' % boot_bottom
-            if boot_bottom else
-            'fixture left no ink under the bottom bar — test proves nothing'))
+        # The bars must come out solid in the colour the config asked for.
+        # With BG that also means the text under them is gone, which is the
+        # only thing the shadow did before SHADOW= existed.
+        want = vram.COL_UI if variant == 'ui' else vram.COL_BG
+        for label, rect in (('right', self.RIGHTBAR),
+                            ('bottom', self.BOTBAR)):
+            boot_ink = off(v_boot, rect, vram.COL_BG)
+            solid = off(v_dlg, rect, want)
+            checks.append(Check(
+                '%s/shadow-%s' % (tag, label),
+                boot_ink and solid == 0,
+                '%s bar is solid colour %d over %s inked pixels'
+                % (label, want, boot_ink) if boot_ink else
+                'fixture left no ink under the %s bar — test proves nothing'
+                % label))
 
         if v_boot is None or v_dlg is None:
             stray = [(-1, -1)]
         else:
             stray = [(x, y) for (x, y) in self.CORNERS
                      if vram.pixel(v_boot, x, y, fl) != vram.pixel(v_dlg, x, y, fl)]
-        checks.append(Check('H21/corners-clean', not stray,
+        checks.append(Check(tag + '/corners-clean', not stray,
                             'shadow corners show the saved background'
                             if not stray else
                             '%d stale pixels in shadow corners' % len(stray)))
 
         cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]
         d = vram.diff(v_boot, v_closed, ignore_cells=cursor)
-        checks.append(Check('H21/restore', not d,
+        checks.append(Check(tag + '/restore', not d,
                             'VRAM (shadow margin included) restored on close'
                             if not d else
                             '%d stray pixels after close' % len(d)))
@@ -2654,23 +2673,26 @@ class D8Accents(Case):
     # not reproduced by pressing a key once and hoping: whether a key-down
     # lands in the window depends on where MAINLOOP is when the BIOS queues
     # its code, i.e. on the phase between the keystroke and the interrupt.
-    # With the clock off that phase is fixed, so the run is deterministic and
-    # what decides it is how many presses are made and how fast.  Measured
-    # against the defect put back (mutation d8-double): the row typed twice at
-    # the default gap never reproduced it, and at 50 ms it depended on the gap
-    # to the millisecond.  Typed FOUR times with 50 ms between presses it goes
-    # red at every gap tried from 20 to 120 ms -- 36 presses drift far enough
-    # through the phase that one of them always lands in the window.  The
-    # fixed build is byte for byte correct at every one of those gaps.
+    # With the clock off that phase is fixed, so the run is deterministic --
+    # and deterministic is not the same as robust.  A SINGLE gap ties the case
+    # to one phase, and any unrelated change that moves boot timing slides the
+    # build out of the window: this was recalibrated to 0.05, 0.040 and 0.053
+    # in turn, and on 2026-09-22 a config key added at boot made 0.040 stop
+    # reproducing the defect while 0.030, 0.050, 0.060, 0.080 and 0.100 all
+    # still did.  So the passes no longer share a gap: each one uses its own,
+    # spanning the range, and whichever phase the build lands in one of them
+    # falls in the window.  The fixed build is byte for byte correct at every
+    # one of them -- that is what makes the spread free.
     GRAPH_ROW = 'AEIOUNW1/'
-    GRAPH_PASSES = 4
-    GRAPH_GAP = 0.040
+    GRAPH_GAPS = (0.030, 0.050, 0.070, 0.090)
+    GRAPH_PASSES = len(GRAPH_GAPS)
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
         # Line 0: unshifted GRAPH combinations (á é í ó ú ñ ü ¡ ¿), four times
-        for key in self.GRAPH_PASSES * self.GRAPH_ROW:
-            t.press(key, mods=['GRAPH'], tail=self.GRAPH_GAP)
+        for gap in self.GRAPH_GAPS:
+            for key in self.GRAPH_ROW:
+                t.press(key, mods=['GRAPH'], tail=gap)
         t.press('RETURN')
         # Line 1: shifted GRAPH combination (Ñ)
         t.press('N', mods=['GRAPH', 'SHIFT'])

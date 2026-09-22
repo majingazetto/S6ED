@@ -96,8 +96,8 @@ DRWSTAT         CALL    BLDSTAT         ; BUILD STRING IN STATBUF
                 INC     IX
                 DJNZ    .STPLP
 
-                ; STATUS BAR USES THE UI THEME COLOR
-                LD      A, (VCOLUI)
+                ; STATUS BAR HAS ITS OWN ROLE, DISTINCT FROM THE MENU BAR
+                LD      A, (VCOLSTAT)
                 LD      (IY+0), A
                 INC     IY
 

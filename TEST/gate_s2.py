@@ -460,13 +460,14 @@ class S27EnterBot(S2Case):
         ]
         # The status bar is chrome.  It may legitimately change (the modified
         # marker), but it must still be CHROME: with LD B, 23 the split
-        # painted a document line there, in COLTXT.
+        # painted a document line there, in COLTXT.  Since the chrome split
+        # the bar has its own role, VCOLSTAT, distinct from the menu bar's.
         _, colours = pattern.uniform_colour_cells(after[0x2000:],
                                                   pattern.STBROW)
         checks.append(Check(
-            'S2-7/status-is-chrome', colours == {pattern.COLUI},
-            'the status bar is still painted in COLUI (#1F)'
-            if colours == {pattern.COLUI} else
+            'S2-7/status-is-chrome', colours == {pattern.COLSTAT},
+            'the status bar is still painted in COLSTAT (#%02X)'
+            % pattern.COLSTAT if colours == {pattern.COLSTAT} else
             'status bar colours: %s' % sorted('#%02X' % c for c in colours)))
         head_row = pattern.row_of(after[:0x2000], pattern.STBROW)
         band_row = pattern.row_of(after[:0x2000], pattern.TXRLAST)
@@ -639,22 +640,32 @@ class S29Margin(S2Case):
 
 class S210Theme(S2Case):
     name = 'S2-10-theme'
-    desc = 'THEME=AMBER loads S2THMBR into VCOLTXT..VCOLBG and reaches VRAM'
+    desc = 'each theme fills all twelve role bytes and every one reaches VRAM'
     origin = ('the theme integration itself: the TMS9918 palette is fixed, '
               'so a theme is a choice of WHICH of the 16 colours fills each '
-              'role, carried in seven RAM bytes.  THMLOAD plants the default, '
-              'PARSTHM rewrites them on THEME=, and COMCELL, CLRROW, INITCOL, '
-              'DRWSTAT and DRWMENU read them instead of the old immediates.  '
-              'A copy that never lands leaves the editor in the default theme '
-              'with the config claiming amber.')
-    AMBER = [0xA1, 0x1A, 0xB1, 0x71, 0x31, 0xE1, 1]     # S2THMBR
-    LINES = ['AMBER ON THIS LINE', 'SECOND LINE']
+              'role, carried in twelve RAM bytes.  THMLOAD plants the '
+              'default, PARSTHM rewrites them on THEME=, and COMCELL, '
+              'CLRROW, INITCOL, DRWSTAT, DRWMENU and WBOX read them instead '
+              'of immediates.  A copy that never lands leaves the editor in '
+              'the default theme with the config claiming otherwise -- and '
+              'PARSTHM dispatches on the FIRST LETTER of the value, which is '
+              'how AUTOALIGN=OFF once turned auto-align on, so MSX (index 12) '
+              'only resolves because the index table reaches M.')
+    # TXT, UI, BOLD, ITAL, UNDR, MARK, BORDER, STAT, WIN, HI, BSEL, SHDW
+    THEMES = {
+        'amber': [0xA1, 0xA6, 0xB1, 0x71, 0x31, 0xE1, 1,
+                  0xA6, 0xA6, 0xB6, 0x6B, 0x66],      # S2THMBR
+        'msx':   [0xF4, 0xF5, 0xB4, 0x74, 0x34, 0xE4, 4,
+                  0xF5, 0xF5, 0xB5, 0x5B, 0x11],      # S2THMSX
+    }
+    variants = ('amber', 'msx')
+    LINES = ['THEME ON THIS LINE', 'SECOND LINE']
 
     def fixture(self, ctx, variant=None):
         return crlf(self.LINES)
 
     def config(self, ctx, variant=None):
-        return self.cfg + 'THEME=AMBER\n'
+        return self.cfg + 'THEME=%s\n' % variant.upper()
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
@@ -662,37 +673,56 @@ class S210Theme(S2Case):
         return t
 
     def verify(self, ctx, runs):
-        run = one(runs)
-        dump = run.blob('boot', 'patcol')
-        if dump is None:
-            return [Check('S2-10/dump', False, 'no VRAM dump')]
-        got = run.var('boot', 'VCOLTXT')
-        checks = [
-            Check('S2-10/theme-vars', got == self.AMBER,
-                  'VCOLTXT..VCOLBG hold S2THMBR' if got == self.AMBER else
-                  'VCOLTXT..VCOLBG = %s (expected %s)'
-                  % (got, ['#%02X' % b for b in self.AMBER])),
-            Check('S2-10/border', run.var('boot', 'RG7SAV') == self.AMBER[6],
-                  'R#7 border = %s (expected %d)'
-                  % (run.var('boot', 'RG7SAV'), self.AMBER[6])),
-        ]
-        col = dump[0x2000:]
-        wrong = []
-        for row in range(pattern.TXRFIRST, pattern.TXRLAST + 1):
-            _, colours = pattern.uniform_colour_cells(col, row)
-            if colours != {self.AMBER[0]}:
-                wrong.append((row, sorted('#%02X' % c for c in colours)))
-        checks.append(Check('S2-10/text-amber', not wrong,
-                            'every text cell is #A1 (dark yellow on black)'
-                            if not wrong else 'rows: %s' % wrong[:4]))
-        wrong = []
-        for row in (pattern.MNUROW, pattern.STBROW):
-            _, colours = pattern.uniform_colour_cells(col, row)
-            if colours != {self.AMBER[1]}:
-                wrong.append((row, sorted('#%02X' % c for c in colours)))
-        checks.append(Check('S2-10/chrome-amber', not wrong,
-                            'menu and status bars are #1A (black on amber)'
-                            if not wrong else 'rows: %s' % wrong[:4]))
+        checks = []
+        for variant, run in sorted(runs.items()):
+            want = self.THEMES[variant]
+            tag = 'S2-10/%s' % variant
+            dump = run.blob('boot', 'patcol')
+            if dump is None:
+                checks.append(Check(tag + '/dump', False, 'no VRAM dump'))
+                continue
+            got = run.var('boot', 'VCOLTXT')
+            checks.append(Check(tag + '/vars', got == want,
+                                'all twelve role bytes hold the theme'
+                                if got == want else
+                                'roles = %s (expected %s)'
+                                % (got, ['#%02X' % b for b in want])))
+            border = run.var('boot', 'RG7SAV')
+            checks.append(Check(tag + '/border', border == want[6],
+                                'R#7 border = %s (expected %d)'
+                                % (border, want[6])))
+            col = dump[0x2000:]
+            # Each role that reaches the screen at boot, on the rows it owns.
+            for label, rows, role in (
+                    ('text', range(pattern.TXRFIRST, pattern.TXRLAST + 1), 0),
+                    ('menu', [pattern.MNUROW], 1),
+                    ('status', [pattern.STBROW], 7)):
+                wrong = []
+                for row in rows:
+                    _, colours = pattern.uniform_colour_cells(col, row)
+                    if colours != {want[role]}:
+                        wrong.append((row, sorted('#%02X' % c
+                                                  for c in colours)))
+                checks.append(Check('%s/%s' % (tag, label), not wrong,
+                                    '%s is #%02X' % (label, want[role])
+                                    if not wrong else 'rows: %s' % wrong[:4]))
+            # The chrome roles are free to share a colour -- in every shipped
+            # theme they do, because S6ED's menu bar, status bar and window
+            # body are all COL_UI.  What must hold is that chrome is not the
+            # document surface, or the role checks above are vacuous and the
+            # mutations that swap a chrome role for VCOLTXT prove nothing.
+            split = want[1] != want[0] and want[7] != want[0]
+            checks.append(Check(tag + '/chrome-not-doc', split,
+                                'chrome #%02X is not the document #%02X'
+                                % (want[1], want[0])))
+            # A shadow whose colour matches the document background is not a
+            # shadow at all -- it is what #11 was on every theme but MSX.
+            docbg = want[0] & 0x0F
+            shadow = want[11]
+            checks.append(Check(tag + '/shadow-visible',
+                                (shadow & 0x0F) != docbg,
+                                'shadow #%02X shows against the document '
+                                'background %d' % (shadow, docbg)))
         return checks
 
 
@@ -712,7 +742,6 @@ class S211About(S2Case):
              for i in range(10)]
     # DOABT geometry in S2/WINDOW.Z8A, in cell units
     WINR, WINC, WINNR, WINNC = 6, 9, 11, 13
-    COLSHDW = 0x11
     # The OK button: "[  OK  ]" at row 15, char col 27 -> cells 13..17
     BTNROW, BTNC0, BTNC1 = 15, 13, 17
 
@@ -727,6 +756,14 @@ class S211About(S2Case):
         t.press('RETURN')
         t.snap('closed', vram='patcol')
         return t
+
+    def want_colour(self, row, cell):
+        """The role that owns one cell of the dialog, in the DARK theme."""
+        if row == self.WINR:
+            return pattern.COLHI            # title bar
+        if row == self.BTNROW and self.BTNC0 <= cell <= self.BTNC1:
+            return pattern.COLBSEL          # the focused button: inverse accent
+        return pattern.COLWIN
 
     def cells_of(self, dump, row, cells):
         """The set of colour bytes each cell carries across its 8 scanlines."""
@@ -761,42 +798,52 @@ class S211About(S2Case):
                   % run.var('closed', 'WINACTV')),
         ]
 
-        # Every window cell carries VCOLTXT (dark fill, white frame) on all
-        # 8 scanlines -- except the OK button cells, the inverse VCOLUI bar
+        # Three chrome roles share the dialog, as in S6ED: the accent
+        # (VCOLHI) carries the title bar, the focus role (VCOLBSEL) the
+        # button -- a TMS9918 cell is one FG|BG byte, so focus cannot be a
+        # border drawn inside it and is the inverse accent instead -- and
+        # the body role (VCOLWIN) everything else.  None is VCOLTXT, which
+        # is what makes a dialog a surface and not a patch of document.
         bad = [(r, c) for r in range(self.WINR, self.WINR + self.WINNR)
                for c, v in enumerate(self.cells_of(dlg, r, range(
                    self.WINC, self.WINC + self.WINNC)), start=self.WINC)
-               if v != {pattern.COLUI if r == self.BTNROW
-                        and self.BTNC0 <= c <= self.BTNC1
-                        else pattern.COLTXT}]
+               if v != {self.want_colour(r, c)}]
         checks.append(Check('S2-11/window-colour', not bad,
-                            'window cells are VCOLTXT (#F1), the OK button '
-                            'cells VCOLUI (#1F)' if not bad else
+                            'body #%02X, title bar #%02X, focused button '
+                            '#%02X' % (pattern.COLWIN, pattern.COLHI,
+                                       pattern.COLBSEL) if not bad else
                             'cells with wrong colour: %s' % bad[:6]))
 
         # The shadow margin: right column rows WINR+1..WINR+WINNR and bottom
-        # row cells WINC+1..WINC+WINNC, all COLSHDW (#11)
+        # row cells WINC+1..WINC+WINNC, all VCOLSHDW.  The shadow is a theme
+        # role, not a constant: it keeps the document's pattern and flattens
+        # its colour, so a black shadow is invisible on the three themes
+        # whose document is black.
         bad = [(r, self.WINC + self.WINNC)
                for r in range(self.WINR + 1, self.WINR + self.WINNR + 1)
                for v in self.cells_of(dlg, r, [self.WINC + self.WINNC])
-               if v != {self.COLSHDW}]
+               if v != {pattern.COLSHDW}]
         bad += [(self.WINR + self.WINNR, c)
                 for c, v in enumerate(self.cells_of(
                     dlg, self.WINR + self.WINNR,
                     range(self.WINC + 1, self.WINC + self.WINNC + 1)),
                     start=self.WINC + 1)
-                if v != {self.COLSHDW}]
+                if v != {pattern.COLSHDW}]
         checks.append(Check('S2-11/shadow', not bad,
-                            'right and bottom shadow cells are #11'
+                            'right and bottom shadow cells are #%02X'
+                            % pattern.COLSHDW
                             if not bad else 'cells not shadowed: %s'
                             % bad[:6]))
 
-        # The title cuts the top edge: "About S2ED" at row WINR, one cell in
+        # The title cuts the top edge: "About S2ED" at row WINR, one cell in.
+        # Scanline 7 of the whole row belongs to the separator, which is laid
+        # down after the title, so the glyph owns scanlines 0..6 only.
         fnt = font(ctx)
         trow = pattern.row_of(dlg[:0x2000], self.WINR)
         bad = [self.WINC + 1 + i
                for i, want in enumerate(self.text_cells(fnt, 'About S2ED'))
-               if trow[(self.WINC + 1 + i) * 8:(self.WINC + 2 + i) * 8] != want]
+               if trow[(self.WINC + 1 + i) * 8:(self.WINC + 2 + i) * 8]
+               != want[:7] + b'\xff']
         checks.append(Check('S2-11/title-text', not bad,
                             'title "About S2ED" rendered from the RAM font'
                             if not bad else 'title cells differ: %s' % bad))
@@ -837,7 +884,8 @@ class S211About(S2Case):
             for c, v in [(self.WINC, 0xC0), (self.WINC + self.WINNC - 1, 0x03)]:
                 want = bytearray([v] * 8)
                 if r == self.WINR:
-                    want[0] = 0xFF
+                    want[0] = 0xFF      # top edge
+                    want[7] = 0xFF      # separator under the title bar
                 if r == self.WINR + self.WINNR - 1:
                     want[7] = 0xFF
                 if prow[c * 8:(c + 1) * 8] != bytes(want):
@@ -846,6 +894,18 @@ class S211About(S2Case):
                             'left border #C0, right border #03 on every row'
                             if not bad else 'border cells differ: %s'
                             % bad[:6]))
+
+        # The separator that closes the title bar: scanline 7 of every cell
+        # of the top row, borders included.  It is drawn after the title
+        # because WINPUTC overwrites all eight scanlines of a cell, so a
+        # line laid down first would survive everywhere except under the
+        # title -- which is the half anyone would notice.
+        bad = [c for c in range(self.WINC, self.WINC + self.WINNC)
+               if trow[c * 8 + 7] != 0xFF]
+        checks.append(Check('S2-11/title-separator', not bad,
+                            'a separator closes the title bar across the '
+                            'window' if not bad else
+                            'cells without the separator: %s' % bad[:6]))
 
         # Bottom edge: #FF on scanline 7 of every cell of the last row
         frow = pattern.row_of(dlg[:0x2000], self.WINR + self.WINNR - 1)
@@ -1009,9 +1069,85 @@ class S212DialogUndo(S2Case):
         return checks
 
 
+# --- S2-13  THE SHADOW= CONFIG KEY ------------------------------------
+
+
+class S213ShadowCfg(S2Case):
+    name = 'S2-13-shadow'
+    desc = 'SHADOW=OFF leaves the margin alone, SHADOW=<hex> repaints it'
+    origin = ('the drop shadow was a hardcoded #11, black ink on black.  A '
+              'shadow cell keeps the document pattern and only flattens its '
+              'colour, so it reads as a shadow exactly where it differs from '
+              'the document background -- which was true of one theme out of '
+              'four and nobody noticed until MSX existed to compare against.  '
+              'It is a theme role now, and this is the key that overrides it.')
+    WINR, WINC, WINNR, WINNC = 6, 9, 11, 13     # DOABT, in cells
+    LINES = ['%02d %s' % (i, 'SHADOW TEST LINE ABCDEFGHIJKLMNOP')
+             for i in range(12)]
+    variants = ('off', 'colour')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def config(self, ctx, variant=None):
+        return self.cfg + ('SHADOW=OFF\n' if variant == 'off'
+                           else 'SHADOW=C\n')
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram='patcol')
+        t.press('F5')
+        t.snap('dialog', vram='patcol', at='WINPOLL')
+        return t
+
+    def margin(self):
+        """The cells the drop shadow owns: right column and bottom row."""
+        return ([(r, self.WINC + self.WINNC)
+                 for r in range(self.WINR + 1, self.WINR + self.WINNR + 1)] +
+                [(self.WINR + self.WINNR, c)
+                 for c in range(self.WINC + 1, self.WINC + self.WINNC + 1)])
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            tag = 'S2-13/%s' % variant
+            boot = run.blob('boot', 'patcol')
+            dlg = run.blob('dialog', 'patcol')
+            if boot is None or dlg is None:
+                checks.append(Check(tag + '/dump', False, 'missing VRAM dump'))
+                continue
+            bad = []
+            for r, c in self.margin():
+                sl = slice(c * 8, (c + 1) * 8)
+                got = pattern.colour_row(dlg[0x2000:], r)[sl]
+                if variant == 'off':
+                    # Untouched: the document's own colours, still there.
+                    if got != pattern.colour_row(boot[0x2000:], r)[sl]:
+                        bad.append((r, c))
+                elif set(got) != {0xCC}:
+                    bad.append((r, c, sorted('#%02X' % b for b in set(got))))
+            checks.append(Check(
+                tag + '/margin', not bad,
+                'the margin keeps the document colours'
+                if variant == 'off' else
+                'every margin cell is #CC (SHADOW=C, flattened)'
+                if not bad else 'cells differ: %s' % bad[:6]))
+
+            # Whatever the key says, the patterns under the margin are the
+            # document's: a shadow recolours, it never repaints.
+            bad = [(r, c) for r, c in self.margin()
+                   if pattern.row_of(dlg, r)[c * 8:(c + 1) * 8]
+                   != pattern.row_of(boot, r)[c * 8:(c + 1) * 8]]
+            checks.append(Check(tag + '/patterns', not bad,
+                                'the margin repaints no patterns'
+                                if not bad else 'cells differ: %s' % bad[:6]))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
-         S210Theme(), S211About(), S212DialogUndo()]
+         S210Theme(), S211About(), S212DialogUndo(),
+         S213ShadowCfg()]
 
 
 def run(ctx, cases=None):

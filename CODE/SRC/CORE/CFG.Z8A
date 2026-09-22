@@ -142,6 +142,17 @@ CFGLOAD         LD      HL, CFGNAME
 
 .NOTALN         POP     HL
                 PUSH    HL
+                LD      DE, KEYSHDW
+                CALL    STRPREF
+                JR      NC, .NOTSHD
+                CALL    CFGVAL
+                JR      NC, .NOTSHD
+                CALL    PARSSHD
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JP      .SKPLIN
+
+.NOTSHD         POP     HL
+                PUSH    HL
                 LD      DE, KEYTHM
                 CALL    STRPREF
                 JR      NC, .NOTTHM
@@ -151,6 +162,15 @@ CFGLOAD         LD      HL, CFGNAME
                 POP     HL              ; RESTORE HL TO START OF LINE
                 JP      .SKPLIN
 
+                IFDEF   S2ED
+                ; NO COLOR_* KEYS ON S2ED. THE TMS9918 PALETTE IS FIXED, SO
+                ; A ROLE IS A CHOICE OF WHICH OF THE 16 COLORS FILLS IT AND
+                ; THAT CHOICE IS THE THEME. THE KEYS USED TO BE PARSED HERE
+                ; AND WRITTEN INTO A PALDATA NO S2 CODE EVER READ -- ACCEPTED
+                ; IN SILENCE AND DISCARDED. PARSCOL, GETNUM, SKPCOM AND THE
+                ; SIX KEY STRINGS ARE EXCLUDED WITH THEM.
+.NOTTHM
+                ELSE
 .NOTTHM         POP     HL
                 PUSH    HL
                 LD      DE, KEYCBG
@@ -211,6 +231,8 @@ CFGLOAD         LD      HL, CFGNAME
                 POP     HL              ; RESTORE HL TO START OF LINE
                 JP      .SKPLIN
 
+                ENDIF
+
 .NOTCHI         POP     HL
 
 .SKPLIN         ; ADVANCE HL TO END OF CURRENT LINE (CR, LF, OR 0)
@@ -236,7 +258,12 @@ CFGLOAD         LD      HL, CFGNAME
 .CFGDON         LD      A, (PALDIRT)
                 OR      A
                 RET     Z
+                ; S2ED'S SETPAL TAKES NO ARGUMENT: IT REAPPLIES THE ROLE
+                ; VARIABLES A THEME= LINE JUST REWROTE. S6ED'S STREAMS THE
+                ; V9938 PALETTE BLOCK AT HL.
+                IFNDEF  S2ED
                 LD      HL, PALDATA
+                ENDIF
                 JP      SETPAL
 
 
@@ -536,13 +563,113 @@ PARSALN         LD      A, (HL)
                 RET
 
 
+; --- PARSSHD                   ----------------------------------------
+
+
+; - PARSSHD ----------------------------
+; - PARSE THE DROP SHADOW SETTING
+; - S2ED: "OFF" OR ONE HEX DIGIT 0-F, A TMS9918 COLOR INDEX. THE CELL IS
+; -   FLATTENED (N << 4 | N) BECAUSE A SHADOW CELL KEEPS THE DOCUMENT'S
+; -   PATTERN AND ONLY REPLACES ITS COLOR. OFF SKIPS THE MARGIN ENTIRELY.
+; - S6ED: "BG", "FG", "UI" OR "HI" -- SCREEN 6 HAS FOUR COLORS ON SCREEN
+; -   AND ALL FOUR ARE SPOKEN FOR, SO THE SHADOW CAN ONLY BORROW ONE.
+; -   "OFF" IS AN ALIAS OF "BG": THE BARS MUST STILL BE PAINTED OR THE
+; -   COMPOSITION BUFFER BLITS STALE DATA, AND CLR_BG IS WHAT "NO SHADOW"
+; -   LOOKS LIKE THERE.
+; - TWO CHARACTERS DECIDE, NEVER ONE: AUTOALIGN=OFF/ON COST A SPRINT.
+; - AN UNKNOWN VALUE LEAVES THE DEFAULT ALONE.
+; - IN:  HL = POINTER TO VALUE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+PARSSHD         LD      A, (HL)
+                CALL    UPCASE
+                LD      C, A            ; C = FIRST CHARACTER
+                INC     HL
+                LD      A, (HL)
+                CALL    UPCASE
+                LD      B, A            ; B = SECOND CHARACTER
+
+                IFDEF   S2ED
+                LD      A, C
+                CP      'O'
+                JR      NZ, .S2COL
+                LD      A, B
+                CP      'F'
+                RET     NZ              ; NOT "OF..." -- LEAVE THE DEFAULT
+                LD      A, #FF
+                LD      (SHDWOFF), A
+                RET
+
+.S2COL          LD      A, C            ; A HEX DIGIT: 0-9 OR A-F
+                CP      '0'
+                RET     C
+                CP      '9' + 1
+                JR      C, .S2DIG
+                CP      'A'
+                RET     C
+                CP      'F' + 1
+                RET     NC
+                SUB     'A' - 10
+                JR      .S2SET
+.S2DIG          SUB     '0'
+.S2SET          LD      C, A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; A = N << 4
+                OR      C               ; FLATTEN: N << 4 | N
+                LD      (VCOLSHDW), A
+                XOR     A
+                LD      (SHDWOFF), A
+                RET
+                ELSE
+                LD      A, B
+                CP      'G'             ; "BG" / "FG"
+                JR      NZ, .S6ALT
+                LD      A, C
+                CP      'B'
+                JR      NZ, .S6FG
+                LD      A, CLR_BG
+                JR      .S6SET
+.S6FG           CP      'F'
+                RET     NZ
+                LD      A, CLR_FG
+                JR      .S6SET
+.S6ALT          LD      A, C
+                CP      'U'             ; "UI"
+                JR      NZ, .S6HI
+                LD      A, B
+                CP      'I'
+                RET     NZ
+                LD      A, CLR_UI
+                JR      .S6SET
+.S6HI           CP      'H'             ; "HI"
+                JR      NZ, .S6OFF
+                LD      A, B
+                CP      'I'
+                RET     NZ
+                LD      A, CLR_HI
+                JR      .S6SET
+.S6OFF          CP      'O'             ; "OFF" == "BG" ON FOUR COLORS
+                RET     NZ
+                LD      A, B
+                CP      'F'
+                RET     NZ
+                LD      A, CLR_BG
+.S6SET          LD      (SHDWCLR), A
+                RET
+                ENDIF
+
+
 ; --- PARSTHM                   ----------------------------------------
 
 
 ; - PARSTHM ----------------------------
 ; - PARSE THEME NAME AND LOAD THE THEME COLORS
 ; - S6ED: 8-BYTE V9938 PALETTE TABLES (4 COLORS, R/G/B) INTO PALDATA
-; - S2ED: 7-BYTE TMS9918 COLOR TABLES (FG<<4|BG) INTO VCOLTXT..VCOLBG
+; - S2ED: VCOLNUM-BYTE TMS9918 COLOR TABLES (FG<<4|BG) INTO VCOLTXT..
 ; - IN:  HL = POINTER TO VALUE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
@@ -553,7 +680,7 @@ PARSTHM         LD      A, (HL)
                 SUB     #41             ; 'A'
                 RET     C
                 IFDEF   S2ED
-                CP      #08             ; 8 ENTRIES (A-H)
+                CP      #0D             ; 13 ENTRIES (A-M): MSX IS INDEX 12
                 RET     NC
                 LD      DE, S2TIDX
                 ADD     A, E
@@ -575,7 +702,7 @@ PARSTHM         LD      A, (HL)
                 EX      DE, HL
                 ; FALL THROUGH TO .CPYTHM
 .CPYTHM         LD      DE, VCOLTXT
-                LD      BC, 7
+                LD      BC, VCOLNUM
                 LDIR
                 LD      A, #FF
                 LD      (PALDIRT), A
@@ -631,8 +758,11 @@ MKPTBL          DEFB    #02, #01, #FF, #00
 
                 IFDEF   S2ED
                 ; A=AMBER, B=BLUE, D=DARK, G=GREEN (ELSE #FF = NO THEME)
-S2TIDX          DEFB    #01, #03, #FF, #00, #FF, #FF, #02, #FF
-S2TPTR          DEFW    S2THDKR, S2THMBR, S2THGRN, S2THBLU
+                ; ONE ENTRY PER LETTER A..M, SO THE DISPATCH ON THE FIRST
+                ; LETTER REACHES MSX. #FF = NO THEME WITH THAT INITIAL.
+S2TIDX          DEFB    #01, #FF, #FF, #00, #FF, #FF, #02, #FF
+                DEFB    #FF, #FF, #FF, #FF, #03
+S2TPTR          DEFW    S2THDKR, S2THMBR, S2THGRN, S2THMSX
                 ELSE
 THMIDX          DEFB    #01, #FF, #FF, #00, #FF, #FF, #02, #FF
                 DEFB    #FF, #FF, #FF, #03, #04
@@ -646,6 +776,7 @@ TABTBL          DEFB    #FF, #FF, #02, #FF, #04, #FF, #FF, #FF
                 DEFB    #08, #FF
 
 
+                IFNDEF  S2ED
 ; --- PARSCOL                   ----------------------------------------
 
 
@@ -759,6 +890,9 @@ SKPCOM          LD      A, (HL)
                 RET
 
 
+                ENDIF
+
+
 ; --- CFG DATA                  ----------------------------------------
 
 
@@ -774,13 +908,16 @@ KEYCLK          DEFM    "CLOCK", 0
 KEYTAB          DEFM    "TABWIDTH", 0
 KEYEOL          DEFM    "EOL", 0
 KEYALN          DEFM    "AUTOALIGN", 0
+KEYSHDW         DEFM    "SHADOW", 0
 KEYTHM          DEFM    "THEME", 0
+                IFNDEF  S2ED
 KEYCBG          DEFM    "COLOR_BG", 0
 KEYCTX          DEFM    "COLOR_TEXT", 0
 KEYCFG          DEFM    "COLOR_FG", 0
 KEYCUI          DEFM    "COLOR_UI", 0
 KEYCHI          DEFM    "COLOR_HIGHLIGHT", 0
 KEYCHIS         DEFM    "COLOR_HI", 0
+                ENDIF
 
 
 ; --- THEMES                    ----------------------------------------

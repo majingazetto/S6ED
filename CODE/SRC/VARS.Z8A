@@ -302,6 +302,15 @@ WINCLIPX        DEFW    0               ; WINSTR: GLYPHS MUST END AT/BEFORE THIS
                                         ;   DX (WINX+WINW-1, SET BY WINOPEN);
                                         ;   0 = NO CLIPPING
 WINACTV         DEFB    0               ; 1 = MODAL WINDOW ACTIVE, 0 = INACTIVE
+
+                ; DROP SHADOW, SET BY THE CFG KEY SHADOW=. BOTH DEFAULT TO
+                ; ZERO, WHICH INIT ALREADY WRITES AND WHICH MEANS "AS BEFORE":
+                ; ON S2ED THE THEME'S VCOLSHDW, ON S6ED CLR_BG.
+                IFDEF   S2ED
+SHDWOFF         DEFB    0               ; NON-ZERO: NO DROP SHADOW AT ALL
+                ELSE
+SHDWCLR         DEFB    0               ; PACKED FILL BYTE FOR THE SHADOW BARS
+                ENDIF
 WINVAR          DEFB    0               ; WINSTR: FONT VARIANT TEMP
 WINOP           DEFB    0               ; WINSTR: VDP LOGOP TEMP
 WINBST          DEFB    0               ; WINBTS: BUTTON STYLE (0=NORMAL, 1=SELECTED)
@@ -362,14 +371,28 @@ VDP_CMD         EQU     VDPCMBLK + 14 ; BYTE
 ; THMLOAD FILLS THE DEFAULT THEME BEFORE CFGRUN. S2ED ONLY: S6ED
 ; REPROGRAMS THE V9938 PALETTE INSTEAD, AND DECLARING THESE THERE
 ; WOULD SHIFT UNDOBAS AND BREAK THE S6ED.COM BYTE-IDENTITY GUARD.
+                ; ONE CONTIGUOUS BLOCK: A THEME IS AN LDIR OF VCOLNUM BYTES
+                ; FROM A TABLE IN S2/VDP.Z8A, AND THE TEST HARNESS READS THE
+                ; WHOLE SPAN FROM VCOLTXT. THE TABLES ARE IN THIS ORDER --
+                ; APPEND, NEVER INSERT.
+                ;
+                ; A ROLE WITHOUT A READER IS NOT A FEATURE: VCOLMARK SPENT
+                ; TWO SPRINTS BEING LOADED FROM EVERY THEME AND READ BY
+                ; NOBODY. VCOLUNDR IS THE SAME AND IS KEPT DELIBERATELY --
+                ; COMCELL READS IT, NOTHING STAMPS ATRUNDR YET.
                 IFDEF   S2ED
-VCOLTXT         DEFB    0               ; NORMAL TEXT (FG|BG)
-VCOLUI          DEFB    0               ; UI CHROME (FG|BG)
-VCOLBOLD        DEFB    0               ; BOLD TEXT (FG|BG)
-VCOLITAL        DEFB    0               ; ITALIC TEXT (FG|BG)
-VCOLUNDR        DEFB    0               ; CODE / UNDERLINE (FG|BG)
-VCOLMARK        DEFB    0               ; MARKDOWN DELIMITERS (FG|BG)
-VCOLBG          DEFB    0               ; BORDER COLOR (TMS9918 INDEX)
+VCOLTXT         DEFB    0               ; DOCUMENT: NORMAL TEXT (FG|BG)
+VCOLUI          DEFB    0               ; CHROME: MENU BAR (ROW 0)
+VCOLBOLD        DEFB    0               ; DOCUMENT: BOLD TEXT
+VCOLITAL        DEFB    0               ; DOCUMENT: ITALIC TEXT
+VCOLUNDR        DEFB    0               ; DOCUMENT: CODE / UNDERLINE (RESERVED)
+VCOLMARK        DEFB    0               ; DOCUMENT: MARKUP DELIMITERS (RESERVED)
+VCOLBG          DEFB    0               ; GLOBAL: BORDER (TMS9918 INDEX, NOT FG|BG)
+VCOLSTAT        DEFB    0               ; CHROME: STATUS BAR (ROW 23)
+VCOLWIN         DEFB    0               ; CHROME: WINDOW BODY
+VCOLHI          DEFB    0               ; CHROME: ACCENT -- TITLE BAR, BUTTONS
+VCOLBSEL        DEFB    0               ; CHROME: FOCUSED BUTTON / SELECTED ITEM
+VCOLSHDW        DEFB    0               ; CHROME: WINDOW DROP SHADOW
                 ENDIF
 
 ENDVARS
