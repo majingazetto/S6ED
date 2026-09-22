@@ -1,6 +1,8 @@
 # S2ED Window & Menu System — Design Specification
 
-> **Status:** Approved 2026-09-21. W1 done (branch `feat/s2ed-window-engine`): window engine + `DOABT` + guards, gate case S2-11. W2/W4/W5 pending.
+> **Status:** Approved 2026-09-21. W1 done (branch `feat/s2ed-window-engine`): window engine + `DOABT` + guards, gate cases S2-11 and S2-12. W2/W4/W5 pending.
+>
+> **Amended 2026-09-22.** Two things changed after W1 shipped. The dialog is **dark with a white frame** (`VCOLTXT` fill, `VCOLUI` only for the button bar): drawn in ink on a white fill the frame sat exactly on the boundary with the black document and had zero contrast — it was rendered correctly and invisible. And the background save buffer **left the container for the TPA** (§8), which is where the rest of the budget for W2/W4 comes from.
 
 ## 1. Objective
 

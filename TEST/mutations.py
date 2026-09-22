@@ -235,6 +235,143 @@ MUTATIONS = [
         'expect': ['S2-8/matches-document'],
     },
     {
+        # The TPA chain (VARS.Z8A) exists so no buffer ever names an address.
+        # One literal here and the allocation stops following whatever the
+        # target actually declared above it.
+        'name': 't0-tpa-fixed',
+        'why': 'the S2 window save buffer is pinned to a literal address '
+               'instead of chaining off the top of the undo ring',
+        'file': 'VARS.Z8A',
+        'old': 'WSVBUF          EQU     UNDOTOP',
+        'new': 'WSVBUF          EQU     #6D5B',
+        'filter': 'T0',
+        'expect_static': ['tpa-chain'],
+    },
+    {
+        'name': 's2-wsvbuf-undo',
+        'why': 'the window save buffer is allocated on top of the undo ring: '
+               'the dialog opens and restores perfectly, and eats the undo '
+               'transaction while it is open',
+        'target': 'S2ED',
+        'file': 'VARS.Z8A',
+        'old': 'WSVBUF          EQU     UNDOTOP',
+        'new': 'WSVBUF          EQU     UNDOBAS',
+        'filter': 'S2-12',
+        'expect': ['S2-12/content'],
+    },
+    {
+        'name': 's2-wbox-rframe',
+        'why': 'WBOX reaches the right border with a (WINNC-1)*8 offset from '
+               'the cell past the left border, landing on the shadow column: '
+               'no right border anywhere, and a stray #03 column in document '
+               'colour one cell past the window',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      A, (WINNC)
+                SUB     2
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE          ; RIGHT CELL: (WINNC-2)*8 PAST WINC+1""",
+        'new': """                LD      A, (WINNC)
+                DEC     A               ; MUTATION: ONE CELL TOO FAR
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE          ; RIGHT CELL: (WINNC-2)*8 PAST WINC+1""",
+        'filter': 'S2-11',
+        'expect': ['S2-11/side-borders'],
+    },
+    {
+        'name': 's2-wbox-title',
+        'why': 'WBOX clears (WINNC-2)*8 bytes of the top row for the title '
+               'instead of only the cells the title occupies, so the top '
+               'edge survives only at the two corner cells',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """                ; SPAN: THE TITLE STARTS AT CHAR COLUMN (WINC+1)*2 AND
+                ; WINPUTS CLIPS IT AT WINCLIM (OR THE RIGHT SCREEN EDGE
+                ; WHEN WINCLIM IS 0), TWO CHARACTERS PER CELL
+                LD      A, (WINC)
+                INC     A
+                ADD     A, A
+                LD      C, A            ; C = START CHAR COLUMN
+                LD      A, (WINCLIM)
+                OR      A
+                JR      NZ, .TLIM
+                LD      A, SCRCOLS
+.TLIM           SUB     C               ; A = COLUMNS BEFORE THE CLIP
+                LD      B, A
+                LD      C, 0            ; C = CHARACTERS DRAWN
+                JR      Z, .TSPAN       ; NO ROOM: NOTHING TO CLEAR
+.TLEN           LD      A, (HL)
+                OR      A
+                JR      Z, .TSPAN
+                INC     HL
+                INC     C
+                DJNZ    .TLEN
+.TSPAN          LD      A, C
+                OR      A
+                JR      Z, .TDRAW       ; EMPTY TITLE: NOTHING TO CLEAR
+                INC     A
+                SRL     A               ; CELLS = (CHARS+1)/2
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      B, A            ; B = CELLS*8 BYTES
+                LD      A, (WINR)
+                ADD     A, #80          ; HIGH(PATSHAD)
+                LD      H, A
+                LD      A, (WINC)
+                INC     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A            ; CELL WINC+1 OF THE TOP ROW
+                XOR     A""",
+        'new': """                ; MUTATION: CLEAR THE WHOLE INNER TOP EDGE
+                LD      A, (WINR)
+                ADD     A, #80          ; HIGH(PATSHAD)
+                LD      H, A
+                LD      A, (WINC)
+                INC     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A
+                LD      A, (WINNC)
+                SUB     2
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      B, A            ; (WINNC-2)*8 BYTES
+                XOR     A""",
+        'filter': 'S2-11',
+        'expect': ['S2-11/top-edge'],
+    },
+    {
+        'name': 's2-wbox-uicol',
+        'why': 'WBOX fills the window rect with VCOLUI again: a white dialog '
+               'whose black frame patterns vanish against the black boundary '
+               '-- the approved design is a dark window with a white frame',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      A, (WINNC)
+                LD      B, A
+                LD      A, (VCOLTXT)
+.CFILL          LD      (HL), A""",
+        'new': """                LD      A, (WINNC)
+                LD      B, A
+                LD      A, (VCOLUI)     ; MUTATION: LIGHT DIALOG FILL
+.CFILL          LD      (HL), A""",
+        'filter': 'S2-11',
+        'expect': ['S2-11/window-colour'],
+    },
+    {
         # Round 2 fixed the same class in FILEIO.Z8A and stopped there.  This
         # is what was left in ACTDWLFT and ACTDLS: the attribute half of the
         # record addressed as "+ 81", right for a 1+80+80 record and 16 bytes
@@ -975,7 +1112,7 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 'wq-direct',
         'why': 'ACTQUIT jumps straight to TERM without asking (pre-3b behaviour)',
         'file': 'ACTION.Z8A',
-        'old': """.ASKQ           ; FTR-BUDGET: S6ED ~9,600 FREE, S2ED ~200 FREE (2026-09-21)
+        'old': """.ASKQ           ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
                 LD      A, (FTRSEG)
                 LD      HL, DOQIT
                 CALL    FCALL""",

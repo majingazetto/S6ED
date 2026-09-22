@@ -5,7 +5,9 @@
 ; WINDOWS COMPOSE DIRECTLY IN THE RAM SHADOWS (PATSHAD + COLMAP): THE TMS9918
 ; HAS NO COMMAND ENGINE AND NO OFF-SCREEN VRAM, SO THE S6ED BLIT ARCHITECTURE
 ; IS REPLACED BY SHADOW WRITES PLUS ROW DUMPS. THE BACKGROUND UNDER THE WINDOW
-; IS SAVED TO WSVBUF (TOP OF THE FEATURE CONTAINER) AND RESTORED ON CLOSE.
+; IS SAVED TO WSVBUF AND RESTORED ON CLOSE. WSVBUF IS PLAIN TPA RAM IN PAGE 1
+; (THE CHAIN AT THE FOOT OF VARS.Z8A), NOT CONTAINER SPACE: PAGE 1 IS OURS
+; WHILE THIS CODE RUNS, AND THE CONTAINER IS THE SCARCE RESOURCE ON S2.
 ;
 ; GEOMETRY IS IN CELL UNITS: WINR/WINC ARE THE TOP-LEFT CORNER, WINNR/WINNC
 ; THE SIZE. THE WINDOW OCCUPIES WINNR ROWS X WINNC CELLS; THE DROP SHADOW
@@ -315,7 +317,8 @@ WRSTOR          LD      HL, WSVBUF
 ; - DRAW THE WINDOW FRAME, BODY FILL AND TITLE INTO THE SHADOWS
 ; - THE FRAME IS RAW PATTERNS: TOP/BOTTOM EDGES ARE #FF ON SCANLINE 0/7,
 ; - SIDE BORDERS #C0 / #03, CORNERS THE UNION OF BOTH. EVERY WINDOW CELL
-; - CARRIES VCOLUI. THE TITLE CUTS THE TOP EDGE: ITS CELLS ARE CLEARED
+; - CARRIES VCOLTXT, SO THE DARK FILL MAKES THE FRAME PATTERNS READ AS
+; - WHITE LINES. THE TITLE CUTS THE TOP EDGE: ITS CELLS ARE CLEARED
 ; - BEFORE THE TEXT GOES IN.
 ; - IN:  HL = ASCIIZ TITLE STRING (0 = NONE)
 ; - OUT: NONE
@@ -324,7 +327,7 @@ WRSTOR          LD      HL, WSVBUF
 
 WBOX            PUSH    HL              ; TITLE
 
-                ; 1. COLORS: FILL THE WINDOW RECT WITH VCOLUI
+                ; 1. COLORS: FILL THE WINDOW RECT WITH VCOLTXT
                 LD      A, (WINR)
                 LD      B, A            ; B = ROW
                 LD      A, (WINNR)
@@ -346,7 +349,7 @@ WBOX            PUSH    HL              ; TITLE
                 ADD     HL, DE
                 LD      A, (WINNC)
                 LD      B, A
-                LD      A, (VCOLUI)
+                LD      A, (VCOLTXT)
 .CFILL          LD      (HL), A
                 INC     HL
                 DJNZ    .CFILL
@@ -404,13 +407,13 @@ WBOX            PUSH    HL              ; TITLE
                 INC     HL
                 DJNZ    .LBOR
                 LD      A, (WINNC)
-                DEC     A
+                SUB     2
                 ADD     A, A
                 ADD     A, A
                 ADD     A, A
                 LD      E, A
                 LD      D, 0
-                ADD     HL, DE          ; RIGHT CELL
+                ADD     HL, DE          ; RIGHT CELL: (WINNC-2)*8 PAST WINC+1
                 LD      B, 8
                 LD      A, #03
 .RBOR           LD      (HL), A
@@ -459,12 +462,43 @@ WBOX            PUSH    HL              ; TITLE
                 ADD     HL, DE
                 DJNZ    .BEDG
 
-                ; 6. TITLE OVER THE TOP EDGE, ONE CELL IN
+                ; 6. TITLE OVER THE TOP EDGE, ONE CELL IN: ONLY THE CELLS
+                ;    THE TITLE OCCUPIES ARE CLEARED OFF THE EDGE
                 POP     HL              ; TITLE
                 LD      A, H
                 OR      L
                 RET     Z               ; NO TITLE
                 PUSH    HL
+                ; SPAN: THE TITLE STARTS AT CHAR COLUMN (WINC+1)*2 AND
+                ; WINPUTS CLIPS IT AT WINCLIM (OR THE RIGHT SCREEN EDGE
+                ; WHEN WINCLIM IS 0), TWO CHARACTERS PER CELL
+                LD      A, (WINC)
+                INC     A
+                ADD     A, A
+                LD      C, A            ; C = START CHAR COLUMN
+                LD      A, (WINCLIM)
+                OR      A
+                JR      NZ, .TLIM
+                LD      A, SCRCOLS
+.TLIM           SUB     C               ; A = COLUMNS BEFORE THE CLIP
+                LD      B, A
+                LD      C, 0            ; C = CHARACTERS DRAWN
+                JR      Z, .TSPAN       ; NO ROOM: NOTHING TO CLEAR
+.TLEN           LD      A, (HL)
+                OR      A
+                JR      Z, .TSPAN
+                INC     HL
+                INC     C
+                DJNZ    .TLEN
+.TSPAN          LD      A, C
+                OR      A
+                JR      Z, .TDRAW       ; EMPTY TITLE: NOTHING TO CLEAR
+                INC     A
+                SRL     A               ; CELLS = (CHARS+1)/2
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      B, A            ; B = CELLS*8 BYTES
                 LD      A, (WINR)
                 ADD     A, #80          ; HIGH(PATSHAD)
                 LD      H, A
@@ -474,24 +508,18 @@ WBOX            PUSH    HL              ; TITLE
                 ADD     A, A
                 ADD     A, A
                 LD      L, A            ; CELL WINC+1 OF THE TOP ROW
-                LD      A, (WINNC)
-                SUB     2
-                ADD     A, A
-                ADD     A, A
-                ADD     A, A
-                LD      B, A            ; (WINNC-2)*8 BYTES
                 XOR     A
 .TCLR           LD      (HL), A
                 INC     HL
                 DJNZ    .TCLR
-                POP     HL
+.TDRAW          POP     HL
                 LD      A, (WINR)
                 LD      B, A
                 LD      A, (WINC)
                 INC     A
                 ADD     A, A
                 LD      C, A            ; CHAR COL = (WINC+1)*2
-                LD      A, (VCOLUI)
+                LD      A, (VCOLTXT)
                 JP      WINPUTS
 
 
@@ -774,37 +802,37 @@ DOABT           LD      A, 6
                 LD      B, 8
                 LD      C, 20
                 LD      HL, .STRHDR
-                LD      A, (VCOLUI)
+                LD      A, (VCOLTXT)
                 CALL    WINPUTS
 
                 LD      B, 9
                 LD      C, 20
                 LD      HL, .STRSUB
-                LD      A, (VCOLUI)
+                LD      A, (VCOLTXT)
                 CALL    WINPUTS
 
                 LD      B, 11
                 LD      C, 20
                 LD      HL, .STRDSP
-                LD      A, (VCOLUI)
+                LD      A, (VCOLTXT)
                 CALL    WINPUTS
 
                 LD      B, 12
                 LD      C, 20
                 LD      HL, .STRFNT
-                LD      A, (VCOLUI)
+                LD      A, (VCOLTXT)
                 CALL    WINPUTS
 
                 LD      B, 13
                 LD      C, 20
                 LD      HL, .STRMEM
-                LD      A, (VCOLUI)
+                LD      A, (VCOLTXT)
                 CALL    WINPUTS
 
                 LD      B, 15
                 LD      C, 27
                 LD      HL, .BTNOK
-                LD      A, (VCOLUI)
+                LD      A, (VCOLUI)     ; INVERSE BAR: THE BUTTON ON THE DARK DIALOG
                 CALL    WINPUTS
 
                 ; REDUMP THE WINDOW ROWS WITH THE TEXT IN

@@ -509,13 +509,73 @@ def check_ftr_budget(ctx):
                  'targets')
 
 
+def check_tpa_chain(ctx):
+    """TPA buffers chain off each other; none of them names an address.
+
+    The feature container taught this the hard way: target-specific code at a
+    fixed address looks like free space to the target that does not declare
+    it.  The TPA block at the foot of VARS.Z8A is additive by construction --
+    each buffer starts where the previous one ends -- and this check keeps it
+    that way, because one literal address in there reintroduces exactly the
+    same failure, silently, on whichever target does not declare the buffer.
+
+    It does NOT prove two buffers cannot overlap; that is a runtime property
+    and S2-12 is the case that measures it.
+    """
+    bad = []
+    path = ctx.find_src_file('VARS.Z8A')
+    lines = open(path, errors='replace').read().splitlines()
+    tail = None
+    for n, line in enumerate(lines):
+        if line.strip() == 'ENDVARS':
+            tail = lines[n + 1:]
+            break
+    if tail is None:
+        return Check('tpa-chain', False, 'VARS.Z8A has no ENDVARS')
+    defined = {'ENDVARS'}
+    for n, line in enumerate(tail):
+        code = _strip_comment(line)
+        m = re.match(r'^([A-Z][A-Z0-9]*)\s+EQU\s+(.+?)\s*$', code)
+        if not m:
+            continue
+        name, expr = m.group(1), m.group(2)
+        # A bare address -- the thing this check exists to forbid.
+        if re.search(r'(?<![\w#])#[0-9A-Fa-f]{3,4}\b', expr) or \
+                re.fullmatch(r'\d{3,}', expr.strip()):
+            bad.append('VARS.Z8A: %s = %s names an address; chain it off the '
+                       'previous allocation instead' % (name, expr))
+        elif not any(re.search(r'\b%s\b' % re.escape(d), expr)
+                     for d in defined):
+            bad.append('VARS.Z8A: %s = %s does not build on the chain'
+                       % (name, expr))
+        defined.add(name)
+    for want in ('UNDOBAS', 'TPATOP', 'TPAFREE'):
+        if want not in defined:
+            bad.append('VARS.Z8A: the TPA chain does not define %s' % want)
+    if not re.search(r'ASSERT\s+TPATOP\s*<=\s*TXPAGE', '\n'.join(tail)):
+        bad.append('VARS.Z8A does not ASSERT TPATOP <= TXPAGE')
+    for prefix in ('S6ED', 'S2ED'):
+        if not os.path.exists(os.path.join(ctx.code_dir, prefix + '.sym')):
+            continue
+        sym = symbols.load(ctx.code_dir, prefix, TARGETS[prefix])
+        free = sym.get('TPAFREE')
+        if free is None:
+            bad.append('%s.sym has no TPAFREE' % prefix)
+        elif not 0 < free < 0x4000:
+            bad.append('%s TPAFREE = %s (TPA overflowed page 2)'
+                       % (prefix, free))
+    return Check('tpa-chain', not bad, '; '.join(bad) if bad else
+                 'TPA allocations chain off ENDVARS, no fixed addresses, '
+                 'TPATOP asserted below page 2')
+
+
 ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_layout_asserts, check_record_exclusive, check_target_params,
        check_data_placement,
        check_label_style,
        check_number_notation, check_defb_width, check_page1_hooks,
        check_assets, check_feature_discipline, check_window_discipline,
-       check_ftr_budget]
+       check_ftr_budget, check_tpa_chain]
 
 
 def run(ctx):

@@ -441,7 +441,7 @@ DATLOAD         LD      HL, DATNAME
 ; -
 
 CFGRUN          CALL    DATLOAD
-                ; FTR-BUDGET: S6ED ~9,600 FREE, S2ED ~200 FREE (2026-09-21)
+                ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
                 LD      A, (FTRSEG)
                 LD      HL, CFGLOAD
                 JP      FCALL
