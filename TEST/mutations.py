@@ -577,6 +577,115 @@ MUTATIONS = [
         'expect': ['S2-17/r1/title'],
     },
     {
+        # The defect this phase removed on the way past: five of the six Edit
+        # menu items called the action ID and not the routine.
+        'name': 'menu-edit-id',
+        'why': 'Edit > Select All calls ACSELAL, the action ID (EQU 42), so '
+               'the menu jumps to #002A in the DOS zero page instead of the '
+               'routine -- which is what shipped, unnoticed, because no case '
+               'had ever pressed an Edit menu item',
+        'file': 'ACTION.Z8A',
+        'old': """.EALL           CALL    ACTSELAL""",
+        'new': """.EALL           CALL    ACSELAL         ; MUTATION: THE ID, NOT THE ROUTINE""",
+        'filter': 'H23',
+        # Calling into page 0 is undefined: sometimes the selection simply
+        # never happens, sometimes the session does not survive it.
+        'expect_any': ['H23/edit-action', 'H23-menu-nav'],
+    },
+    {
+        'name': 'goto-nodispatch',
+        'why': 'Ctrl+G and Edit > Go to Line reach nothing, the state the '
+               'editor was in before this phase',
+        'file': 'ACTION.Z8A',
+        'old': """                DEFW    ACTGOTO         ; 59 (GO TO LINE)""",
+        'new': """                DEFW    ACTNONE         ; MUTATION: GO TO LINE UNBOUND""",
+        'filter': 'H24',
+        'expect': ['H24/open', 'H24/centred'],
+    },
+    {
+        # The round-3 defect class, and the reason the suite runs two gates:
+        # on S6ED this mutation changes nothing at all.
+        'name': 'goto-scrrows',
+        'why': 'the viewport centres on SCRROWS / 2 instead of ROWSVIS / 2, '
+               'which is identical on S6ED and two rows wrong on S2ED',
+        'target': 'S2ED',
+        'file': 'ACTION.Z8A',
+        'old': """.CENTRE         ; TOPLINE = DOCLINE - ROWSVIS / 2, CLAMPED
+                LD      DE, ROWSVIS / 2""",
+        'new': """.CENTRE         ; TOPLINE = DOCLINE - ROWSVIS / 2, CLAMPED
+                LD      DE, SCRROWS / 2 ; MUTATION: THE SCREEN, NOT THE BAND""",
+        'filter': 'S2-18',
+        'expect': ['S2-18/centred', 'S2-18/space'],
+    },
+    {
+        'name': 'goto-visible',
+        'why': 'a line already on screen scrolls the viewport anyway, so '
+               'every jump is a jolt',
+        'file': 'ACTION.Z8A',
+        'old': """                JP      C, SETCURY      ; VISIBLE: DO NOT MOVE THE VIEWPORT""",
+        'new': """                JP      C, .CENTRE      ; MUTATION: ALWAYS RECENTRE""",
+        'filter': 'H24',
+        'expect': ['H24/nearby'],
+    },
+    {
+        'name': 'goto-bs',
+        'why': 'Backspace leaves the digit in the field, so a correction '
+               'goes to the line the user was trying not to go to',
+        'file': 'WINDOW.Z8A',
+        'old': """                DEC     A
+                LD      (INPLEN), A
+                LD      E, A""",
+        'new': """                NOP                     ; MUTATION: BACKSPACE REMOVES NOTHING
+                LD      (INPLEN), A
+                LD      E, A""",
+        'filter': 'H24',
+        'expect': ['H24/backspace'],
+    },
+    {
+        'name': 'goto-esc',
+        'why': 'ESC accepts instead of cancelling, so the way out of the '
+               'dialog is the way into a jump nobody asked for',
+        'file': 'WINDOW.Z8A',
+        'old': """                CP      ESC
+                JP      Z, .CANCEL
+                CP      CR
+                JP      Z, .ACCEPT""",
+        'new': """                CP      ESC
+                JP      Z, .ACCEPT      ; MUTATION: ESC ACCEPTS
+                CP      CR
+                JP      Z, .ACCEPT""",
+        'filter': 'H24',
+        'expect': ['H24/cancel'],
+    },
+    {
+        'name': 'goto-empty',
+        'why': 'ENTER on an empty field is taken as line 0, so a reflex ENTER '
+               'throws the cursor to the top of the document',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      A, (INPLEN)
+                OR      A
+                JR      Z, .CANCEL      ; AN EMPTY FIELD CANCELS""",
+        'new': """                LD      A, (INPLEN)
+                OR      A
+                JR      C, .CANCEL      ; MUTATION: NEVER TAKEN AFTER OR A""",
+        'filter': 'H24',
+        'expect': ['H24/empty'],
+    },
+    {
+        'name': 'goto-space',
+        'why': 'SPACE accepts while the field has the focus, which is right '
+               'for digits and wrong the day a class accepts a space -- the '
+               'reason the focus has three positions and not two',
+        'file': 'WINDOW.Z8A',
+        'old': """.SPACE          LD      A, (WINSEL)
+                OR      A
+                JP      Z, .KEYLP       ; THE FIELD HAS IT: SPACE IS NOT A KEY""",
+        'new': """.SPACE          LD      A, (WINSEL)
+                OR      A               ; MUTATION: SPACE ALWAYS ACCEPTS""",
+        'filter': 'H24',
+        'expect': ['H24/space'],
+    },
+    {
         'name': 's2-mark-role',
         'why': 'COMCELL never tests ATRMARK, so the ** delimiters fall back '
                'to the document colour and VCOLMARK goes back to being a '

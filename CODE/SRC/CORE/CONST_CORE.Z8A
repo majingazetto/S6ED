@@ -183,9 +183,27 @@ ACMNU3          EQU     55              ; DROP-DOWN MENU OPTIONS (F4)
 ACMNU4          EQU     56              ; DROP-DOWN MENU HELP (F5)
 ACUNDO          EQU     57              ; CTRL + Z / VI u (UNDO)
 ACREDO          EQU     58              ; CTRL + Y / VI CTRL+R (REDO)
-ACMAX           EQU     59
+ACGOTOL         EQU     59              ; CTRL + G / EDIT MENU (GO TO LINE)
+ACMAX           EQU     60
 
 MNUCOUNT        EQU     5               ; TOTAL TOP-LEVEL MENUS (FILE, EDIT, VIEW, OPT, HELP)
+
+
+; --- MODAL TEXT INPUT (WINEDIT) ---------------------------------------
+
+
+                ; THE FIELD IS A CONTROL LIKE THE BUTTONS ARE, WHICH IS WHY
+                ; THE FOCUS HAS THREE POSITIONS AND NOT TWO: SPACE MAY ONLY
+                ; ACTIVATE THE FOCUSED CONTROL, SO IT CANNOT MEAN "ACCEPT"
+                ; WHILE THE FIELD HAS IT -- THE DAY ED_TEXT EXISTS A SPACE IS
+                ; A CHARACTER SOMEBODY IS TYPING.
+INPMAX          EQU     5               ; LONGEST FIELD THE BUFFER HOLDS
+ED_DIGIT        EQU     0               ; CHARACTER CLASS: '0'..'9'
+ED_FILE         EQU     1               ; DECLARED, NOT IMPLEMENTED
+ED_TEXT         EQU     2               ; DECLARED, NOT IMPLEMENTED
+ED_FFLD         EQU     0               ; FOCUS: THE FIELD (DEFAULT)
+ED_FOK          EQU     1               ; FOCUS: THE OK BUTTON
+ED_FCAN         EQU     2               ; FOCUS: THE CANCEL BUTTON
 
 
 ; --- KEYMAP PROFILES           ----------------------------------------

@@ -68,6 +68,7 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTMNU4         ; 56 (HELP)
                 DEFW    ACTUNDO         ; 57 (UNDO)
                 DEFW    ACTREDO         ; 58 (REDO)
+                DEFW    ACTGOTO         ; 59 (GO TO LINE)
 
 
 ; --- ACTNONE                   ----------------------------------------
@@ -915,6 +916,99 @@ ACTHELP         ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
                 LD      A, (FTRSEG)
                 LD      HL, DOABT
                 JP      FCALL
+
+
+; --- ACTGOTO                   ----------------------------------------
+
+
+; - ACTGOTO ----------------------------
+; - GO TO LINE (CTRL + G / EDIT MENU). THE DIALOG COLLECTS A NUMBER IN THE
+; - FEATURE SEGMENT; THE JUMP ITSELF HAPPENS HERE, IN PAGE 1, BECAUSE
+; - GOTOLN WRITES TOPLINE AND CALLS REDRAW AND THOSE NEED THE TEXT
+; - SEGMENTS AT PAGE 2, NOT FTRSEG.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTGOTO         CALL    CHKUNSEL
+                ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
+                LD      A, (FTRSEG)
+                LD      HL, DOGOTO
+                CALL    FCALL
+                RET     C               ; CANCELLED: RESUME EDITING
+                CALL    GOTOLN
+                CALL    REDRAW
+                JP      DRWSTAT
+
+
+; --- GOTOLN                    ----------------------------------------
+
+
+; - GOTOLN -----------------------------
+; - PLACE THE DOCUMENT AND THE VIEWPORT ON A LINE
+; - IN:  HL = TARGET LINE, 1-BASED, UNCLAMPED
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+; - THE VIEWPORT IS BOUNDED BY ROWSVIS -- THE TEXT BAND -- AND CENTRED ON
+; - ROWSVIS / 2. NEITHER MAY BE A LITERAL: THE BAND IS 24 ROWS ON S6ED AND
+; - 22 ON S2ED, WHOSE SCRROWS IS STILL 24, SO A NUMBER WRITTEN HERE IS
+; - WRONG ON ONE TARGET AND SCRROWS IS WRONG ON THE OTHER.
+; -
+
+GOTOLN          ; CLAMP INTO [1, TOTLINES]
+                LD      A, H
+                OR      L
+                JR      NZ, .NOTZERO
+                INC     HL              ; 0 -> 1
+.NOTZERO        LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JR      C, .INRANGE
+                JR      Z, .INRANGE
+                EX      DE, HL          ; PAST THE END: THE LAST LINE
+.INRANGE        DEC     HL              ; 1-BASED -> DOCLINE
+                LD      (DOCLINE), HL
+                XOR     A
+                LD      (CURX), A
+
+                ; ALREADY ON SCREEN? TOPLINE <= DOCLINE < TOPLINE + ROWSVIS
+                LD      DE, (TOPLINE)
+                CALL    CMPHLDE
+                JR      C, .CENTRE      ; ABOVE THE VIEWPORT
+                PUSH    HL
+                LD      HL, (TOPLINE)
+                LD      DE, ROWSVIS
+                ADD     HL, DE
+                EX      DE, HL          ; DE = TOPLINE + ROWSVIS
+                POP     HL
+                CALL    CMPHLDE
+                JP      C, SETCURY      ; VISIBLE: DO NOT MOVE THE VIEWPORT
+
+.CENTRE         ; TOPLINE = DOCLINE - ROWSVIS / 2, CLAMPED
+                LD      DE, ROWSVIS / 2
+                CALL    CMPHLDE
+                JR      C, .ATTOP
+                OR      A
+                SBC     HL, DE          ; HL = DOCLINE - ROWSVIS / 2
+                ; CLAMP AGAINST THE LAST FULL PAGE
+                PUSH    HL
+                LD      HL, (TOTLINES)
+                LD      DE, ROWSVIS
+                OR      A
+                SBC     HL, DE          ; HL = TOTLINES - ROWSVIS
+                JR      NC, .HAVEMAX
+                LD      HL, 0           ; DOCUMENT SHORTER THAN THE BAND
+.HAVEMAX        POP     DE              ; DE = WANTED TOPLINE
+                CALL    CMPHLDE         ; MAX VS WANTED
+                JR      C, .SETTOP      ; MAX < WANTED: USE MAX (IN HL)
+                EX      DE, HL          ; WANTED FITS
+.SETTOP         LD      (TOPLINE), HL
+                JP      SETCURY
+
+.ATTOP          LD      HL, 0
+                LD      (TOPLINE), HL
+                JP      SETCURY
 
 
 ; --- ACTCYCKM                  ----------------------------------------
@@ -2749,25 +2843,35 @@ MNUENT          ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
                 JR      Z, .EALL
                 CP      6
                 JR      Z, .EDSL
+                CP      8
+                JR      Z, .EGOTO
                 RET
 
-.ECUT           CALL    ACCUT
+                ; EVERY ONE OF THESE CALLS THE ROUTINE, NEVER THE ACTION ID.
+                ; FIVE OF THE SIX USED TO NAME THE CONSTANT -- ACCUT IS EQU 46,
+                ; SO CALL ACCUT ASSEMBLED TO CALL #002E, INTO THE DOS ZERO
+                ; PAGE. IT ASSEMBLES CLEANLY AND NO GATE CASE HAD EVER PRESSED
+                ; AN EDIT MENU ITEM, WHICH IS WHY IT SHIPPED ON BOTH TARGETS.
+
+.ECUT           CALL    ACTCUT
                 JP      DRWSTAT
 
-.ECPY           CALL    ACCOPY
+.ECPY           CALL    ACTCOPY
                 JP      DRWSTAT
 
 .EPST           CALL    ACTPAST
                 JP      DRWSTAT
 
-.EDEL           CALL    ACDELLN
+.EDEL           CALL    ACTDELLN
                 JP      DRWSTAT
 
-.EALL           CALL    ACSELAL
+.EALL           CALL    ACTSELAL
                 JP      DRWSTAT
 
-.EDSL           CALL    ACDSEL
+.EDSL           CALL    ACTDSEL
                 JP      DRWSTAT
+
+.EGOTO          JP      ACTGOTO
 
 .VIWMNU         LD      A, (MNUSEL)
                 OR      A

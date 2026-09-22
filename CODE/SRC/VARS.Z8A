@@ -192,6 +192,23 @@ PSTRUN          DEFB    0               ; LENGTH OF THE RUN BEING INSERTED
 CLIPBUF         DEFS    CLIPMAX, 0      ; CLIPBOARD BUFFER IN PAGE 0 RAM
 
 
+; --- MODAL TEXT INPUT          ----------------------------------------
+
+
+                ; WINEDIT'S WORK AREA. SHARED BY EVERY DIALOG WITH A FIELD,
+                ; SO IT IS NOT IFDEF'D: BOTH TARGETS RUN THE SAME WIDGET
+                ; CONTRACT OVER THEIR OWN DRAWING PRIMITIVES.
+INPBUF          DEFS    INPMAX + 1, 0   ; FIELD CONTENTS, ASCIIZ
+INPLEN          DEFB    0               ; CHARACTERS IN INPBUF (0..INPMAX)
+                ; GEOMETRY OF THE ACTIVE FIELD. THEY ARE IN RAM AND NOT IN
+                ; REGISTERS BECAUSE WINEDIT RUNS A KEY LOOP AND WINPOLL
+                ; CLOBBERS EVERYTHING. EIGHT BITS EACH SERVES BOTH TARGETS:
+                ; A CELL COORDINATE ON S2, A RELATIVE PIXEL ON S6 (0..199).
+EDROW           DEFB    0               ; FIELD ROW
+EDCOL           DEFB    0               ; FIELD COLUMN
+EDWID           DEFB    0               ; FIELD WIDTH IN CHARACTERS
+
+
 ; --- FILE                      ----------------------------------------
 
 

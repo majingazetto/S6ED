@@ -57,6 +57,7 @@ DEFAULT_VARS = [
     # and a name the table does not carry is simply skipped -- which is what
     # lets one list serve both targets.
     ('WINR', 1), ('WINC', 1), ('WINNR', 1), ('WINNC', 1),
+    ('INPLEN', 1),                      # WINEDIT: characters in the field
     ('WINSEL', 1), ('WINRES', 1), ('WINBST', 1),
     ('MNUID', 1), ('MNUSEL', 1),
     ('UNDOPTR', 2), ('UNDOBOT', 2), ('REDOPTR', 2), ('UNDOTYP', 1),
