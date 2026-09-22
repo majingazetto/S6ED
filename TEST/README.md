@@ -99,6 +99,13 @@ is caught only by `S2-8/matches-document`. Measured, 2026-09-21.
 | `S2-8-renderpure` | the general net: edits, then a forced REDRAW, compared both ways |
 | `S2-9-margin` | the right margin: a full line clamps the cursor to its last column, so an edit there is an append, not an insert one place early |
 | `S2-10-theme` | the theme integration: `THEME=` rewrites `VCOLTXT..VCOLBG`, and text, chrome and border follow |
+| `S2-11-about` | W1: with no command engine and no off-screen VRAM a window composes in the RAM shadows, so a save or a restore off by one cell corrupts the document under it permanently |
+| `S2-12-dialog-undo` | `WSVBUF` moved into the TPA next to the undo ring; only a run can prove two allocations do not overlap |
+| `S2-13-shadow` | the drop shadow was a hardcoded `#11` -- black on black, visible on one theme of four |
+| `S2-14-markup` | `MARKUP=MD` shipped untested; `ATRMARK` is tested last so a delimiter on an odd column gives way to the content sharing its cell |
+| `S2-15-quit` | W2: `ACTQUIT` went straight to `TERM`, so ESC threw the document away without asking |
+| `S2-16-menu` | W4: `MNUENT` was the last `IFDEF S2ED` in the menu path -- SELECT and F1..F5 opened nothing, and the item indices have to match S6ED's because the dispatch below them is shared |
+| `S2-17-menu-nav` | W4: switching menus is a close, a re-highlight and an open; miss the un-highlight and the inverted titles pile up along the bar, which no check that only looks at the window can see |
 
 Two traps this suite met while being built, both worth knowing before adding a
 case:
@@ -110,6 +117,18 @@ case:
   each is checked against its own `BLNKPH`, and the last one is taken right
   after a keystroke, which ends in `.DRAWCUR` and leaves the cursor up by
   construction.
+* **A `WINPOLL` gate samples whichever modal got there first.** The breakpoint
+  is armed at a moment in the timeline and fires at the next hit, and every
+  modal loop polls `WINPOLL` continuously -- so a snapshot armed between two
+  keystrokes catches the window that is open *then*, not the one the case is
+  about. It cost a whole suite run when W4 moved About behind the Help menu:
+  `S2-11`, `S2-12` and `S2-13` pressed F5 and sampled the dropdown. Two rules
+  came out of it. Arm the gate **after** every key that leads to the window you
+  mean, and make the check **name that window**: `S2-16/open` asserts
+  `WINR/WINC/WINNR/WINNC`, because `WINACTV == 1` is equally true of the Quit
+  dialog, which is what a stubbed-out `MNUENT` leaves the timeline's ESC to
+  open -- and `mut/s2-menu-stub` walked straight through the first version of
+  that check.
 * **An operation that ends in `REDRAW` blinds the sample.** `S2-8` originally
   ended with BACKSPACE at column 0, which in `WRAP_TXT` cascades `REFLOW` and
   finishes with a full repaint microseconds before the snapshot -- a mutation

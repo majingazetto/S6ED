@@ -401,11 +401,12 @@ MUTATIONS = [
                'document away -- the stub that stood there until W2',
         'target': 'S2ED',
         'file': 'ACTION.Z8A',
-        'old': """.ASKQ           ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
-                LD      A, (FTRSEG)
-                LD      HL, DOQIT
-                CALL    FCALL""",
-        'new': '.ASKQ           JP      TERM            ; MUTATION: QUIT WITHOUT ASKING',
+        # Anchored below the FTR-BUDGET comment on purpose: that line carries
+        # measured byte counts and is rewritten every time the container moves.
+        'old': """                LD      A, (FTRSEG)
+                LD      HL, DOQIT""",
+        'new': """                JP      TERM            ; MUTATION: QUIT WITHOUT ASKING
+                LD      HL, DOQIT""",
         'filter': 'S2-15',
         # ESC exits on the spot: either the displayed check goes red, or the
         # case dies waiting for a WINPOLL that never comes.
@@ -472,6 +473,108 @@ MUTATIONS = [
         # The exit breakpoint never fires, so either the check sees no exit
         # snapshot or the case dies waiting for one.
         'expect_any': ['S2-15/clean/quit-y', 'S2-15-quit'],
+    },
+    {
+        # The stub W4 exists to remove: MNUENT was the last IFDEF S2ED in the
+        # menu and dialog path.
+        'name': 's2-menu-stub',
+        'why': 'MNUENT returns without opening anything on S2ED, so F1..F5 '
+               'and SELECT do nothing -- the stub that stood there until W4',
+        'target': 'S2ED',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      A, (FTRSEG)
+                LD      HL, DOMNU
+                CALL    FCALL""",
+        'new': """                RET                     ; MUTATION: MENUS DISABLED
+                LD      HL, DOMNU
+                CALL    FCALL""",
+        'filter': 'S2-16',
+        # SELECT opens nothing, so the timeline's later ESC opens the Quit
+        # dialog instead and the WINPOLL gate samples THAT: WINACTV is still
+        # 1 and MNUID still 0.  It is the geometry and the accelerator that
+        # tell the two apart, which is why S2-16/open names both.
+        'expect': ['S2-16/open', 'S2-16/accel-new'],
+    },
+    {
+        'name': 's2-menu-defsel',
+        'why': 'a menu opens with the second item selected, so a reflex '
+               'ENTER on File runs Open instead of New',
+        'target': 'S2ED',
+        'file': 'MENU.Z8A',
+        'old': """.INITOK         XOR     A
+                LD      (MNUSEL), A     ; DEFAULT SELECTION = 0""",
+        'new': """.INITOK         LD      A, 1            ; MUTATION: OPENS ON ITEM 1
+                LD      (MNUSEL), A""",
+        'filter': 'S2-16',
+        'expect': ['S2-16/open', 'S2-16/open/colour'],
+    },
+    {
+        'name': 's2-menu-skipsep',
+        'why': 'DOWN stops on the separator, so a rule can be selected and '
+               'ENTER dispatches an item index that means nothing',
+        'target': 'S2ED',
+        'file': 'MENU.Z8A',
+        'old': """.DWNCHK         CALL    MNUCHKS
+                JR      NZ, .MOVE
+                INC     A               ; SKIP SEPARATOR""",
+        'new': """.DWNCHK         CALL    MNUCHKS
+                JR      .MOVE           ; MUTATION: SEPARATOR SELECTABLE
+                INC     A""",
+        'filter': 'S2-16',
+        'expect': ['S2-16/skip-separator'],
+    },
+    {
+        'name': 's2-menu-title',
+        'why': 'the title in row 0 is never highlighted, so nothing on the '
+               'bar says which menu is open',
+        'target': 'S2ED',
+        'file': 'MENU.Z8A',
+        'old': """MNUTITL         LD      A, (MNUID)
+                ADD     A, A            ; TWO BYTES PER SPAN""",
+        'new': """MNUTITL         RET                     ; MUTATION: NO HIGHLIGHT
+                ADD     A, A            ; TWO BYTES PER SPAN""",
+        'filter': 'S2-16',
+        'expect': ['S2-16/title-highlight'],
+    },
+    {
+        'name': 's2-menu-nav-wrap',
+        'why': 'RIGHT stops at Help instead of wrapping round to File, so '
+               'the bar is a dead end in one direction',
+        'target': 'S2ED',
+        'file': 'MENU.Z8A',
+        'old': """                JR      C, .RGHTOK
+                XOR     A               ; WRAP 4 -> 0""",
+        'new': """                JR      C, .RGHTOK
+                DEC     A               ; MUTATION: RIGHT DOES NOT WRAP""",
+        'filter': 'S2-17',
+        'expect': ['S2-17/walk'],
+    },
+    {
+        'name': 's2-menu-enter',
+        'why': 'RETURN cancels instead of accepting, so the only way to run a '
+               'menu item is its accelerator',
+        'target': 'S2ED',
+        'file': 'MENU.Z8A',
+        'old': """                CP      CR
+                JP      Z, .ACCEPT""",
+        'new': """                CP      CR
+                JP      Z, .CANCEL      ; MUTATION: RETURN CANCELS""",
+        'filter': 'S2-17',
+        'expect': ['S2-17/action'],
+    },
+    {
+        'name': 's2-menu-swtitl',
+        'why': 'switching menus never un-highlights the one it came from, so '
+               'the inverted titles pile up along the bar',
+        'target': 'S2ED',
+        'file': 'MENU.Z8A',
+        'old': """                CALL    WINCLOS
+                CALL    MNUTITL         ; UN-HIGHLIGHT THE OLD TITLE
+                POP     BC""",
+        'new': """                CALL    WINCLOS
+                POP     BC""",
+        'filter': 'S2-17',
+        'expect': ['S2-17/r1/title'],
     },
     {
         'name': 's2-mark-role',
@@ -1404,11 +1507,12 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 'wq-direct',
         'why': 'ACTQUIT jumps straight to TERM without asking (pre-3b behaviour)',
         'file': 'ACTION.Z8A',
-        'old': """.ASKQ           ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
-                LD      A, (FTRSEG)
-                LD      HL, DOQIT
-                CALL    FCALL""",
-        'new': """.ASKQ           JP      TERM            ; MUTATION: QUIT WITHOUT ASKING""",
+        # Anchored below the FTR-BUDGET comment on purpose: that line carries
+        # measured byte counts and is rewritten every time the container moves.
+        'old': """                LD      A, (FTRSEG)
+                LD      HL, DOQIT""",
+        'new': """                JP      TERM            ; MUTATION: QUIT WITHOUT ASKING
+                LD      HL, DOQIT""",
         'filter': 'H19',
         # ESC exits on the spot: either the dialog-displayed check goes red,
         # or the whole case dies waiting for a WINPOLL that never comes.

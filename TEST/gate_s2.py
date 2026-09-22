@@ -49,6 +49,57 @@ def font(ctx):
     return pattern.load_font(ctx)
 
 
+def restored(after, before, currow, curcol):
+    """Cells of `after` that do not match `before`, cursor blink forgiven.
+
+    A modal window saves the region it covers and puts it back on close, so
+    "the screen is what it was" is the check that catches a save or a restore
+    off by one cell.  The one honest difference is the cursor: DRWCUR may have
+    toggled its column between the two samples, so a cell that is exactly the
+    inverse of that one column is not a difference.
+    """
+    bad = []
+    for row in range(pattern.ROWS):
+        acol = pattern.colour_row(after[0x2000:], row)
+        bcol = pattern.colour_row(before[0x2000:], row)
+        arow = pattern.row_of(after, row)
+        brow = pattern.row_of(before, row)
+        for cell in range(pattern.CELLS):
+            sl = slice(cell * 8, (cell + 1) * 8)
+            if acol[sl] != bcol[sl]:
+                bad.append((row, cell))
+                continue
+            if arow[sl] == brow[sl]:
+                continue
+            if row == currow and curcol // 2 == cell:
+                if arow[sl] == pattern.invert_column(brow, curcol)[sl]:
+                    continue        # cursor blink phase
+            bad.append((row, cell))
+    return bad
+
+
+def menubar(ctx):
+    """The row 0 bar text, read from the source that paints it.
+
+    The dropdown title spans live in .TITX in S2/MENU.Z8A and the bar text in
+    .MNUTXT in S2/UI.Z8A.  Deriving the expected span from the bar means an
+    edit to one without the other goes red instead of quietly highlighting
+    the wrong four columns.
+    """
+    import re
+    src = open(ctx.find_src_file('UI.Z8A'), errors='replace').read()
+    m = re.search(r'\.MNUTXT\s+DEFM\s+"(.*)"', src)
+    if not m:
+        raise RuntimeError('.MNUTXT not found in S2/UI.Z8A')
+    return m.group(1)
+
+
+def titlespan(ctx, name):
+    """(first column, width) of one menu title inside the row 0 bar."""
+    col = menubar(ctx).index(name)
+    return col, len(name)
+
+
 # --- S2-1  THE SCREEN IS WHAT THE DOCUMENT SAYS -----------------------
 
 
@@ -751,7 +802,12 @@ class S211About(S2Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot', vram='patcol')
-        t.press('F5')                           # HELP entry -> About (W1 wiring)
+        # About lives behind the Help menu since W4, exactly as on S6ED.
+        # The snapshot is armed AFTER both keys: WINPOLL is polled in a tight
+        # loop by whichever modal owns the screen, so a gate armed between the
+        # two would sample the dropdown instead of the dialog.
+        t.press('F5')                           # Help menu
+        t.press('A')                            # Help > About
         t.snap('dialog', vram='patcol', at='WINPOLL')
         t.press('RETURN')
         t.snap('closed', vram='patcol')
@@ -1032,7 +1088,8 @@ class S212DialogUndo(S2Case):
         t = Timeline()
         t.text('PREFIX ')                       # one coalesced transaction
         t.snap('typed')
-        t.press('F5')                           # About, through FTRBASE
+        t.press('F5')                           # Help menu
+        t.press('A')                            # About, through FTRBASE
         t.snap('dialog', at='WINPOLL')
         t.press('RETURN')
         t.snap('closed')
@@ -1113,7 +1170,8 @@ class S213ShadowCfg(S2Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot', vram='patcol')
-        t.press('F5')
+        t.press('F5')                           # Help menu
+        t.press('A')                            # Help > About
         t.snap('dialog', vram='patcol', at='WINPOLL')
         return t
 
@@ -1387,10 +1445,350 @@ class S215Quit(S2Case):
         return checks
 
 
+
+# --- S2-16  THE FILE DROPDOWN -----------------------------------------
+
+
+class S216Menu(S2Case):
+    name = 'S2-16-menu'
+    desc = ('SELECT opens the File dropdown, DOWN/UP walk the items skipping '
+            'the separator, ESC and SELECT cancel byte for byte, and the N '
+            'accelerator runs File > New')
+    origin = ('phase W4.  MNUENT was the last IFDEF S2ED left in the menu and '
+              'dialog path: on S2 it returned without opening anything, and '
+              'only the Help entry did something, jumping straight to DOABT.  '
+              'The dispatch below it is shared with S6ED, so the item indices '
+              'and the separator positions have to be the same on both '
+              'targets -- which is exactly what a case can check and a reader '
+              'of two source files cannot.')
+    LINES = ['%02d MENU TEST LINE ABCDEFGHIJKLM' % i for i in range(12)]
+    # MENU 0 (FILE) in .MNUTBL, in cell units
+    WINR, WINC, WINNR, WINNC = 1, 3, 8, 12
+    C0, C1 = WINC + 1, WINC + WINNC - 2     # content cells 4..13
+    SEPITEM = 4                             # File: separator between Save As and Quit
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram='patcol')
+
+        # SELECT opens the File menu with item 0 selected
+        t.press('SELECT')
+        t.snap('open', vram='patcol', at='WINPOLL')
+
+        # DOWN walks 0 -> 1 -> 2 -> 3 -> 5: item 4 is the separator
+        t.press('DOWN')
+        t.snap('item1', at='WINPOLL')
+        t.press('DOWN')
+        t.press('DOWN')
+        t.snap('item3', at='WINPOLL')
+        t.press('DOWN')
+        t.snap('item5', vram='patcol', at='WINPOLL')
+        t.press('UP')
+        t.snap('item3up', at='WINPOLL')
+
+        # ESC cancels and puts the screen back
+        t.press('ESC')
+        t.snap('esc', vram='patcol')
+
+        # SELECT reopens, SELECT cancels
+        t.press('SELECT')
+        t.snap('reopen', at='WINPOLL')
+        t.press('SELECT')
+        t.snap('selcancel', vram='patcol')
+
+        # The N accelerator runs File > New on a dirty buffer
+        t.text('EDITED')
+        t.snap('dirty')
+        t.press('F1')
+        t.snap('fornew', at='WINPOLL')
+        t.press('N')
+        t.snap('new')
+        return t
+
+    def cells(self, dump, row, rng):
+        crow = pattern.colour_row(dump[0x2000:], row)
+        return {c: set(crow[c * 8:(c + 1) * 8]) for c in rng}
+
+    def text_cells(self, fnt, text):
+        high, low = fnt
+        return [bytes(high[ord(text[i]) * 8 + y] | low[ord(text[i + 1]) * 8 + y]
+                      for y in range(8))
+                for i in range(0, len(text), 2)]
+
+    def want_colour(self, row, cell, sel):
+        """The role that owns one cell of the dropdown, in the DARK theme."""
+        if row == self.WINR:
+            return pattern.COLHI                    # title bar
+        if self.C0 <= cell <= self.C1 and row == self.WINR + 1 + sel:
+            return pattern.COLBSEL                  # the selected item: a bar
+        return pattern.COLWIN
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        boot = run.blob('boot', 'patcol')
+        opened = run.blob('open', 'patcol')
+        item5 = run.blob('item5', 'patcol')
+        esc = run.blob('esc', 'patcol')
+        selc = run.blob('selcancel', 'patcol')
+        if None in (boot, opened, item5, esc, selc):
+            return [Check('S2-16/dump', False, 'missing VRAM dump')]
+        fnt = font(ctx)
+        # The geometry is part of the identity: WINACTV alone says "a modal
+        # window is open", and with the menus stubbed out the ESC later in
+        # this timeline opens the Quit dialog, which satisfies that and
+        # nothing else.  A gate on WINPOLL samples whichever window got
+        # there first, so the check has to name which one it wants.
+        geom = tuple(run.var('open', v)
+                     for v in ('WINR', 'WINC', 'WINNR', 'WINNC'))
+        checks = [
+            Check('S2-16/open',
+                  run.var('open', 'WINACTV') == 1 and
+                  run.var('open', 'MNUID') == 0 and
+                  run.var('open', 'MNUSEL') == 0 and
+                  geom == (self.WINR, self.WINC, self.WINNR, self.WINNC),
+                  'SELECT opens File with item 0 selected (WINACTV=%s, '
+                  'MNUID=%s, MNUSEL=%s, geometry %s)'
+                  % (run.var('open', 'WINACTV'), run.var('open', 'MNUID'),
+                     run.var('open', 'MNUSEL'), geom)),
+            Check('S2-16/displayed', opened != boot,
+                  'the screen changes while the dropdown is open'),
+        ]
+
+        # The title in row 0 is inverted, and nothing else in that row moves.
+        # The span is derived from the bar text itself, so an edit to one of
+        # the two tables without the other goes red.
+        col, width = titlespan(ctx, 'File')
+        r0b = pattern.row_of(boot, pattern.MNUROW)
+        r0o = pattern.row_of(opened, pattern.MNUROW)
+        inv = pattern.inverted_columns(r0o, r0b)
+        diff = pattern.differing_columns(r0o, r0b)
+        want = list(range(col, col + width))
+        checks.append(Check('S2-16/title-highlight',
+                            inv == want and diff == want,
+                            'columns %d..%d of row 0 are inverted and nothing '
+                            'else is' % (col, col + width - 1)
+                            if inv == want and diff == want else
+                            'inverted %s, differing %s, expected %s'
+                            % (inv, diff, want)))
+
+        # Every cell of the window wears the role its position asks for, and
+        # the selection bar spans the whole content width, not just the text.
+        for label, dump, sel in (('open', opened, 0), ('item5', item5, 5)):
+            bad = [(r, c)
+                   for r in range(self.WINR, self.WINR + self.WINNR)
+                   for c, v in self.cells(dump, r, range(
+                       self.WINC, self.WINC + self.WINNC)).items()
+                   if v != {self.want_colour(r, c, sel)}]
+            checks.append(Check('S2-16/%s/colour' % label, not bad,
+                                'body #%02X, title bar #%02X, selected item '
+                                '#%02X' % (pattern.COLWIN, pattern.COLHI,
+                                           pattern.COLBSEL)
+                                if not bad else 'cells wrong: %s' % bad[:6]))
+
+        # The dropdown carries its menu's name in the title bar.  Scanline 7
+        # of the top row belongs to the separator, laid down after the text.
+        trow = pattern.row_of(opened, self.WINR)
+        bad = [self.C0 + i
+               for i, want in enumerate(self.text_cells(fnt, 'File'))
+               if trow[(self.C0 + i) * 8:(self.C0 + i + 1) * 8]
+               != want[:7] + b'\xff']
+        checks.append(Check('S2-16/title-text', not bad,
+                            'the dropdown is titled "File"' if not bad else
+                            'title cells differ: %s' % bad))
+
+        # Item text, composed from the same RAM font the document uses.
+        for item, text in ((0, 'New               ^N'),
+                           (5, 'Quit              ^Q')):
+            prow = pattern.row_of(opened, self.WINR + 1 + item)
+            bad = [self.C0 + i
+                   for i, want in enumerate(self.text_cells(fnt, text))
+                   if prow[(self.C0 + i) * 8:(self.C0 + i + 1) * 8] != want]
+            checks.append(Check('S2-16/item%d-text' % item, not bad,
+                                'item %d reads %r' % (item, text)
+                                if not bad else 'cells differ: %s' % bad))
+
+        # The separator is scanline 3 of the content span and nothing else.
+        srow = pattern.row_of(opened, self.WINR + 1 + self.SEPITEM)
+        want = b'\x00\x00\x00\xff\x00\x00\x00\x00'
+        bad = [c for c in range(self.C0, self.C1 + 1)
+               if srow[c * 8:(c + 1) * 8] != want]
+        checks.append(Check('S2-16/separator', not bad,
+                            'item %d is a rule on scanline 3' % self.SEPITEM
+                            if not bad else 'cells differ: %s' % bad))
+
+        # DOWN and UP skip it: 0 -> 1 -> 3 -> 5 -> 3, never 4.
+        got = [run.var(l, 'MNUSEL')
+               for l in ('item1', 'item3', 'item5', 'item3up')]
+        checks.append(Check('S2-16/skip-separator', got == [1, 3, 5, 3],
+                            'DOWN and UP step over the separator (%s)' % got))
+
+        # Both ways out restore the screen exactly.
+        currow = pattern.TXRFIRST + (run.var('boot', 'CURY') or 0)
+        curcol = run.var('boot', 'CURX') or 0
+        for label, dump in (('esc', esc), ('sel', selc)):
+            bad = restored(dump, boot, currow, curcol)
+            checks.append(Check('S2-16/%s-restores' % label, not bad,
+                                'the screen comes back byte for byte'
+                                if not bad else 'cells differ: %s' % bad[:6]))
+        checks.append(Check('S2-16/closed',
+                            run.var('esc', 'WINACTV') == 0,
+                            'WINACTV = %s after cancelling'
+                            % run.var('esc', 'WINACTV')))
+
+        # The accelerator reaches the shared dispatch in page 1.
+        dirty = run.var('dirty', 'TOTLINES')
+        checks.append(Check('S2-16/accel-new',
+                            run.var('new', 'TOTLINES') == 1 and
+                            run.var('new', 'MODIFIED') == 0 and
+                            dirty == len(self.LINES),
+                            'N runs File > New (%s lines -> %s, MODIFIED=%s)'
+                            % (dirty, run.var('new', 'TOTLINES'),
+                               run.var('new', 'MODIFIED'))))
+        return checks
+
+
+# --- S2-17  HORIZONTAL MENU NAVIGATION --------------------------------
+
+
+class S217MenuNav(S2Case):
+    name = 'S2-17-menu-nav'
+    desc = ('RIGHT and LEFT walk the five menus and wrap, F1..F5 jump '
+            'straight to one, and the highlight in row 0 follows exactly one '
+            'title at a time')
+    origin = ('phase W4.  Switching menus closes one window and opens the '
+              'next, and the title highlight is a PATINV toggle: miss the '
+              'un-highlight and two titles stay inverted, which is invisible '
+              'to any check that only looks at the window.')
+    LINES = ['%02d MENU NAV TEST LINE ABCDEFGHIJ' % i for i in range(12)]
+    NAMES = ('File', 'Edit', 'View', 'Options', 'Help')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram='patcol')
+        t.press('F1')
+        t.snap('file', at='WINPOLL')
+
+        # RIGHT walks 0 -> 1 -> 2 -> 3 -> 4 and wraps back to 0
+        t.press('RIGHT')
+        t.snap('r1', vram='patcol', at='WINPOLL')
+        t.press('RIGHT')
+        t.snap('r2', at='WINPOLL')
+        t.press('RIGHT')
+        t.snap('r3', at='WINPOLL')
+        t.press('RIGHT')
+        t.snap('r4', vram='patcol', at='WINPOLL')
+        t.press('RIGHT')
+        t.snap('rwrap', vram='patcol', at='WINPOLL')
+
+        # LEFT wraps the other way: 0 -> 4 -> 3
+        t.press('LEFT')
+        t.snap('lwrap', at='WINPOLL')
+        t.press('LEFT')
+        t.snap('l3', at='WINPOLL')
+
+        # The function keys jump straight to a menu
+        t.press('F2')
+        t.snap('f2', at='WINPOLL')
+        t.press('F4')
+        t.snap('f4', at='WINPOLL')
+        t.press('F5')
+        t.snap('f5', vram='patcol', at='WINPOLL')
+        t.press('F3')
+        t.snap('f3', at='WINPOLL')
+        t.press('F1')
+        t.snap('f1', at='WINPOLL')
+
+        t.press('ESC')
+        t.snap('esc', vram='patcol')
+
+        # RETURN accepts, and the action runs in page 1 after DOMNU returns.
+        # Options > Keymap Profile is the cheapest branch of the shared
+        # dispatch to observe: it moves one byte and paints nothing.
+        t.press('F4')
+        t.snap('opts', at='WINPOLL')
+        t.press('RETURN')
+        t.snap('profile')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        boot = run.blob('boot', 'patcol')
+        if boot is None:
+            return [Check('S2-17/dump', False, 'missing VRAM dump')]
+        checks = []
+
+        # Every step lands on the menu it should.
+        want = [('file', 0), ('r1', 1), ('r2', 2), ('r3', 3), ('r4', 4),
+                ('rwrap', 0), ('lwrap', 4), ('l3', 3),
+                ('f2', 1), ('f4', 3), ('f5', 4), ('f3', 2), ('f1', 0)]
+        bad = [(l, run.var(l, 'MNUID')) for l, m in want
+               if run.var(l, 'MNUID') != m]
+        checks.append(Check('S2-17/walk', not bad,
+                            'RIGHT/LEFT wrap both ways and F1..F5 jump '
+                            'directly' if not bad else
+                            'wrong menu at %s' % bad))
+
+        # A switch resets the selection to the first item.
+        bad = [l for l, _ in want if run.var(l, 'MNUSEL') != 0]
+        checks.append(Check('S2-17/selection-reset', not bad,
+                            'every menu opens on item 0' if not bad else
+                            'MNUSEL != 0 at %s' % bad))
+
+        # Exactly one title is inverted at any moment, and it is the open
+        # menu's.  This is what catches a missing un-highlight.
+        r0b = pattern.row_of(boot, pattern.MNUROW)
+        for label, menu in (('r1', 1), ('r4', 4), ('rwrap', 0), ('f5', 4)):
+            dump = run.blob(label, 'patcol')
+            if dump is None:
+                checks.append(Check('S2-17/%s/title' % label, False,
+                                    'missing VRAM dump'))
+                continue
+            col, width = titlespan(ctx, self.NAMES[menu])
+            r0 = pattern.row_of(dump, pattern.MNUROW)
+            inv = pattern.inverted_columns(r0, r0b)
+            diff = pattern.differing_columns(r0, r0b)
+            exp = list(range(col, col + width))
+            checks.append(Check('S2-17/%s/title' % label,
+                                inv == exp and diff == exp,
+                                'only %r is highlighted' % self.NAMES[menu]
+                                if inv == exp and diff == exp else
+                                'inverted %s, differing %s, expected %s'
+                                % (inv, diff, exp)))
+
+        # Cancelling puts row 0 and the document back exactly.
+        esc = run.blob('esc', 'patcol')
+        if esc is None:
+            checks.append(Check('S2-17/restores', False, 'missing VRAM dump'))
+        else:
+            currow = pattern.TXRFIRST + (run.var('boot', 'CURY') or 0)
+            curcol = run.var('boot', 'CURX') or 0
+            bad = restored(esc, boot, currow, curcol)
+            checks.append(Check('S2-17/restores', not bad,
+                                'ESC leaves the screen byte for byte as it '
+                                'was' if not bad else
+                                'cells differ: %s' % bad[:6]))
+
+        was, now = run.var('boot', 'KMAPID'), run.var('profile', 'KMAPID')
+        checks.append(Check('S2-17/action',
+                            run.var('opts', 'MNUID') == 3 and
+                            was is not None and now is not None and
+                            now != was,
+                            'RETURN accepts and Options > Keymap Profile runs '
+                            '(KMAPID %s -> %s)' % (was, now)))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
-         S213ShadowCfg(), S214Markup(), S215Quit()]
+         S213ShadowCfg(), S214Markup(), S215Quit(),
+         S216Menu(), S217MenuNav()]
 
 
 def run(ctx, cases=None):

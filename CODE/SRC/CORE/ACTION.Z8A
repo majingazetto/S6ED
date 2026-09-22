@@ -891,7 +891,7 @@ ACTQUIT         LD      A, (SELACT)
                 OR      A
                 JR      Z, .ASKQ
                 JP      ACTDSEL
-.ASKQ           ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
+.ASKQ           ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
                 LD      A, (FTRSEG)
                 LD      HL, DOQIT
                 CALL    FCALL
@@ -911,7 +911,7 @@ ACTQUIT         LD      A, (SELACT)
 ; - CLOBBERS: ALL
 ; -
 
-ACTHELP         ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
+ACTHELP         ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
                 LD      A, (FTRSEG)
                 LD      HL, DOABT
                 JP      FCALL
@@ -2698,19 +2698,11 @@ ACTMNU4         LD      A, 4
 ; - CLOBBERS: ALL
 ; -
 
-MNUENT          IFDEF   S2ED
-                ; THE HELP ENTRY OPENS ABOUT DIRECTLY UNTIL DOMNU LANDS (W4)
-                LD      A, (MNUID)
-                CP      MNUCOUNT - 1
-                JP      Z, ACTHELP
-                RET
-                ELSE
-                ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
+MNUENT          ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
                 LD      A, (FTRSEG)
                 LD      HL, DOMNU
                 CALL    FCALL
                 RET     C               ; CANCELLED: RETURN TO EDITING
-                ENDIF
 
                 ; DISPATCH SELECTED ACTION BASED ON (MNUID)
                 LD      A, (MNUID)
