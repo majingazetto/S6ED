@@ -1241,10 +1241,139 @@ class S214Markup(S2Case):
         return checks
 
 
+# --- S2-15  THE QUIT DIALOG -------------------------------------------
+
+
+class S215Quit(S2Case):
+    name = 'S2-15-quit'
+    desc = 'ESC asks before quitting: NO by default, LEFT picks YES, Y exits'
+    origin = ('phase W2.  Until this existed ACTQUIT on S2ED went straight to '
+              'TERM, so ESC threw the document away without asking -- the S6ED '
+              'branch had had DOQIT since Fase 3b and the S2ED one was a stub.  '
+              'It is also the first S2 dialog with more than one control, so '
+              'it is what proves VCOLBSEL actually marks the focus.')
+    WINR, WINC, WINNR, WINNC = 8, 9, 8, 13      # DOQIT, in cells
+    BTNROW = 13
+    YES = range(11, 15)         # "[  YES ]" at char col 22: cells 11..14
+    NO = range(17, 21)          # "[  NO  ]" at char col 34: cells 17..20
+    WRNROW = 11
+    WRN = range(10, 18)         # "Unsaved changes!" at char col 20
+    LINES = ['%02d QUIT DIALOG TEST LINE' % i for i in range(10)]
+    variants = ('clean', 'dirty')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        if variant == 'dirty':
+            t.text('X')                         # MODIFIED != 0
+        t.snap('boot', vram='patcol')
+        t.press('ESC')
+        t.snap('dlg_no', vram='patcol', at='WINPOLL')
+        t.press('LEFT')
+        t.snap('dlg_yes', vram='patcol', at='WINPOLL')
+        t.press('ESC')                          # cancel
+        t.snap('after_esc', vram='patcol')
+        t.press('ESC')                          # reopen
+        t.snap('exit', at='TERM.TERMDON')       # armed before the key that quits
+        t.press('Y')
+        t.wait(1.0)
+        return t
+
+    def cells(self, dump, row, rng):
+        crow = pattern.colour_row(dump[0x2000:], row)
+        return {c: set(crow[c * 8:(c + 1) * 8]) for c in rng}
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            tag = 'S2-15/%s' % variant
+            boot = run.blob('boot', 'patcol')
+            no = run.blob('dlg_no', 'patcol')
+            yes = run.blob('dlg_yes', 'patcol')
+            esc = run.blob('after_esc', 'patcol')
+            if None in (boot, no, yes, esc):
+                checks.append(Check(tag + '/dump', False, 'missing VRAM dump'))
+                continue
+
+            checks.append(Check(tag + '/displayed', no != boot,
+                                'the screen changes while the dialog is open'))
+
+            # Focus: the selected button wears VCOLBSEL, the other VCOLHI.
+            for label, dump, sel in (('default-no', no, self.NO),
+                                     ('nav-left', yes, self.YES)):
+                other = self.YES if sel is self.NO else self.NO
+                bad = [c for c, v in self.cells(dump, self.BTNROW, sel).items()
+                       if v != {pattern.COLBSEL}]
+                bad += [c for c, v in self.cells(dump, self.BTNROW,
+                                                 other).items()
+                        if v != {pattern.COLHI}]
+                checks.append(Check('%s/%s' % (tag, label), not bad,
+                                    'the focused button wears the inverse '
+                                    'accent and the other does not'
+                                    if not bad else 'cells wrong: %s' % bad))
+
+            # The warning line is there exactly when the buffer is dirty.
+            prow = pattern.row_of(no, self.WRNROW)
+            ink = sum(prow[c * 8:(c + 1) * 8].count(0) != 8 for c in self.WRN)
+            col = self.cells(no, self.WRNROW, self.WRN)
+            if variant == 'dirty':
+                ok = ink > 0 and all(v == {pattern.COLHI}
+                                     for v in col.values())
+                checks.append(Check(tag + '/warning', ok,
+                                    'the unsaved-changes line is shown in the '
+                                    'accent (%d inked cells)' % ink))
+            else:
+                ok = ink == 0 and all(v == {pattern.COLWIN}
+                                      for v in col.values())
+                checks.append(Check(tag + '/warning', ok,
+                                    'no unsaved-changes line on a clean '
+                                    'buffer' if ok else
+                                    '%d inked cells on the warning row' % ink))
+
+            # ESC cancels and puts the screen back, byte for byte.
+            currow = pattern.TXRFIRST + (run.var('boot', 'CURY') or 0)
+            curcol = run.var('boot', 'CURX') or 0
+            bad = []
+            for row in range(pattern.ROWS):
+                for cell in range(pattern.CELLS):
+                    sl = slice(cell * 8, (cell + 1) * 8)
+                    if (pattern.colour_row(esc[0x2000:], row)[sl]
+                            != pattern.colour_row(boot[0x2000:], row)[sl]):
+                        bad.append((row, cell))
+                        continue
+                    a = pattern.row_of(esc, row)[sl]
+                    b = pattern.row_of(boot, row)[sl]
+                    if a == b:
+                        continue
+                    if row == currow and curcol // 2 == cell:
+                        inv = pattern.invert_column(pattern.row_of(boot, row),
+                                                    curcol)
+                        if a == inv[sl]:
+                            continue        # cursor blink phase
+                    bad.append((row, cell))
+            res = run.var('after_esc', 'WINRES')
+            checks.append(Check(tag + '/cancel-esc', not bad and res == 0,
+                                'ESC restores the screen byte for byte and '
+                                'WINRES = 0' if not bad else
+                                'cells differ: %s' % bad[:6]))
+
+            # Y confirms and the editor really leaves.
+            scrmod = run.var('exit', 'SCRMOD')
+            winres = run.var('exit', 'WINRES')
+            checks.append(Check(tag + '/quit-y',
+                                scrmod == 0 and winres == 1,
+                                'Y quits to DOS (SCRMOD=0, WINRES=1)'
+                                if scrmod == 0 and winres == 1 else
+                                'SCRMOD=%s WINRES=%s' % (scrmod, winres)))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
-         S213ShadowCfg(), S214Markup()]
+         S213ShadowCfg(), S214Markup(), S215Quit()]
 
 
 def run(ctx, cases=None):
