@@ -858,6 +858,23 @@ class S211About(S2Case):
                             'body "S2ED - MSX1 64-Col" rendered'
                             if not bad else 'body cells differ: %s' % bad))
 
+        # The version line, read from the SYMBOL TABLE rather than written
+        # here: CORE/CONST_CORE.Z8A holds VERSION.MAJOR/.MINOR and both
+        # editors' About dialogs print that one pair, so a version typed by
+        # hand into either dialog goes red the moment the constant moves.
+        ver = 'Version %c.%c' % (ctx.sym['VERSION.MAJOR'],
+                                 ctx.sym['VERSION.MINOR'])
+        # A cell is two characters, so an odd-length string ends half way
+        # into one; the other half is the blanked window body, a space.
+        pad = ver + ' ' * (len(ver) % 2)
+        vrow = pattern.row_of(dlg[:0x2000], self.WINR + 4)
+        bad = [10 + i for i, want in enumerate(self.text_cells(fnt, pad))
+               if vrow[(10 + i) * 8:(11 + i) * 8] != want]
+        checks.append(Check('S2-11/version', not bad,
+                            '%r rendered, and it is the one constant both '
+                            'editors read' % ver if not bad else
+                            'version cells differ: %s' % bad))
+
         # The frame, pattern level.  Top edge: #FF on scanline 0 of every
         # window cell EXCEPT the ones the title occupies, which carry the
         # glyphs' scanline 0 (the clear behind the title must span exactly

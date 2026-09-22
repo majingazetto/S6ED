@@ -847,6 +847,15 @@ DOABT           LD      A, 6
                 LD      A, (VCOLWIN)
                 CALL    WINPUTS
 
+                ; VERSION FROM THE ONE PLACE THAT HOLDS IT: CORE/CONST_CORE
+                ; DEFINES VERSION.MAJOR/.MINOR AND S6ED'S ABOUT READS THE SAME
+                ; PAIR, SO THE TWO EDITORS CANNOT DRIFT APART.
+                LD      B, 10
+                LD      C, 20
+                LD      HL, .STRVER
+                LD      A, (VCOLWIN)
+                CALL    WINPUTS
+
                 LD      B, 11
                 LD      C, 20
                 LD      HL, .STRDSP
@@ -890,6 +899,7 @@ DOABT           LD      A, 6
 .TITABT         DEFM    "About S2ED", 0
 .STRHDR         DEFM    "S2ED - MSX1 64-Col", 0
 .STRSUB         DEFM    "Text Editor", 0
+.STRVER         DEFB    "Version ", VERSION.MAJOR, '.', VERSION.MINOR, 0
 .STRDSP         DEFM    "Display: 64x24", 0
 .STRFNT         DEFM    "Font: 4x8 custom", 0
 .STRMEM         DEFM    "Memory: DOS2/Nextor", 0
