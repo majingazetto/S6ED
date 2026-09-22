@@ -902,7 +902,7 @@ ACTQUIT         LD      A, (SELACT)
 ; - CLOBBERS: ALL
 ; -
 
-ACTHELP         ; FTR-BUDGET: S6ED ~9,600 FREE, S2ED ~200 FREE (2026-09-21)
+ACTHELP         ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
                 LD      A, (FTRSEG)
                 LD      HL, DOABT
                 JP      FCALL
@@ -911,7 +911,7 @@ ACTQUIT         LD      A, (SELACT)
                 OR      A
                 JR      Z, .ASKQ
                 JP      ACTDSEL
-.ASKQ           ; FTR-BUDGET: S6ED ~9,600 FREE, S2ED ~200 FREE (2026-09-21)
+.ASKQ           ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
                 LD      A, (FTRSEG)
                 LD      HL, DOQIT
                 CALL    FCALL
@@ -931,7 +931,7 @@ ACTQUIT         LD      A, (SELACT)
 ; - CLOBBERS: ALL
 ; -
 
-ACTHELP         ; FTR-BUDGET: S6ED ~9,600 FREE, S2ED ~200 FREE (2026-09-21)
+ACTHELP         ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
                 LD      A, (FTRSEG)
                 LD      HL, DOABT
                 JP      FCALL
@@ -2726,7 +2726,7 @@ MNUENT          IFDEF   S2ED
                 JP      Z, ACTHELP
                 RET
                 ELSE
-                ; FTR-BUDGET: S6ED ~9,600 FREE, S2ED ~200 FREE (2026-09-21)
+                ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
                 LD      A, (FTRSEG)
                 LD      HL, DOMNU
                 CALL    FCALL

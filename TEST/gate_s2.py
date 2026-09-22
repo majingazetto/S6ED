@@ -713,6 +713,8 @@ class S211About(S2Case):
     # DOABT geometry in S2/WINDOW.Z8A, in cell units
     WINR, WINC, WINNR, WINNC = 6, 9, 11, 13
     COLSHDW = 0x11
+    # The OK button: "[  OK  ]" at row 15, char col 27 -> cells 13..17
+    BTNROW, BTNC0, BTNC1 = 15, 13, 17
 
     def fixture(self, ctx, variant=None):
         return crlf(self.LINES)
@@ -759,14 +761,18 @@ class S211About(S2Case):
                   % run.var('closed', 'WINACTV')),
         ]
 
-        # Every window cell carries VCOLUI on all 8 scanlines
+        # Every window cell carries VCOLTXT (dark fill, white frame) on all
+        # 8 scanlines -- except the OK button cells, the inverse VCOLUI bar
         bad = [(r, c) for r in range(self.WINR, self.WINR + self.WINNR)
                for c, v in enumerate(self.cells_of(dlg, r, range(
                    self.WINC, self.WINC + self.WINNC)), start=self.WINC)
-               if v != {pattern.COLUI}]
+               if v != {pattern.COLUI if r == self.BTNROW
+                        and self.BTNC0 <= c <= self.BTNC1
+                        else pattern.COLTXT}]
         checks.append(Check('S2-11/window-colour', not bad,
-                            'every window cell is VCOLUI (#1F)' if not bad else
-                            'cells not VCOLUI: %s' % bad[:6]))
+                            'window cells are VCOLTXT (#F1), the OK button '
+                            'cells VCOLUI (#1F)' if not bad else
+                            'cells with wrong colour: %s' % bad[:6]))
 
         # The shadow margin: right column rows WINR+1..WINR+WINNR and bottom
         # row cells WINC+1..WINC+WINNC, all COLSHDW (#11)
@@ -805,6 +811,108 @@ class S211About(S2Case):
                             'body "S2ED - MSX1 64-Col" rendered'
                             if not bad else 'body cells differ: %s' % bad))
 
+        # The frame, pattern level.  Top edge: #FF on scanline 0 of every
+        # window cell EXCEPT the ones the title occupies, which carry the
+        # glyphs' scanline 0 (the clear behind the title must span exactly
+        # the title cells, not the whole inner edge)
+        tcells = self.text_cells(fnt, 'About S2ED')
+        bad = []
+        for c in range(self.WINC, self.WINC + self.WINNC):
+            i = c - (self.WINC + 1)
+            want = tcells[i][0] if 0 <= i < len(tcells) else 0xFF
+            got = trow[c * 8]
+            if got != want:
+                bad.append((c, '#%02X' % got))
+        checks.append(Check('S2-11/top-edge', not bad,
+                            'top edge is #FF on scanline 0 except behind '
+                            'the title' if not bad else
+                            'top-edge cells differ: %s' % bad[:6]))
+
+        # Side borders: #C0 left, #03 right, on every row.  The corner cells
+        # are the union with the edges: the top edge owns their scanline 0
+        # and the bottom edge their scanline 7
+        bad = []
+        for r in range(self.WINR, self.WINR + self.WINNR):
+            prow = pattern.row_of(dlg[:0x2000], r)
+            for c, v in [(self.WINC, 0xC0), (self.WINC + self.WINNC - 1, 0x03)]:
+                want = bytearray([v] * 8)
+                if r == self.WINR:
+                    want[0] = 0xFF
+                if r == self.WINR + self.WINNR - 1:
+                    want[7] = 0xFF
+                if prow[c * 8:(c + 1) * 8] != bytes(want):
+                    bad.append((r, c))
+        checks.append(Check('S2-11/side-borders', not bad,
+                            'left border #C0, right border #03 on every row'
+                            if not bad else 'border cells differ: %s'
+                            % bad[:6]))
+
+        # Bottom edge: #FF on scanline 7 of every cell of the last row
+        frow = pattern.row_of(dlg[:0x2000], self.WINR + self.WINNR - 1)
+        bad = [c for c in range(self.WINC, self.WINC + self.WINNC)
+               if frow[c * 8 + 7] != 0xFF]
+        checks.append(Check('S2-11/bottom-edge', not bad,
+                            'bottom edge is #FF on scanline 7 across the '
+                            'window' if not bad else
+                            'bottom-edge cells differ: %s' % bad[:6]))
+
+        # The corner cells outside the window and its shadow -- (WINR,
+        # WINC+WINNC) above the right shadow column and (WINR+WINNR, WINC)
+        # left of the bottom strip -- stay untouched document
+        bad = []
+        for r, c in [(self.WINR, self.WINC + self.WINNC),
+                     (self.WINR + self.WINNR, self.WINC)]:
+            sl = slice(c * 8, (c + 1) * 8)
+            if (pattern.row_of(dlg, r)[sl] != pattern.row_of(boot, r)[sl]
+                    or pattern.colour_row(dlg[0x2000:], r)[sl]
+                    != pattern.colour_row(boot[0x2000:], r)[sl]):
+                bad.append((r, c))
+        checks.append(Check('S2-11/corners-untouched', not bad,
+                            'corner cells outside the window are byte-'
+                            'identical to boot' if not bad else
+                            'corners differ: %s' % bad))
+
+        # Global guard: outside the window rect and the shadow margin the
+        # dialog is the boot screen byte for byte, patterns AND colours --
+        # and inside the shadow only the colours may change (a shadow
+        # darkens, it does not repaint).  The blinking cursor column is the
+        # one legitimate diff.
+        currow = pattern.TXRFIRST + (run.var('dialog', 'CURY') or 0)
+        curcol = run.var('dialog', 'CURX') or 0
+        bad = []
+        for row in range(pattern.ROWS):
+            dpat, bpat = pattern.row_of(dlg, row), pattern.row_of(boot, row)
+            dcol = pattern.colour_row(dlg[0x2000:], row)
+            bcol = pattern.colour_row(boot[0x2000:], row)
+            for cell in range(pattern.CELLS):
+                if (self.WINR <= row < self.WINR + self.WINNR
+                        and self.WINC <= cell < self.WINC + self.WINNC):
+                    continue                # window rect: checked above
+                sl = slice(cell * 8, (cell + 1) * 8)
+                patdiff = dpat[sl] != bpat[sl]
+                coldiff = dcol[sl] != bcol[sl]
+                inshdw = (cell == self.WINC + self.WINNC
+                          and self.WINR + 1 <= row
+                          <= self.WINR + self.WINNR) or \
+                         (row == self.WINR + self.WINNR
+                          and self.WINC + 1 <= cell
+                          <= self.WINC + self.WINNC)
+                if inshdw:
+                    if patdiff:             # colours checked by S2-11/shadow
+                        bad.append((row, cell))
+                    continue
+                if not (patdiff or coldiff):
+                    continue
+                if row == currow and curcol // 2 == cell and not coldiff:
+                    inv = pattern.invert_column(bpat, curcol)
+                    if dpat[sl] in (bpat[sl], inv[sl]):
+                        continue            # cursor up or down at the snap
+                bad.append((row, cell))
+        checks.append(Check('S2-11/outside-untouched', not bad,
+                            'outside the window and shadow the screen is '
+                            'untouched, and the shadow repaints no patterns'
+                            if not bad else 'cells differ: %s' % bad[:6]))
+
         # Restore: identical to boot, except the blinking cursor column
         currow = pattern.TXRFIRST + (run.var('closed', 'CURY') or 0)
         curcol = run.var('closed', 'CURX') or 0
@@ -825,9 +933,85 @@ class S211About(S2Case):
         return checks
 
 
+# --- S2-12  A DIALOG MUST NOT EAT THE UNDO RING -----------------------
+
+
+class S212DialogUndo(S2Case):
+    name = 'S2-12-dialog-undo'
+    desc = 'opening and closing the About dialog leaves the undo ring intact'
+    origin = ('2026-09-22: the window background save buffer moved out of the '
+              'feature container into the TPA, above the undo ring.  The two '
+              'are now neighbours in page 1, and a buffer placed by hand '
+              'instead of by the chain lands on top of the ring -- silently, '
+              'because the dialog itself still opens and restores perfectly.  '
+              'The static tpa-chain check forbids fixed addresses; only a run '
+              'can prove the two allocations do not overlap.')
+    LINES = ['HELLO MSX WORLD', 'SECOND LINE']
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.text('PREFIX ')                       # one coalesced transaction
+        t.snap('typed')
+        t.press('F5')                           # About, through FTRBASE
+        t.snap('dialog', at='WINPOLL')
+        t.press('RETURN')
+        t.snap('closed')
+        t.press('Z', mods=['CTRL'])             # undo the burst
+        t.snap('undone', vram='pat')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        typed_x = run.var('typed', 'CURX')
+        checks = [
+            Check('S2-12/typed', typed_x == 7 and run.var('typed', 'UNDOPTR'),
+                  'CURX = %s and a transaction is open after typing'
+                  % typed_x),
+        ]
+
+        # The dialog is not an edit: it may not move the ring at all.
+        ring = ('UNDOPTR', 'UNDONXT', 'UNDOBOT')
+        moved = [v for v in ring
+                 if run.var('typed', v) != run.var('closed', v)]
+        checks.append(Check('S2-12/ring-intact', not moved,
+                            'the ring pointers survive the dialog'
+                            if not moved else
+                            'the dialog moved %s' % ', '.join(moved)))
+
+        undone_x = run.var('undone', 'CURX')
+        checks.append(Check('S2-12/undone', undone_x == 0,
+                            'CURX = %s after Undo' % undone_x))
+
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(self.LINES)
+        checks.append(Check('S2-12/content', got == want,
+                            'the document is the original byte for byte'
+                            if got == want else 'got %r, want %r'
+                            % (got, want)))
+
+        pat = run.blob('undone', 'pat')
+        if pat is None:
+            checks.append(Check('S2-12/screen', False, 'missing VRAM dump'))
+        else:
+            bad = pattern.mismatched_rows(
+                pat, font(ctx), self.LINES, run.var('undone', 'TOPLINE'),
+                cursor=(pattern.TXRFIRST + run.var('undone', 'CURY'),
+                        run.var('undone', 'CURX')))
+            checks.append(Check('S2-12/screen', not bad,
+                                'the screen agrees with the undone document'
+                                if not bad else 'rows differ: %s' % bad[:4]))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
-         S210Theme(), S211About()]
+         S210Theme(), S211About(), S212DialogUndo()]
 
 
 def run(ctx, cases=None):
