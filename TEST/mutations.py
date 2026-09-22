@@ -372,6 +372,29 @@ MUTATIONS = [
         'expect': ['S2-11/shadow'],
     },
     {
+        'name': 't0-dsk-s6only',
+        'why': 'the S6ED disk stops carrying S2ED, so the one image that runs '
+               'both editors on an MSX2 quietly goes out with one',
+        'file': 'Makefile',
+        'old': '\t\t\t  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2) TEST_S2.TXT',
+        'new': '\t\t\t  $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2) TEST_S2.TXT',
+        'filter': 'T0',
+        'expect_static': ['build-symmetry'],
+    },
+    {
+        # The asymmetry the user found on 2026-09-22: clean removed both
+        # editors' artefacts while build assembled one, so `make clean build`
+        # left the tree half built and the S2 harness died on a missing .sym.
+        'name': 't0-build-s6only',
+        'why': 'make build assembles S6ED alone again while clean removes '
+               'both, so clean+build leaves the tree half built',
+        'file': 'Makefile',
+        'old': 'build: build-s6 build-s2',
+        'new': 'build: build-s6',
+        'filter': 'T0',
+        'expect_static': ['build-symmetry'],
+    },
+    {
         # The defect W2 exists to remove: on S2ED, ESC went straight to TERM.
         'name': 's2-quit-direct',
         'why': 'ACTQUIT quits without asking on S2ED, so ESC throws the '

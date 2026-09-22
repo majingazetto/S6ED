@@ -3,7 +3,8 @@
 #	* (c) 2024 - 2025 Armando Pérez            						    	*
 #	*************************************************************************
 
-.PHONY: build run clean check gate test test-s2 selftest testall \
+.PHONY: build build-s6 build-s2 dsk dsk-s2 s2 run clean check gate test \
+        test-s2 selftest testall \
         run-s2 run-s2-1mb run-s2-msx2 run-s2-msx2-128
 
 # 	=========================================================================
@@ -56,6 +57,7 @@ DSKBASE			= $(RES_DIR)/DOS2.DSK
 
 # --- S2 (Screen 2 TMS9918) Targets -------------------------------------
 SOURCE_S2		= S2ED.Z8A
+CFGFILE_S2		= S2ED.CFG
 OUTPUT_S2		= S2ED.COM
 FNTFILE_S2		= S2ED.FNT
 DATFILE_S2		= S2ED.DAT
@@ -79,7 +81,14 @@ clean:
 	@$(RM) -R $(OUTPUT) $(DATFILE) $(LSTFILE) $(SYMFILE) $(DSKFILE) $(FNTFILE) \
 		$(OUTPUT_S2) $(DATFILE_S2) $(LSTFILE_S2) $(SYMFILE_S2) $(DSKFILE_S2) $(FNTFILE_S2)
 
-build: $(OUTPUT) $(DATFILE) $(FNTFILE)
+# `build` means the PROJECT, both targets.  It used to mean S6ED alone while
+# `clean` removed the artefacts of both, so `make clean build` left the tree
+# half built -- and the S2 half of the harness then died on a .sym that did
+# not exist.  The per-target names stay available, and the runners use them so
+# that running one editor still assembles only that one.
+build: build-s6 build-s2
+
+build-s6: $(OUTPUT) $(DATFILE) $(FNTFILE)
 
 # S6ED.DAT is written by the same sjasmplus run as S6ED.COM (rotating OUTPUT
 # directive in S6ED.Z8A), so normally it simply follows the .COM. The recipe
@@ -93,7 +102,13 @@ $(DATFILE): $(OUTPUT)
 
 dsk: $(DSKFILE)
 
-DSKCONT			= $(OUTPUT) $(DATFILE) $(FNTFILE) TEST.TXT AUTOEXEC.BAT S6ED.CFG
+# The S6ED disk carries S2ED too.  An MSX2 runs both editors, so one image
+# lets them be compared side by side without swapping disks: boot goes to
+# S6ED through AUTOEXEC.BAT, and `S2ED TEST_S2.TXT` starts the other.  No
+# swapping is needed here the way dsk-s2 needs it -- S6ED.CFG and S2ED.CFG
+# are different names, and so are TEST.TXT and TEST_S2.TXT.
+DSKCONT			= $(OUTPUT) $(DATFILE) $(FNTFILE) TEST.TXT AUTOEXEC.BAT S6ED.CFG \
+			  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2) TEST_S2.TXT
 
 $(DSKFILE): $(DSKCONT)
 	@cp $(DSKBASE) $(DSKFILE)
@@ -122,7 +137,6 @@ $(RES_DIR)/FONTS_S2.BIN: $(RES_DIR)/FONT4X8.PNG $(RES_DIR)/fontcheck_s2.py
 
 dsk-s2: $(DSKFILE_S2)
 
-CFGFILE_S2		= S2ED.CFG
 DSKCONT_S2		= $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2)
 
 # TEST.TXT and AUTOEXEC.BAT ship under names the S6ED disk uses too, and

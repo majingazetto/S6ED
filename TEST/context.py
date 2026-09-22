@@ -54,9 +54,22 @@ class Context(object):
                        target=target)
 
     def find_src_file(self, filename):
-        """Find a source file by basename along this target's include path."""
+        """Find a source file by basename along this target's include path.
+
+        The path is the same list the Makefile hands the assembler, never a
+        recursive walk: with two targets in the tree UI.Z8A and SCROLL.Z8A
+        exist twice and os.walk order is filesystem-dependent, so a mutation
+        could land in the copy that is not compiled (2026-09-20).
+
+        The build files themselves -- Makefile and the like -- live in
+        code_dir, not under SRC, and the suite guards them too, so they are
+        the one fallback before giving up.
+        """
         for sub in self.SRC_PATH:
             candidate = os.path.join(self.src_dir, sub, filename)
             if os.path.exists(candidate):
                 return candidate
+        candidate = os.path.join(self.code_dir, filename)
+        if os.path.exists(candidate):
+            return candidate
         return os.path.join(self.src_dir, filename)

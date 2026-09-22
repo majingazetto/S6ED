@@ -383,7 +383,9 @@ def check_build_clean(ctx):
     """The build itself: 0 errors, 0 warnings, every ASSERT satisfied."""
     # -B: force the assembly even when nothing changed, so every ASSERT in
     # the sources is actually evaluated on every run.
-    target = 'build' if ctx.prefix == 'S6ED' else 'build-s2'
+    # Per-target names, never the umbrella `build`: it assembles both and
+    # the summary parsed below is whichever ran first.
+    target = 'build-s6' if ctx.prefix == 'S6ED' else 'build-s2'
     r = subprocess.run(['make', '-B', target], cwd=ctx.code_dir,
                        capture_output=True, text=True)
     tail = (r.stdout + r.stderr).strip().splitlines()
@@ -569,13 +571,67 @@ def check_tpa_chain(ctx):
                  'TPATOP asserted below page 2')
 
 
+def check_build_symmetry(ctx):
+    """`make clean` and `make build` must cover the same targets.
+
+    They did not: `clean` removed the artefacts of both editors while `build`
+    assembled S6ED alone, so `make clean build` left the tree half built and
+    the S2 half of the harness died on a .sym that did not exist -- reported
+    by the user on 2026-09-22 after it had bitten a session.  The shape is
+    what matters, so the shape is what is checked: `build` reaches both
+    per-target builds, each per-target build produces its own binary, and
+    `clean` names both.
+    """
+    bad = []
+    path = os.path.join(ctx.code_dir, 'Makefile')
+    text = open(path, errors='replace').read()
+
+    def rule(name):
+        """The prerequisites and recipe of one target, as one string."""
+        m = re.search(r'^%s:(.*?)(?=^\S|\Z)' % re.escape(name), text,
+                      re.M | re.S)
+        return m.group(1) if m else None
+
+    build = rule('build')
+    if build is None:
+        bad.append('Makefile has no build target')
+    else:
+        for want in ('build-s6', 'build-s2'):
+            if not re.search(r'\b%s\b' % want, build):
+                bad.append('build does not reach %s' % want)
+    for name, var in (('build-s6', 'OUTPUT'), ('build-s2', 'OUTPUT_S2')):
+        r = rule(name)
+        if r is None:
+            bad.append('Makefile has no %s target' % name)
+        elif '$(%s)' % var not in r:
+            bad.append('%s does not build $(%s)' % (name, var))
+    clean = rule('clean')
+    if clean is None:
+        bad.append('Makefile has no clean target')
+    else:
+        for var in ('OUTPUT', 'OUTPUT_S2'):
+            if '$(%s)' % var not in clean:
+                bad.append('clean does not remove $(%s)' % var)
+    # The S6ED disk carries S2ED too, so one image runs both editors on an
+    # MSX2.  Nothing in a build failure would reveal a tidied-up DSKCONT --
+    # the disk would simply come out with one editor on it.
+    m = re.search(r'^DSKCONT\s*=(.*?)^\s*$', text, re.M | re.S)
+    if m is None:
+        bad.append('Makefile has no DSKCONT')
+    elif '$(OUTPUT_S2)' not in m.group(1):
+        bad.append('the S6ED disk does not carry $(OUTPUT_S2)')
+    return Check('build-symmetry', not bad, '; '.join(bad) if bad else
+                 'build reaches both targets, clean removes what both '
+                 'produce, and the S6ED disk carries both')
+
+
 ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_layout_asserts, check_record_exclusive, check_target_params,
        check_data_placement,
        check_label_style,
        check_number_notation, check_defb_width, check_page1_hooks,
        check_assets, check_feature_discipline, check_window_discipline,
-       check_ftr_budget, check_tpa_chain]
+       check_ftr_budget, check_tpa_chain, check_build_symmetry]
 
 
 def run(ctx):
