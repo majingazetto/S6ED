@@ -331,8 +331,20 @@ COMCELL         PUSH    DE              ; SAVE ATTRIBUTES (D=LATTR, E=RATTR)
                 LD      A, (VCOLITAL)
                 JR      .SETCOL
 .NOTIT          BIT     2, C            ; ATRUNDR ?
-                JR      Z, .SETCOL
+                JR      Z, .NOTUN
                 LD      A, (VCOLUNDR)
+                JR      .SETCOL
+
+                ; ATRMARK IS TESTED LAST ON PURPOSE.  A CELL IS TWO
+                ; CHARACTERS, SO A DELIMITER THAT STARTS ON AN ODD COLUMN
+                ; SHARES ITS CELL WITH CONTENT: LOWEST PRIORITY MEANS THE
+                ; CONTENT KEEPS ITS OWN ROLE AND THE DELIMITER GIVES WAY,
+                ; RATHER THAN A BOLD LETTER BEING PAINTED AS A DELIMITER.
+                ; ALIGNED -- THE COMMON CASE -- THE PAIR OWNS ITS CELL AND
+                ; VCOLMARK SHOWS.
+.NOTUN          BIT     4, C            ; ATRMARK ?
+                JR      Z, .SETCOL
+                LD      A, (VCOLMARK)
 
 .SETCOL         ; 5. WRITE ONE COLOR BYTE TO COLMAP
                 LD      (IY+0), A

@@ -372,6 +372,65 @@ MUTATIONS = [
         'expect': ['S2-11/shadow'],
     },
     {
+        'name': 's2-mark-role',
+        'why': 'COMCELL never tests ATRMARK, so the ** delimiters fall back '
+               'to the document colour and VCOLMARK goes back to being a '
+               'theme byte nobody reads',
+        'target': 'S2ED',
+        'file': 'RENDER.Z8A',
+        'old': """.NOTUN          BIT     4, C            ; ATRMARK ?
+                JR      Z, .SETCOL
+                LD      A, (VCOLMARK)""",
+        'new': """.NOTUN          BIT     4, C            ; ATRMARK ?
+                JR      .SETCOL         ; MUTATION: DELIMITERS UNMARKED
+                LD      A, (VCOLMARK)""",
+        'filter': 'S2-14',
+        'expect': ['S2-14/line0', 'S2-14/line1'],
+    },
+    {
+        # The ordering decision, not the wiring.  A cell is two characters,
+        # so a delimiter starting on an odd column shares its cell with
+        # content; testing ATRMARK FIRST paints that content character as a
+        # delimiter and it loses its own role.  Line 0 is aligned and cannot
+        # see the difference -- only line 1 can, which is why it exists.
+        'name': 's2-mark-prio',
+        'why': 'ATRMARK is tested before ATRBOLD, so a bold letter sharing a '
+               'cell with a delimiter is painted as a delimiter',
+        'target': 'S2ED',
+        'file': 'RENDER.Z8A',
+        'old': """                LD      A, (VCOLTXT)    ; DEFAULT COLOR
+                BIT     0, C            ; ATRBOLD ?
+                JR      Z, .NOTBD""",
+        'new': """                LD      A, (VCOLTXT)    ; DEFAULT COLOR
+                BIT     4, C            ; MUTATION: DELIMITER WINS
+                JR      Z, .MUTBD
+                LD      A, (VCOLMARK)
+                JR      .SETCOL
+.MUTBD          BIT     0, C            ; ATRBOLD ?
+                JR      Z, .NOTBD""",
+        'filter': 'S2-14',
+        'expect': ['S2-14/line1'],
+    },
+    {
+        # What S2-14/line1 exists for.  A cell is TWO characters and COMCELL
+        # ORs both attributes, so a span that starts on an odd column drags
+        # its delimiter into the span's colour.  Reading only the left
+        # attribute leaves the aligned line looking perfect and silently
+        # halves the span on every odd one.
+        'name': 's2-comcell-rattr',
+        'why': 'COMCELL takes the cell colour from the left character alone, '
+               'so a markup span starting on an odd column loses its first '
+               'cell -- invisible on any aligned example',
+        'target': 'S2ED',
+        'file': 'RENDER.Z8A',
+        'old': """                LD      A, D
+                OR      E               ; A = LATTR | RATTR""",
+        'new': """                LD      A, D
+                                        ; MUTATION: RIGHT ATTRIBUTE IGNORED""",
+        'filter': 'S2-14',
+        'expect': ['S2-14/line1'],
+    },
+    {
         'name': 's2-shadow-off',
         'why': 'WSHDW ignores SHADOW=OFF and recolours the margin anyway, so '
                'the key cannot turn the shadow off',
