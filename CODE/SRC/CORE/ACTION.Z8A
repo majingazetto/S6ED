@@ -884,29 +884,9 @@ ACTSAVE         CALL    FILESAVE
 ; - CLOBBERS: ALL
 ; -
 
-                IFDEF   S2ED
-ACTQUIT         LD      A, (SELACT)
-                OR      A
-                JR      Z, .DOQ
-                JP      ACTDSEL
-.DOQ            JP      TERM
-
-
-; --- ACTHELP                   ----------------------------------------
-
-
-; - ACTHELP ----------------------------
-; - DISPLAY ABOUT DIALOG (F5 > HELP, UNTIL THE MENU SYSTEM LANDS IN W4)
-; - IN:  NONE
-; - OUT: NONE
-; - CLOBBERS: ALL
-; -
-
-ACTHELP         ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
-                LD      A, (FTRSEG)
-                LD      HL, DOABT
-                JP      FCALL
-                ELSE
+                ; NO IFDEF HERE ANY MORE.  S2ED had a stub that went straight
+                ; to TERM until DOQIT existed for it; both targets now open the
+                ; same dialog through the same FCALL, so CORE stops forking.
 ACTQUIT         LD      A, (SELACT)
                 OR      A
                 JR      Z, .ASKQ
@@ -935,7 +915,6 @@ ACTHELP         ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
                 LD      A, (FTRSEG)
                 LD      HL, DOABT
                 JP      FCALL
-                ENDIF
 
 
 ; --- ACTCYCKM                  ----------------------------------------

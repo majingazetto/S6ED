@@ -372,6 +372,85 @@ MUTATIONS = [
         'expect': ['S2-11/shadow'],
     },
     {
+        # The defect W2 exists to remove: on S2ED, ESC went straight to TERM.
+        'name': 's2-quit-direct',
+        'why': 'ACTQUIT quits without asking on S2ED, so ESC throws the '
+               'document away -- the stub that stood there until W2',
+        'target': 'S2ED',
+        'file': 'ACTION.Z8A',
+        'old': """.ASKQ           ; FTR-BUDGET: S6ED 11,602 B FREE, S2ED 2,982 B (2026-09-22)
+                LD      A, (FTRSEG)
+                LD      HL, DOQIT
+                CALL    FCALL""",
+        'new': '.ASKQ           JP      TERM            ; MUTATION: QUIT WITHOUT ASKING',
+        'filter': 'S2-15',
+        # ESC exits on the spot: either the displayed check goes red, or the
+        # case dies waiting for a WINPOLL that never comes.
+        'expect_any': ['S2-15/clean/displayed', 'S2-15-quit'],
+    },
+    {
+        'name': 's2-quit-defsel',
+        'why': 'the Quit dialog opens with YES selected, so a reflex ENTER '
+               'discards the document',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """                ; DEFAULT: NO SELECTED, RESULT CANCELLED
+                LD      A, 1
+                LD      (WINSEL), A""",
+        'new': """                ; DEFAULT: NO SELECTED, RESULT CANCELLED
+                XOR     A               ; MUTATION: YES SELECTED BY DEFAULT
+                LD      (WINSEL), A""",
+        'filter': 'S2-15',
+        'expect': ['S2-15/clean/default-no'],
+    },
+    {
+        'name': 's2-quit-nav',
+        'why': 'LEFT and RIGHT are swapped, so the arrow keys move the focus '
+               'the wrong way',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """                CP      CLEFT
+                JR      Z, .TOYES
+                CP      CRIGHT
+                JR      Z, .TONO""",
+        'new': """                CP      CLEFT
+                JR      Z, .TONO        ; MUTATION: NAVIGATION REVERSED
+                CP      CRIGHT
+                JR      Z, .TOYES""",
+        'filter': 'S2-15',
+        'expect': ['S2-15/clean/nav-left'],
+    },
+    {
+        'name': 's2-quit-warn',
+        'why': 'the unsaved-changes warning is shown on a clean buffer and '
+               'hidden on a dirty one -- the test that matters inverted',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .NOWRN""",
+        'new': """                LD      A, (MODIFIED)
+                OR      A
+                JR      NZ, .NOWRN      ; MUTATION: WARNING INVERTED""",
+        'filter': 'S2-15',
+        'expect': ['S2-15/clean/warning', 'S2-15/dirty/warning'],
+    },
+    {
+        'name': 's2-quit-yes',
+        'why': 'the Y accelerator does not set WINRES, so the editor refuses '
+               'to quit however the dialog is answered',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """.YES            LD      A, 1
+                LD      (WINRES), A""",
+        'new': """.YES            XOR     A               ; MUTATION: Y CANCELS
+                LD      (WINRES), A""",
+        'filter': 'S2-15',
+        # The exit breakpoint never fires, so either the check sees no exit
+        # snapshot or the case dies waiting for one.
+        'expect_any': ['S2-15/clean/quit-y', 'S2-15-quit'],
+    },
+    {
         'name': 's2-mark-role',
         'why': 'COMCELL never tests ATRMARK, so the ** delimiters fall back '
                'to the document colour and VCOLMARK goes back to being a '

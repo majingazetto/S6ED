@@ -894,3 +894,138 @@ DOABT           LD      A, 6
 .STRFNT         DEFM    "Font: 4x8 custom", 0
 .STRMEM         DEFM    "Memory: DOS2/Nextor", 0
 .BTNOK          DEFM    "[  OK  ]", 0
+
+
+; --- DOQIT                     ----------------------------------------
+
+
+; - DOQIT ------------------------------
+; - QUIT CONFIRMATION DIALOG. TWO OPTIONS, DEFAULT NO, SO A STRAY ESC
+; - CANNOT THROW THE DOCUMENT AWAY -- WHICH IS EXACTLY WHAT S2ED DID
+; - UNTIL THIS EXISTED: ACTQUIT WENT STRAIGHT TO TERM.
+; -
+; - BUTTON GEOMETRY IS CELL-ALIGNED ON PURPOSE. A COLOR BYTE COVERS A
+; - WHOLE CELL, SO AN 8-CHARACTER BUTTON STARTING ON AN EVEN COLUMN
+; - OWNS EXACTLY FOUR CELLS AND ITS BAR HAS NO HALF CELL HANGING OFF
+; - EITHER END.
+; -
+; - IN:  NONE
+; - OUT: (WINRES) = 0 CANCELLED, 1 CONFIRMED
+; - CLOBBERS: ALL
+; -
+
+DOQIT           LD      A, 8
+                LD      (WINR), A
+                LD      A, 9
+                LD      (WINC), A
+                LD      A, 8
+                LD      (WINNR), A
+                LD      A, 13
+                LD      (WINNC), A
+                LD      HL, .TITQIT
+                CALL    WINOPEN
+
+                ; DEFAULT: NO SELECTED, RESULT CANCELLED
+                LD      A, 1
+                LD      (WINSEL), A
+                XOR     A
+                LD      (WINRES), A
+
+                ; MESSAGE LINE
+                LD      B, 10
+                LD      C, 20
+                LD      HL, .STRQIT
+                LD      A, (VCOLWIN)
+                CALL    WINPUTS
+
+                ; WARNING LINE, ONLY WITH A DIRTY BUFFER
+                LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .NOWRN
+                LD      B, 11
+                LD      C, 20
+                LD      HL, .STRWRN
+                LD      A, (VCOLHI)
+                CALL    WINPUTS
+
+.NOWRN          CALL    .BTNS
+                CALL    WDUMP
+
+                ; MODAL KEY LOOP
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+                CP      ESC
+                JR      Z, .DONE        ; CANCEL: WINRES IS ALREADY 0
+                CP      CR
+                JR      Z, .ACCEPT
+                CP      ' '
+                JR      Z, .ACCEPT
+                CP      CLEFT
+                JR      Z, .TOYES
+                CP      CRIGHT
+                JR      Z, .TONO
+                CP      'Y'
+                JR      Z, .YES
+                CP      'y'
+                JR      Z, .YES
+                CP      'N'
+                JR      Z, .DONE
+                CP      'n'
+                JR      Z, .DONE
+                JR      .KEYLP
+
+.TOYES          XOR     A
+                JR      .NAV
+.TONO           LD      A, 1
+.NAV            LD      HL, WINSEL
+                CP      (HL)
+                JR      Z, .KEYLP       ; ALREADY THERE: NOTHING TO REPAINT
+                LD      (HL), A
+                CALL    .BTNS
+                CALL    WDUMP
+                JR      .KEYLP
+
+.ACCEPT         LD      A, (WINSEL)
+                XOR     1               ; YES (0) CONFIRMS, NO (1) CANCELS
+                LD      (WINRES), A
+                JR      .DONE
+
+.YES            LD      A, 1
+                LD      (WINRES), A
+
+.DONE           JP      WINCLOS
+
+
+; - .BTNS: BOTH BUTTONS, EACH IN THE ROLE ITS SELECTION STATE ASKS FOR.
+; - THE SELECTED ONE WEARS VCOLBSEL (THE INVERSE ACCENT), THE OTHER
+; - VCOLHI -- ON A TMS9918 A CELL IS ONE FG|BG BYTE, SO FOCUS CANNOT BE
+; - A BORDER DRAWN INSIDE ONE WITHOUT CLIPPING THE GLYPH.
+
+.BTNS           LD      A, (WINSEL)
+                OR      A
+                CALL    .ROLE           ; Z = YES IS SELECTED
+                LD      B, 13
+                LD      C, 22
+                LD      HL, .BTNYES
+                CALL    WINPUTS
+
+                LD      A, (WINSEL)
+                DEC     A
+                CALL    .ROLE           ; Z = NO IS SELECTED
+                LD      B, 13
+                LD      C, 34
+                LD      HL, .BTNNO
+                JP      WINPUTS
+
+; - .ROLE: A = COLOR FOR A BUTTON, GIVEN Z SET WHEN IT IS THE SELECTED ONE
+.ROLE           JR      Z, .ROLSEL
+                LD      A, (VCOLHI)
+                RET
+.ROLSEL         LD      A, (VCOLBSEL)
+                RET
+
+.TITQIT         DEFM    "Quit S2ED", 0
+.STRQIT         DEFM    "Exit to MSX-DOS?", 0
+.STRWRN         DEFM    "Unsaved changes!", 0
+.BTNYES         DEFM    "[  YES ]", 0
+.BTNNO          DEFM    "[  NO  ]", 0
