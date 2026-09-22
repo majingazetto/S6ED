@@ -248,6 +248,17 @@ SCNMD           ; --- PASS 1: BOLD (**) ---
                 INC     HL
                 DJNZ    .MDBST
                 POP     BC
+
+                ; MARK THE FOUR DELIMITER COLUMNS: C, C+1 AND B, B+1.  ONLY
+                ; THE TWO-CHARACTER FORM GETS THIS.  A ONE-CHARACTER
+                ; DELIMITER CAN NEVER OWN A CELL ON A 4 PX FONT -- IT ALWAYS
+                ; SHARES ONE WITH CONTENT -- SO COLOURING IT WOULD CLAIM A
+                ; CONTENT CHARACTER INSTEAD OF MARKING ANYTHING.
+                LD      A, C
+                CALL    MKDELIM         ; OPENING '**'
+                LD      A, B
+                CALL    MKDELIM         ; CLOSING '**'
+
                 LD      C, B
                 INC     C               ; ADVANCE PAST SECOND '*' OF CLOSING
 
@@ -395,6 +406,34 @@ SCNMD           ; --- PASS 1: BOLD (**) ---
                 JR      .MDULP
 
 .MDDON          RET
+
+
+; --- MKDELIM                   ----------------------------------------
+
+
+; - MKDELIM ----------------------------
+; - STAMP ATRMARK ON TWO CONSECUTIVE ATTRIBUTE COLUMNS OF WORKBUF
+; - THE ATTRIBUTE IS PURELY DESCRIPTIVE -- "THESE COLUMNS ARE A
+; - DELIMITER" -- AND EACH TARGET'S RENDERER DECIDES WHAT TO DO WITH IT.
+; - S6ED MASKS IT OFF (ATRFMSK IS BITS 0-1) BECAUSE IT SHOWS MARKUP AS A
+; - FONT WEIGHT AND HAS NO COLOUR TO SPARE; S2ED MAPS IT TO VCOLMARK.
+; - IN:  A = FIRST COLUMN
+; - OUT: NONE
+; - CLOBBERS: AF, DE, HL
+; -
+
+MKDELIM         LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                ADD     HL, DE
+                LD      A, (HL)
+                OR      ATRMARK
+                LD      (HL), A
+                INC     HL
+                LD      A, (HL)
+                OR      ATRMARK
+                LD      (HL), A
+                RET
 
 
 ; --- ACTCYCMK                  ----------------------------------------

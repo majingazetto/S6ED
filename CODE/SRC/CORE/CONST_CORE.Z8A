@@ -19,6 +19,7 @@ ATRBOLD         EQU     #01             ; BIT 0
 ATRITAL         EQU     #02             ; BIT 1
 ATRUNDR         EQU     #04             ; BIT 2
 ATRINV          EQU     #08             ; BIT 3  (INVERSE VIDEO)
+ATRMARK         EQU     #10             ; BIT 4  (MARKUP DELIMITER CHARACTER)
 ATRFMSK         EQU     #03             ; BITS 0-1 -> FONT VARIANT INDEX
 
 

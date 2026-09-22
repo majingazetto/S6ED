@@ -2675,16 +2675,30 @@ class D8Accents(Case):
     # its code, i.e. on the phase between the keystroke and the interrupt.
     # With the clock off that phase is fixed, so the run is deterministic --
     # and deterministic is not the same as robust.  A SINGLE gap ties the case
-    # to one phase, and any unrelated change that moves boot timing slides the
-    # build out of the window: this was recalibrated to 0.05, 0.040 and 0.053
-    # in turn, and on 2026-09-22 a config key added at boot made 0.040 stop
-    # reproducing the defect while 0.030, 0.050, 0.060, 0.080 and 0.100 all
-    # still did.  So the passes no longer share a gap: each one uses its own,
-    # spanning the range, and whichever phase the build lands in one of them
-    # falls in the window.  The fixed build is byte for byte correct at every
-    # one of them -- that is what makes the spread free.
+    # to one phase and any unrelated change to timing slides the build out of
+    # the window: recalibrated to 0.05, 0.040 and 0.053 in turn, and on
+    # 2026-09-22 twice in one afternoon.
+    #
+    # BE HONEST ABOUT WHAT THIS IS: the passes use four different gaps so that
+    # more than one phase is sampled, and the set below is the one MEASURED to
+    # reproduce the defect on the current build -- 0.043 catches it alone,
+    # 0.033 and 0.037 alone do not.  There is no model here that predicts
+    # which gaps work; the first spread tried (0.030/0.050/0.070/0.090) looked
+    # wide and was not, because all four are congruent mod the 20 ms PAL frame
+    # and therefore walk the same phase.  Spreading in milliseconds is not
+    # spreading in phase.
+    #
+    # RECALIBRATION, when it comes: sweep GRAPH_GAPS against `runtests.py
+    # --selftest -k d8-double` and keep a set containing at least one gap that
+    # catches on its own.  The fixed build is byte for byte correct at every
+    # gap tried, which is what makes the spread free.
+    #
+    # THE REAL FIX is to stop sampling and force the race: inject the key-down
+    # from a breakpoint at MAINLOOP.GOTACNT, inside the window itself, so the
+    # case is deterministic by construction instead of by luck.  That is
+    # harness work and is not done.
     GRAPH_ROW = 'AEIOUNW1/'
-    GRAPH_GAPS = (0.030, 0.050, 0.070, 0.090)
+    GRAPH_GAPS = (0.033, 0.037, 0.043, 0.047)
     GRAPH_PASSES = len(GRAPH_GAPS)
 
     def timeline(self, ctx, variant=None):

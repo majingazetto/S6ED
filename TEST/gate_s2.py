@@ -1144,10 +1144,107 @@ class S213ShadowCfg(S2Case):
         return checks
 
 
+# --- S2-14  THE MARKUP THAT WAS NEVER MEASURED ------------------------
+
+
+class S214Markup(S2Case):
+    name = 'S2-14-markup'
+    desc = 'MARKUP=MD colours span interiors, and ** delimiters, by role'
+    origin = ('round 3 left MARKUP=OFF on the shipped disk with a note that '
+              'said MARKUP=MD "should work for real now that the attribute '
+              'bytes are clean, but it has not been tested since the fix".  '
+              'It never was: suite S2 had no case with markup on at all, so '
+              'whether the scanner survives the 1+64+64 record layout was an '
+              'assumption.  This is the measurement.')
+    # The attribute spans are stated, not derived: re-deriving them in Python
+    # would test a reimplementation of MARKUP.Z8A against itself.  MARKUP
+    # stamps the INSIDE of a span (cols C+1..B-1), never the delimiters.
+    #
+    #   line 0  "**BOLD** and *ITALIC* end"
+    #            0123456789...              bold 2..5, italic 14..19
+    #   line 1  " **BOLD** odd"             bold 3..6 -- deliberately odd, so
+    #                                       the span starts mid-cell
+    LINES = ['**BOLD** and *ITALIC* end',
+             ' **BOLD** odd']
+    BOLD = [(0, 2, 5), (1, 3, 6)]
+    ITAL = [(0, 14, 19)]
+    # Only the TWO-character delimiter is marked.  The single '*' of an
+    # italic span is not: it can never own a cell, so colouring it would
+    # claim a content character instead of marking anything.
+    MARK = [(0, 0, 1), (0, 6, 7), (1, 1, 2), (1, 7, 8)]
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def config(self, ctx, variant=None):
+        return self.cfg.replace('MARKUP=OFF', 'MARKUP=MD')
+
+    def want_cell(self, line, cell):
+        """COMCELL ORs both characters' attributes and tests them in order.
+
+        BOLD, then ITAL, then MARK -- the delimiter LAST, so where a cell
+        holds one delimiter character and one content character the content
+        keeps its own role and the delimiter gives way.  A delimiter only
+        shows in VCOLMARK when the pair owns its cell, or when its neighbour
+        carries no attribute of its own (which is the one bleed left).
+        """
+        cols = (cell * 2, cell * 2 + 1)
+
+        def hits(spans):
+            return any(ln == line and any(c0 <= c <= c1 for c in cols)
+                       for ln, c0, c1 in spans)
+
+        if hits(self.BOLD):
+            return pattern.COLBOLD
+        if hits(self.ITAL):
+            return pattern.COLITAL
+        if hits(self.MARK):
+            return pattern.COLMARK
+        return pattern.COLTXT
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram='patcol')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        dump = run.blob('boot', 'patcol')
+        if dump is None:
+            return [Check('S2-14/dump', False, 'no VRAM dump')]
+        checks = []
+        col = dump[0x2000:]
+        for line in range(len(self.LINES)):
+            row = pattern.TXRFIRST + line
+            crow = pattern.colour_row(col, row)
+            bad = []
+            for cell in range(pattern.CELLS):
+                want = self.want_cell(line, cell)
+                got = set(crow[cell * 8:(cell + 1) * 8])
+                if got != {want}:
+                    bad.append((cell, '#%02X' % want,
+                                sorted('#%02X' % b for b in got)))
+            checks.append(Check('S2-14/line%d' % line, not bad,
+                                'every cell carries the role its attributes '
+                                'ask for' if not bad else
+                                'cells (cell, want, got): %s' % bad[:6]))
+
+        # The delimiters are still on screen: markup colours, it never hides.
+        bad = pattern.mismatched_rows(
+            dump, font(ctx), self.LINES, run.var('boot', 'TOPLINE'),
+            cursor=(pattern.TXRFIRST + run.var('boot', 'CURY'),
+                    run.var('boot', 'CURX')))
+        checks.append(Check('S2-14/text', not bad,
+                            'the text, delimiters included, is rendered as '
+                            'written' if not bad else 'rows differ: %s'
+                            % bad[:4]))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
-         S213ShadowCfg()]
+         S213ShadowCfg(), S214Markup()]
 
 
 def run(ctx, cases=None):

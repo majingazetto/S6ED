@@ -38,7 +38,7 @@ ROWSVIS = TXRLAST - TXRFIRST + 1        # 22 document lines on screen
 # each role, so the roles are named here, never the colours.
 # The chrome surface is one colour, as in S6ED: menu bar, status bar and
 # window body all wear it.  The accent carries the window title and buttons.
-COLTXT, COLBOLD = 0xF1, 0xB1
+COLTXT, COLBOLD, COLITAL, COLUNDR, COLMARK = 0xF1, 0xB1, 0x71, 0x31, 0xE1
 COLUI = COLSTAT = COLWIN = 0xF4
 COLHI, COLBSEL = 0xB4, 0x4B
 # A shadow cell keeps the document's pattern and flattens its colour, so it is
