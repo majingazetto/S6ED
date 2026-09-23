@@ -800,6 +800,23 @@ MUTATIONS = [
         'expect': ['S2-11/side-borders'],
     },
     {
+        'name': 's2-selpain-ix',
+        'why': 'SELPAIN loads IX once before its row loop and trusts it to '
+               'survive SELXOR; PATINV uses IX on S2ED, so every row after '
+               'the first reads its extent out of the pattern shadow.  Only '
+               'this gate can catch it: S6ED\'s LMMV leaves IX alone',
+        'target': 'S2ED',
+        'file': 'ACTION.Z8A',
+        'old': """SELPAIN         LD      B, 0
+.ROWLP          LD      IX, SELSTRL
+                PUSH    BC""",
+        'new': """SELPAIN         LD      IX, SELSTRL     ; MUTATION: LOADED ONCE
+                LD      B, 0
+.ROWLP          PUSH    BC""",
+        'filter': 'S2-19',
+        'expect': ['S2-19/down1'],
+    },
+    {
         'name': 's2-wbox-title',
         'why': 'WBOX clears (WINNC-2)*8 bytes of the top row for the title '
                'instead of only the cells the title occupies, so the top '
