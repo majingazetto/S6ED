@@ -87,7 +87,13 @@ MAINLOOP        ; CHECK CLOCK / COLON UPDATE
                 JR      Z, .DRPGRPH     ; NO CTRL: GRAPHIC HEADER
                 LD      A, #01          ; CTRL HELD: DISPATCH AS CTRL+A
 
-.DISPCH         ; DISPATCH KEYPRESS THROUGH ACTIVE KEYMAP AND ACTION CATALOG
+.DISPCH         ; CLEAR ANY PENDING LOAD ERROR ON USER KEYPRESS
+                PUSH    AF
+                XOR     A
+                LD      (LOADERR), A
+                POP     AF
+
+                ; DISPATCH KEYPRESS THROUGH ACTIVE KEYMAP AND ACTION CATALOG
                 CALL    DISPKEY
 
 .DRAWCUR        ; STATUS BAR FOLLOWS THE KEY (LN / COL / FLAGS), THEN THE CURSOR

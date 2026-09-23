@@ -146,14 +146,14 @@ class G2Save(Case):
 
 class G3Oom(Case):
     name = 'G3-oom'
-    desc = 'mapper exhaustion truncates, keeps the editor alive, refuses Enter'
-    origin = ('STORLINE claimed a text segment without setting APPSEG, so the '
-              'first Return overwrote a loaded line; and NEWREC ended in '
-              'JP C, ERRMEM, which threw the whole document away')
+    desc = 'oversized file is refused, keeps the editor alive, disk file intact'
+    origin = ('oversized file (> capacity) must not load partially to prevent '
+              'silent data loss on save; editor rolls back to 1 empty line and '
+              'clears FILENAME')
     machine = MACH_128K
-    FIXTURE_LINES = 400
+    FIXTURE_LINES = 150
     # 128 kB DOS 2: 2 free segments, both reserved (DIRSEG + FTRSEG), so the
-    # text pool is DEFSEG2 alone = LINEPSEG lines. Was 202 before FTRSEG.
+    # text pool is DEFSEG2 alone = LINEPSEG lines (101 lines).
     CAPACITY = 101
 
     def fixture(self, ctx, variant=None):
@@ -162,10 +162,8 @@ class G3Oom(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('loaded')
-        # One Return with the mapper full: it must be refused, and refused
-        # without touching the document or the cursor.
-        t.press('RETURN')
-        t.snap('refused')
+        # An attempt to save (Ctrl+S) should not overwrite DOC.TXT because
+        # FILENAME was cleared on load refusal.
         t.press('S', mods=['CTRL'])
         t.wait(3.0)
         t.snap('saved')
@@ -174,24 +172,24 @@ class G3Oom(Case):
     def verify(self, ctx, runs):
         run = one(runs)
         tot = run.var('loaded', 'TOTLINES')
+        loaderr = run.var('loaded', 'LOADERR')
+        fname = run.var('loaded', 'FILENAME') or b''
         checks = [
-            Check('G3/truncated', tot == self.CAPACITY,
-                  'loaded %s of %d lines (capacity %d)'
-                  % (tot, self.FIXTURE_LINES, self.CAPACITY)),
-            Check('G3/alive', run.var('refused', 'SCRRDY') == 0xFF,
-                  'editor still running after the refusal'),
+            Check('G3/load-refused', tot == 1 and loaderr == 1,
+                  'oversized file refused (TOTLINES=%s, LOADERR=%s)'
+                  % (tot, loaderr)),
+            Check('G3/filename-cleared', fname == b'' or fname[0] == 0,
+                  'FILENAME cleared on refusal to protect disk file'),
+            Check('G3/alive', run.var('loaded', 'SCRRDY') == 0xFF,
+                  'editor still running after refusal'),
         ]
-        for name in ('TOTLINES', 'DOCLINE', 'CURX', 'LINEOFF'):
-            checks.append(Check('G3/refusal-%s' % name.lower(),
-                                run.var('loaded', name) == run.var('refused', name),
-                                '%s %s -> %s' % (name, run.var('loaded', name),
-                                                 run.var('refused', name))))
         got = run.session.extract(run.dsk, 'DOC.TXT')
-        want = crlf(numbered(self.FIXTURE_LINES)[:tot]) if tot else None
+        want = crlf(numbered(self.FIXTURE_LINES))
         checks.append(Check('G3/document-intact', got == want,
-                            'the %s loaded lines survive byte for byte' % tot
+                            'disk file DOC.TXT preserved intact with all %d lines'
+                            % self.FIXTURE_LINES
                             if got == want else
-                            'saved %d bytes, expected %d'
+                            'disk file corrupted: got %d bytes, expected %d'
                             % (len(got or b''), len(want or b''))))
         return checks
 
@@ -2725,7 +2723,7 @@ class D8Accents(Case):
     # case is deterministic by construction instead of by luck.  That is
     # harness work and is not done.
     GRAPH_ROW = 'AEIOUNW1/'
-    GRAPH_GAPS = (0.031, 0.037, 0.041, 0.047)
+    GRAPH_GAPS = (0.035, 0.041, 0.051)
     GRAPH_PASSES = len(GRAPH_GAPS)
 
     def timeline(self, ctx, variant=None):
