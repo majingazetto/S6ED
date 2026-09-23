@@ -10,22 +10,106 @@
 FILENEW         JP      BUFRESET
 
 
+; --- CHKFLEN                   ----------------------------------------
+
+
+; - CHKFLEN ----------------------------
+; - CHECK IF FILE SIZE EXCEEDS MAXIMUM AVAILABLE DOCUMENT CAPACITY
+; - IN:  DE:HL = FILE SIZE IN BYTES (FROM DSKOPEN)
+; - OUT: CY = 0: FILE MAY FIT IN MEMORY
+; -      CY = 1: FILE DEFINITELY EXCEEDS MAXIMUM CAPACITY
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+CHKFLEN         PUSH    DE              ; [SP+2] = FILE SIZE HIGH
+                PUSH    HL              ; [SP]   = FILE SIZE LOW
+
+                ; COMPUTE SEGLNS * (TEXTCOLS + 2) -> 24-BIT RESULT IN D:HL
+                LD      BC, (SEGLNS)
+                LD      A, TEXTCOLS + 2
+                LD      E, A
+                LD      HL, 0
+                LD      D, 0
+                LD      A, 8
+.MULLP          SRL     E
+                JR      NC, .NOADD
+                ADD     HL, BC
+                JR      NC, .NOADD
+                INC     D
+.NOADD          SLA     C
+                RL      B
+                DEC     A
+                JR      NZ, .MULLP
+
+                ; D = MAX HIGH BYTE, HL = MAX LOW WORD
+                LD      A, D            ; A = MAX HIGH BYTE
+                EX      DE, HL          ; DE = MAX LOW WORD
+                POP     HL              ; HL = FILE SIZE LOW WORD
+                EX      (SP), HL        ; [SP] = FILE SIZE LOW WORD, HL = FILE SIZE HIGH WORD
+
+                LD      B, A            ; B = MAX HIGH BYTE
+                LD      A, H
+                OR      A
+                JR      NZ, .TOOBIG     ; FILE SIZE >= 16 MB -> DEFINITELY TOOBIG
+                LD      A, L            ; A = FILE SIZE HIGH BYTE
+                CP      B               ; COMPARE WITH MAX HIGH BYTE
+                JR      C, .FITS        ; FILE HIGH < MAX HIGH -> FITS
+                JR      NZ, .TOOBIG     ; FILE HIGH > MAX HIGH -> TOOBIG
+
+                ; HIGH BYTES EQUAL: COMPARE LOW WORDS (FILE LOW IN [SP] VS MAX LOW IN DE)
+                POP     HL              ; HL = FILE SIZE LOW WORD
+                CALL    CMPHLDE         ; CY=1 IF HL < DE, Z=1 IF HL == DE
+                JR      Z, .OK
+                JR      C, .OK
+                SCF
+                RET
+
+.FITS           POP     HL              ; CLEAN STACK
+.OK             AND     A               ; CY = 0
+                RET
+
+.TOOBIG         POP     HL              ; CLEAN STACK
+                SCF                     ; CY = 1
+                RET
+
+
 ; --- FILELOAD                  ----------------------------------------
 
-; - FILELOAD ---------
+
+; - FILELOAD ---------------------------
 ; - LOAD FILE FROM DISK INTO BUFFER
-; - HL: FILENAME (ASCIIZ)
+; - IN:  HL: FILENAME (ASCIIZ)
+; - OUT: CY = 0: SUCCESS
+; -      CY = 1: ERROR OR NEW FILE (LOADERR = 1 IF FILE TOO LARGE)
+; - CLOBBERS: ALL
 ; -
 
 FILELOAD        PUSH    HL
                 CALL    FILENEW         ; RESET BUFFER AND ALLOCATE INITIAL SEGS
                 POP     HL
 
+                XOR     A
+                LD      (LOADERR), A
+
                 CALL    DSKOPEN         ; A=HANDLE, DEHL=SIZE
                 RET     C
                 LD      (FILEHAND), A
 
-                LD      HL, 0
+                ; PRE-CHECK FILE SIZE: REJECT IMMEDIATELY IF FILE CANNOT FIT
+                CALL    CHKFLEN
+                JR      NC, .LENOK
+
+                ; FILE EXCEEDS MAXIMUM THEORETICAL CAPACITY
+                LD      A, (FILEHAND)
+                CALL    DSKCLOSE
+                XOR     A
+                LD      (FILENAME), A   ; PROTECT DISK FILE AGAINST OVERWRITE
+                INC     A
+                LD      (LOADERR), A    ; SIGNAL ERROR
+                SCF
+                RET
+
+.LENOK          LD      HL, 0
                 LD      (TOTLINES), HL
                 LD      (LINEOFF), HL
                 XOR     A
@@ -105,7 +189,7 @@ FILELOAD        PUSH    HL
 
 .TABSP          LD      A, (CURLLEN)
                 CP      TEXTCOLS
-                JR      NC, .SKIP       ; TRUNCATE AT THE RECORD'S TEXT WIDTH
+                JP      NC, .SKIP       ; TRUNCATE AT THE RECORD'S TEXT WIDTH
 
                 LD      A, (APPSEG)
                 CALL    RECBANK
@@ -166,7 +250,17 @@ FILELOAD        PUSH    HL
 
 .OOM            POP     HL              ; BALANCE PUSH HL IN .PROCLP
                 POP     BC              ; BALANCE PUSH BC IN .PROCLP
-                JR      .CLSFIL
+.OOMNL          ; ROLLBACK DUE TO CAPACITY EXHAUSTION DURING LOAD
+                LD      A, (FILEHAND)
+                CALL    DSKCLOSE
+                CALL    SEGTRIM         ; FREE ANY ALLOCATED MAPPER SEGMENTS
+                CALL    BUFRESET        ; RESET BUFFER TO 1 CLEAN EMPTY LINE
+                XOR     A
+                LD      (FILENAME), A   ; PROTECT DISK FILE AGAINST OVERWRITE
+                INC     A
+                LD      (LOADERR), A    ; SIGNAL LOAD ERROR
+                SCF                     ; RETURN ERROR
+                RET
 
 .SKIP           POP     HL
                 INC     HL
@@ -181,12 +275,14 @@ FILELOAD        PUSH    HL
                 AND     A
                 JR      Z, .CHKTOT
                 CALL    STORLINE        ; STORE FINAL PENDING LINE
+                JR      C, .OOMNL
                 JR      .CLSFIL
 .CHKTOT         LD      HL, (TOTLINES)
                 LD      A, H
                 OR      L
                 JR      NZ, .CLSFIL
                 CALL    STORLINE        ; ENSURE AT LEAST 1 LINE IF FILE WAS EMPTY
+                JR      C, .OOMNL
 .CLSFIL         LD      A, (FILEHAND)
                 CALL    DSKCLOSE
                 
@@ -196,6 +292,7 @@ FILELOAD        PUSH    HL
                 XOR     A
                 LD      (CURX), A
                 LD      (CURY), A
+                AND     A               ; CY = 0: SUCCESSFUL LOAD
                 RET
 
 ; - STORLINE ---------------------------

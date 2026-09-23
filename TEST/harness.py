@@ -60,6 +60,7 @@ DEFAULT_VARS = [
     ('INPLEN', 1),                      # WINEDIT: characters in the field
     ('WINSEL', 1), ('WINRES', 1), ('WINBST', 1),
     ('MNUID', 1), ('MNUSEL', 1),
+    ('LOADERR', 1),
     ('UNDOPTR', 2), ('UNDOBOT', 2), ('REDOPTR', 2), ('UNDOTYP', 1),
 ]
 

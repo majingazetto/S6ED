@@ -993,7 +993,18 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'new': """                XOR     A               ; MUTATION: NO FEATURE RESERVATION
                 LD      (FTRSEG), A""",
         'filter': 'G3',
-        'expect': ['G3/truncated'],
+        'expect': ['G3/load-refused'],
+    },
+    {
+        'name': 'load-rollback',
+        'why': 'FILELOAD does not roll back on OOM, leaving truncated lines',
+        'file': 'FILEIO.Z8A',
+        'old': """.STORCR         CALL    STORLINE
+                JR      C, .OOM""",
+        'new': """.STORCR         CALL    STORLINE
+                JR      C, .CLSFIL      ; MUTATION: NO ROLLBACK ON OOM""",
+        'filter': 'G3',
+        'expect': ['G3/load-refused'],
     },
     {
         'name': 'g10-align',

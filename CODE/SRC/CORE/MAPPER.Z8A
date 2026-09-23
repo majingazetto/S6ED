@@ -509,7 +509,7 @@ TXTVKB          DEFM    " KB)", 13, 10, 0
 TXTVRES         DEFM    "Reserved:       2 segments (Directory, Features)", 13, 10, "$"
 TXTVCAP         DEFM    "Text capacity:  ", 0
 TXTVLNS         DEFM    " lines", 13, 10, 0
-TXTVLOW         DEFM    "Low mapper memory: text capacity limited to 101 lines.", 13, 10, "$"
+TXTVLOW         DEFM    "Warning: Low mapper memory (no spare segments for growth).", 13, 10, "$"
 TXTVFIL         DEFM    "File:           ", 0
 TXTVCR          DEFM    13, 10, 0
 TXTVKEY         DEFM    13, 10, "Press any key to continue...", 13, 10, "$"

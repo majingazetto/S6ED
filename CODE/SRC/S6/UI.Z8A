@@ -252,11 +252,16 @@ BLDSTAT         LD      DE, STATBUF
                 LD      HL, .STRSEP
                 CALL    .CPYSTR
 
-                ; FILENAME
-                LD      HL, FILENAME
+                ; FILENAME OR LOAD ERROR
+                LD      A, (LOADERR)
+                OR      A
+                JR      Z, .PUTNAME
+                LD      HL, .STROOM
                 CALL    .CPYSTR
-
-                ; TERMINATING NULL
+                JR      .DONENAM
+.PUTNAME        LD      HL, FILENAME
+                CALL    .CPYSTR
+.DONENAM        ; TERMINATING NULL
                 XOR     A
                 LD      (DE), A
                 RET
@@ -309,6 +314,7 @@ BLDSTAT         LD      DE, STATBUF
 .STRLN          DEFM    "Ln ", 0
 .STRCOL         DEFM    " Col ", 0
 .STRSEP         DEFM    " | ", 0
+.STROOM         DEFM    "[FILE TOO LARGE]", 0
 
 
 ; --- DRWMENU               ----------------------------------------

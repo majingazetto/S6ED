@@ -205,13 +205,18 @@ BLDSTAT         LD      DE, STATBUF
                 LD      B, 2
                 CALL    .CPYNUM
 
-                ; 6. SEPARATOR + FILENAME
+                ; 6. SEPARATOR + FILENAME OR LOAD ERROR
                 LD      HL, .STRSEP
                 CALL    .CPYSTR
-                LD      HL, FILENAME
+                LD      A, (LOADERR)
+                OR      A
+                JR      Z, .PUTNAME
+                LD      HL, .STROOM
                 CALL    .CPYSTR
-
-                XOR     A
+                JR      .DONENAM
+.PUTNAME        LD      HL, FILENAME
+                CALL    .CPYSTR
+.DONENAM        XOR     A
                 LD      (DE), A
                 RET
 
@@ -255,6 +260,7 @@ BLDSTAT         LD      DE, STATBUF
 .STRLN          DEFM    "Ln ", 0
 .STRCOL         DEFM    " C", 0
 .STRSEP         DEFM    " | ", 0
+.STROOM         DEFM    "[FILE TOO LARGE]", 0
 
 
 
