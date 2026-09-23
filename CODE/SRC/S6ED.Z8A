@@ -82,6 +82,7 @@ TXTHLP       DEFM    "S6ED v"
                 INCLUDE SCROLL.Z8A
                 INCLUDE EDIT.Z8A
                 INCLUDE UNDO.Z8A
+                INCLUDE SEARCH.Z8A
                 INCLUDE MARKUP.Z8A
                 INCLUDE ACTION.Z8A
                 INCLUDE KEYMAP.Z8A

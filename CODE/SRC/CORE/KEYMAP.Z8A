@@ -57,7 +57,10 @@ KMAPSTD         ; UNMODIFIED CURSORS
                 DEFB    BS,      MODNONE, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
-                DEFB    INSKEY,  MODANY,  ACTGLIN
+                DEFB    INSKEY,  MODNONE, ACTGLIN
+                DEFB    CTRL_F,  MODCTRL, ACFIND
+                DEFB    CTRL_L,  MODCTRL, ACFNXT
+                DEFB    CTRL_R,  MODCTRL, ACFPRV
                 DEFB    CTRL_S,  MODCTRL, ACSAVE
                 DEFB    CTRL_W,  MODCTRL, ACTGLWR
                 DEFB    CTRL_K,  MODCTRL, ACCYCKM
@@ -137,8 +140,9 @@ KMAPWS          ; WORDSTAR DIAMOND
                 DEFB    BS,      MODNONE, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
-                DEFB    INSKEY,  MODANY,  ACTGLIN
+                DEFB    INSKEY,  MODNONE, ACTGLIN
                 DEFB    CTRL_K,  MODCTRL, ACCYCKM
+                DEFB    CTRL_L,  MODCTRL, ACFNXT
                 DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    CTRL_W,  MODCTRL, ACTGLWR
                 DEFB    CTRL_Z,  MODCTRL, ACUNDO
@@ -196,7 +200,7 @@ KMAPEMAC        ; EMACS NAVIGATION & EDITING
                 DEFB    BS,      MODNONE, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
-                DEFB    INSKEY,  MODANY,  ACTGLIN
+                DEFB    INSKEY,  MODNONE, ACTGLIN
                 DEFB    CTRL_T,  MODCTRL, ACCYCMK
                 DEFB    CTRL_G,  MODCTRL, ACGOTOL
                 DEFB    CTRL_W,  MODCTRL, ACTGLWR
@@ -236,6 +240,9 @@ KMAPVIN         ; VI NORMAL MOVEMENT
                 DEFB    'u',     MODNONE, ACUNDO
                 DEFB    CTRL_R,  MODCTRL, ACREDO
                 DEFB    'G',     MODNONE, ACBOT
+                DEFB    '/',     MODNONE, ACFIND
+                DEFB    'n',     MODNONE, ACFNXT
+                DEFB    'N',     MODNONE, ACFPRV
 
                 ; UNMODIFIED CURSORS
                 DEFB    CLEFT,   MODNONE, ACMVL

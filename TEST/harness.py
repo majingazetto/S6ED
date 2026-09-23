@@ -58,6 +58,9 @@ DEFAULT_VARS = [
     # lets one list serve both targets.
     ('WINR', 1), ('WINC', 1), ('WINNR', 1), ('WINNC', 1),
     ('INPLEN', 1),                      # WINEDIT: characters in the field
+    ('SRCHLEN', 1), ('RPLCLEN', 1), ('RPLCNT', 2),
+    ('SRCHOPT', 1), ('SRCHDIR', 1), ('SRCHCOL', 1), ('SRCHLST', 2),
+    ('SELANCX', 1), ('SELANCL', 2),
     ('WINSEL', 1), ('WINRES', 1), ('WINBST', 1),
     ('MNUID', 1), ('MNUSEL', 1),
     ('LOADERR', 1),
@@ -69,7 +72,9 @@ DEFAULT_VARS = [
 # what tells a corrupted painted range from an honest one.
 BYTE_VARS = [
     ('SELSTRL', 6), ('DRWSTRL', 6), ('CLKBUF', 6), ('PALDATA', 8),
-    ('STATBUF', 80), ('VCOLTXT', 12),
+    ('STATBUF', 80), ('VCOLTXT', 12), ('SRCHPAT', 19), ('RPLCPAT', 19),
+    ('CLIPBUF', 32),
+    ('WORKBUF', 81),
 ]
 
 HOOK_ADDR = 0xFD9F      # H.TIMI: nothing of ours may ever live behind it

@@ -1356,3 +1356,413 @@ EDBTNS          LD      A, (WINSEL)
 
 .BTNOK          DEFM    "[  OK  ]", 0
 .BTNCAN         DEFM    "[CANCEL]", 0
+
+
+; --- DOFIND                    ----------------------------------------
+
+
+; - DOFIND -----------------------------
+; - FIND & REPLACE DIALOG (PHASED IN FTRBASE VIA FCALL).
+; - COLLECTS SEARCH PATTERN, REPLACE PATTERN, OPTIONS AND ACTION.
+; - IN:  NONE
+; - OUT: CY = 1: CANCELLED
+; -      CY = 0: A = ACTION (SRCH_FND, SRCH_RPL, SRCH_ALL)
+; - CLOBBERS: ALL
+; -
+
+DOFIND          LD      A, 8
+                LD      (WINR), A
+                LD      A, 7
+                LD      (WINC), A
+                LD      A, 7
+                LD      (WINNR), A
+                LD      A, 18
+                LD      (WINNC), A
+                LD      HL, .TITFND
+                CALL    WINOPEN
+
+                XOR     A
+                LD      (FNDFOC), A     ; DEFAULT FOCUS: FIND FIELD
+                CALL    .DRWUI
+                CALL    WDUMP
+
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+
+                CP      ESC
+                JP      Z, .CANCEL
+                CP      TAB
+                JR      Z, .NEXT
+                CP      CDOWN
+                JR      Z, .NEXT
+                CP      CUP
+                JR      Z, .PREV
+                CP      CRIGHT
+                JR      Z, .RGTKEY
+                CP      CLEFT
+                JR      Z, .LFTKEY
+
+                ; ROUTE KEYS ACCORDING TO FOCUSED CONTROL
+                LD      B, A            ; B = KEY
+                LD      A, (FNDFOC)
+                OR      A
+                JP      Z, .FOCFND      ; 0: FIND FIELD
+                DEC     A
+                JP      Z, .FOCRPL      ; 1: REPLACE FIELD
+                DEC     A
+                JP      Z, .FOCCAS      ; 2: CASE OPTION
+                ; 3..6: BUTTONS
+                JP      .FOCBTN
+
+.NEXT           LD      A, (FNDFOC)
+                INC     A
+                CP      7
+                JR      C, .SETFOC
+                XOR     A
+                JR      .SETFOC
+
+.PREV           LD      A, (FNDFOC)
+                OR      A
+                JR      NZ, .PREVD
+                LD      A, 7
+.PREVD          DEC     A
+.SETFOC         LD      (FNDFOC), A
+                CALL    .DRWUI
+                CALL    WDUMP
+                JP      .KEYLP
+
+.RGTKEY         LD      A, (FNDFOC)
+                CP      3
+                JP      C, .KEYLP       ; ONLY ON BUTTONS
+                INC     A
+                CP      7
+                JR      C, .SETFOC
+                LD      A, 3
+                JR      .SETFOC
+
+.LFTKEY         LD      A, (FNDFOC)
+                CP      3
+                JP      C, .KEYLP       ; ONLY ON BUTTONS
+                DEC     A
+                CP      3
+                JR      NC, .SETFOC
+                LD      A, 6
+                JR      .SETFOC
+
+.FOCFND         ; FIELD 0: FIND FIELD
+                LD      A, B
+                CP      CR
+                JP      Z, .DOACT0      ; ENTER ON FIND: IMMEDIATE FIND NEXT
+                CP      BS
+                JR      Z, .BS0
+                ; PRINTABLE CHAR
+                CP      ' '
+                JP      C, .KEYLP
+                LD      A, (SRCHLEN)
+                CP      SRCHMAX
+                JP      NC, .KEYLP      ; FULL
+                LD      E, A
+                LD      D, 0
+                LD      HL, SRCHPAT
+                ADD     HL, DE
+                LD      (HL), B
+                INC     HL
+                LD      (HL), 0
+                INC     A
+                LD      (SRCHLEN), A
+                CALL    .DRWUI
+                CALL    WDUMP
+                JP      .KEYLP
+
+.BS0            LD      A, (SRCHLEN)
+                OR      A
+                JP      Z, .KEYLP
+                DEC     A
+                LD      (SRCHLEN), A
+                LD      E, A
+                LD      D, 0
+                LD      HL, SRCHPAT
+                ADD     HL, DE
+                LD      (HL), 0
+                CALL    .DRWUI
+                CALL    WDUMP
+                JP      .KEYLP
+
+.FOCRPL         ; FIELD 1: REPLACE FIELD
+                LD      A, B
+                CP      CR
+                JP      Z, .DOACT0      ; ENTER ON REPLACE: FIND NEXT
+                CP      BS
+                JR      Z, .BS1
+                CP      ' '
+                JP      C, .KEYLP
+                LD      A, (RPLCLEN)
+                CP      SRCHMAX
+                JP      NC, .KEYLP
+                LD      E, A
+                LD      D, 0
+                LD      HL, RPLCPAT
+                ADD     HL, DE
+                LD      (HL), B
+                INC     HL
+                LD      (HL), 0
+                INC     A
+                LD      (RPLCLEN), A
+                CALL    .DRWUI
+                CALL    WDUMP
+                JP      .KEYLP
+
+.BS1            LD      A, (RPLCLEN)
+                OR      A
+                JP      Z, .KEYLP
+                DEC     A
+                LD      (RPLCLEN), A
+                LD      E, A
+                LD      D, 0
+                LD      HL, RPLCPAT
+                ADD     HL, DE
+                LD      (HL), 0
+                CALL    .DRWUI
+                CALL    WDUMP
+                JP      .KEYLP
+
+.FOCCAS         ; CONTROL 2: CASE OPTION
+                LD      A, B
+                CP      ' '
+                JR      Z, .TOGCAS
+                CP      CR
+                JP      NZ, .KEYLP
+.TOGCAS         LD      A, (SRCHOPT)
+                XOR     1
+                LD      (SRCHOPT), A
+                CALL    .DRWUI
+                CALL    WDUMP
+                JP      .KEYLP
+
+.FOCBTN         ; CONTROLS 3..6: BUTTONS
+                LD      A, B
+                CP      ' '
+                JR      Z, .ACTBTN
+                CP      CR
+                JP      NZ, .KEYLP
+.ACTBTN         LD      A, (FNDFOC)
+                CP      3
+                JP      Z, .DOACT0      ; [Find]
+                CP      4
+                JP      Z, .DOACT1      ; [Repl]
+                CP      5
+                JP      Z, .DOACT2      ; [All]
+                ; 6: [Cancel]
+.CANCEL         CALL    WINCLOS
+                SCF
+                RET
+
+.DOACT0         ; ACCEPT: FIND NEXT
+                CALL    WINCLOS
+                LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z               ; EMPTY SEARCH PATTERN: CANCEL
+                LD      A, SRCH_FND
+                AND     A               ; CY = 0
+                RET
+
+.DOACT1         ; ACCEPT: REPLACE
+                CALL    WINCLOS
+                LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z
+                LD      A, SRCH_RPL
+                AND     A
+                RET
+
+.DOACT2         ; ACCEPT: REPLACE ALL
+                CALL    WINCLOS
+                LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z
+                LD      A, SRCH_ALL
+                AND     A
+                RET
+
+.DRWUI          ; DUMP ALL LABELS, FIELDS AND BUTTONS INTO SHADOW
+                ; 1. FIND LABEL (ROW 9, COL 16)
+                LD      A, (FNDFOC)
+                OR      A
+                LD      A, (VCOLWIN)
+                JR      NZ, .FNDNLB
+                LD      A, (VCOLHI)     ; HIGHLIGHT LABEL WHEN FOCUSED
+.FNDNLB         LD      B, 9
+                LD      C, 16
+                LD      HL, .LBLFND
+                CALL    WINPUTS
+
+                ; 2. DRAW FIELD 0 (FIND)
+                LD      A, 9
+                LD      (FNDROW), A
+                LD      HL, SRCHPAT
+                LD      (FNDBUF), HL
+                LD      A, (SRCHLEN)
+                LD      (FNDLEN), A
+                LD      A, (FNDFOC)
+                OR      A
+                LD      A, 0
+                JR      NZ, .FNDNFA
+                INC     A               ; FNDACT = 1 IF FOCUSED
+.FNDNFA         LD      (FNDACT), A
+                CALL    .DRWFLD
+
+                ; 3. REPLACE LABEL (ROW 10, COL 16)
+                LD      A, (FNDFOC)
+                DEC     A
+                LD      A, (VCOLWIN)
+                JR      NZ, .RPLNLB
+                LD      A, (VCOLHI)     ; HIGHLIGHT LABEL WHEN FOCUSED
+.RPLNLB         LD      B, 10
+                LD      C, 16
+                LD      HL, .LBLRPL
+                CALL    WINPUTS
+
+                ; 4. DRAW FIELD 1 (REPLACE)
+                LD      A, 10
+                LD      (FNDROW), A
+                LD      HL, RPLCPAT
+                LD      (FNDBUF), HL
+                LD      A, (RPLCLEN)
+                LD      (FNDLEN), A
+                LD      A, (FNDFOC)
+                DEC     A
+                LD      A, 0
+                JR      NZ, .RPLNFA
+                INC     A               ; FNDACT = 1 IF FOCUSED
+.RPLNFA         LD      (FNDACT), A
+                CALL    .DRWFLD
+
+                ; 5. DRAW CASE OPTION (ROW 11, COL 16)
+                LD      B, 11
+                LD      C, 16
+                LD      HL, .LBLCAS
+                LD      A, (VCOLWIN)
+                CALL    WINPUTS
+
+                LD      A, (SRCHOPT)
+                BIT     0, A
+                LD      A, ' '
+                JR      Z, .NOCAS
+                LD      A, 'X'
+.NOCAS          PUSH    AF
+                LD      A, (FNDFOC)
+                CP      2
+                LD      A, (VCOLHI)
+                JR      NZ, .CASNSEL
+                LD      A, (VCOLBSEL)
+.CASNSEL        LD      E, A
+                POP     AF
+                LD      B, 11
+                LD      C, 29
+                CALL    WINPUTC
+                LD      A, (VCOLWIN)
+                LD      E, A
+                LD      A, ']'
+                LD      B, 11
+                LD      C, 30
+                CALL    WINPUTC
+
+                ; 6. DRAW BUTTONS AT ROW 12
+                LD      B, 12
+                LD      C, 16
+                LD      HL, .BTNFND
+                LD      A, (FNDFOC)
+                CP      3
+                CALL    .ROLE
+                CALL    WINPUTS
+
+                LD      B, 12
+                LD      C, 24
+                LD      HL, .BTNRPL
+                LD      A, (FNDFOC)
+                CP      4
+                CALL    .ROLE
+                CALL    WINPUTS
+
+                LD      B, 12
+                LD      C, 32
+                LD      HL, .BTNALL
+                LD      A, (FNDFOC)
+                CP      5
+                CALL    .ROLE
+                CALL    WINPUTS
+
+                LD      B, 12
+                LD      C, 39
+                LD      HL, .BTNCAN
+                LD      A, (FNDFOC)
+                CP      6
+                CALL    .ROLE
+                JP      WINPUTS
+
+.DRWFLD         ; DRAW 18-CHAR FIELD AT (FNDROW), COLS 24..41
+                ; USES FNDROW, FNDBUF, FNDLEN, FNDACT, FNDCOL
+                LD      A, (FNDACT)
+                OR      A
+                LD      A, (VCOLWIN)
+                JR      Z, .SETCOL
+                LD      A, (VCOLTXT)
+.SETCOL         LD      (FNDCOL), A     ; COLOR FOR THE FIELD CELLS
+
+                LD      A, (FNDROW)
+                LD      B, A            ; B = ROW
+                LD      C, 24           ; C = START COL (24)
+
+.FLOOP          ; COMPUTE INDEX = C - 24
+                LD      A, C
+                SUB     24              ; A = INDEX (0..17)
+                LD      D, A            ; D = INDEX
+                LD      A, (FNDLEN)
+                CP      D
+                JR      C, .ISPAC       ; INDEX > FNDLEN: SPACE
+                JR      Z, .ISCRT       ; INDEX == FNDLEN: CARET OR SPACE
+                ; INDEX < FNDLEN: CHAR FROM BUFFER
+                LD      HL, (FNDBUF)
+                LD      E, D
+                LD      D, 0
+                ADD     HL, DE
+                LD      A, (HL)
+                JR      .IDRAW
+
+.ISCRT          LD      A, (FNDACT)
+                OR      A
+                LD      A, ' '
+                JR      Z, .IDRAW
+                LD      A, #DB          ; SOLID BLOCK CARET
+                JR      .IDRAW
+
+.ISPAC          LD      A, ' '
+
+.IDRAW          PUSH    AF              ; SAVE CHAR ON STACK
+                LD      A, (FNDCOL)
+                LD      E, A            ; E = COLOR
+                POP     AF              ; RESTORE CHAR
+                CALL    WINPUTC         ; PRESERVES BC!
+                INC     C               ; NEXT COLUMN
+                LD      A, C
+                CP      42              ; 24 + 18 = 42
+                JR      NZ, .FLOOP
+                RET
+
+.ROLE           JR      Z, .ROLSEL
+                LD      A, (VCOLHI)
+                RET
+.ROLSEL         LD      A, (VCOLBSEL)
+                RET
+
+.TITFND         DEFM    "Find & Replace", 0
+.LBLFND         DEFM    "Find:   ", 0
+.LBLRPL         DEFM    "Replace:", 0
+.LBLCAS         DEFM    "Match case: [", 0
+.BTNFND         DEFM    "[Find]", 0
+.BTNRPL         DEFM    "[Repl]", 0
+.BTNALL         DEFM    "[All]", 0
+.BTNCAN         DEFM    "[Cancel]", 0

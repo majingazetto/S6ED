@@ -1,0 +1,710 @@
+;                                       ****************************************
+;                                       * SEARCH & REPLACE                     *
+;                                       ****************************************
+;
+; CORE STRING SEARCH AND REPLACE ENGINE FOR SXED (PAGE 1).
+; OPERATES ACROSS MAPPER SEGMENTS VIA LINEREAD / LINEWRT.
+; INTEGRATED WITH SELECTION HIGHLIGHT AND TRANSACTIONAL UNDO (UNDOT_MOD).
+
+
+; --- SRCHUPC                   ----------------------------------------
+
+
+; - SRCHUPC ----------------------------
+; - CONVERT ASCII LOWERCASE 'a'..'z' TO UPPERCASE 'A'..'Z'
+; - IN:  A = CHARACTER
+; - OUT: A = UPPERCASE CHARACTER
+; - CLOBBERS: F
+; -
+
+SRCHUPC         CP      'a'
+                RET     C
+                CP      'z' + 1
+                RET     NC
+                AND     #DF
+                RET
+
+
+; --- STRMCMP                   ----------------------------------------
+
+
+; - STRMCMP ----------------------------
+; - COMPARE SEARCH PATTERN (SRCHPAT) AGAINST LINE BUFFER SLICE AT HL
+; - IN:  HL = POINTER TO TEXT IN WORKBUF
+; -      B  = PATTERN LENGTH (SRCHLEN, 1..SRCHMAX)
+; - OUT: Z = 1: MATCH, Z = 0: MISMATCH
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+STRMCMP         PUSH    BC
+                PUSH    HL
+                LD      DE, SRCHPAT
+.CMPLP          LD      A, (DE)
+                LD      C, (HL)
+                PUSH    AF
+                LD      A, (SRCHOPT)
+                BIT     0, A            ; BIT 0: 1 = CASE SENSITIVE
+                JR      NZ, .EXACT
+                ; CASE-INSENSITIVE: CONVERT BOTH TO UPPERCASE
+                POP     AF
+                CALL    SRCHUPC
+                PUSH    AF
+                LD      A, C
+                CALL    SRCHUPC
+                LD      C, A
+.EXACT          POP     AF
+                CP      C
+                JR      NZ, .NOMATCH
+                INC     DE
+                INC     HL
+                DJNZ    .CMPLP
+                ; ALL CHARACTERS MATCHED
+                POP     HL
+                POP     BC
+                XOR     A               ; Z = 1
+                RET
+
+.NOMATCH        POP     HL
+                POP     BC
+                OR      1               ; Z = 0
+                RET
+
+
+; --- SCANLNF                   ----------------------------------------
+
+
+; - SCANLNF ----------------------------
+; - SCAN LINE IN WORKBUF FORWARD STARTING AT COLUMN C
+; - IN:  C = STARTING COLUMN (0..79)
+; - OUT: CY = 0: MATCH FOUND AT COLUMN C
+; -      CY = 1: NO MATCH IN THIS LINE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+SCANLNF         LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z               ; EMPTY PATTERN: NO MATCH
+                LD      B, A            ; B = PATTERN LENGTH
+                LD      A, (WORKBUF)    ; A = LINE LENGTH
+                CP      B
+                RET     C               ; LINE SHORTER THAN PATTERN: CY = 1
+                SUB     B               ; A = MAX START COLUMN
+                CP      C
+                RET     C               ; START COLUMN PAST MAX: CY = 1
+
+.SCANLP         PUSH    AF
+                PUSH    BC
+                LD      HL, WORKBUF + 1
+                LD      E, C
+                LD      D, 0
+                ADD     HL, DE          ; HL = WORKBUF + 1 + C
+                CALL    STRMCMP
+                JR      Z, .FOUND
+                POP     BC
+                POP     AF
+                INC     C
+                CP      C
+                JR      NC, .SCANLP
+                SCF
+                RET
+
+.FOUND          POP     BC
+                POP     AF
+                AND     A               ; CY = 0
+                RET
+
+
+; --- SCANLNB                   ----------------------------------------
+
+
+; - SCANLNB ----------------------------
+; - SCAN LINE IN WORKBUF BACKWARD STARTING AT COLUMN C
+; - IN:  C = STARTING COLUMN (0..79)
+; - OUT: CY = 0: MATCH FOUND AT COLUMN C
+; -      CY = 1: NO MATCH IN THIS LINE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+SCANLNB         LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z               ; EMPTY PATTERN: NO MATCH
+                LD      B, A            ; B = PATTERN LENGTH
+                LD      A, (WORKBUF)    ; A = LINE LENGTH
+                CP      B
+                RET     C               ; LINE SHORTER THAN PATTERN: CY = 1
+                SUB     B               ; A = MAX START COLUMN
+                CP      C
+                JR      NC, .CLMPCOL
+                LD      C, A            ; CLAMP C TO MAX START COLUMN
+.CLMPCOL        PUSH    BC
+                LD      HL, WORKBUF + 1
+                LD      E, C
+                LD      D, 0
+                ADD     HL, DE          ; HL = WORKBUF + 1 + C
+                CALL    STRMCMP
+                JR      Z, .BFOUND
+                POP     BC
+                LD      A, C
+                OR      A
+                SCF
+                RET     Z               ; REACHED COL 0: NO MATCH
+                DEC     C
+                JR      .CLMPCOL
+
+.BFOUND         POP     BC
+                AND     A               ; CY = 0
+                RET
+
+
+; --- SRCHFWD                   ----------------------------------------
+
+
+; - SRCHFWD ----------------------------
+; - SEARCH FORWARD FOR SRCHPAT STARTING AFTER CURRENT CURSOR POSITION
+; - IN:  NONE (USES DOCLINE, CURX, SRCHPAT, SRCHLEN, SRCHOPT)
+; - OUT: CY = 0: MATCH FOUND, DOCLINE/CURX UPDATED, SELECTION SET
+; -      CY = 1: PATTERN NOT FOUND IN DOCUMENT
+; - CLOBBERS: ALL
+; -
+
+SRCHFWD         LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z               ; NO PATTERN
+
+                ; 1. CHECK REST OF CURRENT LINE STARTING AT CURX + 1
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                LD      A, (CURX)
+                INC     A
+                LD      C, A
+                CALL    SCANLNF
+                JR      NC, .MATCH
+
+                ; 2. SEARCH FORWARD: DOCLINE+1 UP TO TOTLINES-1
+                LD      HL, (DOCLINE)
+                INC     HL
+.FWDLP          LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JR      NC, .WRAPTOP
+                PUSH    HL
+                CALL    LINEREAD
+                LD      C, 0
+                CALL    SCANLNF
+                JR      NC, .MATPOP
+                POP     HL
+                INC     HL
+                JR      .FWDLP
+
+.MATPOP         POP     HL              ; HL = MATCH DOCLINE
+                JR      .MATCH
+
+                ; 3. WRAP TO TOP: LINE 0 UP TO (DOCLINE)
+.WRAPTOP        LD      HL, 0
+.WRPLP          LD      DE, (DOCLINE)
+                CALL    CMPHLDE
+                JR      NC, .LSTCHK     ; AT CURRENT DOCLINE: FINAL CHECK
+                PUSH    HL
+                CALL    LINEREAD
+                LD      C, 0
+                CALL    SCANLNF
+                JR      NC, .MATPOP
+                POP     HL
+                INC     HL
+                JR      .WRPLP
+
+.LSTCHK         ; CHECK LINE 0..CURX OF ORIGINAL DOCLINE
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                LD      C, 0
+                CALL    SCANLNF
+                RET     C               ; NOT FOUND ANYWHERE
+                LD      A, (CURX)
+                CP      C
+                RET     C               ; FOUND ONLY AT/PAST CURX (ALREADY CHECKED)
+
+.MATCH          ; MATCH AT LINE HL, COLUMN C
+                PUSH    BC
+                PUSH    HL
+                CALL    SELPRE
+                POP     HL
+                POP     BC
+                LD      (DOCLINE), HL
+                LD      A, C
+                LD      (SELANCX), A
+                LD      (SELANCL), HL
+                LD      A, (SRCHLEN)
+                ADD     A, C
+                LD      (CURX), A       ; CURSOR AT END OF MATCH
+                LD      A, 1
+                LD      (SELACT), A
+                CALL    SELNORM
+                LD      HL, (DOCLINE)
+                CALL    SHOWLN
+                CALL    REDRAW
+                CALL    SELPOST
+                CALL    DRWSTAT
+                AND     A               ; CY = 0: SUCCESS
+                RET
+
+
+; --- SRCHBWD                   ----------------------------------------
+
+
+; - SRCHBWD ----------------------------
+; - SEARCH BACKWARD FOR SRCHPAT STARTING BEFORE CURRENT CURSOR POSITION
+; - IN:  NONE (USES DOCLINE, CURX, SRCHPAT, SRCHLEN, SRCHOPT)
+; - OUT: CY = 0: MATCH FOUND, DOCLINE/CURX UPDATED, SELECTION SET
+; -      CY = 1: PATTERN NOT FOUND IN DOCUMENT
+; - CLOBBERS: ALL
+; -
+
+SRCHBWD         LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z
+
+                ; 1. CHECK CURRENT LINE BEFORE CURRENT MATCH/CURSOR
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                LD      A, (CURX)
+                LD      B, A
+                LD      A, (SELACT)
+                OR      A
+                LD      A, B
+                JR      Z, .USECURX
+                LD      A, (SELSTRX)
+.USECURX        OR      A
+                JR      Z, .PREVLN      ; AT COL 0: START ON PREVIOUS LINE
+                DEC     A
+                LD      C, A
+                CALL    SCANLNB
+                JR      NC, .BMATCH
+
+.PREVLN         ; 2. SEARCH BACKWARD: DOCLINE-1 DOWN TO 0
+                LD      HL, (DOCLINE)
+.BWDLN          LD      A, H
+                OR      L
+                JR      Z, .WRAPBOT     ; REACHED LINE 0: WRAP TO BOTTOM
+                DEC     HL
+                PUSH    HL
+                CALL    LINEREAD
+                LD      C, TEXTCOLS - 1
+                CALL    SCANLNB
+                JR      NC, .BMATPOP
+                POP     HL
+                JR      .BWDLN
+
+.BMATPOP        POP     HL
+                JR      .BMATCH
+
+                ; 3. WRAP TO BOTTOM: (TOTLINES-1) DOWN TO (DOCLINE)
+.WRAPBOT        LD      HL, (TOTLINES)
+                LD      A, H
+                OR      L
+                SCF
+                RET     Z               ; EMPTY DOCUMENT
+                DEC     HL              ; HL = TOTLINES - 1
+.BWRPLP         LD      DE, (DOCLINE)
+                CALL    CMPHLDE
+                JR      C, .NOTFND      ; PAST ORIGINAL LINE: NOT FOUND
+                JR      Z, .BLSTCHK     ; AT ORIGINAL DOCLINE: FINAL CHECK
+                PUSH    HL
+                CALL    LINEREAD
+                LD      C, TEXTCOLS - 1
+                CALL    SCANLNB
+                JR      NC, .BMATPOP
+                POP     HL
+                LD      A, H
+                OR      L
+                JR      Z, .NOTFND
+                DEC     HL
+                JR      .BWRPLP
+
+.BLSTCHK        ; CHECK ORIGINAL DOCLINE STARTING AT TEXTCOLS-1 DOWN TO CURX
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                LD      C, TEXTCOLS - 1
+                CALL    SCANLNB
+                RET     C
+                LD      A, (CURX)
+                CP      C
+                JR      C, .BMATCH      ; MATCH IS AFTER CURX: WRAP MATCH OK
+                SCF
+                RET                     ; MATCH IS AT OR BEFORE CURX (ALREADY CHECKED)
+
+.NOTFND         SCF
+                RET
+
+.BMATCH         PUSH    BC
+                PUSH    HL
+                CALL    SELPRE
+                POP     HL
+                POP     BC
+                LD      (DOCLINE), HL
+                LD      A, C
+                LD      (SELANCX), A
+                LD      (SELANCL), HL
+                LD      A, (SRCHLEN)
+                ADD     A, C
+                LD      (CURX), A
+                LD      A, 1
+                LD      (SELACT), A
+                CALL    SELNORM
+                LD      HL, (DOCLINE)
+                CALL    SHOWLN
+                CALL    REDRAW
+                CALL    SELPOST
+                CALL    DRWSTAT
+                AND     A
+                RET
+
+
+; --- DOREPL                    ----------------------------------------
+
+
+; - DOREPL -----------------------------
+; - REPLACE CURRENT MATCH WITH RPLCPAT (OR FIND NEXT IF NOT ON A MATCH)
+; - IN:  NONE
+; - OUT: CY = 0: REPLACED, CY = 1: ERROR / NO MATCH
+; - CLOBBERS: ALL
+; -
+
+DOREPL          LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z
+
+                ; CHECK IF CURRENT SELECTION MATCHES CURRENT SEARCH
+                LD      A, (SELACT)
+                OR      A
+                JP      Z, .FINDNXT
+                LD      HL, (DOCLINE)
+                LD      DE, (SELSTRL)
+                CALL    CMPHLDE
+                JP      NZ, .FINDNXT
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JP      NZ, .FINDNXT
+                ; CHECK SELECTION LENGTH MATCHES SRCHLEN
+                LD      A, (SELENDX)
+                LD      HL, SELSTRX
+                SUB     (HL)
+                LD      HL, SRCHLEN
+                CP      (HL)
+                JP      NZ, .FINDNXT
+                ; CHECK MATCH PATTERN AT SELSTRX
+                LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                LD      A, (SELSTRX)
+                LD      C, A
+                CALL    SCANLNF
+                JP      C, .FINDNXT
+                LD      A, (SELSTRX)
+                CP      C
+                JP      NZ, .FINDNXT
+
+                ; AT MATCH: SET CURX TO START OF MATCH
+                LD      (CURX), A
+
+                ; AT MATCH: PERFORM REPLACEMENT IN WORKBUF
+                ; CHECK LINE LENGTH: NEWLEN = OLDLEN - SRCHLEN + RPLCLEN
+                LD      A, (WORKBUF)
+                LD      B, A            ; B = OLDLEN
+                LD      A, (SRCHLEN)
+                LD      C, A            ; C = SRCHLEN
+                LD      A, (RPLCLEN)
+                LD      D, A            ; D = RPLCLEN
+                LD      A, B
+                SUB     C
+                ADD     A, D            ; A = NEWLEN
+                CP      TEXTCOLS + 1
+                JR      C, .FITSLN
+                SCF
+                RET                     ; LINE OVERFLOW: REFUSE
+.FITSLN
+
+                ; RECORD UNDO TRANSACTION (PRE-MUTATION STATE)
+                PUSH    AF              ; SAVE NEWLEN
+                LD      A, UNDOT_MOD
+                CALL    UNDOREC
+                POP     AF              ; RESTORE NEWLEN
+
+                ; PERFORM SPLICE: SHIFT TAIL TEXT & ATTRS, COPY RPLCPAT, BLANK TAIL
+                LD      A, (CURX)
+                LD      C, A            ; C = CURX
+                LD      A, (SRCHLEN)
+                LD      B, A            ; B = SRCHLEN
+                LD      A, (RPLCLEN)
+                LD      D, A            ; D = RPLCLEN
+                CALL    SPLICELN
+                LD      HL, (DOCLINE)
+                CALL    LINEWRT
+                LD      A, #FF
+                LD      (MODIFIED), A
+
+                ; ADVANCE CURX PAST REPLACEMENT
+                LD      A, (CURX)
+                LD      HL, RPLCLEN
+                ADD     A, (HL)
+                LD      (CURX), A
+
+                ; CLEAR SELECTION AND REDRAW
+                CALL    CHKUNSEL
+                LD      HL, (DOCLINE)
+                CALL    SHOWLN
+                CALL    REDRAW
+                CALL    DRWSTAT
+                AND     A               ; CY = 0: SUCCESS
+                RET
+
+.FINDNXT        CALL    SRCHFWD
+                RET     C
+                JP      DOREPL
+
+
+; --- SPLICELN                  ----------------------------------------
+
+
+; - SPLICELN ---------------------------
+; - REPLACE BYTES [CURX..CURX+SRCHLEN-1] WITH RPLCPAT[0..RPLCLEN-1] IN WORKBUF
+; - IN:  C = CURX
+; -      B = SRCHLEN
+; -      D = RPLCLEN
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SPLICELN        ; 1. COMPUTE NEWLEN = OLDLEN - SRCHLEN + RPLCLEN
+                LD      A, (WORKBUF)
+                SUB     B
+                ADD     A, D
+                PUSH    AF              ; [NEWLEN]
+
+                ; SAVE CURX AND RPLCLEN
+                PUSH    BC              ; [CURX, NEWLEN]
+                PUSH    DE              ; [RPLCLEN, CURX, NEWLEN]
+
+                ; 2. COMPUTE TAIL_CNT = OLDLEN - (CURX + SRCHLEN)
+                LD      A, (WORKBUF)
+                LD      H, A            ; H = OLDLEN
+                LD      A, C
+                ADD     A, B            ; A = CURX + SRCHLEN
+                LD      L, A            ; L = CURX + SRCHLEN
+                LD      A, H
+                SUB     L               ; A = TAIL_CNT
+                JR      Z, .CPYRPL      ; NO TAIL TO SHIFT
+                JR      C, .CPYRPL      ; SAFETY: MATCH BEYOND LINE
+
+                EX      AF, AF'         ; A' = TAIL_CNT
+
+                ; 3. COMPARE RPLCLEN (D) VS SRCHLEN (B)
+                LD      A, D
+                CP      B
+                JR      Z, .CPYRPL      ; D == B: EQUAL LENGTH, NO SHIFT
+                JR      C, .SHFLFT      ; D < B: SHRINK (LDIR)
+
+                ; D > B: EXPAND (LDDR BACKWARDS)
+                SUB     B               ; A = DELTA (D - B)
+                LD      E, H            ; E = OLDLEN
+                LD      D, 0
+                LD      HL, WORKBUF
+                ADD     HL, DE          ; HL = WORKBUF + OLDLEN (SRC END TEXT)
+                PUSH    HL              ; SAVE SRC END TEXT
+                LD      E, A            ; E = DELTA
+                LD      D, 0
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DEST END TEXT
+                POP     HL              ; HL = SRC END TEXT
+                PUSH    HL              ; [SRC_END, ...]
+                PUSH    DE              ; [DEST_END, SRC_END, ...]
+                EX      AF, AF'
+                LD      C, A
+                LD      B, 0
+                EX      AF, AF'
+                LDDR                    ; SHIFT TEXT TAIL RIGHT
+                POP     DE              ; DEST END TEXT
+                POP     HL              ; SRC END TEXT
+                LD      BC, TEXTCOLS
+                ADD     HL, BC          ; HL = SRC END ATTR
+                EX      DE, HL
+                ADD     HL, BC
+                EX      DE, HL          ; DE = DEST END ATTR
+                EX      AF, AF'
+                LD      C, A
+                LD      B, 0
+                EX      AF, AF'
+                LDDR                    ; SHIFT ATTR TAIL RIGHT
+                JR      .CPYRPL
+
+.SHFLFT         ; D < B: SHRINK (LDIR FORWARDS)
+                LD      A, B
+                SUB     D               ; A = DELTA (B - D)
+                LD      E, L            ; L = CURX + SRCHLEN
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE          ; HL = SRC START TEXT
+                PUSH    HL              ; SAVE SRC START TEXT
+                LD      E, A            ; E = DELTA
+                LD      D, 0
+                OR      A
+                SBC     HL, DE
+                EX      DE, HL          ; DE = DEST START TEXT
+                POP     HL              ; HL = SRC START TEXT
+                PUSH    HL              ; [SRC_START, ...]
+                PUSH    DE              ; [DEST_START, SRC_START, ...]
+                EX      AF, AF'
+                LD      C, A
+                LD      B, 0
+                EX      AF, AF'
+                LDIR                    ; SHIFT TEXT TAIL LEFT
+                POP     DE              ; DEST START TEXT
+                POP     HL              ; SRC START TEXT
+                LD      BC, TEXTCOLS
+                ADD     HL, BC          ; HL = SRC START ATTR
+                EX      DE, HL
+                ADD     HL, BC
+                EX      DE, HL          ; DE = DEST START ATTR
+                EX      AF, AF'
+                LD      C, A
+                LD      B, 0
+                EX      AF, AF'
+                LDIR                    ; SHIFT ATTR TAIL LEFT
+
+.CPYRPL         ; 4. COPY REPLACEMENT PATTERN
+                POP     DE              ; D = RPLCLEN
+                POP     BC              ; C = CURX
+                LD      A, D
+                OR      A
+                JR      Z, .FINIS       ; RPLCLEN == 0: NOTHING TO COPY
+                LD      E, C
+                LD      B, 0
+                LD      C, D            ; BC = RPLCLEN
+                LD      HL, RPLCPAT
+                PUSH    DE              ; SAVE E = CURX, D = RPLCLEN
+                PUSH    BC              ; SAVE BC = RPLCLEN
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                EX      DE, HL          ; DE = WORKBUF + 1 + CURX
+                LD      HL, RPLCPAT
+                LDIR                    ; COPY REPLACEMENT TEXT
+                POP     BC              ; BC = RPLCLEN
+                POP     DE              ; E = CURX, D = RPLCLEN
+
+                ; ZERO REPLACEMENT ATTRIBUTES
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      D, 0
+                ADD     HL, DE          ; HL = ATTR START
+                LD      B, C            ; B = RPLCLEN
+.ZATTR          LD      (HL), 0
+                INC     HL
+                DJNZ    .ZATTR
+
+.FINIS          ; 5. UPDATE LINE LENGTH AND BLANK UNUSED TAIL
+                POP     AF              ; A = NEWLEN
+                LD      (WORKBUF), A
+                JP      RECBL80
+
+
+; --- DORPLAL                   ----------------------------------------
+
+
+; - DORPLAL ----------------------------
+; - REPLACE ALL OCCURRENCES OF SRCHPAT WITH RPLCPAT IN ENTIRE DOCUMENT
+; - IN:  NONE
+; - OUT: BC = TOTAL OCCURRENCES REPLACED
+; - CLOBBERS: ALL
+; -
+
+DORPLAL         LD      A, (SRCHLEN)
+                OR      A
+                LD      BC, 0
+                RET     Z
+
+                LD      HL, 0
+                LD      (RPLCNT), HL
+                LD      (DOCLINE), HL
+
+.ALLLINE        LD      HL, (DOCLINE)
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JR      NC, .ALLDONE
+
+                CALL    LINEREAD
+                LD      C, 0            ; SCAN FROM COL 0 OF THIS LINE
+.REPLIN         CALL    SCANLNF
+                JR      C, .NEXTLIN     ; NO MORE MATCHES ON THIS LINE
+
+                ; MATCH AT COLUMN C ON CURRENT LINE: REPLACE IT
+                LD      A, C
+                LD      (CURX), A
+
+                ; CHECK LENGTH LIMIT
+                LD      A, (WORKBUF)
+                LD      B, A
+                LD      A, (SRCHLEN)
+                SUB     B
+                NEG
+                LD      B, A            ; B = WORKBUF - SRCHLEN
+                LD      A, (RPLCLEN)
+                ADD     A, B
+                CP      TEXTCOLS + 1
+                JR      NC, .NEXTLIN    ; WOULD OVERFLOW: SKIP
+
+                ; UNDO RECORD: FIRST REPLACEMENT IN GROUP IS MOD, SUBSEQUENT ARE CHAINED
+                PUSH    BC
+                LD      HL, (RPLCNT)
+                LD      A, H
+                OR      L
+                LD      A, UNDOT_MOD
+                JR      Z, .FSTREC
+                OR      UNDOF_CHN       ; CHAIN INTO SINGLE UNDO TRANSACTION
+.FSTREC         CALL    UNDOREC
+                POP     BC
+
+                ; SPLICE LINE
+                PUSH    BC
+                LD      A, (CURX)
+                LD      C, A
+                LD      A, (SRCHLEN)
+                LD      B, A
+                LD      A, (RPLCLEN)
+                LD      D, A
+                CALL    SPLICELN
+                LD      HL, (DOCLINE)
+                CALL    LINEWRT
+                LD      A, #FF
+                LD      (MODIFIED), A
+
+                ; INCREMENT REPLACEMENT COUNTER
+                LD      HL, (RPLCNT)
+                INC     HL
+                LD      (RPLCNT), HL
+
+                ; ADVANCE COLUMN PAST REPLACEMENT
+                POP     BC
+                LD      A, (CURX)
+                LD      HL, RPLCLEN
+                ADD     A, (HL)
+                LD      C, A
+                JR      .REPLIN
+
+.NEXTLIN        LD      HL, (DOCLINE)
+                INC     HL
+                LD      (DOCLINE), HL
+                JR      .ALLLINE
+
+.ALLDONE        LD      HL, 0
+                LD      (DOCLINE), HL
+                XOR     A
+                LD      (CURX), A
+                CALL    CHKUNSEL
+                LD      HL, (DOCLINE)
+                CALL    SHOWLN
+                CALL    REDRAW
+                CALL    DRWSTAT
+                LD      BC, (RPLCNT)
+                RET

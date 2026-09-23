@@ -69,6 +69,10 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTUNDO         ; 57 (UNDO)
                 DEFW    ACTREDO         ; 58 (REDO)
                 DEFW    ACTGOTO         ; 59 (GO TO LINE)
+                DEFW    ACTFIND         ; 60 (FIND & REPLACE)
+                DEFW    ACTFNXT         ; 61 (FIND NEXT)
+                DEFW    ACTFPRV         ; 62 (FIND PREV)
+                ASSERT  ($ - ACTTBL) / 2 == ACMAX
 
 
 ; --- ACTNONE                   ----------------------------------------
@@ -946,6 +950,85 @@ ACTGOTO         CALL    CHKUNSEL
                 CALL    GOTOLN
                 CALL    REDRAW
                 JP      DRWSTAT
+
+
+; --- ACTFIND                   ----------------------------------------
+
+
+; - ACTFIND ----------------------------
+; - FIND & REPLACE (CTRL + F / EDIT MENU ITEM 9).
+; - OPENS MODAL DIALOG IN FTRSEG VIA DOFIND, THEN DISPATCHES
+; - THE REQUESTED ACTION (FIND NEXT, REPLACE, REPLACE ALL) IN PAGE 1.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTFIND         ; FTR-BUDGET: S6ED 10,846 B FREE, S2ED 5,312 B (2026-09-23)
+                LD      A, (FTRSEG)
+                LD      HL, DOFIND
+                CALL    FCALL
+                RET     C               ; CANCELLED: RESUME EDITING
+
+                ; A = ACTION (SRCH_FND, SRCH_RPL, SRCH_ALL)
+                OR      A
+                JR      Z, ACTFNXT
+                DEC     A
+                JR      Z, .REPL
+                CALL    DORPLAL
+                RET
+
+.REPL           CALL    DOREPL
+                CALL    REDRAW
+                JP      DRWSTAT
+
+
+; --- ACTFNXT                   ----------------------------------------
+
+
+; - ACTFNXT ----------------------------
+; - FIND NEXT OCCURRENCE OF SEARCH PATTERN
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTFNXT         LD      A, (SRCHLEN)
+                OR      A
+                JR      Z, ACTFIND      ; NO PATTERN YET: OPEN DIALOG
+                CALL    SRCHFWD
+                JR      C, .NOTFND
+                CALL    REDRAW
+                JP      DRWSTAT
+
+.NOTFND         LD      E, BEL
+                LD      C, _CONOUT
+                CALL    BDOS
+                RET
+
+
+; --- ACTFPRV                   ----------------------------------------
+
+
+; - ACTFPRV ----------------------------
+; - FIND PREVIOUS OCCURRENCE OF SEARCH PATTERN
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTFPRV         LD      A, (SRCHLEN)
+                OR      A
+                JR      Z, ACTFIND      ; NO PATTERN YET: OPEN DIALOG
+                CALL    SRCHBWD
+                JR      C, .NOTFND
+                CALL    REDRAW
+                JP      DRWSTAT
+
+.NOTFND         LD      E, BEL
+                LD      C, _CONOUT
+                CALL    BDOS
+                RET
 
 
 ; --- GOTOLN                    ----------------------------------------
@@ -2872,6 +2955,8 @@ MNUENT          ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
                 JR      Z, .EDSL
                 CP      8
                 JR      Z, .EGOTO
+                CP      9
+                JR      Z, .EFIND
                 RET
 
                 ; EVERY ONE OF THESE CALLS THE ROUTINE, NEVER THE ACTION ID.
@@ -2899,6 +2984,8 @@ MNUENT          ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
                 JP      DRWSTAT
 
 .EGOTO          JP      ACTGOTO
+
+.EFIND          JP      ACTFIND
 
 .VIWMNU         LD      A, (MNUSEL)
                 OR      A
