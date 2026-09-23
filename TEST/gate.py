@@ -4143,7 +4143,8 @@ class H25FindReplace(Case):
         t.wait(0.5)
         self.chars(t, 'EXPANDED')
         t.press('TAB')
-        t.wait(0.2)
+        t.wait(0.5)
+        t.snap('match_case', vram=True, at='WINPOLL')
         t.press('TAB')
         t.wait(0.2)
         t.press('TAB')
@@ -4197,6 +4198,7 @@ class H25FindReplace(Case):
         run = runs['replace']
         v_boot = run.blob('boot', 'vram')
         v_open = run.blob('open', 'vram')
+        v_mc = run.blob('match_case', 'vram')
         checks = []
 
         geom = tuple(run.var('open', v)
@@ -4227,6 +4229,15 @@ class H25FindReplace(Case):
                             fld_bg_ok and caret_ok,
                             'Active input field rendered with COL_UI box and solid COL_HI caret (box=%s, caret=%s)'
                             % (fld_bg_ok, caret_ok)))
+
+        # Match case checkbox rendered with solid COL_HI block on focus
+        mc_box_ok = all(vram.pixel(v_mc, x, y, first_line=vram.TEXT_FIRST_LINE) == vram.COL_HI
+                        for x in range(self.WINX + 90, self.WINX + 90 + 6)
+                        for y in range(self.WINY + 32, self.WINY + 32 + 8))
+        checks.append(Check('H25/match-case-focus',
+                            run.var('match_case', 'FNDFOC') == 2 and mc_box_ok,
+                            'Match case checkbox rendered with solid COL_HI block on focus (FNDFOC=%s, box=%s)'
+                            % (run.var('match_case', 'FNDFOC'), mc_box_ok)))
 
         checks.append(Check('H25/typed',
                             run.var('typed', 'SRCHLEN') == 6,
