@@ -108,6 +108,7 @@ is caught only by `S2-8/matches-document`. Measured, 2026-09-21.
 | `S2-17-menu-nav` | W4: switching menus is a close, a re-highlight and an open; miss the un-highlight and the inverted titles pile up along the bar, which no check that only looks at the window can see |
 | `S2-18-goto` | the first window with an input field.  Its viewport maths centres on `ROWSVIS / 2`, which is 11 here and 12 on S6ED, so `mut/goto-scrrows` is a mutation only this gate can catch |
 | `S2-19-select-lines` | `SELPAIN` loaded `IX` once and trusted it across `SELXOR`, whose contract is clobbers-all; `PATINV` really does use `IX`, so a selection across lines painted rows it did not cover.  S6ED's `LMMV` leaves `IX` alone, so `mut/s2-selpain-ix` is catchable only here |
+| `S2-20-undo-seldel` | the reported flow: select the TEST lines, DEL, Ctrl+Z restored nothing.  Checked on disk and against the computed pattern table, and with a 57-line group: `UNDOGMAX` derives from `LINEREC`, so a number written for S6ED's 46 is what `mut/s2-undo-gmax` injects |
 
 Two traps this suite met while being built, both worth knowing before adding a
 case:
@@ -193,6 +194,10 @@ Every case names the defect it was derived from in its `origin` field.
 | I2 | auto-detect DOS CRLF on load and preserve CRLF on save | `FILELOAD` CRLF delimiter and `FILESAVE` CRLF |
 | I3 | convert DOS document to UNIX on save via EOL=UNIX | `PARSEOL` `AUTOLOD=0` and `SAVEEOL=1` |
 | I4 | convert UNIX document to DOS on save via EOL=DOS | `PARSEOL` `AUTOLOD=0` and `SAVEEOL=0` |
+| U6 | deleting a selection is one undo step, on every shape: several lines, one line, with older history below it, started above the viewport | `ACTDLS` recording nothing, so Ctrl+Z replayed a stale record on the line that now had its number |
+| U7 | a group lives or dies whole in the ring; a new edit cuts the redo chain; a delete over `UNDOGMAX` drops the history; 50 edits keep the last 47 | `UNDOEVC` evicting every record above the write point on each wrap, and the head left linked to stale redo records |
+| U8 | push-wrap and reflow, which move text across lines unrecorded, drop the history | the record of an earlier edit naming a line they shifted |
+| U9 | paste, word delete, markup wrap and a bold toggle across lines each undo in one step | `EDINSRUN`, `ACTDWLFT`, `WRAPSEL`, `APPLSEL` writing lines with no record |
 
 **G7 is the general one.** A full `REDRAW` repaints from the document alone, so
 comparing the screen before and after one is a test of every differential painter

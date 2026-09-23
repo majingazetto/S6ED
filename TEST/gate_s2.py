@@ -2112,12 +2112,118 @@ class S219SelLines(S2Case):
         return checks
 
 
+# --- S2-20  DELETING A SELECTION IS ONE UNDO STEP ---------------------
+
+
+class S220UndoSelDel(S2Case):
+    name = 'S2-20-undo-seldel'
+    desc = ('Ctrl+Z after deleting a selection restores every line, on '
+            'screen and on disk')
+    origin = ('ACTDLS recorded nothing: select the TEST lines, DEL, Ctrl+Z did '
+              'nothing -- or, with an older edit in the history, replayed it '
+              'on the line that now had its number.  UNDOGMAX derives from '
+              'LINEREC, so S2ED groups up to 57 lines where S6ED stops at 46: '
+              'the big variant is what a constant written for one target '
+              'would get wrong.')
+    variants = ('fresh', 'stale', 'big')
+    LINES = ['Hello MSX World!', 'This is a test of S2ED.',
+             'MSX Screen 2 Text Editor', '64 columns x 24 rows.',
+             'With colours!!', 'Line six', 'Line seven', 'Line eight']
+    BIG = ['ROW %02d OF THE GROUP TEST' % i for i in range(60)]
+    GROUP = 57
+
+    def lines(self, variant):
+        return self.BIG if variant == 'big' else self.LINES
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.lines(variant))
+
+    def want(self, variant):
+        want = list(self.lines(variant))
+        if variant == 'stale':
+            want[5] = 'X' + want[5]
+        return want
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        if variant == 'stale':
+            t.press('DOWN', repeat=5)
+            t.text('X')
+            t.press('UP', repeat=5)
+            t.press('LEFT')
+        n = self.GROUP - 1 if variant == 'big' else 3
+        t.press('DOWN', mods=['SHIFT'], repeat=n)
+        t.press('DEL')
+        t.wait(1.0)
+        t.snap('deleted')
+        t.press('Z', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('undone', vram='pat')
+        t.press('Z', mods=['SHIFT', 'CTRL'])
+        t.wait(1.0)
+        t.snap('redone')
+        t.press('Z', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('undone2')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        f = font(ctx)
+        for v in self.variants:
+            run = runs[v]
+            lines = self.lines(v)
+            n = len(lines)
+            gone = self.GROUP - 1 if v == 'big' else 3
+            tot = [run.var(lb, 'TOTLINES')
+                   for lb in ('deleted', 'undone', 'redone', 'undone2')]
+            ok = (run.var('deleted', 'UNDOPTR') != 0 and
+                  tot == [n - gone, n, n - gone, n])
+            checks.append(Check('S2-20/%s/cycle' % v, ok,
+                                'recorded; TOTLINES through the cycle %s' % tot
+                                if ok else 'UNDOPTR %s, TOTLINES %s'
+                                % (run.var('deleted', 'UNDOPTR'), tot)))
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            want = crlf(self.want(v))
+            checks.append(Check('S2-20/%s/content' % v, got == want,
+                                'document restored byte for byte'
+                                if got == want else 'got %r' % (got[:120],)))
+            if v == 'big':
+                continue
+            # The repaint after the undo, against the computed pattern table
+            dump = run.blob('undone', 'pat')
+            cury = run.var('undone', 'CURY')
+            curx = run.var('undone', 'CURX')
+            shown = list(lines)
+            if v == 'stale':
+                shown[5] = 'X' + shown[5]
+            bad = []
+            for i, text in enumerate(shown):
+                row = pattern.TXRFIRST + i
+                dif = pattern.differing_columns(
+                    pattern.row_of(dump, row), pattern.compose_row(f, text))
+                if i == cury:
+                    dif = [c for c in dif if c != curx]
+                if dif:
+                    bad.append((i, dif[:6]))
+            checks.append(Check('S2-20/%s/screen' % v, dump is not None
+                                and not bad,
+                                'every restored row painted as computed'
+                                if dump is not None and not bad else
+                                'rows off: %s' % bad[:4]))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
          S213ShadowCfg(), S214Markup(), S215Quit(),
          S216Menu(), S217MenuNav(), S218Goto(),
-         S219SelLines()]
+         S219SelLines(), S220UndoSelDel()]
 
 
 def run(ctx, cases=None):

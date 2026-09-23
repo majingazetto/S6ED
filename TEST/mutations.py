@@ -1845,6 +1845,226 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'U5',
         'expect': ['U5/sel-cancelled'],
     },
+    {
+        'name': 'undo-seldel-rec',
+        'why': 'ACTDLS records nothing again: a deleted selection cannot be '
+               'undone, and older history replays on the wrong line',
+        'file': 'ACTION.Z8A',
+        'old': """.DLSNEMP        ; RECORD EVERY LINE THE DELETE TOUCHES, AS ONE UNDO GROUP
+                LD      A, UNDOT_DEL
+                CALL    UNDOSEL""",
+        'new': """.DLSNEMP        ; MUTATION: NOTHING RECORDED
+                LD      A, UNDOT_DEL""",
+        'filter': 'U6',
+        'expect': ['U6/multi/recorded', 'U6/stale/content'],
+    },
+    {
+        'name': 'undo-group-loop',
+        'why': 'ACTUNDO stops after one record, ignoring the chain: a '
+               'three-line delete comes back one line at a time',
+        'file': 'UNDO.Z8A',
+        'old': """                LD      A, B
+                AND     UNDOF_CHN
+                JP      Z, UNDOPNT      ; THE GROUP'S FIRST RECORD: DONE""",
+        'new': """                JP      UNDOPNT         ; MUTATION: ONE RECORD PER CTRL+Z""",
+        'filter': 'U6',
+        'expect': ['U6/multi/undo'],
+    },
+    {
+        'name': 'undo-redo-loop',
+        'why': 'ACTREDO re-applies only the first record of a group',
+        'file': 'UNDO.Z8A',
+        'old': """                AND     UNDOF_CHN
+                JR      Z, .RDDONE      ; NEXT RECORD STARTS ANOTHER ACTION""",
+        'new': """                JR      .RDDONE         ; MUTATION: NEVER FOLLOW THE CHAIN""",
+        'filter': 'U6',
+        'expect': ['U6/multi/redo'],
+    },
+    {
+        'name': 'undo-evict-group',
+        'why': 'eviction takes only the colliding record, leaving the rest of '
+               'its group to be replayed without its first record',
+        'file': 'UNDO.Z8A',
+        'old': """                LD      IX, (UNDOBOT)
+                LD      A, (IX + 4)
+                AND     UNDOF_CHN
+                JR      NZ, .EVICT
+                JR      .EVCLP          ; CHECK IF NEXT RECORD ALSO COLLIDES""",
+        'new': """                JR      .EVCLP          ; MUTATION: GROUPS EVICTED PIECEMEAL""",
+        'filter': 'U7',
+        'expect': ['U7/evict/content'],
+    },
+    {
+        'name': 'undo-redo-trunc',
+        'why': 'a new edit leaves the head linked to the stale redo records: '
+               'evicting the head makes the new record its own predecessor',
+        'file': 'UNDO.Z8A',
+        'old': """                OR      L
+                JR      Z, .NOREDO""",
+        'new': """                OR      L
+                JR      .NOREDO         ; MUTATION: REDO CHAIN LEFT LINKED""",
+        'filter': 'U7',
+        'expect': ['U7/selfloop/content'],
+    },
+    {
+        'name': 'undo-group-cap',
+        'why': 'a group larger than the ring is recorded anyway and evicts its '
+               'own first record, leaving a headless tail to replay',
+        'file': 'UNDO.Z8A',
+        'old': """                CALL    CMPHLDE
+                JR      C, .FITS""",
+        'new': """                CALL    CMPHLDE
+                JR      .FITS           ; MUTATION: NO CAPACITY CHECK""",
+        'filter': 'U7',
+        'expect': ['U7/toobig/dropped'],
+    },
+    {
+        'name': 'undo-evict-window',
+        'why': 'the shipped collision test: its second subtraction ran with '
+               'the write base in both registers, so every record above the '
+               'write point was evicted -- the whole history on each wrap',
+        'file': 'UNDO.Z8A',
+        'old': """                SBC     HL, DE          ; HL = UNDOBOT - WRITE BASE
+                JR      C, .EVCBEL      ; BELOW THE WINDOW
+                LD      DE, UNDOMOD_SZ
+                SBC     HL, DE          ; CY = 1 INSIDE THE WINDOW (CY WAS 0)
+                POP     HL              ; HL = WRITE BASE
+                JR      NC, .EVCDON     ; PAST THE WINDOW -> DONE""",
+        'new': """                SBC     HL, DE          ; HL = UNDOBOT - WRITE BASE
+                POP     HL
+                JR      C, .EVCDON
+                PUSH    HL              ; MUTATION: THE 2026-09-19 TEST
+                EX      DE, HL
+                OR      A
+                SBC     HL, DE
+                LD      DE, UNDOMOD_SZ
+                OR      A
+                SBC     HL, DE
+                POP     HL
+                JR      NC, .EVCDON""",
+        'filter': 'U7',
+        'expect': ['U7/depth/content', 'U7/evict/content'],
+    },
+    {
+        'name': 'undo-reflow-drop',
+        'why': 'a reflow that pulls a whole line up keeps the history, whose '
+               'records then name lines the reflow shifted',
+        'file': 'EDIT.Z8A',
+        'old': """.RFALL          ; ENTIRE LINE L+1 FITS ON LINE L!
+                CALL    UNDOINIT""",
+        'new': """.RFALL          ; ENTIRE LINE L+1 FITS ON LINE L! MUTATION: HISTORY KEPT""",
+        'filter': 'U8',
+        'expect': ['U8/reflow/content'],
+    },
+    {
+        'name': 'undo-pushwrap-drop',
+        'why': 'push-wrap inserts a line and keeps the history, whose records '
+               'then name lines one off',
+        'file': 'EDIT.Z8A',
+        'old': """                ; (UNDOINIT KEEPS BC AND DE)
+                CALL    UNDOINIT""",
+        'new': """                ; MUTATION: HISTORY KEPT""",
+        'filter': 'U8',
+        'expect': ['U8/pushwrap/content'],
+    },
+    {
+        'name': 'undo-insrun-rec',
+        'why': 'a pasted run is written with no record, so Ctrl+Z skips it',
+        'file': 'EDIT.Z8A',
+        'old': """.IRFITS         ; ONE LINE CHANGES: RECORD IT AS IT STANDS IN WORKBUF
+                CALL    UNDOCLS
+                LD      A, UNDOT_MOD
+                CALL    UNDOREC""",
+        'new': """.IRFITS         ; MUTATION: NOT RECORDED""",
+        'filter': 'U9',
+        'expect': ['U9/paste/content'],
+    },
+    {
+        'name': 'undo-dwlft-rec',
+        'why': 'word delete is written with no record',
+        'file': 'ACTION.Z8A',
+        'old': """                ; CTRL+Z PUTS THE CURSOR BACK AFTER THE WORD
+                CALL    UNDOCLS
+                LD      A, UNDOT_MOD
+                CALL    UNDOREC""",
+        'new': """                ; MUTATION: NOT RECORDED""",
+        'filter': 'U9',
+        'expect': ['U9/wordel/content'],
+    },
+    {
+        'name': 'undo-wrapsel-rec',
+        'why': 'wrapping a selection in markup delimiters is not recorded',
+        'file': 'MARKUP.Z8A',
+        'old': """                CALL    UNDOCLS
+                LD      HL, (SELSTRL)
+                LD      A, UNDOT_MOD
+                CALL    UNDOLNR""",
+        'new': """                ; MUTATION: NOT RECORDED""",
+        'filter': 'U9',
+        'expect': ['U9/wrapsel/content'],
+    },
+    {
+        'name': 'undo-applsel-rec',
+        'why': 'toggling bold across a selection is not recorded',
+        'file': 'ACTION.Z8A',
+        'old': """.APLINIT        LD      A, UNDOT_MOD    ; EVERY SELECTED LINE, ONE UNDO GROUP
+                CALL    UNDOSEL""",
+        'new': """.APLINIT        ; MUTATION: NOT RECORDED""",
+        'filter': 'U9',
+        'expect': ['U9/style/undo'],
+    },
+    {
+        'name': 'undo-dls-showln',
+        'why': 'deleting a selection that starts above the viewport leaves '
+               'TOPLINE alone, so CURY goes negative',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      HL, (SELSTRL)
+                LD      (DOCLINE), HL
+                CALL    SHOWLN
+                CALL    REDRAW""",
+        'new': """                LD      HL, (SELSTRL)
+                LD      (DOCLINE), HL
+                CALL    SETCURY         ; MUTATION: NOT BROUGHT ON SCREEN
+                CALL    REDRAW""",
+        'filter': 'U6',
+        'expect': ['U6/scrolled/visible'],
+    },
+    {
+        'name': 'undo-pnt-showln',
+        'why': 'the repaint after an undo trusts the recorded TOPLINE, which '
+               'need not show a cursor restored above it',
+        'file': 'UNDO.Z8A',
+        'old': """UNDOPNT         LD      HL, (DOCLINE)
+                CALL    SHOWLN""",
+        'new': """UNDOPNT         CALL    SETCURY         ; MUTATION: TOPLINE TRUSTED""",
+        'filter': 'U6',
+        'expect': ['U6/scrolled/visible'],
+    },
+    {
+        'name': 's2-undo-seldel',
+        'why': 'the reported S2ED flow: select the TEST lines, DEL, Ctrl+Z '
+               'restores nothing',
+        'target': 'S2ED',
+        'file': 'ACTION.Z8A',
+        'old': """.DLSNEMP        ; RECORD EVERY LINE THE DELETE TOUCHES, AS ONE UNDO GROUP
+                LD      A, UNDOT_DEL
+                CALL    UNDOSEL""",
+        'new': """.DLSNEMP        ; MUTATION: NOTHING RECORDED
+                LD      A, UNDOT_DEL""",
+        'filter': 'S2-20',
+        'expect': ['S2-20/fresh/cycle'],
+    },
+    {
+        'name': 's2-undo-gmax',
+        'why': 'UNDOGMAX written for the 171-byte S6ED record: S2ED would drop '
+               'the history on any delete over 46 lines instead of 57',
+        'target': 'S2ED',
+        'file': 'CONST_CORE.Z8A',
+        'old': """UNDOGMAX        EQU     (UNDOSIZ - UNDOMOD_SZ + 1) / UNDOMOD_SZ""",
+        'new': """UNDOGMAX        EQU     46              ; MUTATION: ONE TARGET'S NUMBER""",
+        'filter': 'S2-20',
+        'expect': ['S2-20/big/cycle'],
+    },
 ]
 
 
