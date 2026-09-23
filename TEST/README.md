@@ -107,6 +107,7 @@ is caught only by `S2-8/matches-document`. Measured, 2026-09-21.
 | `S2-16-menu` | W4: `MNUENT` was the last `IFDEF S2ED` in the menu path -- SELECT and F1..F5 opened nothing, and the item indices have to match S6ED's because the dispatch below them is shared |
 | `S2-17-menu-nav` | W4: switching menus is a close, a re-highlight and an open; miss the un-highlight and the inverted titles pile up along the bar, which no check that only looks at the window can see |
 | `S2-18-goto` | the first window with an input field.  Its viewport maths centres on `ROWSVIS / 2`, which is 11 here and 12 on S6ED, so `mut/goto-scrrows` is a mutation only this gate can catch |
+| `S2-19-select-lines` | `SELPAIN` loaded `IX` once and trusted it across `SELXOR`, whose contract is clobbers-all; `PATINV` really does use `IX`, so a selection across lines painted rows it did not cover.  S6ED's `LMMV` leaves `IX` alone, so `mut/s2-selpain-ix` is catchable only here |
 
 Two traps this suite met while being built, both worth knowing before adding a
 case:

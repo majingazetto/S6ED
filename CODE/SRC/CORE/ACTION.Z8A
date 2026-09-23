@@ -1353,11 +1353,13 @@ SELXOR          LD      A, E
 ; - IN:  SELSTRL, SELSTRX, SELENDL, SELENDX
 ; - OUT: NONE
 ; - CLOBBERS: ALL
+; - IX IS RELOADED EVERY ROW: SELXOR CLOBBERS ALL, AND ON S2ED PATINV REALLY
+; - DOES USE IX, SO A POINTER LOADED ONCE READ THE PATTERN SHADOW FROM ROW 1 ON.
 ; -
 
-SELPAIN         LD      IX, SELSTRL
-                LD      B, 0
-.ROWLP          PUSH    BC
+SELPAIN         LD      B, 0
+.ROWLP          LD      IX, SELSTRL
+                PUSH    BC
                 LD      HL, (TOPLINE)
                 LD      E, B
                 LD      D, 0

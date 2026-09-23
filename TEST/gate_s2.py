@@ -2012,11 +2012,112 @@ class S218Goto(S2Case):
         return checks
 
 
+# --- S2-19  A SELECTION ACROSS LINES ----------------------------------
+
+
+class S219SelLines(S2Case):
+    name = 'S2-19-select-lines'
+    desc = ('SHIFT+DOWN inverts exactly the rows it covers, and deselect '
+            'leaves none')
+    origin = ('SELPAIN loaded IX = SELSTRL once, before its row loop, and '
+              'relied on it surviving SELXOR -- whose contract is CLOBBERS: '
+              'ALL.  On S6ED the LMMV path happens not to touch IX; on S2ED '
+              'PATINV uses it as its pattern shadow pointer, so from row 1 '
+              'on SELEXT read the range out of PATSHAD.  The first SHIFT+DOWN '
+              'inverted two rows that were not selected, every later diff '
+              'built on that, and SELPRE un-XORed through the same loop.  '
+              'S2-4 selects inside one line and never saw it.')
+    # An empty line on purpose: its extent is the one cell of the line break.
+    LINES = ['Hello MSX World!', 'This is a test of S2ED.', '',
+             'MSX Screen 2 Text Editor', '64 columns x 24 rows.',
+             'With colours!!']
+    STEPS = (1, 2, 4)
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        done = 0
+        for n in self.STEPS:
+            while done < n:
+                t.press('DOWN', mods=['SHIFT'])
+                done += 1
+            t.wait(1.0)
+            t.snap('down%d' % n, vram='pat')
+        t.press('UP')                       # unshifted: deselect
+        t.wait(1.0)
+        t.snap('after', vram='pat')
+        return t
+
+    def plain(self, f, row):
+        n = row - pattern.TXRFIRST
+        return pattern.compose_row(
+            f, self.LINES[n] if n < len(self.LINES) else '')
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        f = font(ctx)
+        checks = []
+        rows = range(pattern.TXRFIRST,
+                     pattern.TXRFIRST + len(self.LINES) + 2)
+        for n in self.STEPS:
+            label = 'down%d' % n
+            dump = run.blob(label, 'pat')
+            if dump is None:
+                checks.append(Check('S2-19/%s' % label, False,
+                                    'missing VRAM dump'))
+                continue
+            bad = []
+            for row in rows:
+                line = row - pattern.TXRFIRST
+                if line < n:            # fully selected, line break included
+                    ln = len(self.LINES[line])
+                    want = list(range(min(ln + 1, pattern.COLS)))
+                elif line == n:         # the end line: only the cursor
+                    want = [0]
+                else:
+                    want = []
+                got = pattern.row_of(dump, row)
+                inv = pattern.inverted_columns(got, self.plain(f, row))
+                dif = pattern.differing_columns(got, self.plain(f, row))
+                if inv != want or dif != want:
+                    bad.append((line, inv if inv == dif else dif))
+            checks.append(Check('S2-19/%s' % label, not bad and
+                                run.var(label, 'DOCLINE') == n,
+                                '%d lines selected, every row exact' % n
+                                if not bad else
+                                'DOCLINE %s, rows off: %s'
+                                % (run.var(label, 'DOCLINE'), bad[:4])))
+
+        after = run.blob('after', 'pat')
+        if after is None:
+            checks.append(Check('S2-19/no-residue', False, 'missing dump'))
+            return checks
+        cury = run.var('after', 'CURY')
+        curx = run.var('after', 'CURX')
+        residue = []
+        for row in rows:
+            dif = pattern.differing_columns(pattern.row_of(after, row),
+                                            self.plain(f, row))
+            if row - pattern.TXRFIRST == cury:
+                dif = [c for c in dif if c != curx]
+            if dif:
+                residue.append((row - pattern.TXRFIRST, dif[:6]))
+        checks.append(Check('S2-19/no-residue',
+                            not residue and run.var('after', 'SELACT') == 0,
+                            'deselect leaves the document as rendered'
+                            if not residue else 'residue: %s' % residue[:4]))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
          S213ShadowCfg(), S214Markup(), S215Quit(),
-         S216Menu(), S217MenuNav(), S218Goto()]
+         S216Menu(), S217MenuNav(), S218Goto(),
+         S219SelLines()]
 
 
 def run(ctx, cases=None):
