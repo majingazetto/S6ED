@@ -195,7 +195,15 @@ ACMNU4          EQU     56              ; DROP-DOWN MENU HELP (F5)
 ACUNDO          EQU     57              ; CTRL + Z / VI u (UNDO)
 ACREDO          EQU     58              ; CTRL + Y / VI CTRL+R (REDO)
 ACGOTOL         EQU     59              ; CTRL + G / EDIT MENU (GO TO LINE)
-ACMAX           EQU     60
+ACFIND          EQU     60              ; CTRL + F / EDIT MENU (FIND & REPLACE)
+ACFNXT          EQU     61              ; CTRL + L / F3 (FIND NEXT)
+ACFPRV          EQU     62              ; CTRL + R / SHIFT + F3 (FIND PREV)
+ACMAX           EQU     63
+
+SRCHMAX         EQU     18              ; MAX SEARCH / REPLACE PATTERN LENGTH
+SRCH_FND        EQU     0               ; ACTION: FIND NEXT
+SRCH_RPL        EQU     1               ; ACTION: REPLACE
+SRCH_ALL        EQU     2               ; ACTION: REPLACE ALL
 
 MNUCOUNT        EQU     5               ; TOTAL TOP-LEVEL MENUS (FILE, EDIT, VIEW, OPT, HELP)
 

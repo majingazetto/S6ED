@@ -209,6 +209,26 @@ EDCOL           DEFB    0               ; FIELD COLUMN
 EDWID           DEFB    0               ; FIELD WIDTH IN CHARACTERS
 
 
+; --- SEARCH & REPLACE          ----------------------------------------
+
+
+SRCHPAT         DEFS    SRCHMAX + 1, 0  ; SEARCH PATTERN (ASCIIZ)
+SRCHLEN         DEFB    0               ; LENGTH OF SEARCH PATTERN (0..SRCHMAX)
+RPLCPAT         DEFS    SRCHMAX + 1, 0  ; REPLACE PATTERN (ASCIIZ)
+RPLCLEN         DEFB    0               ; LENGTH OF REPLACE PATTERN (0..SRCHMAX)
+SRCHOPT         DEFB    0               ; BIT 0: CASE SENSITIVE (1=YES, 0=NO)
+SRCHDIR         DEFB    0               ; 0 = FORWARD, 1 = BACKWARD
+SRCHLST         DEFW    0               ; LAST MATCH DOCLINE
+SRCHCOL         DEFB    0               ; LAST MATCH CURX
+FNDFOC          DEFB    0               ; FIND DIALOG ACTIVE FOCUS (0..6)
+FNDROW          DEFB    0               ; FIND DIALOG FIELD ROW
+FNDLEN          DEFB    0               ; FIND DIALOG FIELD LENGTH
+FNDACT          DEFB    0               ; FIND DIALOG FIELD ACTIVE (1=YES, 0=NO)
+FNDCOL          DEFB    0               ; FIND DIALOG FIELD COLOR
+FNDBUF          DEFW    0               ; FIND DIALOG BUFFER POINTER
+RPLCNT          DEFW    0               ; REPLACE ALL COUNTER
+
+
 ; --- FILE                      ----------------------------------------
 
 

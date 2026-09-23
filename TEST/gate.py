@@ -4066,6 +4066,226 @@ class H24GoToLine(Case):
         return checks
 
 
+# --- H25  FIND & REPLACE ----------------------------------------------
+
+
+class H25FindReplace(Case):
+    name = 'H25-find-replace'
+    desc = ('Ctrl+F opens Find & Replace dialog, searches forward, finds next/prev '
+            'via Ctrl+L/Ctrl+R, replaces match, undoes replace via Ctrl+Z, '
+            'and Replace All replaces across document with atomic Undo')
+    origin = 'Resident Find & Replace engine: SEARCH.Z8A and DOFIND modal dialog'
+    LINES = [
+        'LINE 00 START OF DOC',
+        'LINE 01 NORMAL TEXT',
+        'LINE 02 FIRST TARGET HERE',
+        'LINE 03 MIDDLE SECTION',
+        'LINE 04 ANOTHER ROW',
+        'LINE 05 SECOND TARGET HERE',
+        'LINE 06 TAIL OF DOCUMENT',
+    ]
+    variants = ('replace', 'undo')
+    LINES_REPLACED = [
+        'LINE 00 START OF DOC',
+        'LINE 01 NORMAL TEXT',
+        'LINE 02 FIRST expanded HERE',
+        'LINE 03 MIDDLE SECTION',
+        'LINE 04 ANOTHER ROW',
+        'LINE 05 SECOND expanded HERE',
+        'LINE 06 TAIL OF DOCUMENT',
+    ]
+    WINX, WINY, WINW, WINH = 108, 56, 260, 74
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def chars(self, t, s):
+        for ch in s:
+            t.press(ch)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram=True)
+
+        # 1. Ctrl+F opens the Find & Replace window
+        t.wait(1.0)
+        t.press('F', mods=['CTRL'])
+        t.snap('open', vram=True, at='WINPOLL')
+
+        # 2. Type search pattern "TARGET"
+        t.wait(1.0)
+        self.chars(t, 'TARGET')
+        t.snap('typed', at='WINPOLL')
+
+        # 3. Press ENTER on Find field -> immediate Find Next
+        t.wait(1.0)
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('found1')
+
+        # 4. Ctrl+L -> Find Next (should jump to Line 5)
+        t.wait(1.0)
+        t.press('L', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('found2')
+
+        # 5. Ctrl+R -> Find Previous (should jump back to Line 2)
+        t.wait(1.0)
+        t.press('R', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('found_prev')
+
+        # 6. Replace test: open dialog, TAB to Replace, type "REPL", TAB to [Repl], press RETURN
+        t.wait(1.0)
+        t.press('F', mods=['CTRL'])
+        t.wait(1.0)
+        t.press('TAB')
+        t.wait(0.5)
+        self.chars(t, 'EXPANDED')
+        t.press('TAB')
+        t.wait(0.2)
+        t.press('TAB')
+        t.wait(0.2)
+        t.press('TAB')
+        t.wait(0.5)
+        t.snap('repl_ready', at='WINPOLL')
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('after_repl')
+
+        # 7. Undo the replacement
+        t.wait(1.0)
+        t.press('Z', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('after_undo')
+
+        # 8. Replace All test: open dialog, TAB 5 times to reach [All], press RETURN
+        t.wait(1.0)
+        t.press('F', mods=['CTRL'])
+        t.wait(1.0)
+        t.press('TAB')
+        t.press('TAB')
+        t.press('TAB')
+        t.press('TAB')
+        t.press('TAB')
+        t.wait(0.5)
+        t.snap('all_ready', at='WINPOLL')
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('after_all')
+        if variant == 'replace':
+            # Save to disk to verify expanded lines
+            t.wait(1.0)
+            t.press('S', mods=['CTRL'])
+            t.wait(2.0)
+            t.snap('saved')
+        else:
+            # 9. Single Undo reverts all replacements
+            t.wait(1.0)
+            t.press('Z', mods=['CTRL'])
+            t.wait(1.0)
+            t.snap('after_undo_all')
+
+            # 10. Save to verify disk lines
+            t.wait(1.0)
+            t.press('S', mods=['CTRL'])
+            t.wait(2.0)
+            t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = runs['replace']
+        v_boot = run.blob('boot', 'vram')
+        v_open = run.blob('open', 'vram')
+        checks = []
+
+        geom = tuple(run.var('open', v)
+                     for v in ('WINX', 'WINY', 'WINW', 'WINH'))
+        checks.append(Check('H25/open',
+                            run.var('open', 'WINACTV') == 1 and
+                            geom == (self.WINX, self.WINY, self.WINW, self.WINH) and
+                            v_open != v_boot,
+                            'Ctrl+F opens Find & Replace dialog (geometry %s, WINACTV=1)'
+                            % (geom,)))
+
+        # Side borders (left x=108, right x=367) intact in COL_UI
+        left_ok = all(vram.pixel(v_open, self.WINX, y, first_line=vram.TEXT_FIRST_LINE) == vram.COL_UI
+                      for y in range(self.WINY + 1, self.WINY + self.WINH - 1))
+        right_ok = all(vram.pixel(v_open, self.WINX + self.WINW - 1, y, first_line=vram.TEXT_FIRST_LINE) == vram.COL_UI
+                       for y in range(self.WINY + 1, self.WINY + self.WINH - 1))
+        checks.append(Check('H25/borders',
+                            left_ok and right_ok,
+                            'Vertical side borders intact in COL_UI (left=%s, right=%s)'
+                            % (left_ok, right_ok)))
+
+        # Active field 0 box (COL_UI) and solid block caret in COL_HI
+        fld_bg_ok = all(vram.pixel(v_open, x, self.WINY + 18, first_line=vram.TEXT_FIRST_LINE) in (vram.COL_UI, vram.COL_HI)
+                        for x in range(self.WINX + 64, self.WINX + 64 + 116))
+        caret_ok = all(vram.pixel(v_open, self.WINX + 66, y, first_line=vram.TEXT_FIRST_LINE) == vram.COL_HI
+                       for y in range(self.WINY + 16, self.WINY + 24))
+        checks.append(Check('H25/field-focus',
+                            fld_bg_ok and caret_ok,
+                            'Active input field rendered with COL_UI box and solid COL_HI caret (box=%s, caret=%s)'
+                            % (fld_bg_ok, caret_ok)))
+
+        checks.append(Check('H25/typed',
+                            run.var('typed', 'SRCHLEN') == 6,
+                            'SRCHLEN = %s (expected 6)'
+                            % (run.var('typed', 'SRCHLEN'),)))
+
+        pos1 = (run.var('found1', 'DOCLINE'), run.var('found1', 'CURX'))
+        sel1 = (run.var('found1', 'SELACT'), run.var('found1', 'SELANCX'))
+        checks.append(Check('H25/found1',
+                            pos1 == (2, 20) and sel1 == (1, 14),
+                            'First match found at line 2 col 14..20 (pos=%s, sel=%s)'
+                            % (pos1, sel1)))
+
+        pos2 = (run.var('found2', 'DOCLINE'), run.var('found2', 'CURX'))
+        sel2 = (run.var('found2', 'SELACT'), run.var('found2', 'SELANCX'))
+        checks.append(Check('H25/found2',
+                            pos2 == (5, 21) and sel2 == (1, 15),
+                            'Ctrl+L finds next match at line 5 col 15..21 (pos=%s, sel=%s)'
+                            % (pos2, sel2)))
+
+        pos_prev = (run.var('found_prev', 'DOCLINE'), run.var('found_prev', 'CURX'))
+        sel_prev = (run.var('found_prev', 'SELACT'), run.var('found_prev', 'SELANCX'))
+        checks.append(Check('H25/found-prev',
+                            pos_prev == (2, 20) and sel_prev == (1, 14),
+                            'Ctrl+R finds previous match at line 2 col 14..20 (pos=%s, sel=%s)'
+                            % (pos_prev, sel_prev)))
+
+        checks.append(Check('H25/replace-modified',
+                            run.var('after_repl', 'MODIFIED') == 0xFF,
+                            'Replace marks document modified (MODIFIED=%s)'
+                            % (run.var('after_repl', 'MODIFIED'),)))
+
+        checks.append(Check('H25/undo-repl',
+                            run.var('after_undo', 'DOCLINE') == 2,
+                            'Ctrl+Z returns to line 2 (DOCLINE=%s)'
+                            % (run.var('after_undo', 'DOCLINE'),)))
+
+        checks.append(Check('H25/replace-all',
+                            run.var('after_all', 'RPLCNT') == 2,
+                            'Replace All completed with RPLCNT = %s'
+                            % (run.var('after_all', 'RPLCNT'),)))
+
+        saved_repl = disk_lines(run)
+        checks.append(Check('H25/replace-expand',
+                            saved_repl == self.LINES_REPLACED,
+                            'Replacement expands lines cleanly without corruption'
+                            if saved_repl == self.LINES_REPLACED else
+                            'document mismatch after Replace: %r' % (saved_repl,)))
+
+        saved_undo = disk_lines(runs['undo'])
+        checks.append(Check('H25/undo-all-content',
+                            saved_undo == self.LINES,
+                            'Single Ctrl+Z atomically reverts all replacements'
+                            if saved_undo == self.LINES else
+                            'document mismatch after Undo All: %r' % (saved_undo,)))
+
+        return checks
+
+
 
 # --- U6..U9  EDITS THAT USED TO ESCAPE THE HISTORY -------------------
 #
@@ -4530,7 +4750,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          H11DatTruncHdr(), H12DatTruncTbl(), H13DatLenZero(), H14DatLenOver(),
          H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(), H18WindowRobustness(),
          H19QuitDialog(), H20QuitDirty(), H21Shadow(), H22FileMenu(), H23MenuNav(),
-         H24GoToLine(),
+         H24GoToLine(), H25FindReplace(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(),

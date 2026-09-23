@@ -352,8 +352,35 @@ WINSTR          PUSH    AF
 
 WINPRN          PUSH    HL
                 PUSH    AF
+                CALL    WINPCO
+                POP     AF
+                POP     HL
+                JP      WINSTR
 
-                ; DX = WINX + 6 + C * 6
+
+; - WINPRN3 ----------------------------
+; - PRINT TEXT LINE WITH COLOR 3 HIGHLIGHT (TOR)
+; - IN:  HL = ASCIIZ STRING, C = COL, B = ROW, A = FONT VARIANT
+; - OUT: DE = DX ADVANCED PAST LAST CHAR
+; - CLOBBERS: ALL
+; -
+
+WINPRN3         PUSH    HL
+                PUSH    AF
+                CALL    WINPCO
+                POP     AF
+                POP     HL
+                JP      WINSTR3
+
+
+; - WINPCO -----------------------------
+; - COMPUTE COMPOSITION BUFFER PIXEL COORDINATES FOR CHAR ROW AND COL
+; - IN:  B = ROW, C = COL
+; - OUT: DE = DX, BC = DY
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINPCO          ; DX = WINX + 6 + C * 6
                 LD      L, C
                 LD      H, 0
                 ADD     HL, HL
@@ -379,11 +406,8 @@ WINPRN          PUSH    HL
                 ADD     HL, DE
                 LD      B, H
                 LD      C, L
-
                 POP     DE
-                POP     AF
-                POP     HL
-                JP      WINSTR
+                RET
 
 
 ; --- WINDOW DRAWING            ----------------------------------------
@@ -573,14 +597,42 @@ WINBOX          PUSH    HL
                 CALL    WINBAND
 
                 ; 7. SIDE BORDER SLIVERS (LMMV, 1 PX, COL_UI), Y=1..WINH-2
-                LD      HL, (WINH)
+                CALL    WINSID
+
+                ; 8. TITLE TEXT IN BOLD + COLOR 3 (TOR) AT (WINX+6, +2)
+.TITLE          POP     HL              ; HL = TITLE STRING
+                LD      A, H
+                OR      L
+                RET     Z
+                LD      A, (HL)
+                OR      A
+                RET     Z
+                PUSH    HL
+                LD      HL, (WINX)
+                LD      DE, 6
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DX
+                LD      BC, WINCOMP_Y + 2
+                POP     HL              ; HL = TITLE STRING
+                LD      A, 1            ; BOLD (VARIANT 1)
+                JP      WINSTR3
+
+
+; - WINSID -----------------------------
+; - DRAW THE TWO 1-PX SIDE BORDER SLIVERS IN COMPOSITION BUFFER (COL_UI)
+; - IN:  NONE (USES WINX, WINW, WINH)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINSID          LD      HL, (WINH)
                 DEC     HL
                 DEC     HL
                 LD      A, H
                 AND     A
-                JP      M, .TITLE
+                RET     M
                 OR      L
-                JR      Z, .TITLE
+                RET     Z
                 LD      (VDP_NY), HL
                 LD      HL, (WINX)
                 LD      (VDP_DX), HL
@@ -615,25 +667,7 @@ WINBOX          PUSH    HL
                 LD      (VDP_ARG), A
                 LD      HL, VDPCMBLK
                 LD      A, VDP_LMMV | VDP_IMP
-                CALL    LMMV
-
-                ; 8. TITLE TEXT IN BOLD + COLOR 3 (TOR) AT (WINX+6, +2)
-.TITLE          POP     HL              ; HL = TITLE STRING
-                LD      A, H
-                OR      L
-                RET     Z
-                LD      A, (HL)
-                OR      A
-                RET     Z
-                PUSH    HL
-                LD      HL, (WINX)
-                LD      DE, 6
-                ADD     HL, DE
-                EX      DE, HL          ; DE = DX
-                LD      BC, WINCOMP_Y + 2
-                POP     HL              ; HL = TITLE STRING
-                LD      A, 1            ; BOLD (VARIANT 1)
-                JP      WINSTR3
+                JP      LMMV
 
 
 ; - WINBTN -----------------------------
@@ -1549,3 +1583,420 @@ EDBTNS          LD      HL, .BTNOK
 
 .BTNOK          DEFM    "[  OK  ]", 0
 .BTNCAN         DEFM    "[CANCEL]", 0
+
+
+; --- DOFIND                    ----------------------------------------
+
+
+; - DOFIND -----------------------------
+; - FIND & REPLACE DIALOG (PHASED IN FTRBASE VIA FCALL).
+; - COLLECTS SEARCH PATTERN, REPLACE PATTERN, OPTIONS AND ACTION.
+; - IN:  NONE
+; - OUT: CY = 1: CANCELLED
+; -      CY = 0: A = ACTION (SRCH_FND, SRCH_RPL, SRCH_ALL)
+; - CLOBBERS: ALL
+; -
+
+DOFIND          LD      HL, 110
+                LD      (WINX), HL
+                LD      HL, 56
+                LD      (WINY), HL
+                LD      HL, 260
+                LD      (WINW), HL
+                LD      HL, 74
+                LD      (WINH), HL
+                LD      HL, .TITFND
+                CALL    WINOPEN
+
+                XOR     A
+                LD      (FNDFOC), A     ; DEFAULT FOCUS: FIND FIELD
+                CALL    .DRWUI
+                CALL    WINSHOW
+
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+
+                CP      ESC
+                JP      Z, .CANCEL
+                CP      TAB
+                JR      Z, .NEXT
+                CP      CDOWN
+                JR      Z, .NEXT
+                CP      CUP
+                JR      Z, .PREV
+                CP      CRIGHT
+                JR      Z, .RGTKEY
+                CP      CLEFT
+                JR      Z, .LFTKEY
+
+                ; ROUTE KEYS ACCORDING TO FOCUSED CONTROL
+                LD      B, A            ; B = KEY
+                LD      A, (FNDFOC)
+                OR      A
+                JR      Z, .FOCFND      ; 0: FIND FIELD
+                DEC     A
+                JP      Z, .FOCRPL      ; 1: REPLACE FIELD
+                DEC     A
+                JP      Z, .FOCCAS      ; 2: CASE OPTION
+                ; 3..6: BUTTONS
+                JP      .FOCBTN
+
+.NEXT           LD      A, (FNDFOC)
+                INC     A
+                CP      7
+                JR      C, .SETFOC
+                XOR     A
+                JR      .SETFOC
+
+.PREV           LD      A, (FNDFOC)
+                OR      A
+                JR      NZ, .PREVD
+                LD      A, 7
+.PREVD          DEC     A
+.SETFOC         LD      (FNDFOC), A
+                CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.RGTKEY         LD      A, (FNDFOC)
+                CP      3
+                JP      C, .KEYLP       ; ONLY ON BUTTONS
+                INC     A
+                CP      7
+                JR      C, .SETFOC
+                LD      A, 3
+                JR      .SETFOC
+
+.LFTKEY         LD      A, (FNDFOC)
+                CP      3
+                JP      C, .KEYLP       ; ONLY ON BUTTONS
+                DEC     A
+                CP      3
+                JR      NC, .SETFOC
+                LD      A, 6
+                JR      .SETFOC
+
+.FOCFND         ; FIELD 0: FIND FIELD
+                LD      A, B
+                CP      CR
+                JP      Z, .DOACT0      ; ENTER ON FIND: IMMEDIATE FIND NEXT
+                CP      BS
+                JR      Z, .BS0
+                ; PRINTABLE CHAR
+                CP      ' '
+                JP      C, .KEYLP
+                LD      A, (SRCHLEN)
+                CP      SRCHMAX
+                JP      NC, .KEYLP      ; FULL
+                LD      E, A
+                LD      D, 0
+                LD      HL, SRCHPAT
+                ADD     HL, DE
+                LD      (HL), B
+                INC     HL
+                LD      (HL), 0
+                INC     A
+                LD      (SRCHLEN), A
+                CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.BS0            LD      A, (SRCHLEN)
+                OR      A
+                JP      Z, .KEYLP
+                DEC     A
+                LD      (SRCHLEN), A
+                LD      E, A
+                LD      D, 0
+                LD      HL, SRCHPAT
+                ADD     HL, DE
+                LD      (HL), 0
+                CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.FOCRPL         ; FIELD 1: REPLACE FIELD
+                LD      A, B
+                CP      CR
+                JP      Z, .DOACT0      ; ENTER ON REPLACE: FIND NEXT
+                CP      BS
+                JR      Z, .BS1
+                CP      ' '
+                JP      C, .KEYLP
+                LD      A, (RPLCLEN)
+                CP      SRCHMAX
+                JP      NC, .KEYLP
+                LD      E, A
+                LD      D, 0
+                LD      HL, RPLCPAT
+                ADD     HL, DE
+                LD      (HL), B
+                INC     HL
+                LD      (HL), 0
+                INC     A
+                LD      (RPLCLEN), A
+                CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.BS1            LD      A, (RPLCLEN)
+                OR      A
+                JP      Z, .KEYLP
+                DEC     A
+                LD      (RPLCLEN), A
+                LD      E, A
+                LD      D, 0
+                LD      HL, RPLCPAT
+                ADD     HL, DE
+                LD      (HL), 0
+                CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.FOCCAS         ; CONTROL 2: CASE OPTION
+                LD      A, B
+                CP      ' '
+                JR      Z, .TOGCAS
+                CP      CR
+                JP      NZ, .KEYLP
+.TOGCAS         LD      A, (SRCHOPT)
+                XOR     1
+                LD      (SRCHOPT), A
+                CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.FOCBTN         ; CONTROLS 3..6: BUTTONS
+                LD      A, B
+                CP      ' '
+                JR      Z, .ACTBTN
+                CP      CR
+                JP      NZ, .KEYLP
+.ACTBTN         LD      A, (FNDFOC)
+                CP      3
+                JP      Z, .DOACT0      ; [Find]
+                CP      4
+                JP      Z, .DOACT1      ; [Repl]
+                CP      5
+                JP      Z, .DOACT2      ; [All]
+                ; 6: [Cancel]
+.CANCEL         CALL    WINCLOS
+                SCF
+                RET
+
+.DOACT0         ; ACCEPT: FIND NEXT
+                CALL    WINCLOS
+                LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z               ; EMPTY SEARCH PATTERN: CANCEL
+                LD      A, SRCH_FND
+                AND     A               ; CY = 0
+                RET
+
+.DOACT1         ; ACCEPT: REPLACE
+                CALL    WINCLOS
+                LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z
+                LD      A, SRCH_RPL
+                AND     A
+                RET
+
+.DOACT2         ; ACCEPT: REPLACE ALL
+                CALL    WINCLOS
+                LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z
+                LD      A, SRCH_ALL
+                AND     A
+                RET
+
+.DRWUI          ; CLEAR BODY BAND
+                LD      HL, (WINH)
+                LD      DE, 13
+                OR      A
+                SBC     HL, DE
+                LD      DE, 12
+                LD      A, CLR_BG
+                CALL    WINBAND
+
+                ; RESTORE SIDE BORDERS OVERWRITTEN BY WINBAND
+                CALL    WINSID
+
+                ; FILL ACTIVE FIELD BOX IF FOCUSED (0 OR 1)
+                LD      A, (FNDFOC)
+                CP      2
+                CALL    C, .FLDBOX
+
+                ; DRAW LABELS
+                LD      HL, .LBLFND
+                LD      B, 0
+                LD      C, 1
+                LD      A, (FNDFOC)
+                OR      A
+                JR      NZ, .FNDNF
+                LD      A, 1            ; BOLD
+                CALL    WINPRN3         ; HIGHLIGHT (COLOR 3 / TOR)
+                JR      .DORPL
+.FNDNF          XOR     A
+                CALL    WINPRN
+
+.DORPL          LD      HL, .LBLRPL
+                LD      B, 1
+                LD      C, 1
+                LD      A, (FNDFOC)
+                DEC     A
+                JR      NZ, .RPLNF
+                LD      A, 1            ; BOLD
+                CALL    WINPRN3         ; HIGHLIGHT (COLOR 3 / TOR)
+                JR      .FLD0
+.RPLNF          XOR     A
+                CALL    WINPRN
+
+                ; DRAW FIELD 0
+.FLD0           LD      HL, SRCHPAT
+                LD      A, (SRCHLEN)
+                LD      D, A
+                LD      B, 0
+                LD      C, 10
+                LD      A, (FNDFOC)
+                OR      A
+                CALL    .DRWFLD
+
+                ; DRAW FIELD 1
+                LD      HL, RPLCPAT
+                LD      A, (RPLCLEN)
+                LD      D, A
+                LD      B, 1
+                LD      C, 10
+                LD      A, (FNDFOC)
+                DEC     A
+                CALL    .DRWFLD
+
+                ; DRAW CASE OPTION
+                LD      HL, .LBLCAS
+                LD      B, 2
+                LD      C, 1
+                XOR     A
+                CALL    WINPRN
+
+                LD      A, (SRCHOPT)
+                BIT     0, A
+                LD      HL, .STRSP
+                JR      Z, .NOCAS
+                LD      HL, .STRX
+.NOCAS          LD      B, 2
+                LD      C, 14
+                LD      A, (FNDFOC)
+                CP      2
+                LD      A, 0
+                JR      NZ, .CASNSEL
+                INC     A               ; VARIANT 1 (BOLD) WHEN FOCUSED
+.CASNSEL        CALL    WINPRN
+                LD      HL, .STRBRK
+                LD      B, 2
+                LD      C, 15
+                XOR     A
+                CALL    WINPRN
+
+                ; DRAW BUTTONS AT RELATIVE Y = 50
+                LD      HL, .BTNFND
+                LD      DE, 12
+                LD      BC, 50
+                LD      A, (FNDFOC)
+                CP      3
+                LD      A, 0
+                JR      NZ, .B0SEL
+                INC     A
+.B0SEL          CALL    WINBTS
+
+                LD      HL, .BTNRPL
+                LD      DE, 72
+                LD      BC, 50
+                LD      A, (FNDFOC)
+                CP      4
+                LD      A, 0
+                JR      NZ, .B1SEL
+                INC     A
+.B1SEL          CALL    WINBTS
+
+                LD      HL, .BTNALL
+                LD      DE, 132
+                LD      BC, 50
+                LD      A, (FNDFOC)
+                CP      5
+                LD      A, 0
+                JR      NZ, .B2SEL
+                INC     A
+.B2SEL          CALL    WINBTS
+
+                LD      HL, .BTNCAN
+                LD      DE, 192
+                LD      BC, 50
+                LD      A, (FNDFOC)
+                CP      6
+                LD      A, 0
+                JR      NZ, .B3SEL
+                INC     A
+.B3SEL          JP      WINBTS
+
+.FLDBOX         ; A = ROW (0 OR 1)
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      DE, WINCOMP_Y + 16
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                LD      HL, (WINX)
+                LD      DE, 64
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                LD      HL, 116
+                LD      (VDP_NX), HL
+                LD      HL, 8
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      A, CLR_UI
+                LD      (VDP_CLR), A
+                LD      HL, VDPCMBLK
+                JP      HMMV
+
+.DRWFLD         ; DRAW FIELD: B=ROW, C=COL, HL=TEXT, D=LEN, Z FLAG SET IF FOCUSED
+                PUSH    AF
+                PUSH    BC
+                PUSH    DE
+                XOR     A
+                CALL    WINPRN
+                POP     DE
+                POP     BC
+                POP     AF
+                RET     NZ
+                ; PRINT CARET IN COLOR 3 HIGHLIGHT
+                PUSH    BC
+                LD      A, C
+                ADD     A, D
+                LD      C, A
+                LD      HL, .STRCRT
+                XOR     A
+                CALL    WINPRN3
+                POP     BC
+                RET
+
+.TITFND         DEFM    "Find & Replace", 0
+.LBLFND         DEFM    "Find:   ", 0
+.LBLRPL         DEFM    "Replace:", 0
+.LBLCAS         DEFM    "Match case: [", 0
+.STRSP          DEFM    " ", 0
+.STRX           DEFM    "X", 0
+.STRBRK         DEFM    "]", 0
+.STRCRT         DEFB    #DB, 0
+.BTNFND         DEFM    "[ Find ]", 0
+.BTNRPL         DEFM    "[ Repl ]", 0
+.BTNALL         DEFM    "[ All  ]", 0
+.BTNCAN         DEFM    "[Cancel]", 0
