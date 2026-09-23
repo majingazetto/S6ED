@@ -126,7 +126,12 @@ EDINSRUN        LD      (WBSRC), HL     ; SURVIVES LINEREAD
                 SCF
                 RET
 
-.IRFITS         LD      HL, WORKBUF
+.IRFITS         ; ONE LINE CHANGES: RECORD IT AS IT STANDS IN WORKBUF
+                CALL    UNDOCLS
+                LD      A, UNDOT_MOD
+                CALL    UNDOREC
+
+                LD      HL, WORKBUF
                 LD      DE, (WBSRC)
                 LD      A, (WBRUN)
                 LD      B, A
@@ -183,6 +188,11 @@ EDPSHWR         CALL    UNDOCLS
                 RET     C               ; NO MAPPER MEMORY: LEAVE THE LINE ALONE
                 LD      (NRSEG), A
                 LD      (NROFF), DE
+
+                ; THE PUSH MOVES TEXT ACROSS LINES AND IS NOT RECORDED, SO THE
+                ; HISTORY WOULD NAME LINES IT IS ABOUT TO SHIFT: DROP IT
+                ; (UNDOINIT KEEPS BC AND DE)
+                CALL    UNDOINIT
 
                 ; 1. SPLIT COLUMN = START OF THE TRAILING WORD
                 PUSH    BC              ; SAVE C (CHAR TO INSERT)
@@ -631,7 +641,11 @@ REFLOW          LD      (RFLINE), HL
                 JR      NZ, .NOTEMP
 
                 ; LINE L+1 IS EMPTY (LEN == 0):
-                ; DELETE THE EMPTY LINE AND STOP (PARAGRAPH BOUNDARY)
+                ; DELETE THE EMPTY LINE AND STOP (PARAGRAPH BOUNDARY).
+                ; A REFLOW MOVES TEXT ACROSS LINES AND IS NOT RECORDED: EACH
+                ; BRANCH THAT WRITES DROPS THE HISTORY FIRST, WHICH WOULD
+                ; OTHERWISE NAME LINES THIS IS ABOUT TO SHIFT
+                CALL    UNDOINIT
                 LD      HL, (RFLINE)
                 INC     HL
                 CALL    LINEDEL
@@ -709,6 +723,7 @@ REFLOW          LD      (RFLINE), HL
                 RET
 
 .RFFND          ; B = INDEX IN LINE B WHERE SPACE WAS FOUND
+                CALL    UNDOINIT        ; KEEPS B
                 LD      A, B
                 LD      (RFCNT), A
 
@@ -846,6 +861,7 @@ REFLOW          LD      (RFLINE), HL
                 JP      .RFLOOP
 
 .RFALL          ; ENTIRE LINE L+1 FITS ON LINE L!
+                CALL    UNDOINIT
                 LD      A, (RFSEP)
                 OR      A
                 JR      Z, .NOPSEP2

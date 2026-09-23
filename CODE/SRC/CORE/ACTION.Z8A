@@ -389,6 +389,12 @@ ACTDWLFT        LD      A, (CURX)
                 RET     Z               ; DELTA IS ZERO, NOTHING TO DELETE
                 LD      (DWK), A
 
+                ; RECORD THE LINE BEFORE IT CHANGES; CURX IS DWFROM AGAIN, SO
+                ; CTRL+Z PUTS THE CURSOR BACK AFTER THE WORD
+                CALL    UNDOCLS
+                LD      A, UNDOT_MOD
+                CALL    UNDOREC
+
                 ; 1. SHIFT TEXT (WORKBUF + 1)
                 ; DEST = WORKBUF + 1 + DWTO
                 ; SRC  = WORKBUF + 1 + DWFROM
@@ -971,8 +977,19 @@ GOTOLN          ; CLAMP INTO [1, TOTLINES]
                 LD      (DOCLINE), HL
                 XOR     A
                 LD      (CURX), A
+                ; FALLS THROUGH INTO SHOWLN WITH HL = DOCLINE
 
-                ; ALREADY ON SCREEN? TOPLINE <= DOCLINE < TOPLINE + ROWSVIS
+
+; - SHOWLN -----------------------------
+; - MAKE A DOCUMENT LINE VISIBLE: LEAVE THE VIEWPORT ALONE WHEN IT ALREADY
+; - SHOWS THE LINE, OTHERWISE CENTRE ON IT, CLAMPED TO THE LAST FULL PAGE;
+; - THEN SET CURY. SAME ROWSVIS RULE AS GOTOLN ABOVE.
+; - IN:  HL = LINE, WHICH MUST BE DOCLINE (CURY IS DERIVED FROM IT)
+; - OUT: TOPLINE, CURY
+; - CLOBBERS: AF, DE, HL
+; -
+
+SHOWLN          ; ALREADY ON SCREEN? TOPLINE <= DOCLINE < TOPLINE + ROWSVIS
                 LD      DE, (TOPLINE)
                 CALL    CMPHLDE
                 JR      C, .CENTRE      ; ABOVE THE VIEWPORT
@@ -1747,7 +1764,11 @@ ACTDLS          LD      A, (SELACT)
                 CP      (HL)
                 JP      Z, .DLSCLR      ; EMPTY RANGE: JUST CLEAR AND EXIT
 
-.DLSNEMP        ; CHECK SINGLE-LINE VS MULTI-LINE
+.DLSNEMP        ; RECORD EVERY LINE THE DELETE TOUCHES, AS ONE UNDO GROUP
+                LD      A, UNDOT_DEL
+                CALL    UNDOSEL
+
+                ; CHECK SINGLE-LINE VS MULTI-LINE
                 LD      HL, (SELSTRL)
                 LD      DE, (SELENDL)
                 CALL    CMPHLDE
@@ -2006,12 +2027,14 @@ ACTDLS          LD      A, (SELACT)
                 LD      (TOTLINES), HL
                 JR      .DELOOP
 
-.DELDONE        ; 5. RE-POSITION CURSOR AT START
+.DELDONE        ; 5. RE-POSITION CURSOR AT START, AND ON SCREEN: A SELECTION
+                ;    MAY START ABOVE THE VIEWPORT (CTRL+A AFTER SCROLLING),
+                ;    WHICH SETCURY ALONE TURNED INTO A NEGATIVE CURY
                 LD      A, (SELSTRX)
                 LD      (CURX), A
                 LD      HL, (SELSTRL)
                 LD      (DOCLINE), HL
-                CALL    SETCURY
+                CALL    SHOWLN
                 CALL    REDRAW
 
 .DLSFIN         XOR     A
@@ -2589,7 +2612,9 @@ APPLSEL         LD      (STYLMASK), A
                 CP      (HL)
                 RET     Z               ; EMPTY: NOTHING TO STYLE
 
-.APLINIT        LD      HL, (SELSTRL)
+.APLINIT        LD      A, UNDOT_MOD    ; EVERY SELECTED LINE, ONE UNDO GROUP
+                CALL    UNDOSEL
+                LD      HL, (SELSTRL)
                 LD      (STYLLN), HL
 
 .APLLINE        ; READ CURRENT LINE RECORD INTO WORKBUF
