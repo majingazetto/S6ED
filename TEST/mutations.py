@@ -2067,12 +2067,12 @@ SELTMPXB        EQU     SELTMPXB2""")],
     },
     {
         'name': 's2-undo-gmax',
-        'why': 'UNDOGMAX written for the 171-byte S6ED record: S2ED would drop '
-               'the history on any delete over 46 lines instead of 57',
+        'why': 'UNDOGMAX set too low: S2ED would drop the history on any delete '
+               'over 15 lines instead of 28',
         'target': 'S2ED',
         'file': 'CONST_CORE.Z8A',
         'old': """UNDOGMAX        EQU     (UNDOSIZ - UNDOMOD_SZ + 1) / UNDOMOD_SZ""",
-        'new': """UNDOGMAX        EQU     46              ; MUTATION: ONE TARGET'S NUMBER""",
+        'new': """UNDOGMAX        EQU     15              ; MUTATION: GMAX TOO LOW""",
         'filter': 'S2-20',
         'expect': ['S2-20/big/cycle'],
     },

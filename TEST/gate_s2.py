@@ -135,6 +135,13 @@ class S21Render(S2Case):
                             '%d text rows match the computed table'
                             % pattern.ROWSVIS if not bad else
                             'rows differ: %s' % bad[:6]))
+        menu_pat = pattern.row_of(pat, pattern.MNUROW)
+        want_menu = pattern.compose_row(font(ctx), menubar(ctx))
+        dif_menu = pattern.differing_columns(menu_pat, want_menu)
+        checks.append(Check('S2-1/menubar', not dif_menu,
+                            'row 0 matches menubar text'
+                            if not dif_menu else
+                            'menubar cols differ: %s' % dif_menu[:6]))
         checks.append(Check('S2-1/totlines',
                             run.var('boot', 'TOTLINES') == len(self.LINES),
                             'TOTLINES = %s (expected %d)'
@@ -2122,15 +2129,15 @@ class S220UndoSelDel(S2Case):
     origin = ('ACTDLS recorded nothing: select the TEST lines, DEL, Ctrl+Z did '
               'nothing -- or, with an older edit in the history, replayed it '
               'on the line that now had its number.  UNDOGMAX derives from '
-              'LINEREC, so S2ED groups up to 57 lines where S6ED stops at 46: '
-              'the big variant is what a constant written for one target '
-              'would get wrong.')
+              'LINEREC and UNDOSIZ, so S2ED groups up to 28 lines with 4 KB undo '
+              '(where S6ED groups 46 with 8 KB): the big variant is what a '
+              'constant written for one target would get wrong.')
     variants = ('fresh', 'stale', 'big')
     LINES = ['Hello MSX World!', 'This is a test of S2ED.',
              'MSX Screen 2 Text Editor', '64 columns x 24 rows.',
              'With colours!!', 'Line six', 'Line seven', 'Line eight']
-    BIG = ['ROW %02d OF THE GROUP TEST' % i for i in range(60)]
-    GROUP = 57
+    BIG = ['ROW %02d OF THE GROUP TEST' % i for i in range(35)]
+    GROUP = 28
 
     def lines(self, variant):
         return self.BIG if variant == 'big' else self.LINES

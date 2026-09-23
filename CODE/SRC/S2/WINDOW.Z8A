@@ -783,12 +783,12 @@ WINPUTC         PUSH    BC              ; ROW/COL FOR THE CALLER
                 POP     AF              ; CF = HALF
                 JR      C, .RGHT
                 LD      A, H
-                ADD     A, #B0          ; HIGH(FONT4H)
+                ADD     A, HIGH(FONT4H)
                 LD      H, A            ; HL = FONT4H + CHAR*8
                 LD      D, #0F          ; KEEP THE RIGHT GLYPH OF THE CELL
                 JR      .MRGE
 .RGHT           LD      A, H
-                ADD     A, #B8          ; HIGH(FONT4L)
+                ADD     A, HIGH(FONT4L)
                 LD      H, A            ; HL = FONT4L + CHAR*8
                 LD      D, #F0          ; KEEP THE LEFT GLYPH
 .MRGE           LD      B, 8

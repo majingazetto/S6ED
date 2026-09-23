@@ -291,7 +291,7 @@ COMCELL         PUSH    DE              ; SAVE ATTRIBUTES (D=LATTR, E=RATTR)
                 ADD     HL, HL
                 ADD     HL, HL
                 LD      A, H
-                ADD     A, #B0          ; HIGH(FONT4H)
+                ADD     A, HIGH(FONT4H)
                 LD      H, A            ; HL = FONT4H + LCHAR * 8
 
                 ; 2. RESOLVE RIGHT GLYPH (FONT4L + RCHAR * 8)
@@ -302,7 +302,7 @@ COMCELL         PUSH    DE              ; SAVE ATTRIBUTES (D=LATTR, E=RATTR)
                 ADD     HL, HL
                 ADD     HL, HL
                 LD      A, H
-                ADD     A, #B8          ; HIGH(FONT4L)
+                ADD     A, HIGH(FONT4L)
                 LD      H, A
                 EX      DE, HL          ; DE = FONT4L + RCHAR * 8
 
