@@ -60,6 +60,7 @@ DEFAULT_VARS = [
     ('INPLEN', 1),                      # WINEDIT: characters in the field
     ('SRCHLEN', 1), ('RPLCLEN', 1), ('RPLCNT', 2),
     ('SRCHOPT', 1), ('SRCHDIR', 1), ('SRCHCOL', 1), ('SRCHLST', 2),
+    ('FNDFOC', 1),
     ('SELANCX', 1), ('SELANCL', 2),
     ('WINSEL', 1), ('WINRES', 1), ('WINBST', 1),
     ('MNUID', 1), ('MNUSEL', 1),

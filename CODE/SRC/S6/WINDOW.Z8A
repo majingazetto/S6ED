@@ -1697,8 +1697,7 @@ DOFIND          LD      HL, 110
                 LD      (HL), 0
                 INC     A
                 LD      (SRCHLEN), A
-                CALL    .DRWUI
-                CALL    WINSHOW
+                CALL    .REFLD0
                 JP      .KEYLP
 
 .BS0            LD      A, (SRCHLEN)
@@ -1711,8 +1710,7 @@ DOFIND          LD      HL, 110
                 LD      HL, SRCHPAT
                 ADD     HL, DE
                 LD      (HL), 0
-                CALL    .DRWUI
-                CALL    WINSHOW
+                CALL    .REFLD0
                 JP      .KEYLP
 
 .FOCRPL         ; FIELD 1: REPLACE FIELD
@@ -1735,8 +1733,7 @@ DOFIND          LD      HL, 110
                 LD      (HL), 0
                 INC     A
                 LD      (RPLCLEN), A
-                CALL    .DRWUI
-                CALL    WINSHOW
+                CALL    .REFLD1
                 JP      .KEYLP
 
 .BS1            LD      A, (RPLCLEN)
@@ -1749,8 +1746,7 @@ DOFIND          LD      HL, 110
                 LD      HL, RPLCPAT
                 ADD     HL, DE
                 LD      (HL), 0
-                CALL    .DRWUI
-                CALL    WINSHOW
+                CALL    .REFLD1
                 JP      .KEYLP
 
 .FOCCAS         ; CONTROL 2: CASE OPTION
@@ -1880,27 +1876,69 @@ DOFIND          LD      HL, 110
                 LD      HL, .LBLCAS
                 LD      B, 2
                 LD      C, 1
-                XOR     A
-                CALL    WINPRN
-
-                LD      A, (SRCHOPT)
-                BIT     0, A
-                LD      HL, .STRSP
-                JR      Z, .NOCAS
-                LD      HL, .STRX
-.NOCAS          LD      B, 2
-                LD      C, 14
                 LD      A, (FNDFOC)
                 CP      2
                 LD      A, 0
-                JR      NZ, .CASNSEL
+                JR      NZ, .CASNF
                 INC     A               ; VARIANT 1 (BOLD) WHEN FOCUSED
-.CASNSEL        CALL    WINPRN
-                LD      HL, .STRBRK
+.CASNF          CALL    WINPRN
+
+                LD      A, (FNDFOC)
+                CP      2
+                JR      NZ, .CASUNF
+
+                ; FOCUSED: FILL 6X8 CHECKBOX WITH COL_HI (YELLOW)
+                LD      HL, (WINX)
+                LD      DE, 90
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y + 32
+                LD      (VDP_DY), HL
+                LD      HL, 6
+                LD      (VDP_NX), HL
+                LD      HL, 8
+                LD      (VDP_NY), HL
+                LD      A, COL_HI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; IF CHECKED, DRAW 'X' IN TXOR OVER YELLOW BLOCK
+                LD      A, (SRCHOPT)
+                BIT     0, A
+                JR      Z, .CASDON
+                LD      HL, (WINX)
+                LD      DE, 90
+                ADD     HL, DE          ; HL = DX
+                LD      DE, WINCOMP_Y + 32 ; DE = DY
+                LD      A, 'X'
+                LD      B, 1            ; BOLD
+                LD      C, VDP_TXOR     ; %11 ^ %01 = %10 (COL_UI)
+                CALL    WINCHTR
+                JR      .CASDON
+
+.CASUNF         ; UNFOCUSED: DRAW 'X' IF CHECKED, NOTHING IF UNCHECKED
+                LD      A, (SRCHOPT)
+                BIT     0, A
+                JR      Z, .CASDON
+                LD      HL, .STRX
+                LD      B, 2
+                LD      C, 14
+                XOR     A               ; VARIANT 0 (NORMAL)
+                CALL    WINPRN
+
+.CASDON         LD      HL, .STRBRK
                 LD      B, 2
                 LD      C, 15
-                XOR     A
-                CALL    WINPRN
+                LD      A, (FNDFOC)
+                CP      2
+                LD      A, 0
+                JR      NZ, .BRKNF
+                INC     A               ; VARIANT 1 (BOLD) WHEN FOCUSED
+.BRKNF          CALL    WINPRN
 
                 ; DRAW BUTTONS AT RELATIVE Y = 50
                 LD      HL, .BTNFND
@@ -1987,6 +2025,37 @@ DOFIND          LD      HL, 110
                 CALL    WINPRN3
                 POP     BC
                 RET
+
+.REFLD0         XOR     A               ; ROW 0
+                CALL    .FLDBOX
+                LD      HL, SRCHPAT
+                LD      A, (SRCHLEN)
+                LD      D, A
+                LD      B, 0
+                LD      C, 10
+                XOR     A               ; Z FLAG SET (FOCUSED)
+                CALL    .DRWFLD
+                LD      DE, 16          ; REL Y = 16
+                JR      .RFBLIT
+
+.REFLD1         LD      A, 1            ; ROW 1
+                CALL    .FLDBOX
+                LD      HL, RPLCPAT
+                LD      A, (RPLCLEN)
+                LD      D, A
+                LD      B, 1
+                LD      C, 10
+                XOR     A               ; Z FLAG SET (FOCUSED)
+                CALL    .DRWFLD
+                LD      DE, 24          ; REL Y = 24
+
+.RFBLIT         PUSH    DE
+                CALL    WINVSY
+                POP     DE
+                LD      HL, 64          ; REL X = 64
+                LD      BC, 116         ; NX = 116
+                LD      A, 8            ; NY = 8
+                JP      WINUPD
 
 .TITFND         DEFM    "Find & Replace", 0
 .LBLFND         DEFM    "Find:   ", 0
