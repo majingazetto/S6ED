@@ -95,16 +95,13 @@ VCOLNUM         EQU     12
                 ;   #8000  PATSHAD  6144  PATTERN SHADOW, 256 B PER ROW
                 ;   #9800  COLMAP    768  COLOR MAP, 1 BYTE PER CELL
                 ;   #9B00  COLEXP    256  ONE ROW OF COLMAP EXPANDED X8
-                ;   #9C00  FTRBASE  5120  FEATURE PASSENGER CONTAINER
-                ;   #B000  FONT4H   2048  HIGH-NIBBLE FONT
-                ;   #B800  FONT4L   2048  LOW-NIBBLE FONT
+                ;   #9C00  FTRBASE  9216  FEATURE PASSENGER CONTAINER
+                ;   #C000  FTRTOP
 PATSHAD         EQU     #8000           ; PATTERN SHADOW (#8000-#97FF, 6144 B)
 COLMAP          EQU     #9800           ; COLOR MAP      (#9800-#9AFF, 768 B)
 COLEXP          EQU     #9B00           ; ROW COLOR STAGER (#9B00-#9BFF, 256 B)
 FTRBASE         EQU     #9C00           ; FEATURE CONTAINER BASE
-FTRTOP          EQU     #B000           ; FIRST BYTE PAST THE CONTAINER
-FONT4H          EQU     #B000           ; HIGH-NIBBLE FONT (#B000-#B7FF, 2048 B)
-FONT4L          EQU     #B800           ; LOW-NIBBLE FONT  (#B800-#BFFF, 2048 B)
+FTRTOP          EQU     #C000           ; FIRST BYTE PAST THE CONTAINER (PAGE 3)
 
 CELLROW         EQU     SCRCOLS / 2     ; 32 CELLS PER SCREEN ROW
 CMAPLEN         EQU     CELLROW * SCRROWS ; 768 BYTES OF COLOR MAP

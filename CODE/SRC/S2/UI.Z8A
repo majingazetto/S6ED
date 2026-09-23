@@ -71,7 +71,7 @@ DRWSTAT         CALL    BLDSTAT         ; BUILD STRING IN STATBUF
                 ADD     HL, HL
                 ADD     HL, HL
                 LD      A, H
-                ADD     A, #B0
+                ADD     A, HIGH(FONT4H)
                 LD      H, A            ; HL = FONT4H + LCHAR * 8
 
                 ; RESOLVE RIGHT GLYPH
@@ -82,7 +82,7 @@ DRWSTAT         CALL    BLDSTAT         ; BUILD STRING IN STATBUF
                 ADD     HL, HL
                 ADD     HL, HL
                 LD      A, H
-                ADD     A, #B8
+                ADD     A, HIGH(FONT4L)
                 LD      H, A
                 EX      DE, HL          ; DE = FONT4L + RCHAR * 8
 
@@ -301,7 +301,7 @@ DRWMENU         CALL    VIDBANK
                 ADD     HL, HL
                 ADD     HL, HL
                 LD      A, H
-                ADD     A, #B0
+                ADD     A, HIGH(FONT4H)
                 LD      H, A
 
                 ; RESOLVE RIGHT GLYPH
@@ -312,7 +312,7 @@ DRWMENU         CALL    VIDBANK
                 ADD     HL, HL
                 ADD     HL, HL
                 LD      A, H
-                ADD     A, #B8
+                ADD     A, HIGH(FONT4L)
                 LD      H, A
                 EX      DE, HL
 
