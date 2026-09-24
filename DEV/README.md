@@ -11,6 +11,9 @@ manuals, keybinding references, etc.) belongs in `../DOC/`.
   multi-segment container specification (Fases 1a, 1b, 2, 3a and C1).
 - `PLAN_CORRECCIONES.md` — post-Fase-3a correction plan (Fases C1–C4) with a
   closing note per completed phase.
+- `PLAN_ROADMAP_V1.md` — post-Find & Replace architecture roadmap: right-justified
+  status bar, VI command console (:), unified Settings dialog, zero-extra-segment
+  file browser, and TED keymap profile.
 - `FONT_BRIEF.md` — font asset brief: `S6ED.FNT` variants and glyph sheet.
 - `informe_directorio_segmento_s6ed.md` — line-directory / mapper-segment
   investigation report.
