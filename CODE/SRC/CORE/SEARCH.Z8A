@@ -181,7 +181,7 @@ SRCHFWD         LD      A, (SRCHLEN)
                 INC     A
                 LD      C, A
                 CALL    SCANLNF
-                JR      NC, .MATCH
+                JR      NC, .MATCUR     ; MATCH ON CURRENT LINE
 
                 ; 2. SEARCH FORWARD: DOCLINE+1 UP TO TOTLINES-1
                 LD      HL, (DOCLINE)
@@ -225,6 +225,7 @@ SRCHFWD         LD      A, (SRCHLEN)
                 CP      C
                 RET     C               ; FOUND ONLY AT/PAST CURX (ALREADY CHECKED)
 
+.MATCUR         LD      HL, (DOCLINE)   ; SCANLNF LEAVES HL IN WORKBUF: RELOAD LINE
 .MATCH          ; MATCH AT LINE HL, COLUMN C
                 PUSH    BC
                 PUSH    HL
@@ -281,7 +282,7 @@ SRCHBWD         LD      A, (SRCHLEN)
                 DEC     A
                 LD      C, A
                 CALL    SCANLNB
-                JR      NC, .BMATCH
+                JR      NC, .BMATCUR    ; MATCH ON CURRENT LINE
 
 .PREVLN         ; 2. SEARCH BACKWARD: DOCLINE-1 DOWN TO 0
                 LD      HL, (DOCLINE)
@@ -331,13 +332,14 @@ SRCHBWD         LD      A, (SRCHLEN)
                 RET     C
                 LD      A, (CURX)
                 CP      C
-                JR      C, .BMATCH      ; MATCH IS AFTER CURX: WRAP MATCH OK
+                JR      C, .BMATCUR     ; MATCH IS AFTER CURX: WRAP MATCH OK
                 SCF
                 RET                     ; MATCH IS AT OR BEFORE CURX (ALREADY CHECKED)
 
 .NOTFND         SCF
                 RET
 
+.BMATCUR        LD      HL, (DOCLINE)   ; SCANLNB LEAVES HL IN WORKBUF: RELOAD LINE
 .BMATCH         PUSH    BC
                 PUSH    HL
                 CALL    SELPRE

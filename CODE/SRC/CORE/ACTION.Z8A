@@ -998,8 +998,7 @@ ACTFNXT         LD      A, (SRCHLEN)
                 JR      Z, ACTFIND      ; NO PATTERN YET: OPEN DIALOG
                 CALL    SRCHFWD
                 JR      C, .NOTFND
-                CALL    REDRAW
-                JP      DRWSTAT
+                RET                     ; SRCHFWD REPAINTS AND KEEPS THE MATCH SELECTED
 
 .NOTFND         LD      E, BEL
                 LD      C, _CONOUT
@@ -1022,8 +1021,7 @@ ACTFPRV         LD      A, (SRCHLEN)
                 JR      Z, ACTFIND      ; NO PATTERN YET: OPEN DIALOG
                 CALL    SRCHBWD
                 JR      C, .NOTFND
-                CALL    REDRAW
-                JP      DRWSTAT
+                RET                     ; SRCHBWD REPAINTS AND KEEPS THE MATCH SELECTED
 
 .NOTFND         LD      E, BEL
                 LD      C, _CONOUT

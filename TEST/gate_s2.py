@@ -2450,12 +2450,109 @@ class S221FindReplace(S2Case):
         return checks
 
 
+class S222FindCurrentLine(S2Case):
+    name = 'S2-22-find-current-line'
+    desc = ('find lands right when the match is on the CURRENT line: forward, '
+            'forward after wrap, backward, backward after wrap -- and the '
+            'match stays inverted on screen')
+    origin = ('2026-09-24, from the keyboard on BOTH targets: SRCHFWD and '
+              'SRCHBWD reached .MATCH/.BMATCH straight from SCANLNF/SCANLNB '
+              'on the current-line paths, and those leave HL pointing into '
+              'WORKBUF -- DOCLINE became WORKBUF+1+C, the status bar read '
+              '"Ln 20575/00030" and the cursor was painted on the status '
+              'row.  S2-21 only ever matched on OTHER lines (.BMATPOP), '
+              'which is why the suite was green.')
+    LINES = ['AAA MSX BBB MSX CCC']
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def chars(self, t, s):
+        for ch in s:
+            t.press(ch)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram='pat')
+
+        # 1. Ctrl+F, type MSX, ENTER: match on the CURRENT line (step 1)
+        t.wait(1.0)
+        t.press('F', mods=['CTRL'])
+        t.wait(1.0)
+        self.chars(t, 'MSX')
+        t.wait(0.5)
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('found1', vram='pat')
+
+        # 2. Ctrl+L: second match, still the current line (step 1 again)
+        t.wait(1.0)
+        t.press('L', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('found2')
+
+        # 3. Ctrl+L: wraps top and re-finds the first match (.LSTCHK)
+        t.wait(1.0)
+        t.press('L', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('found3')
+
+        # 4. Ctrl+R: wraps bottom and re-finds the second match (.BLSTCHK)
+        t.wait(1.0)
+        t.press('R', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('found4')
+
+        # 5. Ctrl+R: previous match on the current line (backward step 1)
+        t.wait(1.0)
+        t.press('R', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('found5')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        checks = []
+        want = {'found1': 4, 'found2': 12, 'found3': 4, 'found4': 12,
+                'found5': 4}
+        for label, col in want.items():
+            got = tuple(run.var(label, v) for v in
+                        ('DOCLINE', 'CURX', 'SELANCL', 'SELANCX', 'SELACT',
+                         'TOPLINE', 'CURY'))
+            ok = got == (0, col + 3, 0, col, 1, 0, 0)
+            checks.append(Check('S2-22/%s' % label, ok,
+                                'match selected at line 0 col %d..%d, '
+                                'viewport and cursor in place' % (col, col + 3)
+                                if ok else
+                                '(DOCLINE, CURX, SELANCL, SELANCX, SELACT, '
+                                'TOPLINE, CURY) = %s' % (got,)))
+
+        # The match is highlighted: cell 2 (columns 4..5, 'MS', fully inside
+        # the match and away from the cursor cell) inverted; cells 0..1
+        # clean.  Cell 3 also carries the cursor, so its state is ambiguous.
+        cury = run.var('found1', 'CURY')
+        pat = run.blob('found1', 'pat')
+        hl_ok = False
+        inv = 'no dump'
+        if pat is not None and cury == 0:
+            plain = pattern.compose_row(font(ctx), self.LINES[0])
+            inv = pattern.inverted_columns(
+                pattern.row_of(pat, pattern.TXRFIRST), plain)
+            hl_ok = ({4, 5} <= set(inv)) and not (set(inv) & {0, 1, 2, 3})
+        checks.append(Check('S2-22/highlight', hl_ok,
+                            'match cell inverted, leading cells clean'
+                            if hl_ok else
+                            'inverted columns: %s (CURY=%s)' % (inv, cury)))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
          S213ShadowCfg(), S214Markup(), S215Quit(),
          S216Menu(), S217MenuNav(), S218Goto(),
-         S219SelLines(), S220UndoSelDel(), S221FindReplace()]
+         S219SelLines(), S220UndoSelDel(), S221FindReplace(),
+         S222FindCurrentLine()]
 
 
 def run(ctx, cases=None):
