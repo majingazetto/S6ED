@@ -2076,6 +2076,84 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'S2-20',
         'expect': ['S2-20/big/cycle'],
     },
+    {
+        'name': 'find-matcur',
+        'why': 'SRCHFWD reaches .MATCH with the HL SCANLNF left pointing into '
+               'WORKBUF, so a match on the current line stores WORKBUF+1+C '
+               'into DOCLINE -- the reported "Ln 20960, cursor on the status '
+               'bar" defect',
+        'file': 'SEARCH.Z8A',
+        'old': """.MATCUR         LD      HL, (DOCLINE)   ; SCANLNF LEAVES HL IN WORKBUF: RELOAD LINE""",
+        'new': """.MATCUR                                 ; MUTATION: HL LEFT IN WORKBUF""",
+        'filter': 'H26',
+        'expect': ['H26/found1', 'H26/found2', 'H26/found3', 'H26/highlight'],
+    },
+    {
+        'name': 'find-bmatcur',
+        'why': 'SRCHBWD reaches .BMATCH with the HL SCANLNB left pointing '
+               'into WORKBUF, so a backward match on the current line stores '
+               'WORKBUF+1+C into DOCLINE',
+        'file': 'SEARCH.Z8A',
+        'old': """.BMATCUR        LD      HL, (DOCLINE)   ; SCANLNB LEAVES HL IN WORKBUF: RELOAD LINE""",
+        'new': """.BMATCUR                                ; MUTATION: HL LEFT IN WORKBUF""",
+        'filter': 'H26',
+        'expect': ['H26/found4', 'H26/found5'],
+    },
+    {
+        'name': 's2-find-matcur',
+        'why': 'the same current-line forward defect seen on the 64-column '
+               'target ("Ln 20575" on the status bar)',
+        'target': 'S2ED',
+        'file': 'SEARCH.Z8A',
+        'old': """.MATCUR         LD      HL, (DOCLINE)   ; SCANLNF LEAVES HL IN WORKBUF: RELOAD LINE""",
+        'new': """.MATCUR                                 ; MUTATION: HL LEFT IN WORKBUF""",
+        'filter': 'S2-22',
+        'expect': ['S2-22/found1', 'S2-22/found2', 'S2-22/found3',
+                   'S2-22/highlight'],
+    },
+    {
+        'name': 's2-find-bmatcur',
+        'why': 'the same current-line backward defect seen on the 64-column '
+               'target',
+        'target': 'S2ED',
+        'file': 'SEARCH.Z8A',
+        'old': """.BMATCUR        LD      HL, (DOCLINE)   ; SCANLNB LEAVES HL IN WORKBUF: RELOAD LINE""",
+        'new': """.BMATCUR                                ; MUTATION: HL LEFT IN WORKBUF""",
+        'filter': 'S2-22',
+        'expect': ['S2-22/found4', 'S2-22/found5'],
+    },
+    {
+        'name': 'find-redraw',
+        'why': 'ACTFNXT repaints after SRCHFWD already painted the match, '
+               'and REDRAW clears SELDRAWN: the found word flashes selected '
+               'and immediately un-highlights',
+        'file': 'ACTION.Z8A',
+        'old': """                CALL    SRCHFWD
+                JR      C, .NOTFND
+                RET                     ; SRCHFWD REPAINTS AND KEEPS THE MATCH SELECTED""",
+        'new': """                CALL    SRCHFWD
+                JR      C, .NOTFND
+                CALL    REDRAW          ; MUTATION: REPAINTS OVER THE SELECTION
+                JP      DRWSTAT""",
+        'filter': 'H26',
+        'expect': ['H26/highlight'],
+    },
+    {
+        'name': 's2-find-redraw',
+        'why': 'the same redundant repaint erasing the match highlight on '
+               'the 64-column target',
+        'target': 'S2ED',
+        'file': 'ACTION.Z8A',
+        'old': """                CALL    SRCHFWD
+                JR      C, .NOTFND
+                RET                     ; SRCHFWD REPAINTS AND KEEPS THE MATCH SELECTED""",
+        'new': """                CALL    SRCHFWD
+                JR      C, .NOTFND
+                CALL    REDRAW          ; MUTATION: REPAINTS OVER THE SELECTION
+                JP      DRWSTAT""",
+        'filter': 'S2-22',
+        'expect': ['S2-22/highlight'],
+    },
 ]
 
 

@@ -4298,6 +4298,109 @@ class H25FindReplace(Case):
 
 
 
+# --- H26  FIND WITH THE MATCH ON THE CURRENT LINE ---------------------
+
+
+class H26FindCurrentLine(Case):
+    name = 'H26-find-current-line'
+    desc = ('find lands right when the match is on the CURRENT line: forward, '
+            'forward after wrap, backward, backward after wrap -- and the '
+            'match stays XOR highlighted on screen')
+    origin = ('2026-09-24, from the keyboard on BOTH targets: SRCHFWD and '
+              'SRCHBWD reached .MATCH/.BMATCH straight from SCANLNF/SCANLNB '
+              'on the current-line paths, and those leave HL pointing into '
+              'WORKBUF -- DOCLINE became WORKBUF+1+C, the status bar read '
+              '"Ln 20960/00031" and the cursor was painted on the status '
+              'row.  H25 only ever matched on OTHER lines (.MATPOP), which '
+              'is why the suite was green.')
+    LINES = ['AAA MSX BBB MSX CCC']
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def chars(self, t, s):
+        for ch in s:
+            t.press(ch)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram=True)
+
+        # 1. Ctrl+F, type MSX, ENTER: match on the CURRENT line (step 1)
+        t.wait(1.0)
+        t.press('F', mods=['CTRL'])
+        t.wait(1.0)
+        self.chars(t, 'MSX')
+        t.wait(0.5)
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('found1', vram=True)
+
+        # 2. Ctrl+L: second match, still the current line (step 1 again)
+        t.wait(1.0)
+        t.press('L', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('found2')
+
+        # 3. Ctrl+L: wraps top and re-finds the first match (.LSTCHK)
+        t.wait(1.0)
+        t.press('L', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('found3')
+
+        # 4. Ctrl+R: wraps bottom and re-finds the second match (.BLSTCHK)
+        t.wait(1.0)
+        t.press('R', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('found4')
+
+        # 5. Ctrl+R: previous match on the current line (backward step 1)
+        t.wait(1.0)
+        t.press('R', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('found5')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        checks = []
+        want = {'found1': 4, 'found2': 12, 'found3': 4, 'found4': 12,
+                'found5': 4}
+        for label, col in want.items():
+            got = tuple(run.var(label, v) for v in
+                        ('DOCLINE', 'CURX', 'SELANCL', 'SELANCX', 'SELACT',
+                         'TOPLINE', 'CURY'))
+            ok = got == (0, col + 3, 0, col, 1, 0, 0)
+            checks.append(Check('H26/%s' % label, ok,
+                                'match selected at line 0 col %d..%d, '
+                                'viewport and cursor in place' % (col, col + 3)
+                                if ok else
+                                '(DOCLINE, CURX, SELANCL, SELANCX, SELACT, '
+                                'TOPLINE, CURY) = %s' % (got,)))
+
+        # The match is highlighted: cells 4..6 XOR inverted against boot,
+        # cells 8..10 untouched (cursor sits on cell 7, out of both rects).
+        v_boot = run.blob('boot', 'vram')
+        v_found = run.blob('found1', 'vram')
+        hl_ok = clean_ok = False
+        if v_boot is not None and v_found is not None:
+            def px(buf, x, y):
+                return vram.pixel(buf, x, y,
+                                  first_line=vram.TEXT_FIRST_LINE)
+            hl_ok = all(px(v_found, x, y) == (px(v_boot, x, y) ^ 1)
+                        for y in range(8, 16) for x in range(40, 58))
+            clean_ok = all(px(v_found, x, y) == px(v_boot, x, y)
+                           for y in range(8, 16) for x in range(64, 82))
+        checks.append(Check('H26/highlight',
+                            hl_ok and clean_ok,
+                            'match cells XOR highlighted, neighbours clean'
+                            if hl_ok and clean_ok else
+                            'highlight=%s, neighbours-clean=%s'
+                            % (hl_ok, clean_ok)))
+        return checks
+
+
+
 # --- U6..U9  EDITS THAT USED TO ESCAPE THE HISTORY -------------------
 #
 # Before 2026-09-23 only typing, in-line Backspace/Delete, Ctrl+Y, Enter and
@@ -4761,7 +4864,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
          H11DatTruncHdr(), H12DatTruncTbl(), H13DatLenZero(), H14DatLenOver(),
          H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(), H18WindowRobustness(),
          H19QuitDialog(), H20QuitDirty(), H21Shadow(), H22FileMenu(), H23MenuNav(),
-         H24GoToLine(), H25FindReplace(),
+         H24GoToLine(), H25FindReplace(), H26FindCurrentLine(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(),
