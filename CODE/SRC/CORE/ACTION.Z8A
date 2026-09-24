@@ -72,6 +72,7 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTFIND         ; 60 (FIND & REPLACE)
                 DEFW    ACTFNXT         ; 61 (FIND NEXT)
                 DEFW    ACTFPRV         ; 62 (FIND PREV)
+                DEFW    ACTEXMOD        ; 63 (VI ':' COMMAND CONSOLE)
                 ASSERT  ($ - ACTTBL) / 2 == ACMAX
 
 
@@ -1027,6 +1028,321 @@ ACTFPRV         LD      A, (SRCHLEN)
                 LD      C, _CONOUT
                 CALL    BDOS
                 RET
+
+
+; --- ACTEXMOD                  ----------------------------------------
+
+
+; - ACTEXMOD ---------------------------
+; - VI EX COMMAND CONSOLE (':')
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
+
+                ; ERASE DOCUMENT CURSOR IF VISIBLE
+                LD      A, (BLNKPH)
+                OR      A
+                JR      Z, .INITEX
+                CALL    DRWCUR
+                XOR     A
+                LD      (BLNKPH), A
+
+.INITEX         ; INITIALISE STATMSG WITH ':'
+                LD      HL, STATMSG
+                LD      (HL), ':'
+                INC     HL
+                LD      (HL), 0
+                CALL    DRWSTAT
+                LD      A, 1
+                LD      (INPLEN), A     ; (INPLEN) = CURRENT LENGTH IN STATMSG
+
+.EXKLP          CALL    WINPOLL
+                JR      Z, .EXKLP
+
+                ; A = KEY CODE
+                CP      ESC
+                JR      Z, .EXESC
+                CP      BS
+                JR      Z, .EXBS
+                CP      DEL
+                JR      Z, .EXBS
+                CP      CR
+                JR      Z, .EXCR
+
+                ; PRINTABLE CHARACTERS: ' ' (32) TO '~' (126)
+                CP      ' '
+                JR      C, .EXKLP
+                CP      127
+                JR      NC, .EXKLP
+
+                ; LIMIT COMMAND LENGTH TO 26 CHARACTERS
+                LD      C, A
+                LD      A, (INPLEN)
+                CP      26
+                JR      NC, .EXKLP
+
+                ; APPEND TO STATMSG
+                LD      E, A
+                LD      D, 0
+                LD      HL, STATMSG
+                ADD     HL, DE
+                LD      (HL), C
+                INC     HL
+                LD      (HL), 0
+                LD      A, (INPLEN)
+                INC     A
+                LD      (INPLEN), A
+                CALL    DRWSTAT
+                JR      .EXKLP
+
+.EXBS           ; BACKSPACE: IF ONLY ':' (INPLEN == 1), CANCEL TO NORMAL MODE
+                LD      A, (INPLEN)
+                DEC     A
+                JR      Z, .EXESC
+                LD      (INPLEN), A
+                LD      E, A
+                LD      D, 0
+                LD      HL, STATMSG
+                ADD     HL, DE
+                LD      (HL), 0
+                CALL    DRWSTAT
+                JR      .EXKLP
+
+.EXESC          ; CANCEL AND RETURN TO NORMAL MODE
+                XOR     A
+                LD      (STATMSG), A
+                JP      DRWSTAT
+
+.EXCR           ; EXECUTE COMMAND IN STATMSG+1
+                LD      HL, STATMSG + 1
+
+                ; SKIP LEADING SPACES
+.SKPSP          LD      A, (HL)
+                CP      ' '
+                JR      NZ, .CMDSTRT
+                INC     HL
+                JR      .SKPSP
+
+.CMDSTRT        LD      A, (HL)
+                OR      A
+                JR      Z, .EXESC       ; EMPTY COMMAND -> CANCEL
+
+                ; 1. CHECK IF NUMBER (DIGIT '0'..'9')
+                SUB     '0'
+                JR      C, .NOTNUM
+                CP      10
+                JR      C, .DONUM
+
+.NOTNUM         ; 2. CHECK LETTER COMMANDS
+                LD      A, (HL)
+                CP      'w'
+                JP      Z, .CMDW
+                CP      'W'
+                JP      Z, .CMDW
+                CP      'q'
+                JP      Z, .CMDQ
+                CP      'Q'
+                JP      Z, .CMDQ
+                CP      'x'
+                JP      Z, .CMDX
+                CP      'X'
+                JP      Z, .CMDX
+                CP      'e'
+                JP      Z, .CMDE
+                CP      'E'
+                JP      Z, .CMDE
+
+                ; UNKNOWN COMMAND
+.BADCMD         LD      HL, .STRERRC
+                CALL    .SETMSG
+                JP      DRWSTAT
+
+.DONUM          ; PARSE DECIMAL NUMBER FROM HL INTO DE
+                LD      DE, 0
+.NUMLP          LD      A, (HL)
+                SUB     '0'
+                JR      C, .NUMFIN
+                CP      10
+                JR      NC, .NUMFIN
+                PUSH    HL
+                LD      H, D
+                LD      L, E
+                ADD     HL, HL          ; * 2
+                ADD     HL, HL          ; * 4
+                ADD     HL, DE          ; * 5
+                ADD     HL, HL          ; * 10
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                EX      DE, HL
+                POP     HL
+                INC     HL
+                JR      .NUMLP
+.NUMFIN         EX      DE, HL          ; HL = TARGET LINE (1-BASED)
+                XOR     A
+                LD      (STATMSG), A
+                CALL    GOTOLN
+                CALL    REDRAW
+                JP      DRWSTAT
+
+.CMDW           INC     HL
+                LD      A, (HL)
+                CP      'q'
+                JR      Z, .CMDWQ
+                CP      'Q'
+                JR      Z, .CMDWQ
+                CP      ' '
+                JR      Z, .WNAME
+                OR      A
+                JR      NZ, .BADCMD
+
+                ; :w (SAVE CURRENT FILE)
+.WSAVE          LD      HL, FILENAME
+                LD      A, (HL)
+                OR      A
+                JP      Z, .ERNOF
+                CALL    FILESAVE
+                LD      HL, .STRSAVD
+                CALL    .SETMSG
+                JP      DRWSTAT
+
+.WNAME          ; :w <NAME>
+                INC     HL
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .WNAME
+                OR      A
+                JR      Z, .WSAVE
+                CALL    .CPYFNAM
+                JR      .WSAVE
+
+.CMDWQ          INC     HL
+                LD      A, (HL)
+                OR      A
+                JR      Z, .WQDO
+                CP      ' '
+                JP      NZ, .BADCMD
+.WQDO           LD      HL, FILENAME
+                LD      A, (HL)
+                OR      A
+                JP      Z, .ERNOF
+                CALL    FILESAVE
+                JP      TERM
+
+.CMDX           INC     HL
+                LD      A, (HL)
+                OR      A
+                JR      Z, .WQDO
+                CP      ' '
+                JP      NZ, .BADCMD
+                JR      .WQDO
+
+.CMDQ           INC     HL
+                LD      A, (HL)
+                CP      '!'
+                JR      Z, .QFORCE
+                OR      A
+                JR      Z, .QCHECK
+                CP      ' '
+                JP      NZ, .BADCMD
+.QCHECK         LD      A, (MODIFIED)
+                OR      A
+                JP      NZ, .ERMOD
+                JP      TERM
+.QFORCE         JP      TERM
+
+.CMDE           INC     HL
+                LD      A, (HL)
+                CP      '!'
+                JR      Z, .EFORCE
+                CP      ' '
+                JR      Z, .ECHECK
+                OR      A
+                JP      Z, .ERARG
+                JP      .BADCMD
+
+.ECHECK         ; CHECK MODIFIED BEFORE LOADING
+                LD      A, (MODIFIED)
+                OR      A
+                JP      NZ, .ERMOD
+.ESKP1          INC     HL
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .ESKP1
+                OR      A
+                JP      Z, .ERARG
+                CALL    .CPYFNAM
+                CALL    FILELOAD
+                XOR     A
+                LD      (STATMSG), A
+                CALL    REDRAW
+                JP      DRWSTAT
+
+.EFORCE         INC     HL
+.ESKP2          LD      A, (HL)
+                CP      ' '
+                JR      NZ, .EFDO
+                INC     HL
+                JR      .ESKP2
+.EFDO           LD      A, (HL)
+                OR      A
+                JR      Z, .ERELD
+                CALL    .CPYFNAM
+.ERELD          CALL    FILELOAD
+                XOR     A
+                LD      (STATMSG), A
+                CALL    REDRAW
+                JP      DRWSTAT
+
+.ERNOF          LD      HL, .STRNOF
+                CALL    .SETMSG
+                JP      DRWSTAT
+
+.ERMOD          LD      HL, .STRMOD
+                CALL    .SETMSG
+                JP      DRWSTAT
+
+.ERARG          LD      HL, .STRARG
+                CALL    .SETMSG
+                JP      DRWSTAT
+
+.SETMSG         LD      DE, STATMSG
+.SETMLP         LD      A, (HL)
+                LD      (DE), A
+                OR      A
+                RET     Z
+                INC     HL
+                INC     DE
+                JR      .SETMLP
+
+.CPYFNAM        LD      DE, FILENAME
+                LD      B, 38
+.CPYFLP         LD      A, (HL)
+                OR      A
+                JR      Z, .CPYFDN
+                CP      ' '
+                JR      Z, .CPYFDN
+                CP      'a'
+                JR      C, .NOUP
+                CP      'z' + 1
+                JR      NC, .NOUP
+                SUB     32
+.NOUP           LD      (DE), A
+                INC     HL
+                INC     DE
+                DJNZ    .CPYFLP
+.CPYFDN         XOR     A
+                LD      (DE), A
+                RET
+
+.STRERRC        DEFM    "Not an editor command", 0
+.STRSAVD        DEFM    "[SAVED]", 0
+.STRNOF         DEFM    "No file name", 0
+.STRMOD         DEFM    "No write since last change (! overrides)", 0
+.STRARG         DEFM    "Argument required", 0
 
 
 ; --- GOTOLN                    ----------------------------------------

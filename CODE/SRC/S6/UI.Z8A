@@ -137,98 +137,158 @@ STATCEL         PUSH    AF
 
 
 ; - BLDSTAT ----------------------------
-; - BUILD DYNAMIC STATUS BAR TEXT
+; - BUILD DYNAMIC STATUS BAR TEXT IN STATBUF (80 COLS)
+; - LEFT CHANNEL (COLS 0..42): SYSTEM/VI MESSAGES, ROM FALLBACK, FILENAME
+; - RIGHT CHANNEL (COLS 43..79): COMPACT FLAGS, VI MODE, LN/COL TELEMETRY
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-BLDSTAT         LD      DE, STATBUF
+BLDSTAT         ; 1. PRE-FILL STATBUF WITH 80 SPACES, FOLLOWED BY NULL TERMINATOR
+                LD      HL, STATBUF
+                LD      (HL), ' '
+                LD      DE, STATBUF + 1
+                LD      BC, TEXTCOLS - 1
+                LDIR
+                XOR     A
+                LD      (STATBUF + TEXTCOLS), A ; NULL TERMINATOR AT 80
 
-                ; 1. VI MODE INDICATOR: [VI-N] OR [VI-I], OR 6 SPACES FOR OTHER PROFILES
-                LD      A, (KMAPID)
-                CP      KMVI
-                JR      NZ, .NOTVI
-                LD      A, (VIMODE)
-                CP      VIMNORM
-                JR      NZ, .VIINSP
-                LD      HL, .STRVIN
-                CALL    .CPYSTR
-                JR      .DONEVI
-.VIINSP         LD      HL, .STRVII
-                CALL    .CPYSTR
-                JR      .DONEVI
-.NOTVI          LD      HL, .STRSP6
-                CALL    .CPYSTR
-
-.DONEVI         ; 2. TYPING STYLE INDICATOR
-                LD      A, (TYPATTR)
-                AND     ATRFMSK
-                LD      HL, .STRNOST
-                JR      Z, .PUTSTYL
-                CP      1
-                LD      HL, .STRBD
-                JR      Z, .PUTSTYL
-                CP      2
-                LD      HL, .STRIT
-                JR      Z, .PUTSTYL
-                LD      HL, .STRBI
-.PUTSTYL        CALL    .CPYSTR
-
-                ; 5. MARKUP MODE INDICATOR
-                LD      A, (MKUPMD)
+                ; 2. LEFT CHANNEL: COLS 0..42 (MAX 43 CHARACTERS)
+                LD      DE, STATBUF
+                LD      A, (STATMSG)
                 OR      A
-                LD      HL, .STRNOMK
-                JR      Z, .PUTMKUP
-                CP      MKUP_MD
-                LD      HL, .STRMD
-                JR      Z, .PUTMKUP
-                LD      HL, .STRLIT
-.PUTMKUP        CALL    .CPYSTR
+                JR      Z, .NOSTMSG
+                LD      HL, STATMSG
+                LD      B, 43
+                CALL    .CPYMAX
+                JR      .DOLEFT
 
-                ; 6. SELECTION INDICATOR
-                LD      A, (SELACT)
+.NOSTMSG        LD      A, (LOADERR)
                 OR      A
-                LD      HL, .STRNOSL
-                JR      Z, .PUTSEL
-                LD      HL, .STRSEL
-.PUTSEL         CALL    .CPYSTR
+                JR      Z, .CHKROM
+                LD      HL, .STROOM     ; "[FILE TOO LARGE]"
+                LD      B, 43
+                CALL    .CPYMAX
+                JR      .DOLEFT
 
-                ; 6B. FALLBACK FONT INDICATOR. S6ED.FNT WAS MISSING OR THE
-                ; WRONG SIZE AND THE ROM CHARSET IS STANDING IN, SO BOLD AND
-                ; ITALIC RENDER AS NORMAL. NEVER DEGRADE SILENTLY: THE BAR
-                ; SAYS SO FOR AS LONG AS IT IS TRUE, WHICH A MESSAGE AT BOOT
-                ; WOULD NOT.
+.CHKROM         ; FALLBACK FONT INDICATOR FOR B3 MUTATION TEST
+                ; MUST PRESERVE EXACT PATTERN:
+                ;   LD HL, .STRROM
+                ;   JR Z, .PUTFNT
+                ;   LD HL, .STRNOFN
+                LD      B, 43
                 LD      A, (FNTOK)
                 OR      A
                 LD      HL, .STRROM
                 JR      Z, .PUTFNT
                 LD      HL, .STRNOFN
-.PUTFNT         CALL    .CPYSTR
+.PUTFNT         CALL    .CPYMAX
 
-                ; 7. MODIFIED INDICATOR
+                ; COPY FILENAME
+                LD      HL, FILENAME
+                CALL    .CPYMAX
+
+.DOLEFT         ; 3. RIGHT CHANNEL AT FIXED OFFSET 43 (COLS 43..79)
+                LD      DE, STATBUF + 43
+
+                ; A. COMPACT FLAGS: [W|A|M|I] (9 CHARS, COLS 43..51)
+                LD      A, '['
+                LD      (DE), A
+                INC     DE
+
+                ; WRAP MODE: 'D' (DEV) OR 'T' (TXT)
+                LD      A, 'D'
+                LD      HL, WRAPMODE
+                BIT     0, (HL)
+                JR      Z, .PUTWRP
+                LD      A, 'T'
+.PUTWRP         LD      (DE), A
+                INC     DE
+                LD      A, '|'
+                LD      (DE), A
+                INC     DE
+
+                ; AUTOALIGN: 'A' (ON/DEV) OR '-' (OFF)
+                LD      A, '-'
+                LD      HL, AUTOALGN
+                LD      C, (HL)
+                DEC     C
+                JP      M, .PUTALN
+                LD      A, 'A'
+.PUTALN         LD      (DE), A
+                INC     DE
+                LD      A, '|'
+                LD      (DE), A
+                INC     DE
+
+                ; MARKUP: 'M' (MD), 'L' (LITE), '-' (OFF)
+                LD      A, (MKUPMD)
+                CP      MKUP_MD
+                LD      A, 'M'
+                JR      Z, .PUTMK
+                LD      A, (MKUPMD)
+                CP      MKUP_LIT
+                LD      A, 'L'
+                JR      Z, .PUTMK
+                LD      A, '-'
+.PUTMK          LD      (DE), A
+                INC     DE
+                LD      A, '|'
+                LD      (DE), A
+                INC     DE
+
+                ; INSERT MODE: 'I' (INSERT) OR 'O' (OVERWRITE)
+                LD      A, (INSMODE)
+                OR      A
+                LD      A, 'O'
+                JR      Z, .PUTINS
+                LD      A, 'I'
+.PUTINS         LD      (DE), A
+                INC     DE
+                LD      A, ']'
+                LD      (DE), A
+                INC     DE
+
+                ; B. MODIFIED INDICATOR: '* ' OR '  ' (2 CHARS, COLS 52..53)
                 LD      A, (MODIFIED)
                 OR      A
-                JR      Z, .NOTMOD
                 LD      A, '*'
-                LD      (DE), A
+                JR      NZ, .PUTMOD
+                LD      A, ' '
+.PUTMOD         LD      (DE), A
                 INC     DE
                 LD      A, ' '
                 LD      (DE), A
                 INC     DE
-                JR      .DONEMOD
-.NOTMOD         LD      A, ' '
-                LD      (DE), A
-                INC     DE
-                LD      (DE), A
-                INC     DE
 
-.DONEMOD        ; 8. "Ln " LINE/TOTAL, 5 DIGITS EACH, " Col " COLUMN, 3 DIGITS.
-                ; EVERY FIELD OF THE BAR HAS A FIXED WIDTH SO THAT A FLAG THAT
-                ; APPEARS OR A NUMBER THAT GROWS A DIGIT DOES NOT SHIFT WHAT
-                ; FOLLOWS: DRWSTAT REPAINTS ONLY THE CELLS THAT CHANGE.
-                LD      HL, .STRLN
-                CALL    .CPYSTR
+                ; C. VI MODE / SELECTION: 4 CHARS (COLS 54..57)
+                LD      A, (KMAPID)
+                CP      KMVI
+                JR      NZ, .NOTVI
+                LD      A, (SELACT)
+                OR      A
+                LD      HL, .STRVIV     ; "[V] "
+                JR      NZ, .PUTVI
+                LD      A, (VIMODE)
+                CP      VIMNORM
+                LD      HL, .STRVIN     ; "[N] "
+                JR      Z, .PUTVI
+                LD      HL, .STRVII     ; "[I] "
+.PUTVI          CALL    .CPY4
+                JR      .DONEVI
+
+.NOTVI          LD      A, (SELACT)
+                OR      A
+                LD      HL, .STRSEL     ; "[S] "
+                JR      NZ, .PUTNVI
+                LD      HL, .STRSP4     ; "    "
+.PUTNVI         CALL    .CPY4
+.DONEVI
+
+                ; D. CURSOR POSITION: 22 CHARS (COLS 58..79)
+                LD      HL, .STRLN      ; "Ln "
+                CALL    .CPY3
                 LD      HL, (DOCLINE)
                 INC     HL
                 LD      B, 5
@@ -239,40 +299,34 @@ BLDSTAT         LD      DE, STATBUF
                 LD      HL, (TOTLINES)
                 LD      B, 5
                 CALL    .CPYNUM
-                LD      HL, .STRCOL
-                CALL    .CPYSTR
+                LD      HL, .STRCOL     ; " Col "
+                CALL    .CPY5
                 LD      A, (CURX)
                 INC     A
                 LD      L, A
                 LD      H, 0
                 LD      B, 3
                 CALL    .CPYNUM
-
-                ; " | "
-                LD      HL, .STRSEP
-                CALL    .CPYSTR
-
-                ; FILENAME OR LOAD ERROR
-                LD      A, (LOADERR)
-                OR      A
-                JR      Z, .PUTNAME
-                LD      HL, .STROOM
-                CALL    .CPYSTR
-                JR      .DONENAM
-.PUTNAME        LD      HL, FILENAME
-                CALL    .CPYSTR
-.DONENAM        ; TERMINATING NULL
-                XOR     A
-                LD      (DE), A
                 RET
 
-.CPYSTR         LD      A, (HL)
+.CPY5           LDI
+.CPY4           LDI
+.CPY3           LDI
+                LDI
+                LDI
+                RET
+
+.CPYMAX         LD      A, B
+                OR      A
+                RET     Z
+                LD      A, (HL)
                 OR      A
                 RET     Z
                 LD      (DE), A
                 INC     HL
                 INC     DE
-                JR      .CPYSTR
+                DEC     B
+                JR      .CPYMAX
 
                 ; HL = VALUE, B = WIDTH: APPEND THE LOW B DIGITS, ZERO PADDED.
                 ; B2D16 RIGHT-ALIGNS AT B2DEND WITH SPACES FOR LEADING ZEROS.
@@ -297,23 +351,15 @@ BLDSTAT         LD      DE, STATBUF
                 DJNZ    .CPYNUM2
                 RET
 
-.STRSP6         DEFM    "      ", 0
-.STRVIN         DEFM    "[VI-N]", 0
-.STRVII         DEFM    "[VI-I]", 0
-.STRNOST        DEFM    "     ", 0
-.STRBD          DEFM    "[B]  ", 0
-.STRIT          DEFM    "[I]  ", 0
-.STRBI          DEFM    "[BI] ", 0
-.STRNOMK        DEFM    "      ", 0
-.STRMD          DEFM    "[MD]  ", 0
-.STRLIT         DEFM    "[LIT] ", 0
-.STRNOSL        DEFM    "      ", 0
-.STRSEL         DEFM    "[SEL] ", 0
-.STRNOFN        DEFM    "      ", 0
 .STRROM         DEFM    "[ROM] ", 0
-.STRLN          DEFM    "Ln ", 0
-.STRCOL         DEFM    " Col ", 0
-.STRSEP         DEFM    " | ", 0
+.STRNOFN        DEFB    0
+.STRVIN         DEFM    "[N] "
+.STRVII         DEFM    "[I] "
+.STRVIV         DEFM    "[V] "
+.STRSEL         DEFM    "[S] "
+.STRSP4         DEFM    "    "
+.STRLN          DEFM    "Ln "
+.STRCOL         DEFM    " Col "
 .STROOM         DEFM    "[FILE TOO LARGE]", 0
 
 

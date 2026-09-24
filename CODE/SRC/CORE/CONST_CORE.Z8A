@@ -198,7 +198,8 @@ ACGOTOL         EQU     59              ; CTRL + G / EDIT MENU (GO TO LINE)
 ACFIND          EQU     60              ; CTRL + F / EDIT MENU (FIND & REPLACE)
 ACFNXT          EQU     61              ; CTRL + L / F3 (FIND NEXT)
 ACFPRV          EQU     62              ; CTRL + R / SHIFT + F3 (FIND PREV)
-ACMAX           EQU     63
+ACEXMOD         EQU     63              ; VI ':' COMMAND LINE CONSOLE
+ACMAX           EQU     64
 
 SRCHMAX         EQU     18              ; MAX SEARCH / REPLACE PATTERN LENGTH
 SRCH_FND        EQU     0               ; ACTION: FIND NEXT
