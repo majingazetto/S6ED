@@ -109,6 +109,8 @@ is caught only by `S2-8/matches-document`. Measured, 2026-09-21.
 | `S2-18-goto` | the first window with an input field.  Its viewport maths centres on `ROWSVIS / 2`, which is 11 here and 12 on S6ED, so `mut/goto-scrrows` is a mutation only this gate can catch |
 | `S2-19-select-lines` | `SELPAIN` loaded `IX` once and trusted it across `SELXOR`, whose contract is clobbers-all; `PATINV` really does use `IX`, so a selection across lines painted rows it did not cover.  S6ED's `LMMV` leaves `IX` alone, so `mut/s2-selpain-ix` is catchable only here |
 | `S2-20-undo-seldel` | the reported flow: select the TEST lines, DEL, Ctrl+Z restored nothing.  Checked on disk and against the computed pattern table, and with a 57-line group: `UNDOGMAX` derives from `LINEREC`, so a number written for S6ED's 46 is what `mut/s2-undo-gmax` injects |
+| `S2-21-find-replace` | resident Find & Replace dialog and engine: field bounds, visual focus in VCOLTXT/VCOLWIN, solid block caret, match highlight, multi-line replace, and single-step undo |
+| `S2-22-find-current-line` | find matches on the current line (forward, backward, top/bottom wrap-arounds): reloads DOCLINE from (DOCLINE) instead of WORKBUF pointer, and verifies inverted pattern highlight survives |
 
 Two traps this suite met while being built, both worth knowing before adding a
 case:
@@ -198,6 +200,11 @@ Every case names the defect it was derived from in its `origin` field.
 | U7 | a group lives or dies whole in the ring; a new edit cuts the redo chain; a delete over `UNDOGMAX` drops the history; 50 edits keep the last 47 | `UNDOEVC` evicting every record above the write point on each wrap, and the head left linked to stale redo records |
 | U8 | push-wrap and reflow, which move text across lines unrecorded, drop the history | the record of an earlier edit naming a line they shifted |
 | U9 | paste, word delete, markup wrap and a bold toggle across lines each undo in one step | `EDINSRUN`, `ACTDWLFT`, `WRAPSEL`, `APPLSEL` writing lines with no record |
+| H18-H20 | window robustness, dirty quit prompt with unsaved changes alert, and drop shadow | Fase 3a & C3 window engine |
+| H21-H23 | shadow color cfg, file menu dropdown, and keyboard menu bar navigation | W4 dropdown menus |
+| H24 | Go to Line dialog: viewport centering, numerical input clamps, and cancel restore | input widget & GOTOLN engine |
+| H25 | resident Find & Replace modal: differential field redraw, match-case focus highlight, block caret, and atomic undo | resident search engine & DOFIND dialog |
+| H26 | find on current line: DOCLINE preservation from WORKBUF corruption, forward/backward wrap, and match XOR highlight retention | current-line search pointer & highlight retention |
 
 **G7 is the general one.** A full `REDRAW` repaints from the document alone, so
 comparing the screen before and after one is a test of every differential painter
@@ -281,9 +288,10 @@ bisect in it measures nothing at all.
 - The Gate covers core invariants, fonts, vertical scroll, core editing
   semantics (D1-D6), accents, tabs and markup (D7-D10), the full selection &
   clipboard subsystem (E1-E7), the EOL round-trips (I1-I4), the `S6ED.DAT`
-  container loader (H6, H8-H17) and the window engine (H7, H18-H20). Suites B
-  (themes, bad asset fallback) and F (status bar, clamping) are not yet
-  implemented.
+  container loader (H6, H8-H17), the window engine and menus (H7, H18-H23),
+  Go to Line (H24), resident Find & Replace (H25-H26), and undo/redo (U6-U9).
+  Suites B (themes, bad asset fallback) and F (status bar, clamping) are not
+  yet implemented.
 - Everything runs on the 128 kB `Philips_NMS_8250`. Cases that need the 2 MB
   machine set `machine = MACH_2MB` explicitly.
 - `type` goes through the BIOS buffer, so it cannot produce modifiers or cursor
