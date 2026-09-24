@@ -89,7 +89,11 @@ def render_text(buf, rows=24, cols=80, font=None, first_line=TEXT_FIRST_LINE):
             key = tuple(tuple(r) for r in
                         ink_mask(buf, x0, y0, w, h, ground=COL_BG,
                                  first_line=first_line))
-            line.append(table.get(key, '?'))
+            ch = table.get(key)
+            if ch is None:
+                inv_key = tuple(tuple(not p for p in r) for r in key)
+                ch = table.get(inv_key, '?')
+            line.append(ch)
         out.append(''.join(line).rstrip())
     return out
 

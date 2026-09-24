@@ -1,7 +1,7 @@
 # S6ED / S2ED — Roadmap de Desarrollo Post-Find & Replace
 
 Fecha: 2026-09-24  
-Estado: **PLANIFICADO (Aprobado para ejecución de Fases 1 y 2)**  
+Estado: **FASES 1 Y 2 COMPLETADAS & VERIFICADAS (555 checks PASS, 0 fallos)**  
 Objetivo: Transformación integral de la interfaz de usuario, incorporación de la consola de comandos de VI, diálogo unificado de configuración y navegador de ficheros, preservando estrictamente el presupuesto de memoria de un único segmento para features (`FTRSEG`).
 
 ---
@@ -172,15 +172,24 @@ Un único diálogo integral con navegación por teclado (`TAB`, `Cursores`, `Esp
 
 ---
 
-## 3. Plan de Acción Inmediato (Fases 1 y 2)
+## 3. Estado de Ejecución
 
-1. Crear la rama de feature en el repositorio `S6ED`:
-   `feat/sxed-statusbar-vi`
-2. **Implementar Fase 1:**
-   - Rediseño de `DRWSTAT` en S6ED y S2ED para justificar a la derecha la telemetría y colocar la tira compacta `[W|A|M|I]`.
-   - Limpieza y reserva del canal izquierdo para mensajes y comandos.
-   - Creación de tests de regresión y comprobación con `make test`.
-3. **Implementar Fase 2:**
-   - Manejo del comando `:` en Vi Normal Mode (`KMAPVIN`).
-   - Implementación del mini-editor de comandos en la fila inferior y despacho de `:w`, `:q`, `:wq`, `:q!`, `:<line>`.
-   - Cobertura de tests y mutaciones en `gate.py` y `gate_s2.py`.
+1. **Fase 1: Barra de Estado Derecha & Indicadores Compactos — COMPLETADA (100% Green)**
+   - `DRWSTAT` rediseñado en S6ED y S2ED con telemetría fija a la derecha y tira compacta de flags `[W|A|M|I]*`.
+   - Canal izquierdo (cols 0..42 en S6ED, 0..27 en S2ED) reservado para mensajes efímeros (`STATMSG`), aviso `[ROM]` y consola de comandos.
+   - Rendimiento diferencial por celda preservado sin regresiones de rendimiento ni artefactos OCR.
+
+2. **Fase 2: Consola de Comandos de VI (`: ex mode`) — COMPLETADA (100% Green)**
+   - Tecla `:` despacha a `ACEXMOD` en Modo Normal VI (`KMAPVIN`).
+   - Entrada de comandos interactiva sobre la fila de estado: soporta edición con caracteres imprimibles, `BS`/`DEL` (cancelación al borrar `:` inicial), `ESC` (cancelación limpia) y `RETURN` (ejecución).
+   - Intérprete residente soporta:
+     - `:<line>` -> salto a línea vía `GOTOLN`.
+     - `:w` / `:w <file>` -> guardado / guardar como vía `FILESAVE`.
+     - `:q` -> comprobación de buffer sucio (`MODIFIED`); si está sucio avisa `"No write since last change (! overrides)"`; si está limpio sale vía `TERM`.
+     - `:q!` -> salida forzada inmediata vía `TERM`.
+     - `:wq` / `:x` -> guardado y salida.
+     - `:e <file>` / `:e!` -> carga de fichero vía `FILELOAD`.
+   - Cobertura completa de verificación mediante la nueva suite `H27ViEx` en `TEST/gate.py` (6 checks PASS).
+
+3. **Próximo Paso: Fase 3 (Reorganización de Menús y Diálogo Unificado 'Settings...')**
+   - Presentar especificación técnica detallada y solicitar aprobación de usuario antes de proceder.

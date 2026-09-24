@@ -87,10 +87,11 @@ MAINLOOP        ; CHECK CLOCK / COLON UPDATE
                 JR      Z, .DRPGRPH     ; NO CTRL: GRAPHIC HEADER
                 LD      A, #01          ; CTRL HELD: DISPATCH AS CTRL+A
 
-.DISPCH         ; CLEAR ANY PENDING LOAD ERROR ON USER KEYPRESS
+.DISPCH         ; CLEAR ANY PENDING LOAD ERROR / STATUS MSG ON USER KEYPRESS
                 PUSH    AF
                 XOR     A
                 LD      (LOADERR), A
+                LD      (STATMSG), A
                 POP     AF
 
                 ; DISPATCH KEYPRESS THROUGH ACTIVE KEYMAP AND ACTION CATALOG
