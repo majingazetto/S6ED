@@ -185,10 +185,6 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 80 SPACES, FOLLOWED BY NULL TERMINATO
                 LD      HL, .STRNOFN
 .PUTFNT         CALL    .CPYMAX
 
-                ; COPY FILENAME
-                LD      HL, FILENAME
-                CALL    .CPYMAX
-
 .DOLEFT         ; 3. RIGHT CHANNEL AT FIXED OFFSET 43 (COLS 43..79)
                 LD      DE, STATBUF + 43
 
@@ -394,9 +390,86 @@ DRWMENU         LD      HL, 0
                 LD      DE, 6           ; DX = 6
                 LD      BC, 0           ; DY = 0
                 CALL    BLTSTR
+                CALL    DRWFNAM
                 JP      UPDMCLK
 
 MNUTEXT         DEFM    "S6ED | File  Edit  View  Options  Help", 0
+
+
+; --- DRWFNAM                   ----------------------------------------
+
+
+; - DRWFNAM ----------------------------
+; - DRAW CURRENT FILENAME IN ROW 0
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DRWFNAM         ; 1. CLEAR FILENAME REGION IN ROW 0
+                ; DX = 236, DY = 0, NX = 234 (IF SHOWCLK) OR 270 (IF NO CLK), NY = 8
+                LD      HL, 236
+                LD      (VDP_DX), HL
+                LD      HL, 0
+                LD      (VDP_DY), HL
+                LD      HL, 234         ; 236 + 234 = 470
+                LD      A, (SHOWCLK)
+                OR      A
+                JR      NZ, .CLRNX
+                LD      HL, 270         ; 236 + 270 = 506
+.CLRNX          LD      (VDP_NX), HL
+                LD      HL, CELLH
+                LD      (VDP_NY), HL
+                LD      A, COL_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; 2. CHECK IF FILENAME IS PRESENT
+                LD      A, (FILENAME)
+                OR      A
+                RET     Z               ; NO FILENAME
+
+                ; 3. COMPUTE LENGTH OF FILENAME (CAPPED AT 30)
+                LD      HL, FILENAME
+                LD      B, 0
+.LNLEN          LD      A, (HL)
+                OR      A
+                JR      Z, .LENDON
+                INC     HL
+                INC     B
+                LD      A, B
+                CP      30
+                JR      NZ, .LNLEN
+.LENDON         ; B = NUMBER OF CHARS (1..30)
+                ; WIDTH IN PIXELS = B * 6
+                LD      L, B
+                LD      H, 0
+                LD      D, H
+                LD      E, L
+                ADD     HL, HL
+                ADD     HL, DE
+                ADD     HL, HL          ; HL = B * 6
+
+                ; END X: 470 (IF SHOWCLK) OR 506 (IF NO CLK)
+                LD      DE, 470
+                LD      A, (SHOWCLK)
+                OR      A
+                JR      NZ, .HAVEND
+                LD      DE, 506
+.HAVEND         ; START X = END X - WIDTH = DE - HL
+                EX      DE, HL
+                OR      A
+                SBC     HL, DE          ; HL = START X
+
+                ; PRINT FILENAME AT (DX = HL, DY = 0)
+                EX      DE, HL          ; DE = START X
+                LD      HL, FILENAME
+                LD      BC, 0           ; DY = 0
+                JP      BLTSTR
 
 
 ; --- CHKCLK                    ----------------------------------------

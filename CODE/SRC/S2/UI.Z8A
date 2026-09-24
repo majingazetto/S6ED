@@ -152,15 +152,11 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 64 SPACES, FOLLOWED BY NULL TERMINATO
 
 .NOSTMSG        LD      A, (LOADERR)
                 OR      A
-                JR      Z, .PUTNAME
+                JR      Z, .DOLEFT
                 LD      HL, .STROOM     ; "[FILE TOO LARGE]"
                 LD      B, 28
                 CALL    .CPYMAX
                 JR      .DOLEFT
-
-.PUTNAME        LD      HL, FILENAME
-                LD      B, 28
-                CALL    .CPYMAX
 
 .DOLEFT         ; 3. RIGHT CHANNEL AT FIXED OFFSET 28 (COLS 28..63)
                 LD      DE, STATBUF + 28
@@ -346,8 +342,42 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 64 SPACES, FOLLOWED BY NULL TERMINATO
 
 DRWMENU         CALL    VIDBANK
 
-                ; FILL ROW 0 WITH MENU BAR STRING
+                ; 1. COPY BASE MENU BAR TEMPLATE TO STATBUF
                 LD      HL, .MNUTXT
+                LD      DE, STATBUF
+                LD      BC, SCRCOLS     ; 64
+                LDIR
+
+                ; 2. OVERLAY FILENAME RIGHT-ALIGNED IF PRESENT
+                LD      A, (FILENAME)
+                OR      A
+                JR      Z, .NODRAW
+                LD      HL, FILENAME
+                LD      B, 0
+.FNLEN          LD      A, (HL)
+                OR      A
+                JR      Z, .FNDON
+                INC     HL
+                INC     B
+                LD      A, B
+                CP      20
+                JR      NZ, .FNLEN
+.FNDON          ; B = LENGTH (1..20)
+                ; END AT COL 62, START AT 63 - B
+                LD      A, 63
+                SUB     B
+                LD      E, A
+                LD      D, 0
+                LD      HL, STATBUF
+                ADD     HL, DE          ; HL = DESTINATION IN STATBUF
+                EX      DE, HL          ; DE = DESTINATION
+                LD      HL, FILENAME
+                LD      C, B
+                LD      B, 0
+                LDIR
+
+.NODRAW         ; 3. FILL ROW 0 PATTERNS AND COLORS FROM STATBUF
+                LD      HL, STATBUF
                 LD      DE, PATSHAD
                 PUSH    DE
                 POP     IX
