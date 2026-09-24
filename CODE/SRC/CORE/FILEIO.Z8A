@@ -411,11 +411,26 @@ STORLINE        ; REFUSE IF THE LINE DIRECTORY IS FULL. EDNWLIN AND EDPSHWR
 FILESAVE        LD      HL, FILENAME
                 LD      A, (HL)
                 OR      A
-                RET     Z               ; NO FILENAME TO SAVE
-                
+                JR      NZ, .DOFSAV
+                SCF
+                RET                     ; NO FILENAME TO SAVE
+
+.DOFSAV         ; DISPLAY "Saving..." ON STATUS BAR BEFORE DISK OPERATION
+                LD      HL, .STRSAVG
+                CALL    .SETMSG
+                CALL    DRWSTAT
+
+                LD      HL, FILENAME
                 CALL    DSKCREAT
-                RET     C               ; ERROR CREATING FILE
-                LD      (SAVHAND), A
+                JR      NC, .OPNOK
+                ; ERROR CREATING FILE
+                LD      HL, .STRSERR
+                CALL    .SETMSG
+                CALL    DRWSTAT
+                SCF
+                RET
+
+.OPNOK          LD      (SAVHAND), A
                 
                 LD      BC, 0           ; BC = DOCLINE (0..TOTLINES-1)
 .LINELP         PUSH    BC
@@ -459,11 +474,25 @@ FILESAVE        LD      HL, FILENAME
                 
                 XOR     A
                 LD      (MODIFIED), A
+
+                ; DISPLAY "[SAVED]" ON STATUS BAR
+                LD      HL, .STRSAVD
+                CALL    .SETMSG
+                CALL    DRWSTAT
+                OR      A               ; CLEAR CARRY
                 RET
 
-                ; CONSTANT, AND THE ONLY DATA THAT BELONGS IN THIS FILE: IT IS
-                ; READ, NEVER WRITTEN, SO THE EMITTED IMAGE IS THE RIGHT HOME.
-                ; SAVHAND, LINEOFF AND CURLLEN USED TO SIT HERE TOO AND DID NOT
-                ; BELONG -- THEY ARE MUTABLE STATE AND NOW LIVE IN VARS.Z8A.
+.SETMSG         LD      DE, STATMSG
+.SETMLP         LD      A, (HL)
+                LD      (DE), A
+                OR      A
+                RET     Z
+                INC     HL
+                INC     DE
+                JR      .SETMLP
+
+.STRSAVG        DEFM    "Saving...", 0
+.STRSAVD        DEFM    "[SAVED]", 0
+.STRSERR        DEFM    "[SAVE ERROR]", 0
 
 CRLFSTR         DEFB    CR, LF

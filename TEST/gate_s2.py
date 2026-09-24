@@ -78,7 +78,7 @@ def restored(after, before, currow, curcol):
     return bad
 
 
-def menubar(ctx):
+def menubar(ctx, fname=None):
     """The row 0 bar text, read from the source that paints it.
 
     The dropdown title spans live in .TITX in S2/MENU.Z8A and the bar text in
@@ -91,7 +91,11 @@ def menubar(ctx):
     m = re.search(r'\.MNUTXT\s+DEFM\s+"(.*)"', src)
     if not m:
         raise RuntimeError('.MNUTXT not found in S2/UI.Z8A')
-    return m.group(1)
+    txt = m.group(1)
+    if fname:
+        start = 63 - len(fname)
+        txt = txt[:start] + fname + txt[start + len(fname):]
+    return txt
 
 
 def titlespan(ctx, name):
@@ -136,7 +140,7 @@ class S21Render(S2Case):
                             % pattern.ROWSVIS if not bad else
                             'rows differ: %s' % bad[:6]))
         menu_pat = pattern.row_of(pat, pattern.MNUROW)
-        want_menu = pattern.compose_row(font(ctx), menubar(ctx))
+        want_menu = pattern.compose_row(font(ctx), menubar(ctx, fname=self.fixture_name))
         dif_menu = pattern.differing_columns(menu_pat, want_menu)
         checks.append(Check('S2-1/menubar', not dif_menu,
                             'row 0 matches menubar text'

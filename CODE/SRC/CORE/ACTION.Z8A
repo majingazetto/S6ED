@@ -881,8 +881,7 @@ ACTTGLWR        CALL    EDTGLWRP
 ; - CLOBBERS: ALL
 ; -
 
-ACTSAVE         CALL    FILESAVE
-                JP      DRWSTAT
+ACTSAVE         JP      FILESAVE
 
 
 ; --- ACTQUIT                   ----------------------------------------
@@ -1205,9 +1204,7 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
                 OR      A
                 JP      Z, .ERNOF
                 CALL    FILESAVE
-                LD      HL, .STRSAVD
-                CALL    .SETMSG
-                JP      DRWSTAT
+                RET
 
 .WNAME          ; :w <NAME>
                 INC     HL
@@ -1217,6 +1214,7 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
                 OR      A
                 JR      Z, .WSAVE
                 CALL    .CPYFNAM
+                CALL    DRWMENU
                 JR      .WSAVE
 
 .CMDWQ          INC     HL
@@ -3246,11 +3244,12 @@ MNUENT          ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
 .FNEW           CALL    FILENEW
                 XOR     A
                 LD      (MODIFIED), A
+                LD      (FILENAME), A
                 CALL    REDRAW
+                CALL    DRWMENU
                 JP      DRWSTAT
 
-.FSAVE          CALL    FILESAVE
-                JP      DRWSTAT
+.FSAVE          JP      FILESAVE
 
 .FQUIT          JP      ACTQUIT
 

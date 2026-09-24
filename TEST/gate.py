@@ -3832,7 +3832,10 @@ class U5UndoSel(Case):
         want = crlf(['Line 0', 'Line 1: Hello MSX', 'Line 2: MSX2 Screen 6 Text Editor'])
         v1 = run.blob('after_arrow', 'vram')
         v2 = run.blob('pure_redraw', 'vram')
-        cursor = [(run.var('after_arrow', 'CURX'), run.var('after_arrow', 'CURY'))]
+        cursor = [
+            (run.var('after_arrow', 'CURX'), run.var('after_arrow', 'CURY')),
+            (run.var('pure_redraw', 'CURX'), run.var('pure_redraw', 'CURY')),
+        ]
         diff = vram.diff(v1, v2, ignore_cells=cursor)
         checks = [
             # Check selection was active before undo
@@ -4496,11 +4499,13 @@ THEME=DEFAULT
                             doc42 == 41 and run.var('jumped', 'CURX') == 0,
                             ':42 jumped to DOCLINE 41 (got %s)' % doc42))
 
-        # 2. :w OUT.TXT: file saved on disk
+        # 2. :w OUT.TXT: file saved on disk and [SAVED] shown
         got_out = run.session.extract(run.dsk, 'OUT.TXT')
+        stat_sav = run.snaps.get('saved_as', {}).get('STATBUF', [])
+        stat_sav_str = ''.join(chr(c) for c in stat_sav) if stat_sav else ''
         checks.append(Check('H27/save-as',
-                            got_out is not None and len(got_out) > 0,
-                            ':w OUT.TXT saved file on disk'))
+                            got_out is not None and len(got_out) > 0 and '[SAVED]' in stat_sav_str,
+                            ':w OUT.TXT saved file on disk and displayed [SAVED]'))
 
         # 3. Modified check
         checks.append(Check('H27/modified',
