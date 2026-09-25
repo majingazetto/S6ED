@@ -740,6 +740,7 @@ UNDORST         ; 1. CHECK IF LINE DIRECTORY IS FULL
                 RET     C               ; DIRECTORY FULL: REFUSE RESURRECTION
 
                 ; 2. RESERVE SPACE IN MAPPER FOR RESTORED LINE
+                LD      C, (IX + UNDOHDR_SZ)
                 CALL    NEWREC
                 RET     C               ; OOM: CANNOT UNDO DELETION
 
@@ -753,18 +754,14 @@ UNDORST         ; 1. CHECK IF LINE DIRECTORY IS FULL
                 LD      H, (IX + 1)
                 LD      (UNDOPTR), HL
 
-                ; 4. COPY PAYLOAD (IX + 10) INTO TXPAGE + NROFF
-                ; (PAGE 2 IS BANKED TO NRSEG BY NEWREC)
-                LD      DE, (NROFF)
-                LD      HL, TXPAGE
-                ADD     HL, DE
-                EX      DE, HL          ; DE = DESTINATION
+                ; 4. WRITE PAYLOAD (IX + 10) INTO (NRSEG, NROFF)
                 PUSH    IX
                 POP     HL
                 LD      BC, UNDOHDR_SZ
                 ADD     HL, BC          ; HL = SOURCE (IX + 10)
-                LD      BC, LINEREC     ; 161 BYTES
-                LDIR
+                LD      A, (NRSEG)
+                LD      DE, (NROFF)
+                CALL    PUTREC
 
                 ; 5. OPEN DIRECTORY SLOT AT (IX + 5) AND FILL IT
                 LD      L, (IX + 5)
@@ -950,6 +947,7 @@ UNDOJNU         ; 1. CHECK IF LINE DIRECTORY IS FULL
                 RET     C               ; DIRECTORY FULL: REFUSE
 
                 ; 2. RESERVE SPACE IN MAPPER FOR RESTORED LINE B
+                LD      C, (IX + UNDOHDR_SZ)
                 CALL    NEWREC
                 RET     C
                 LD      (NRSEG), A
@@ -972,19 +970,14 @@ UNDOJNU         ; 1. CHECK IF LINE DIRECTORY IS FULL
                 LD      H, (IX + 6)
                 CALL    LINEWRT         ; WRITE TRUNCATED LINE A BACK
 
-                ; 5. COPY PAYLOAD (IX + 10) INTO TXPAGE + NROFF (LINE B)
-                LD      A, (NRSEG)
-                CALL    RECBANK         ; BANK NRSEG BACK INTO PAGE 2
-                LD      DE, (NROFF)
-                LD      HL, TXPAGE
-                ADD     HL, DE
-                EX      DE, HL          ; DE = DESTINATION
+                ; 5. WRITE PAYLOAD (IX + 10) INTO (NRSEG, NROFF) (LINE B)
                 PUSH    IX
                 POP     HL
                 LD      BC, UNDOHDR_SZ
                 ADD     HL, BC          ; HL = SOURCE (IX + 10)
-                LD      BC, LINEREC     ; 161 BYTES
-                LDIR
+                LD      A, (NRSEG)
+                LD      DE, (NROFF)
+                CALL    PUTREC
 
                 ; 6. OPEN DIRECTORY SLOT AT (IX + 5) + 1 (LINE B) AND FILL IT
                 LD      L, (IX + 5)

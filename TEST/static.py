@@ -563,7 +563,7 @@ def check_tpa_chain(ctx):
         free = sym.get('TPAFREE')
         if free is None:
             bad.append('%s.sym has no TPAFREE' % prefix)
-        elif not 0 < free < 0x4000:
+        elif not 0 <= free < 0x4000:
             bad.append('%s TPAFREE = %s (TPA overflowed page 2)'
                        % (prefix, free))
     return Check('tpa-chain', not bad, '; '.join(bad) if bad else

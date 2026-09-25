@@ -183,6 +183,7 @@ EDPSHWR         CALL    UNDOCLS
                 ; BEFORE TOUCHING ANYTHING -- SAME REASON AS IN EDNWLIN. POP
                 ; DOES NOT TOUCH THE FLAGS, SO NEWREC'S CARRY SURVIVES IT.
                 PUSH    BC              ; SAVE C (CHAR TO INSERT)
+                LD      C, TEXTCOLS
                 CALL    NEWREC
                 POP     BC
                 RET     C               ; NO MAPPER MEMORY: LEAVE THE LINE ALONE
@@ -257,19 +258,11 @@ EDPSHWR         CALL    UNDOCLS
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
 
-                ; 6. PUT THE TAIL IN THE RECORD RESERVED AT THE TOP. LINEWRT
-                ;    HAS RE-BANKED PAGE 2 SINCE NEWREC, SO BANK IT BACK --
-                ;    NRSEG, NOT APPSEG: NEWREC MAY HAVE HANDED OUT A RECYCLED
-                ;    RECORD FROM ANY SEGMENT.
+                ; 6. PUT THE TAIL IN THE RECORD RESERVED AT THE TOP
                 LD      A, (NRSEG)
-                CALL    RECBANK
                 LD      DE, (NROFF)
-                LD      HL, TXPAGE
-                ADD     HL, DE
-                EX      DE, HL          ; DE = DESTINATION
                 LD      HL, WORKBUF2
-                LD      BC, WORKSIZ
-                LDIR
+                CALL    PUTREC
 
                 ; 7. OPEN A DIRECTORY SLOT AFTER THE CURRENT LINE AND FILL IT
                 LD      HL, (DOCLINE)
@@ -1444,11 +1437,14 @@ EDNWLIN         CALL    UNDOCLS
                 CALL    CMPHLDE
                 RET     NC
 
-                ; 1. RESERVE THE RECORD FOR THE TAIL FIRST. NEWREC IS THE ONLY
-                ;    STEP HERE THAT CAN FAIL, AND EVERY STEP AFTER IT MUTATES
-                ;    THE DOCUMENT. RESERVING IT IN THE MIDDLE MEANT THE HEAD
-                ;    WAS ALREADY TRUNCATED AND WRITTEN BACK WHEN THE MAPPER RAN
-                ;    OUT, AND THE TAIL WENT WITH IT.
+                ; 1. RESERVE THE RECORD FOR THE TAIL FIRST
+                LD      HL, (DOCLINE)
+                CALL    LINELEN         ; A = LINE LENGTH
+                LD      HL, CURX
+                SUB     (HL)            ; A = MAX(0, LEN - CURX)
+                JR      NC, .HAVTLN
+                XOR     A
+.HAVTLN         LD      C, A            ; C = TAIL LENGTH
                 CALL    NEWREC
                 RET     C               ; NO MAPPER MEMORY: LEAVE THE LINE ALONE
                 LD      (NRSEG), A
@@ -1466,19 +1462,11 @@ EDNWLIN         CALL    UNDOCLS
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
 
-                ; 5. PUT THE TAIL IN THE RESERVED RECORD. LINEREAD / LINEWRT
-                ;    HAVE RE-BANKED PAGE 2 SINCE NEWREC, SO BANK IT BACK --
-                ;    NRSEG, NOT APPSEG: NEWREC MAY HAVE HANDED OUT A RECYCLED
-                ;    RECORD FROM ANY SEGMENT.
+                ; 5. PUT THE TAIL IN THE RESERVED RECORD
                 LD      A, (NRSEG)
-                CALL    RECBANK
                 LD      DE, (NROFF)
-                LD      HL, TXPAGE
-                ADD     HL, DE
-                EX      DE, HL          ; DE = DESTINATION
                 LD      HL, WORKBUF2
-                LD      BC, WORKSIZ
-                LDIR
+                CALL    PUTREC
 
                 ; 6. OPEN A DIRECTORY SLOT AFTER THE CURRENT LINE AND FILL IT
                 LD      HL, (DOCLINE)

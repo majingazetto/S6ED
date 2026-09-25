@@ -76,6 +76,7 @@ TXTHLP          DEFM    "S2ED v1.0 - Screen 2 text editor for MSX / TMS9918", 13
                 INCLUDE FONT.Z8A
                 INCLUDE MAPPER.Z8A
                 INCLUDE BUFFER.Z8A
+                INCLUDE COMPACT.Z8A
                 INCLUDE RENDER.Z8A
                 INCLUDE SCROLL.Z8A
                 INCLUDE EDIT.Z8A

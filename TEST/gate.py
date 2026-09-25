@@ -151,13 +151,13 @@ class G3Oom(Case):
               'silent data loss on save; editor rolls back to 1 empty line and '
               'clears FILENAME')
     machine = MACH_128K
-    FIXTURE_LINES = 150
+    FIXTURE_LINES = 220
     # 128 kB DOS 2: 2 free segments, both reserved (DIRSEG + FTRSEG), so the
-    # text pool is DEFSEG2 alone = LINEPSEG lines (101 lines).
-    CAPACITY = 101
+    # text pool is DEFSEG2 alone = 16,384 bytes. Under variable-length records,
+    # 220 lines of 79 chars require 220 * 84 = 18,480 bytes, exceeding DEFSEG2.
 
     def fixture(self, ctx, variant=None):
-        return crlf(numbered(self.FIXTURE_LINES))
+        return crlf([('LINE %05d ' % i) + ('X' * 68) for i in range(1, self.FIXTURE_LINES + 1)])
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
@@ -184,7 +184,7 @@ class G3Oom(Case):
                   'editor still running after refusal'),
         ]
         got = run.session.extract(run.dsk, 'DOC.TXT')
-        want = crlf(numbered(self.FIXTURE_LINES))
+        want = self.fixture(ctx)
         checks.append(Check('G3/document-intact', got == want,
                             'disk file DOC.TXT preserved intact with all %d lines'
                             % self.FIXTURE_LINES
@@ -538,7 +538,7 @@ class G9Directory(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot', dirseg=True)
-        t.press('DOWN', repeat=30)
+        t.press('DOWN', repeat=29)
         t.press('RETURN')                 # LINEINS shifts ~30 entries
         t.snap('inserted', dirseg=True)
         t.press('BS')                     # join it straight back
@@ -589,7 +589,7 @@ class G9Directory(Case):
             if seg not in segs:
                 return 'entry %d names segment %d, not in %s' % (i, seg,
                                                                  sorted(segs))
-            if off > SEGLAST or off % LINEREC:
+            if off >= 16384 or off % 2:
                 return 'entry %d offset %d is not a record boundary' % (i, off)
         return None
 

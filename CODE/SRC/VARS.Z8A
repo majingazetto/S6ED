@@ -294,7 +294,13 @@ STYLMASK        DEFB    0               ; APPLSEL: ATTRIBUTE MASK TO TOGGLE
 STYLLN          DEFW    0               ; APPLSEL: CURRENT LINE ITERATOR
 STYLXA          DEFB    0               ; APPLSEL: START COLUMN
 STYLXB          DEFB    0               ; APPLSEL: END COLUMN
+CMPSEG          DEFB    0               ; COMPACTION: SEGMENT NUMBER
+CMPEND          DEFW    0               ; COMPACTION: SCAN BOUND
+CMPSRC          DEFW    0               ; COMPACTION: SOURCE OFFSET
+CMPDST          DEFW    0               ; COMPACTION: DESTINATION OFFSET
+CMPRSZ          DEFW    0               ; COMPACTION: RECORD SIZE
 FILEBUF         DEFS    256             ; TEMPORARY BUFFER FOR DISK READS
+
 
 
 ; --- FONT SOURCE               ----------------------------------------

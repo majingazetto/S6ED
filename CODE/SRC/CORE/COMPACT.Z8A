@@ -1,0 +1,218 @@
+;                                       ****************************************
+;                                       * SEGMENT COMPACTION ENGINE            *
+;                                       ****************************************
+;
+; LINEAR SEGMENT COMPACTOR: SLIDES ACTIVE RECORDS DOWNWARD IN PLACE,
+; ELIMINATING TOMBSTONED (#FFFF) RECORDS AND CONSOLIDATING FREE SPACE
+; AT THE TAIL OF THE SEGMENT. UPDATES DIRSEG ENTRIES ACCORDINGLY.
+;
+
+
+; --- SEGCOMP                   ----------------------------------------
+
+
+; - SEGCOMP ----------------------------
+; - COMPACT A 16KB TEXT SEGMENT IN PLACE
+; - IN:  A = SEGMENT NUMBER TO COMPACT
+; - OUT: CY = 0 SUCCESS
+; - CLOBBERS: ALL
+; -
+SEGCOMP         LD      (CMPSEG), A
+
+                ; DISPLAY "Compacting..." ON STATUS BAR
+                LD      HL, .STRCMP
+                CALL    .SETMSG
+                CALL    DRWSTAT
+
+                ; DETERMINE HIGH-WATER BOUND FOR SCAN
+                ; IF CMPSEG == APPSEG, BOUND IS (LINEOFF).
+                ; IF CMPSEG != APPSEG, BOUND IS SEGSIZE (16384).
+                LD      A, (CMPSEG)
+                LD      HL, APPSEG
+                CP      (HL)
+                JR      NZ, .NOTAPP
+                LD      HL, (LINEOFF)
+                JR      .HAVBND
+.NOTAPP         LD      HL, SEGSIZE
+.HAVBND         LD      (CMPEND), HL    ; CMPEND = SCAN LIMIT
+
+                ; INITIALIZE SCAN POINTERS: SRC = 0, DST = 0
+                LD      HL, 0
+                LD      (CMPSRC), HL
+                LD      (CMPDST), HL
+
+.SCANLP         ; CHECK IF CMPSRC >= CMPEND
+                LD      HL, (CMPSRC)
+                LD      DE, (CMPEND)
+                CALL    CMPHLDE
+                JR      NC, .SCANDON    ; SRC REACHED END
+
+                ; BANK COMPACTION SEGMENT INTO PAGE 2
+                LD      A, (CMPSEG)
+                CALL    RECBANK
+
+                ; READ RECORD AT TXPAGE + CMPSRC
+                LD      HL, TXPAGE
+                LD      DE, (CMPSRC)
+                ADD     HL, DE          ; HL = RECORD BASE
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)         ; DE = RECCAP
+                INC     HL
+                LD      A, (HL)         ; A = RECLEN LOW
+                INC     HL
+                LD      H, (HL)
+                LD      L, A            ; HL = RECLEN
+
+                ; TOTAL RECORD SIZE = RECHDR_SZ + RECCAP
+                EX      DE, HL          ; HL = RECCAP, DE = RECLEN
+                LD      BC, RECHDR_SZ
+                ADD     HL, BC          ; HL = TOTAL RECORD SIZE
+                LD      (CMPRSZ), HL    ; SAVE RECORD SIZE
+
+                ; CHECK IF RECORD IS DEAD (RECLEN == #FFFF)
+                LD      A, D
+                AND     E
+                INC     A               ; IF DE == #FFFF, A BECOMES 0
+                JR      Z, .ISDEAD
+
+                ; RECORD IS ALIVE!
+                ; CHECK IF CMPSRC == CMPDST
+                LD      HL, (CMPSRC)
+                LD      DE, (CMPDST)
+                CALL    CMPHLDE
+                JR      Z, .NOSLIDE     ; SRC == DST: NO MOVEMENT NEEDED
+
+                ; SRC != DST: MUST SLIDE DOWN!
+                ; 1. LDIR RECORD FROM TXPAGE + CMPSRC TO TXPAGE + CMPDST
+                ; DEST: TXPAGE + CMPDST
+                LD      HL, TXPAGE
+                LD      DE, (CMPDST)
+                ADD     HL, DE
+                EX      DE, HL          ; DE = TXPAGE + CMPDST (DEST)
+                ; SRC: TXPAGE + CMPSRC
+                LD      HL, TXPAGE
+                LD      BC, (CMPSRC)
+                ADD     HL, BC          ; HL = TXPAGE + CMPSRC (SRC)
+                LD      BC, (CMPRSZ)
+                LDIR                    ; SLIDE DOWN!
+
+                ; 2. UPDATE DIRSEG: MATCH (CMPSEG, OLDOFF) -> NEWOFF
+                LD      DE, (CMPSRC)    ; DE = OLDOFF
+                LD      BC, (CMPDST)    ; BC = NEWOFF
+                LD      A, (CMPSEG)
+                CALL    DIRUPDOF
+
+                ; RE-BANK COMPACTION SEGMENT
+                LD      A, (CMPSEG)
+                CALL    RECBANK
+
+.NOSLIDE        ; ADVANCE CMPDST BY RECORD SIZE
+                LD      HL, (CMPDST)
+                LD      DE, (CMPRSZ)
+                ADD     HL, DE
+                LD      (CMPDST), HL
+
+.ISDEAD         ; ADVANCE CMPSRC BY RECORD SIZE
+                LD      HL, (CMPSRC)
+                LD      DE, (CMPRSZ)
+                ADD     HL, DE
+                LD      (CMPSRC), HL
+                JR      .SCANLP
+
+.SCANDON        ; COMPACTION FINISHED!
+                ; IF CMPSEG == APPSEG, UPDATE LINEOFF = CMPDST
+                LD      A, (CMPSEG)
+                LD      HL, APPSEG
+                CP      (HL)
+                JR      NZ, .NOTAPP2
+                LD      HL, (CMPDST)
+                LD      (LINEOFF), HL
+
+                ; IF FREE LIST HEAD IS IN THIS SEGMENT, DRAIN IT
+                LD      A, (CMPSEG)
+                LD      HL, FREEHD
+                CP      (HL)
+                JR      NZ, .NOTAPP2
+                LD      A, FREENIL
+                LD      (FREEHD), A
+
+.NOTAPP2        ; CLEAR STATUS MESSAGE AND REDRAW
+                XOR     A
+                LD      (STATMSG), A
+                CALL    DRWSTAT
+                OR      A               ; CY = 0: SUCCESS
+                RET
+
+.SETMSG         LD      DE, STATMSG
+.SETMLP         LD      A, (HL)
+                LD      (DE), A
+                OR      A
+                RET     Z
+                INC     HL
+                INC     DE
+                JR      .SETMLP
+
+.STRCMP         DEFM    "Compacting...", 0
+
+
+; --- DIRUPDOF                  ----------------------------------------
+
+
+; - DIRUPDOF ---------------------------
+; - UPDATE OFFSET IN DIRSEG FOR ENTRY MATCHING (SEG, OLDOFF)
+; - IN:  A  = SEGMENT NUMBER
+; -      DE = OLD OFFSET
+; -      BC = NEW OFFSET
+; - OUT: CY = 0 UPDATED
+; -      CY = 1 NOT FOUND
+; - CLOBBERS: AF, HL
+; -
+DIRUPDOF        PUSH    BC
+                PUSH    DE
+                CALL    DIRBANK         ; PAGE 2 = DIRSEG
+                LD      HL, (TOTLINES)
+                LD      A, H
+                OR      L
+                JR      Z, .NOTFND
+                LD      B, H
+                LD      C, L            ; BC = COUNT (TOTLINES)
+                LD      HL, DIRWIN      ; HL = FIRST DIRECTORY ENTRY
+                POP     DE              ; DE = OLDOFF
+                PUSH    DE
+                LD      A, (CMPSEG)     ; A = SEGMENT TO MATCH
+
+.SCANLP         CP      (HL)            ; SEGMENT MATCH?
+                JR      NZ, .MIS0
+                INC     HL
+                LD      A, (HL)
+                CP      E               ; OFFSET LOW MATCH?
+                JR      NZ, .MIS1
+                INC     HL
+                LD      A, (HL)
+                CP      D               ; OFFSET HIGH MATCH?
+                JR      NZ, .MIS2
+
+                ; MATCH FOUND! HL IS AT OFFSET HIGH, HL-1 IS AT OFFSET LOW
+                POP     DE              ; CLEAN OLDOFF
+                POP     BC              ; BC = NEWOFF
+                LD      (HL), B         ; WRITE NEW OFFSET HIGH
+                DEC     HL
+                LD      (HL), C         ; WRITE NEW OFFSET LOW
+                OR      A               ; CY = 0: SUCCESS
+                RET
+
+.MIS0           INC     HL              ; ADVANCE FROM +0 TO +1
+.MIS1           INC     HL              ; ADVANCE FROM +1 TO +2
+.MIS2           INC     HL              ; ADVANCE FROM +2 TO +3 (NEXT ENTRY)
+                DEC     BC
+                LD      A, B
+                OR      C
+                JR      Z, .NOTFND
+                LD      A, (CMPSEG)     ; RESTORE A = SEGMENT TO MATCH
+                JR      .SCANLP
+
+.NOTFND         POP     DE
+                POP     BC
+                SCF                     ; CY = 1: NOT FOUND
+                RET
