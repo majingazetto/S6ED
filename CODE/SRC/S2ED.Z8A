@@ -113,6 +113,13 @@ INIT            DBG     "1: INIT START (S2ED)"
                 LD      (HL), 0
                 LDIR
 
+                ; CLEAR PAGE 3 BUFFERS (WORKBUF, WORKBUF2, PREVBUF)
+                LD      HL, WORKBUF
+                LD      DE, WORKBUF + 1
+                LD      BC, 3 * WORKSIZ - 1
+                LD      (HL), 0
+                LDIR
+
                 ; INITIALIZE DEFAULTS
                 LD      A, INS_MODE
                 LD      (INSMODE), A

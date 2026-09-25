@@ -292,7 +292,7 @@ SRCHBWD         LD      A, (SRCHLEN)
                 DEC     HL
                 PUSH    HL
                 CALL    LINEREAD
-                LD      C, TEXTCOLS - 1
+                LD      C, MAXCOLS - 1
                 CALL    SCANLNB
                 JR      NC, .BMATPOP
                 POP     HL
@@ -314,7 +314,7 @@ SRCHBWD         LD      A, (SRCHLEN)
                 JR      Z, .BLSTCHK     ; AT ORIGINAL DOCLINE: FINAL CHECK
                 PUSH    HL
                 CALL    LINEREAD
-                LD      C, TEXTCOLS - 1
+                LD      C, MAXCOLS - 1
                 CALL    SCANLNB
                 JR      NC, .BMATPOP
                 POP     HL
@@ -324,10 +324,10 @@ SRCHBWD         LD      A, (SRCHLEN)
                 DEC     HL
                 JR      .BWRPLP
 
-.BLSTCHK        ; CHECK ORIGINAL DOCLINE STARTING AT TEXTCOLS-1 DOWN TO CURX
+.BLSTCHK        ; CHECK ORIGINAL DOCLINE STARTING AT MAXCOLS-1 DOWN TO CURX
                 LD      HL, (DOCLINE)
                 CALL    LINEREAD
-                LD      C, TEXTCOLS - 1
+                LD      C, MAXCOLS - 1
                 CALL    SCANLNB
                 RET     C
                 LD      A, (CURX)
@@ -422,9 +422,15 @@ DOREPL          LD      A, (SRCHLEN)
                 LD      A, B
                 SUB     C
                 ADD     A, D            ; A = NEWLEN
+                JR      C, .OVRFLW
+                LD      E, A
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JR      NZ, .FITSLN
+                LD      A, E
                 CP      TEXTCOLS + 1
                 JR      C, .FITSLN
-                SCF
+.OVRFLW         SCF
                 RET                     ; LINE OVERFLOW: REFUSE
 .FITSLN
 
@@ -529,7 +535,7 @@ SPLICELN        ; 1. COMPUTE NEWLEN = OLDLEN - SRCHLEN + RPLCLEN
                 LDDR                    ; SHIFT TEXT TAIL RIGHT
                 POP     DE              ; DEST END TEXT
                 POP     HL              ; SRC END TEXT
-                LD      BC, TEXTCOLS
+                LD      BC, WORKATTR
                 ADD     HL, BC          ; HL = SRC END ATTR
                 EX      DE, HL
                 ADD     HL, BC
@@ -564,7 +570,7 @@ SPLICELN        ; 1. COMPUTE NEWLEN = OLDLEN - SRCHLEN + RPLCLEN
                 LDIR                    ; SHIFT TEXT TAIL LEFT
                 POP     DE              ; DEST START TEXT
                 POP     HL              ; SRC START TEXT
-                LD      BC, TEXTCOLS
+                LD      BC, WORKATTR
                 ADD     HL, BC          ; HL = SRC START ATTR
                 EX      DE, HL
                 ADD     HL, BC
@@ -597,7 +603,7 @@ SPLICELN        ; 1. COMPUTE NEWLEN = OLDLEN - SRCHLEN + RPLCLEN
                 POP     DE              ; E = CURX, D = RPLCLEN
 
                 ; ZERO REPLACEMENT ATTRIBUTES
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 LD      D, 0
                 ADD     HL, DE          ; HL = ATTR START
                 LD      B, C            ; B = RPLCLEN
@@ -653,8 +659,15 @@ DORPLAL         LD      A, (SRCHLEN)
                 LD      B, A            ; B = WORKBUF - SRCHLEN
                 LD      A, (RPLCLEN)
                 ADD     A, B
+                JR      C, .NEXTLIN     ; OVERFLOW: SKIP
+                LD      E, A
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JR      NZ, .ALOK
+                LD      A, E
                 CP      TEXTCOLS + 1
                 JR      NC, .NEXTLIN    ; WOULD OVERFLOW: SKIP
+.ALOK
 
                 ; UNDO RECORD: FIRST REPLACEMENT IN GROUP IS MOD, SUBSEQUENT ARE CHAINED
                 PUSH    BC
@@ -697,7 +710,7 @@ DORPLAL         LD      A, (SRCHLEN)
 .NEXTLIN        LD      HL, (DOCLINE)
                 INC     HL
                 LD      (DOCLINE), HL
-                JR      .ALLLINE
+                JP      .ALLLINE
 
 .ALLDONE        LD      HL, 0
                 LD      (DOCLINE), HL

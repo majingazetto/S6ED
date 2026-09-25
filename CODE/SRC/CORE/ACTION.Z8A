@@ -201,10 +201,8 @@ ACTEOL          CALL    CHKUNSEL
                 LD      HL, (DOCLINE)
                 CALL    LINEREAD
                 LD      A, (WORKBUF)
-                CP      TEXTCOLS
-                JR      C, .EOLSET
-                LD      A, TEXTCOLS - 1
-.EOLSET         LD      (CURX), A
+                CALL    GETMAXC
+                LD      (CURX), A
                 RET
 
 
@@ -363,10 +361,8 @@ ACTWRGT         CALL    CHKUNSEL
                 LD      (CURX), A
                 RET
 .WREOL          LD      A, C
-                CP      TEXTCOLS
-                JR      C, .WRSET
-                LD      A, TEXTCOLS - 1
-.WRSET          LD      (CURX), A
+                CALL    GETMAXC
+                LD      (CURX), A
                 RET
 
 
@@ -403,7 +399,7 @@ ACTDWLFT        LD      A, (CURX)
                 ; 1. SHIFT TEXT (WORKBUF + 1)
                 ; DEST = WORKBUF + 1 + DWTO
                 ; SRC  = WORKBUF + 1 + DWFROM
-                ; COUNT = TEXTCOLS - DWFROM
+                ; COUNT = MAXCOLS - DWFROM
                 LD      A, (DWTO)
                 LD      E, A
                 LD      D, 0
@@ -419,8 +415,8 @@ ACTDWLFT        LD      A, (CURX)
 
                 LD      A, (DWFROM)
                 LD      C, A
-                LD      A, TEXTCOLS
-                SUB     C               ; A = TEXTCOLS - DWFROM
+                LD      A, MAXCOLS
+                SUB     C               ; A = MAXCOLS - DWFROM
                 JR      Z, .NOSHFTT
                 LD      C, A
                 LD      B, 0            ; BC = COUNT
@@ -430,19 +426,19 @@ ACTDWLFT        LD      A, (CURX)
                 LD      A, (DWTO)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
                 EX      DE, HL          ; DE = DEST
 
                 LD      A, (DWFROM)
                 LD      L, A
                 LD      H, 0
-                LD      BC, WORKBUF + 1 + TEXTCOLS
+                LD      BC, WORKBUF + 1 + WORKATTR
                 ADD     HL, BC          ; HL = SRC
 
                 LD      A, (DWFROM)
                 LD      C, A
-                LD      A, TEXTCOLS
+                LD      A, MAXCOLS
                 SUB     C
                 JR      Z, .NOSHFTA
                 LD      C, A
@@ -452,8 +448,8 @@ ACTDWLFT        LD      A, (CURX)
 .NOSHFTA        ; 3. CLEAR VACATED TAIL IN TEXT (K BYTES AT THE END)
                 LD      A, (DWK)
                 LD      C, A
-                LD      A, TEXTCOLS
-                SUB     C               ; A = TEXTCOLS - K
+                LD      A, MAXCOLS
+                SUB     C               ; A = MAXCOLS - K
                 LD      E, A
                 LD      D, 0
                 LD      HL, WORKBUF + 1
@@ -466,11 +462,11 @@ ACTDWLFT        LD      A, (CURX)
                 ; 4. CLEAR VACATED TAIL IN ATTRS (K BYTES AT THE END)
                 LD      A, (DWK)
                 LD      C, A
-                LD      A, TEXTCOLS
+                LD      A, MAXCOLS
                 SUB     C
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
                 LD      B, C
 .BLKATR         LD      (HL), 0
@@ -673,13 +669,8 @@ ACTDELLN        CALL    UNDOCLS
                 LD      HL, (DOCLINE)
                 CALL    LINEREAD
                 CALL    UNDOBGN
-                XOR     A
-                LD      (WORKBUF), A
-                LD      HL, WORKBUF + 1
-                LD      (HL), ' '
-                LD      DE, WORKBUF + 2
-                LD      BC, TEXTCOLS - 1
-                LDIR
+                LD      HL, WORKBUF
+                CALL    RECBLNK
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
                 CALL    UNDOCLS
@@ -2197,8 +2188,8 @@ ACTDLS          LD      A, (SELACT)
 
                 LD      A, (SELENDX)
                 LD      C, A
-                LD      A, TEXTCOLS
-                SUB     C               ; A = TEXTCOLS - ENDX
+                LD      A, MAXCOLS
+                SUB     C               ; A = MAXCOLS - ENDX
                 JR      Z, .NOSHFT
                 LD      C, A
                 LD      B, 0
@@ -2208,19 +2199,19 @@ ACTDLS          LD      A, (SELACT)
                 LD      A, (SELSTRX)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
                 EX      DE, HL
 
                 LD      A, (SELENDX)
                 LD      L, A
                 LD      H, 0
-                LD      BC, WORKBUF + 1 + TEXTCOLS
+                LD      BC, WORKBUF + 1 + WORKATTR
                 ADD     HL, BC
 
                 LD      A, (SELENDX)
                 LD      C, A
-                LD      A, TEXTCOLS
+                LD      A, MAXCOLS
                 SUB     C
                 JR      Z, .NOSHFTA
                 LD      C, A
@@ -2230,7 +2221,7 @@ ACTDLS          LD      A, (SELACT)
 .NOSHFTA        ; 3. BLANK VACATED TAIL
                 LD      A, (DWK)
                 LD      C, A
-                LD      A, TEXTCOLS
+                LD      A, MAXCOLS
                 SUB     C
                 LD      E, A
                 LD      D, 0
@@ -2243,11 +2234,11 @@ ACTDLS          LD      A, (SELACT)
 
                 LD      A, (DWK)
                 LD      C, A
-                LD      A, TEXTCOLS
+                LD      A, MAXCOLS
                 SUB     C
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
                 LD      B, C
 .BLKATR2        LD      (HL), 0
@@ -2317,9 +2308,8 @@ ACTDLS          LD      A, (SELACT)
                 LD      C, A            ; C = M
                 LD      A, (SELSTRX)
                 ADD     A, C
-                CP      TEXTCOLS + 1
-                JR      C, .NOTRUNC
-                LD      A, TEXTCOLS
+                JR      NC, .NOTRUNC
+                LD      A, MAXCOLS
                 LD      HL, SELSTRX
                 SUB     (HL)
                 LD      C, A            ; C = CLAMPED M
@@ -2345,13 +2335,13 @@ ACTDLS          LD      A, (SELACT)
                 LD      A, (SELENDX)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF2 + 1 + TEXTCOLS
+                LD      HL, WORKBUF2 + 1 + WORKATTR
                 ADD     HL, DE          ; HL = SRC ATTR
                 PUSH    HL              ; SAVE SRC ATTR
                 LD      A, (SELSTRX)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
                 EX      DE, HL          ; DE = DEST ATTR
                 POP     HL              ; HL = SRC ATTR
@@ -2374,7 +2364,7 @@ ACTDLS          LD      A, (SELACT)
                 LD      D, 0
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE
-                LD      A, TEXTCOLS
+                LD      A, MAXCOLS
                 SUB     E
                 JR      Z, .NOTBLKT
                 LD      B, A
@@ -2385,9 +2375,9 @@ ACTDLS          LD      A, (SELACT)
 .NOTBLKT        LD      A, (WORKBUF)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
-                LD      A, TEXTCOLS
+                LD      A, MAXCOLS
                 SUB     E
                 JR      Z, .WRTSTR
                 LD      B, A
@@ -3056,8 +3046,8 @@ APPLSEL         LD      (STYLMASK), A
                 LD      A, (STYLXA)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
-                ADD     HL, DE          ; HL = WORKBUF + 1 + TEXTCOLS + XA
+                LD      HL, WORKBUF + 1 + WORKATTR
+                ADD     HL, DE          ; HL = WORKBUF + 1 + WORKATTR + XA
                 LD      A, (STYLMASK)
                 LD      C, A            ; C = MASK TO TOGGLE
 

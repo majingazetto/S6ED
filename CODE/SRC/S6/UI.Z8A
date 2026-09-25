@@ -755,6 +755,10 @@ DRWCUR          PUSH    AF
                 PUSH    DE
                 PUSH    HL
 
+                LD      A, (CURX)
+                CP      TEXTCOLS
+                JR      NC, .OFFSCR
+
                 ; DX = TXORG_X + CURX * 6
                 LD      A, (CURX)
                 LD      L, A
@@ -797,7 +801,7 @@ DRWCUR          PUSH    AF
                 LD      A, VDP_LMMV | VDP_XOR
                 CALL    LMMV
 
-                POP     HL
+.OFFSCR         POP     HL
                 POP     DE
                 POP     BC
                 POP     AF
