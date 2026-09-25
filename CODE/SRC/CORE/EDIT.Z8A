@@ -22,6 +22,20 @@ EDINSCHR        PUSH    AF
                 POP     AF
 
                 LD      C, A            ; C = CHAR TO INSERT
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JR      Z, .WRTXT
+
+                ; WRAP_DEV:
+                LD      A, (CURX)
+                CP      MAXCOLS
+                RET     NC              ; AT/PAST MAXCOLS (255), NO INSERT
+                LD      A, (WORKBUF)
+                CP      MAXCOLS
+                RET     NC              ; LINE AT MAXCOLS, CANNOT INSERT
+                JR      .DOINS
+
+.WRTXT          ; WRAP_TXT:
                 LD      A, (CURX)
                 CP      TEXTCOLS
                 RET     NC              ; PAST THE LAST COLUMN, NO INSERT
@@ -34,12 +48,6 @@ EDINSCHR        PUSH    AF
 
                 ; THE LAST COLUMN IS OCCUPIED: INSERTING WOULD PUSH TEXT OUT
                 ; OF THE RECORD. WHAT FOLLOWS IS THE WRAP MODE'S DECISION.
-                LD      A, (WRAPMODE)
-                CP      WRAP_TXT
-                RET     NZ              ; WRAP_DEV: CLAMP, NEVER LOSE CODE
-
-                ; WRAP_TXT: A SPACE TYPED AT THE MARGIN IS JUST A LINE BREAK;
-                ; ANYTHING ELSE PUSHES THE TRAILING WORD DOWN A LINE.
                 LD      A, (CURX)
                 CP      TEXTCOLS - 1
                 JP      NZ, EDPSHWR
@@ -70,6 +78,17 @@ EDINSCHR        PUSH    AF
 .NOREND         ; ADVANCE CURSOR
                 LD      A, (CURX)
                 INC     A
+                LD      B, A            ; B = NEW CURX
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JR      Z, .CKWTXT
+                ; WRAP_DEV: CAN ADVANCE UP TO MAXCOLS - 1
+                LD      A, B
+                CP      MAXCOLS
+                JR      NC, .NOMOV
+                LD      (CURX), A
+                JR      .NOMOV
+.CKWTXT         LD      A, B
                 CP      TEXTCOLS
                 JR      NC, .NOMOV
                 LD      (CURX), A
@@ -105,9 +124,7 @@ EDINSRUN        LD      (WBSRC), HL     ; SURVIVES LINEREAD
                 LD      HL, (DOCLINE)
                 CALL    LINEREAD
 
-                ; ROOM ON THIS LINE = TEXTCOLS - MAX(LENGTH, COLUMN).
-                ; MEASURING FROM THE LENGTH NEVER OVERSTATES IT: A RECORD IS
-                ; SPACE PADDED, SO THE COLUMNS PAST THE LENGTH ARE ALWAYS FREE.
+                ; ROOM ON THIS LINE = MAXCOLS (or TEXTCOLS) - MAX(LENGTH, COLUMN).
                 LD      A, (WORKBUF)    ; LENGTH
                 LD      C, A
                 LD      A, (CURX)
@@ -115,9 +132,16 @@ EDINSRUN        LD      (WBSRC), HL     ; SURVIVES LINEREAD
                 JR      NC, .IRHAVE     ; COLUMN >= LENGTH: MEASURE FROM IT
                 LD      A, C
 .IRHAVE         LD      C, A
-                LD      A, TEXTCOLS
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JR      Z, .IRWTXT
+                ; WRAP_DEV: MAXCOLS
+                LD      A, MAXCOLS
                 SUB     C
-                LD      C, A            ; C = ROOM
+                JR      .IRGOTRM
+.IRWTXT         LD      A, TEXTCOLS
+                SUB     C
+.IRGOTRM        LD      C, A            ; C = ROOM
                 LD      A, (WBRUN)
                 CP      C
                 JR      Z, .IRFITS
@@ -142,11 +166,23 @@ EDINSRUN        LD      (WBSRC), HL     ; SURVIVES LINEREAD
                 CALL    LINEWRT
 
                 ; THE CURSOR ADVANCES BY THE WHOLE RUN, CLAMPED THE WAY
-                ; EDINSCHR CLAMPS ITS SINGLE STEP
+                ; EDINSCHR CLAMPS ITS STEP
                 LD      A, (CURX)
                 LD      C, A
                 LD      A, (WBRUN)
                 ADD     A, C
+                LD      B, A
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JR      Z, .IRCLTXT
+                ; WRAP_DEV: CLAMP TO MAXCOLS - 1
+                LD      A, B
+                CP      MAXCOLS
+                JR      C, .IRSETX
+                LD      A, MAXCOLS - 1
+                JR      .IRSETX
+.IRCLTXT        ; WRAP_TXT: CLAMP TO TEXTCOLS - 1
+                LD      A, B
                 CP      TEXTCOLS
                 JR      C, .IRSETX
                 LD      A, TEXTCOLS - 1
@@ -345,11 +381,7 @@ EDPSHWR         CALL    UNDOCLS
 
 ; - WBINS ------------------------------
 ; - INSERT A CHARACTER INTO A LINE RECORD AT A COLUMN
-; - TEXT AND ATTRIBUTES BOTH SHIFT RIGHT AND THE LAST CELL FALLS
-; - OFF, SO THE CALLER MUST HAVE MADE ROOM THERE FIRST. THE NEW CHARACTER
-; - INHERITS THE ATTRIBUTE OF THE CELL IT DISPLACED (THE SHIFT LEAVES THAT
-; - BYTE IN PLACE, SO IT COSTS NOTHING).
-; - IN:  HL = RECORD BASE, A = COLUMN (0..TEXTCOLS-1), C = CHAR CODE
+; - IN:  HL = RECORD BASE, A = COLUMN (0..MAXCOLS-1), C = CHAR CODE
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
@@ -357,33 +389,45 @@ EDPSHWR         CALL    UNDOCLS
 WBINS           LD      (WBBASE), HL
                 LD      (WBCOL), A
 
-                ; BYTES TO SHIFT RIGHT = TEXTCOLS - 1 - COLUMN
-                LD      E, A
-                LD      A, TEXTCOLS - 1
-                SUB     E
-                JR      Z, .WBPUT       ; AT THE LAST COLUMN: NOTHING MOVES
+                ; CHECK IF COLUMN < LENGTH
+                LD      A, (HL)         ; A = CURRENT LENGTH L
+                LD      B, A            ; B = L
+                LD      A, (WBCOL)
+                CP      B
+                JR      NC, .WBNOSH     ; COLUMN >= LENGTH: NOTHING SHIFTS
+
+                ; COLUMN < LENGTH: SHIFT CHARACTERS FROM COLUMN UP TO L - 1 RIGHT BY 1
+                ; COUNT = L - COLUMN
+                LD      A, B
+                LD      HL, WBCOL
+                SUB     (HL)            ; A = L - COLUMN
                 LD      (WBCNT), A
 
-                ; TEXT HALF: EVERY COLUMN FROM COL ON MOVES UP ONE
-                LD      DE, TEXTCOLS - 1
-                ADD     HL, DE          ; HL = TEXT, SECOND-TO-LAST COLUMN
+                ; TEXT HALF: SOURCE END = BASE + L, DEST END = BASE + L + 1
+                LD      HL, (WBBASE)
+                LD      E, B
+                LD      D, 0
+                ADD     HL, DE          ; HL = BASE + L
                 LD      D, H
                 LD      E, L
-                INC     DE              ; DE = TEXT OF THE LAST COLUMN
+                INC     DE              ; DE = BASE + L + 1
                 LD      A, (WBCNT)
-                PUSH    BC              ; SAVE C (CHAR)
+                PUSH    BC              ; SAVE B=L, C=CHAR
                 LD      C, A
                 LD      B, 0
                 LDDR
                 POP     BC
 
-                ; ATTRIBUTE HALF, EXACTLY THE SAME SHIFT
+                ; ATTRIBUTE HALF: SOURCE END = BASE + WORKATTR + L, DEST END = + 1
                 LD      HL, (WBBASE)
-                LD      DE, TEXTCOLS + TEXTCOLS - 1
-                ADD     HL, DE          ; HL = ATTR, SECOND-TO-LAST COLUMN
+                LD      DE, WORKATTR
+                ADD     HL, DE
+                LD      E, B
+                LD      D, 0
+                ADD     HL, DE          ; HL = BASE + WORKATTR + L
                 LD      D, H
                 LD      E, L
-                INC     DE              ; DE = ATTR OF THE LAST COLUMN
+                INC     DE              ; DE = BASE + WORKATTR + L + 1
                 LD      A, (WBCNT)
                 PUSH    BC
                 LD      C, A
@@ -391,7 +435,7 @@ WBINS           LD      (WBBASE), HL
                 LDDR
                 POP     BC
 
-.WBPUT          ; PLACE THE CHARACTER AND ATTRIBUTE
+.WBNOSH         ; PLACE THE CHARACTER AND ATTRIBUTE
                 LD      HL, (WBBASE)
                 LD      A, (WBCOL)
                 LD      E, A
@@ -399,30 +443,25 @@ WBINS           LD      (WBBASE), HL
                 INC     HL
                 ADD     HL, DE          ; HL = BASE + 1 + COLUMN
                 LD      (HL), C
-                LD      DE, TEXTCOLS
-                ADD     HL, DE          ; HL = BASE + 1 + TEXTCOLS + COLUMN
+                LD      DE, WORKATTR
+                ADD     HL, DE          ; HL = BASE + 1 + WORKATTR + COLUMN
                 LD      A, (TYPATTR)
                 LD      (HL), A
 
-                ; LENGTH. TWO CASES, AND THEY ARE NOT THE SAME:
-                ;   COLUMN >= LENGTH -- WRITING PAST THE END, NOTHING SHIFTED,
-                ;                       SO THE LINE NOW REACHES COLUMN + 1.
-                ;   COLUMN <  LENGTH -- A REAL CHARACTER WAS PUSHED RIGHT, SO
-                ;                       THE LINE IS ONE LONGER, UP TO TEXTCOLS.
-                ; COMPARING COLUMN + 1 AGAINST THE LENGTH INSTEAD OF COLUMN
-                ; MERGES THE TWO AND SILENTLY DROPS THE DISPLACED CHARACTER
-                ; WHEN INSERTING ON THE LAST OCCUPIED COLUMN.
+                ; UPDATE LENGTH
+                ; IF COLUMN < LENGTH: NEW LENGTH = LENGTH + 1 (UP TO MAXCOLS)
+                ; IF COLUMN >= LENGTH: NEW LENGTH = COLUMN + 1
                 LD      HL, (WBBASE)
                 LD      A, (WBCOL)
                 CP      (HL)
-                JR      C, .WBGROW      ; COLUMN < LENGTH
-                INC     A               ; COLUMN >= LENGTH
+                JR      C, .WBGROW
+                INC     A               ; COLUMN >= LENGTH -> NEW LENGTH = COLUMN + 1
                 LD      (HL), A
                 RET
 
 .WBGROW         LD      A, (HL)
-                CP      TEXTCOLS
-                RET     NC              ; ALREADY FULL, CANNOT GROW
+                CP      MAXCOLS
+                RET     NC              ; ALREADY AT MAXCOLS
                 INC     A
                 LD      (HL), A
                 RET
@@ -433,13 +472,7 @@ WBINS           LD      (WBBASE), HL
 
 ; - WBINSN -----------------------------
 ; - INSERT A RUN OF CHARACTERS INTO A LINE RECORD AT A COLUMN
-; - THE BATCH FORM OF WBINS: TEXT AND ATTRIBUTES SHIFT RIGHT BY N IN TWO
-; - LDDR INSTEAD OF N PAIRS, AND THE RUN IS COPIED IN AS A BLOCK. WHATEVER
-; - PASSES THE LAST COLUMN IS LOST, SO THE CALLER MUST MAKE ROOM FIRST:
-; -     MAX(LENGTH, COLUMN) + N <= TEXTCOLS
-; - TAB BECOMES A SPACE ON THE WAY IN. EVERY INSERTED CELL TAKES TYPATTR,
-; - EXACTLY AS WBINS DOES FOR ONE CHARACTER.
-; - IN:  HL = BASE, A = COLUMN, DE = SOURCE, B = COUNT (1..TEXTCOLS)
+; - IN:  HL = BASE, A = COLUMN, DE = SOURCE, B = COUNT (1..MAXCOLS)
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
@@ -452,44 +485,57 @@ WBINSN          LD      (WBBASE), HL
                 RET     Z               ; EMPTY RUN
                 LD      (WBRUN), A
 
-                ; BYTES TO SHIFT RIGHT = TEXTCOLS - COLUMN - N
-                LD      C, A
+                ; CHECK IF COLUMN < LENGTH
+                LD      HL, (WBBASE)
+                LD      A, (HL)         ; A = CURRENT LENGTH L
+                LD      C, A            ; C = L
                 LD      A, (WBCOL)
-                ADD     A, C            ; COLUMN + N, WHICH MAY OVERSHOOT
-                LD      C, A
-                LD      A, TEXTCOLS
-                SUB     C
-                JR      Z, .WNFILL      ; THE RUN REACHES THE EDGE: NO SHIFT
-                JR      C, .WNFILL      ; PRECONDITION BROKEN; DO NOT WRAP BC
+                CP      C
+                JR      NC, .WNFILL     ; COLUMN >= LENGTH: NOTHING SHIFTS
+
+                ; COLUMN < LENGTH: SHIFT CHARACTERS RIGHT BY N (WBRUN)
+                ; COUNT = L - COLUMN
+                LD      A, C            ; A = L
+                LD      HL, WBCOL
+                SUB     (HL)            ; A = L - COLUMN
                 LD      (WBCNT), A
 
-                ; TEXT HALF: EVERY COLUMN FROM COL ON MOVES UP BY N
+                ; TEXT HALF:
+                ; SOURCE END = BASE + L
+                ; DEST END   = BASE + L + N
                 LD      HL, (WBBASE)
-                LD      DE, TEXTCOLS
-                ADD     HL, DE          ; HL = TEXT OF THE LAST COLUMN
-                LD      D, H
-                LD      E, L            ; DE = LAST DESTINATION BYTE
+                LD      E, C            ; E = L
+                LD      D, 0
+                ADD     HL, DE          ; HL = BASE + L (SRC END)
                 LD      A, (WBRUN)
-                LD      C, A
-                LD      B, 0
-                OR      A
-                SBC     HL, BC          ; HL = LAST SOURCE BYTE
+                LD      E, A
+                LD      D, 0
+                PUSH    HL
+                ADD     HL, DE
+                EX      DE, HL          ; DE = BASE + L + N (DEST END)
+                POP     HL              ; HL = SRC END
                 LD      A, (WBCNT)
                 LD      C, A
                 LD      B, 0
                 LDDR
 
-                ; ATTRIBUTE HALF, EXACTLY THE SAME SHIFT
+                ; ATTRIBUTE HALF:
+                ; SOURCE END = BASE + WORKATTR + L
+                ; DEST END   = BASE + WORKATTR + L + N
                 LD      HL, (WBBASE)
-                LD      DE, TEXTCOLS + TEXTCOLS
-                ADD     HL, DE          ; HL = ATTR OF THE LAST COLUMN
-                LD      D, H
-                LD      E, L
+                LD      A, (HL)         ; A = L
+                LD      E, A
+                LD      D, 0
+                LD      BC, WORKATTR
+                ADD     HL, BC
+                ADD     HL, DE          ; HL = BASE + WORKATTR + L
                 LD      A, (WBRUN)
-                LD      C, A
-                LD      B, 0
-                OR      A
-                SBC     HL, BC
+                LD      E, A
+                LD      D, 0
+                PUSH    HL
+                ADD     HL, DE
+                EX      DE, HL          ; DE = BASE + WORKATTR + L + N
+                POP     HL
                 LD      A, (WBCNT)
                 LD      C, A
                 LD      B, 0
@@ -517,12 +563,12 @@ WBINSN          LD      (WBBASE), HL
 
                 ; ATTRIBUTES: N CELLS OF THE CURRENT TYPING ATTRIBUTE
                 LD      HL, (WBBASE)
-                LD      DE, TEXTCOLS + 1
-                ADD     HL, DE          ; HL = ATTR OF COLUMN 0
+                LD      DE, 1 + WORKATTR
+                ADD     HL, DE          ; HL = BASE + 1 + WORKATTR
                 LD      A, (WBCOL)
                 LD      E, A
                 LD      D, 0
-                ADD     HL, DE
+                ADD     HL, DE          ; HL = BASE + 1 + WORKATTR + COLUMN
                 LD      A, (WBRUN)
                 LD      B, A
                 LD      A, (TYPATTR)
@@ -530,29 +576,30 @@ WBINSN          LD      (WBBASE), HL
                 INC     HL
                 DJNZ    .WNATTR
 
-                ; LENGTH, THE SAME TWO CASES WBINS DOCUMENTS:
-                ;   COLUMN >= LENGTH -- NOTHING SHIFTED, THE LINE NOW REACHES
-                ;                       COLUMN + N.
-                ;   COLUMN <  LENGTH -- REAL CHARACTERS WERE PUSHED RIGHT, SO
-                ;                       THE LINE IS N LONGER, UP TO TEXTCOLS.
+                ; UPDATE LENGTH:
+                ; IF COLUMN < LENGTH: NEW LENGTH = LENGTH + N
+                ; IF COLUMN >= LENGTH: NEW LENGTH = COLUMN + N
                 LD      HL, (WBBASE)
                 LD      A, (WBCOL)
                 CP      (HL)
-                JR      C, .WNGROW      ; COLUMN < LENGTH
+                JR      C, .WNGROW
                 LD      C, A
                 LD      A, (WBRUN)
                 ADD     A, C
-                LD      (HL), A
+                CP      MAXCOLS
+                JR      C, .WNSET
+                LD      A, MAXCOLS
+.WNSET          LD      (HL), A
                 RET
 
 .WNGROW         LD      A, (HL)
                 LD      C, A
                 LD      A, (WBRUN)
                 ADD     A, C
-                CP      TEXTCOLS + 1
-                JR      C, .WNSET
-                LD      A, TEXTCOLS
-.WNSET          LD      (HL), A
+                CP      MAXCOLS
+                JR      C, .WNGSET
+                LD      A, MAXCOLS
+.WNGSET         LD      (HL), A
                 RET
 
 
@@ -731,7 +778,7 @@ REFLOW          LD      (RFLINE), HL
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE
                 LD      (HL), ' '
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
                 LD      (HL), 0
                 LD      A, (WORKBUF)
@@ -757,10 +804,10 @@ REFLOW          LD      (RFLINE), HL
                 LD      A, (WORKBUF)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE          ; DEST ATTR
                 EX      DE, HL          ; DE = DEST ATTR
-                LD      HL, WORKBUF2 + 1 + TEXTCOLS
+                LD      HL, WORKBUF2 + 1 + WORKATTR
                 LDIR
 
                 ; UPDATE LINE L LENGTH: LEN_A + RFCNT
@@ -821,9 +868,9 @@ REFLOW          LD      (RFLINE), HL
                 ; COPY REMAINING ATTRIBUTES FROM WORKBUF2 TO WORKBUF
                 LD      E, C
                 LD      D, 0
-                LD      HL, WORKBUF2 + TEXTCOLS
-                ADD     HL, DE          ; HL = WORKBUF2 + TEXTCOLS + C
-                LD      DE, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF2 + WORKATTR
+                ADD     HL, DE          ; HL = WORKBUF2 + WORKATTR + C
+                LD      DE, WORKBUF + 1 + WORKATTR
                 LD      A, (WORKBUF)
                 LD      C, A
                 LD      B, 0
@@ -865,7 +912,7 @@ REFLOW          LD      (RFLINE), HL
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE
                 LD      (HL), ' '
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
                 LD      (HL), 0
                 LD      A, (WORKBUF)
@@ -894,10 +941,10 @@ REFLOW          LD      (RFLINE), HL
                 LD      A, (WORKBUF)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE          ; DEST ATTR
                 EX      DE, HL          ; DE = DEST ATTR
-                LD      HL, WORKBUF2 + 1 + TEXTCOLS
+                LD      HL, WORKBUF2 + 1 + WORKATTR
                 LDIR
 
                 ; UPDATE LINE L LENGTH: LEN_A + LEN_B
@@ -946,14 +993,14 @@ REFLOW          LD      (RFLINE), HL
 ; -
 
 RECBL80         LD      A, (WORKBUF)
-                CP      TEXTCOLS
+                CP      MAXCOLS
                 RET     NC              ; ALREADY FULL
 
                 LD      E, A
                 LD      D, 0
-                LD      A, TEXTCOLS
+                LD      A, MAXCOLS
                 SUB     E
-                LD      B, A            ; B = TEXTCOLS - LEN
+                LD      B, A            ; B = MAXCOLS - LEN
 
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE
@@ -965,7 +1012,7 @@ RECBL80         LD      A, (WORKBUF)
                 POP     HL
                 POP     BC
 
-                LD      DE, TEXTCOLS
+                LD      DE, WORKATTR
                 ADD     HL, DE
 .BLKATT         LD      (HL), 0
                 INC     HL
@@ -981,7 +1028,7 @@ RECBL80         LD      A, (WORKBUF)
 ; - IN:  HL = LINE A (TARGET LINE NUMBER)
 ; -      DE = LINE B (SOURCE TO DELETE)
 ; - OUT: CY = 0 : SUCCESS, JOINCOL = LEN A
-; -      CY = 1 : FAILED (> TEXTCOLS)
+; -      CY = 1 : FAILED (> MAXCOLS)
 ; - CLOBBERS: ALL
 ; -
 
@@ -1008,8 +1055,7 @@ JOIN2L          LD      (JOINLA), HL
                 LD      B, A            ; B = LEN_A
                 LD      A, (WORKBUF2)   ; A = LEN_B
                 ADD     A, B            ; A = LEN_A + LEN_B
-                CP      TEXTCOLS + 1
-                JR      NC, .JNBIG      ; TOO WIDE: REJECT
+                JR      C, .JNBIG       ; 8-BIT OVERFLOW > 255: REJECT
 
                 ; RECORD JOIN IN UNDO RING BUFFER
                 CALL    UNDOJON
@@ -1040,10 +1086,10 @@ JOIN2L          LD      (JOINLA), HL
                 LD      A, (JOINCOL)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
                 EX      DE, HL          ; DE = DEST ATTR
-                LD      HL, WORKBUF2 + 1 + TEXTCOLS ; HL = SRC ATTR
+                LD      HL, WORKBUF2 + 1 + WORKATTR ; HL = SRC ATTR
                 LDIR
 
                 ; UPDATE LINE A LENGTH
@@ -1161,38 +1207,59 @@ EDDELBK         LD      A, (CURX)
                 DEC     A
                 LD      (CURX), A
 
-                ; SHIFT LEFT FROM CURX UP TO THE LAST COLUMN (TEXT AND ATTRS)
-                LD      A, (CURX)
-                LD      B, A
-.SHIFTLP        LD      A, B
-                CP      TEXTCOLS - 1
-                JR      Z, .BLANKLS
-                LD      E, B
-                LD      D, 0
-                ; SHIFT TEXT
-                LD      HL, WORKBUF + 2 ; SOURCE: WORKBUF + 1 + B + 1
-                ADD     HL, DE
-                LD      A, (HL)
-                DEC     HL              ; DEST: WORKBUF + 1 + B
-                LD      (HL), A
-                ; SHIFT ATTRIBUTE
-                LD      HL, WORKBUF + 1 + TEXTCOLS + 1
-                ADD     HL, DE
-                LD      A, (HL)
-                DEC     HL
-                LD      (HL), A
-                INC     B
-                JR      .SHIFTLP
-
-.BLANKLS        LD      HL, WORKBUF + TEXTCOLS
-                LD      (HL), ' '       ; BLANK LAST TEXT COL
-                LD      HL, WORKBUF + TEXTCOLS + TEXTCOLS
-                LD      (HL), 0         ; BLANK LAST ATTR COL
-
-                ; DECREASE LINE LENGTH IF > 0
-                LD      A, (WORKBUF)
+                ; DELETE CHAR AT CURX: SHIFT LEFT FROM CURX+1 UP TO L-1
+                LD      A, (WORKBUF)    ; A = L
                 OR      A
-                JR      Z, .DELWRT
+                JR      Z, .DELWRT      ; LENGTH 0: NOTHING TO DO
+                LD      B, A            ; B = L
+                LD      A, (CURX)       ; A = CURX
+                INC     A               ; A = CURX + 1
+                CP      B
+                JR      NC, .BKLAST     ; CURX + 1 >= L: WE DELETED THE LAST CHAR, NO SHIFT
+
+                ; COUNT = L - (CURX + 1)
+                LD      A, B
+                LD      HL, CURX
+                SUB     (HL)
+                DEC     A               ; A = L - 1 - CURX
+                LD      C, A
+                LD      B, 0            ; BC = COUNT
+
+                ; SHIFT TEXT: SOURCE = WORKBUF + 2 + CURX, DEST = WORKBUF + 1 + CURX
+                LD      A, (CURX)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE          ; HL = DEST (WORKBUF + 1 + CURX)
+                LD      D, H
+                LD      E, L            ; DE = DEST TEXT
+                INC     HL              ; HL = SRC TEXT (WORKBUF + 2 + CURX)
+                PUSH    BC              ; SAVE BC = COUNT
+                PUSH    DE              ; SAVE DE = DEST TEXT
+                LDIR
+
+                POP     DE              ; DE = DEST TEXT
+                POP     BC              ; BC = COUNT
+                LD      HL, WORKATTR
+                ADD     HL, DE          ; HL = DEST ATTR (DEST TEXT + WORKATTR)
+                LD      D, H
+                LD      E, L            ; DE = DEST ATTR
+                INC     HL              ; HL = SRC ATTR (DEST ATTR + 1)
+                LDIR
+
+.BKLAST         ; BLANK THE VACATED LAST CELL (AT FORMER LENGTH L - 1)
+                LD      A, (WORKBUF)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF
+                ADD     HL, DE          ; HL = WORKBUF + L (LAST CHAR)
+                LD      (HL), ' '
+                LD      BC, WORKATTR
+                ADD     HL, BC          ; HL = WORKBUF + L + WORKATTR
+                LD      (HL), 0
+
+                ; DECREASE LINE LENGTH
+                LD      A, (WORKBUF)
                 DEC     A
                 LD      (WORKBUF), A
 
@@ -1267,36 +1334,56 @@ EDDELCHR        LD      HL, (DOCLINE)
 
                 ; IN-LINE DELETE (CURX < LENGTH)
                 CALL    UNDOBGN
+                LD      A, (WORKBUF)
+                LD      B, A            ; B = L
                 LD      A, (CURX)
-                LD      B, A
-.DCHSHFT        LD      A, B
-                CP      TEXTCOLS - 1
-                JR      Z, .DCHLAST
-                LD      E, B
-                LD      D, 0
-                ; SHIFT TEXT
-                LD      HL, WORKBUF + 2
-                ADD     HL, DE
-                LD      A, (HL)
-                DEC     HL
-                LD      (HL), A
-                ; SHIFT ATTRIBUTE
-                LD      HL, WORKBUF + 1 + TEXTCOLS + 1
-                ADD     HL, DE
-                LD      A, (HL)
-                DEC     HL
-                LD      (HL), A
-                INC     B
-                JR      .DCHSHFT
+                INC     A               ; A = CURX + 1
+                CP      B
+                JR      NC, .DCHLAST    ; CURX + 1 >= L: DELETING LAST CHAR
 
-.DCHLAST        LD      HL, WORKBUF + TEXTCOLS
+                ; COUNT = L - 1 - CURX
+                LD      A, B
+                LD      HL, CURX
+                SUB     (HL)
+                DEC     A               ; A = COUNT
+                LD      C, A
+                LD      B, 0            ; BC = COUNT
+
+                ; SHIFT TEXT: DEST = WORKBUF + 1 + CURX, SRC = WORKBUF + 2 + CURX
+                LD      A, (CURX)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE          ; HL = DEST (WORKBUF + 1 + CURX)
+                LD      D, H
+                LD      E, L            ; DE = DEST TEXT
+                INC     HL              ; HL = SRC TEXT (WORKBUF + 2 + CURX)
+                PUSH    BC              ; SAVE BC = COUNT
+                PUSH    DE              ; SAVE DE = DEST TEXT
+                LDIR
+
+                POP     DE              ; DE = DEST TEXT
+                POP     BC              ; BC = COUNT
+                LD      HL, WORKATTR
+                ADD     HL, DE          ; HL = DEST ATTR (DEST TEXT + WORKATTR)
+                LD      D, H
+                LD      E, L            ; DE = DEST ATTR
+                INC     HL              ; HL = SRC ATTR (DEST ATTR + 1)
+                LDIR
+
+.DCHLAST        ; BLANK THE VACATED LAST CELL (AT FORMER LENGTH L - 1)
+                LD      A, (WORKBUF)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF
+                ADD     HL, DE          ; HL = WORKBUF + L (LAST CHAR)
                 LD      (HL), ' '
-                LD      HL, WORKBUF + TEXTCOLS + TEXTCOLS
+                LD      BC, WORKATTR
+                ADD     HL, BC
                 LD      (HL), 0
 
+                ; DECREASE LINE LENGTH
                 LD      A, (WORKBUF)
-                OR      A
-                JR      Z, .DCHWRT
                 DEC     A
                 LD      (WORKBUF), A
 
@@ -1555,7 +1642,14 @@ EDNWLIN         CALL    UNDOCLS
 ; - CLOBBERS: AF
 ; -
 
-EFFCURX         LD      A, (WORKBUF)    ; LINE LENGTH
+EFFCURX         LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JR      Z, .EFWTXT
+                ; WRAP_DEV: THE CURSOR ALWAYS MEANS ITS EXACT COLUMN
+                LD      A, (CURX)
+                RET
+
+.EFWTXT         LD      A, (WORKBUF)    ; LINE LENGTH
                 CP      TEXTCOLS
                 LD      A, (CURX)       ; DOES NOT TOUCH THE FLAGS
                 RET     C               ; NOT FULL: THE CURSOR MEANS ITSELF
@@ -1580,7 +1674,7 @@ SPLITL          CALL    EFFCURX
 
 ; - SPLITLA ----------------------------
 ; - SPLIT WORKBUF AT AN EXPLICIT COLUMN
-; - IN:  A = SPLIT COLUMN (0..TEXTCOLS)
+; - IN:  A = SPLIT COLUMN (0..MAXCOLS)
 ; - OUT: WORKBUF2 = THE TAIL AS A COMPLETE LINE RECORD
 ; -      WORKBUF  = TRUNCATED TO A CHARACTERS
 ; - CLOBBERS: ALL
@@ -1619,9 +1713,9 @@ SPLITLA         LD      (SPLCOL), A
                 LD      A, (SPLCOL)
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
-                LD      DE, WORKBUF2 + 1 + TEXTCOLS
+                LD      DE, WORKBUF2 + 1 + WORKATTR
                 LDIR
 
 .TRUNC          ; HEAD KEEPS SPLCOL CHARACTERS; BLANK WHAT IS LEFT OF IT
@@ -1629,7 +1723,7 @@ SPLITLA         LD      (SPLCOL), A
                 LD      (WORKBUF), A
                 LD      E, A
                 LD      D, 0
-                LD      A, TEXTCOLS
+                LD      A, MAXCOLS
                 SUB     E
                 RET     Z               ; THE SPLIT WAS AT THE RECORD END
                 LD      B, A
@@ -1644,7 +1738,7 @@ SPLITLA         LD      (SPLCOL), A
                 POP     DE
                 POP     BC
 
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
 .ZATTLP         LD      (HL), 0
                 INC     HL
@@ -1682,22 +1776,20 @@ EDMOVCHR        CP      CRIGHT
                 OR      L
                 RET     Z               ; ALREADY AT LINE 0, CANNOT WRAP UP
                 DEC     HL
-                CALL    LINELEN         ; A = PREV LINE LENGTH (0..TEXTCOLS)
+                CALL    LINELEN         ; A = PREV LINE LENGTH (0..MAXCOLS)
                 CALL    GETMAXC
                 LD      (CURX), A
                 LD      A, CUP
                 JP      EDMOVROW
                 
 .RIGHT          LD      HL, (DOCLINE)
-                CALL    LINELEN         ; A = LINE LENGTH (0..TEXTCOLS)
+                CALL    LINELEN         ; A = LINE LENGTH (0..MAXCOLS)
                 CALL    GETMAXC         ; A = MAX ALLOWED CURX
                 LD      B, A            ; B = MAX CURX
                 LD      A, (CURX)
                 CP      B
                 JR      NC, .RGTWRAP    ; AT OR BEYOND MAX COLUMN
                 INC     A
-                CP      TEXTCOLS
-                RET     NC
                 LD      (CURX), A
                 RET
 
@@ -1721,8 +1813,8 @@ EDMOVCHR        CP      CRIGHT
 
 ; - GETMAXC ----------------------------
 ; - CALCULATE MAXIMUM ALLOWED CURX FOR LINE
-; - IN:  A = LINE LENGTH (0..TEXTCOLS)
-; - OUT: A = MAX CURX (0..TEXTCOLS-1)
+; - IN:  A = LINE LENGTH (0..MAXCOLS)
+; - OUT: A = MAX CURX (0..MAXCOLS-1)
 ; - CLOBBERS: B
 ; -
 
@@ -1738,11 +1830,20 @@ GETMAXC         LD      B, A
                 OR      A
                 RET     Z               ; EMPTY LINE -> COL 0
                 DEC     A
-                CP      TEXTCOLS
-                RET     C
-                LD      A, TEXTCOLS - 1
-                RET
+                JR      .CLAMP
 .NOTVI          LD      A, B
+.CLAMP          LD      B, A            ; B = CANDIDATE CURX
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JR      Z, .CLTXT
+                ; WRAP_DEV: CLAMP TO MAXCOLS - 1
+                LD      A, B
+                CP      MAXCOLS
+                RET     C
+                LD      A, MAXCOLS - 1
+                RET
+.CLTXT          ; WRAP_TXT: CLAMP TO TEXTCOLS - 1
+                LD      A, B
                 CP      TEXTCOLS
                 RET     C
                 LD      A, TEXTCOLS - 1

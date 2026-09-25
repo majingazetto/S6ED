@@ -148,8 +148,8 @@ FILELOAD        PUSH    HL
                 ; APPEND TO WORKBUF IN TPA RAM
                 LD      B, A
                 LD      A, (CURLLEN)
-                CP      TEXTCOLS
-                JP      NC, .SKIP       ; TRUNCATE AT TEXT WIDTH
+                CP      MAXCOLS
+                JP      NC, .SKIP       ; TRUNCATE AT MAX LINE WIDTH
 
                 LD      HL, WORKBUF + 1
                 LD      E, A
@@ -179,8 +179,8 @@ FILELOAD        PUSH    HL
                 LD      E, A            ; E = COUNT OF SPACES
 
 .TABSP          LD      A, (CURLLEN)
-                CP      TEXTCOLS
-                JP      NC, .SKIP       ; TRUNCATE AT TEXT WIDTH
+                CP      MAXCOLS
+                JP      NC, .SKIP       ; TRUNCATE AT MAX LINE WIDTH
 
                 LD      HL, WORKBUF + 1
                 LD      C, A
@@ -299,12 +299,12 @@ STORLINE        ; 1. CHECK IF LINE DIRECTORY IS FULL
                 LD      A, (CURLLEN)
                 LD      (WORKBUF), A
 
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 LD      (HL), 0
                 LD      D, H
                 LD      E, L
                 INC     DE
-                LD      BC, TEXTCOLS - 1
+                LD      BC, MAXCOLS - 1
                 LDIR
 
                 ; 3. ALLOCATE RECORD IN MAPPER VIA NEWREC

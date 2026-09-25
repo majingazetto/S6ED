@@ -22,9 +22,9 @@ SCANMKUP        LD      A, (MKUPMD)
                 OR      A
                 RET     Z               ; MKUP_OFF: PRESERVE MANUAL ATTRS
 
-                ; 1. CLEAR ATTRIBUTES (COLS 0..79)
-                LD      HL, WORKBUF + 1 + TEXTCOLS
-                LD      B, TEXTCOLS
+                ; 1. CLEAR ATTRIBUTES (COLS 0..MAXCOLS-1)
+                LD      HL, WORKBUF + 1 + WORKATTR
+                LD      B, MAXCOLS
                 XOR     A
 .CLRATR         LD      (HL), A
                 INC     HL
@@ -98,7 +98,7 @@ SCNLIT          ; --- PASS 1: BOLD (*) ---
                 INC     A
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
 .LITBST         LD      A, (HL)
                 OR      ATRBOLD
@@ -156,7 +156,7 @@ SCNLIT          ; --- PASS 1: BOLD (*) ---
                 INC     A
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
 .LITIST         LD      A, (HL)
                 OR      ATRITAL
@@ -240,7 +240,7 @@ SCNMD           ; --- PASS 1: BOLD (**) ---
                 ADD     A, 2
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
 .MDBST          LD      A, (HL)
                 OR      ATRBOLD
@@ -330,7 +330,7 @@ SCNMD           ; --- PASS 1: BOLD (**) ---
                 INC     A
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
 .MDIST          LD      A, (HL)
                 OR      ATRITAL
@@ -392,7 +392,7 @@ SCNMD           ; --- PASS 1: BOLD (**) ---
                 INC     A
                 LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
 .MDUST          LD      A, (HL)
                 OR      ATRITAL
@@ -424,7 +424,7 @@ SCNMD           ; --- PASS 1: BOLD (**) ---
 
 MKDELIM         LD      E, A
                 LD      D, 0
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
                 LD      A, (HL)
                 OR      ATRMARK

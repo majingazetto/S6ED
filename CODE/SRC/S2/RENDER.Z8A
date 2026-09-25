@@ -224,7 +224,7 @@ COMROW          LD      A, B
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE
                 LD      A, (HL)         ; A = LEFT CHAR
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
                 LD      D, (HL)         ; D = LEFT ATTR
                 JR      .RGET
@@ -249,7 +249,7 @@ COMROW          LD      A, B
                 LD      HL, WORKBUF + 1
                 ADD     HL, DE
                 LD      C, (HL)         ; C = RIGHT CHAR
-                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
                 LD      E, (HL)         ; E = RIGHT ATTR
                 JR      .COMCL

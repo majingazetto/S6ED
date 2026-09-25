@@ -106,6 +106,8 @@ FUIR_SX         EQU     256             ; UI-PAPER GLYPHS: SX OFFSET IN VR_FNORM
                 ; SCREEN 6 SHADOWS LIVE IN VRAM, NOT IN A MAPPER SEGMENT.
 FTRBASE         EQU     #8000           ; FEATURE CONTAINER BASE
 FTRTOP          EQU     #C000           ; FIRST BYTE PAST THE CONTAINER
+PAGE3_TOP       EQU     #C600           ; FIRST BYTE PAST S6 PAGE 3 BUFFERS
+TP3MIN          EQU     PAGE3_TOP + 1024 ; MIN SAFE PAGE 3 TPA CEILING (#CA00)
 
 
 ; --- PALETTE                   ----------------------------------------

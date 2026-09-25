@@ -28,8 +28,14 @@ ATRFMSK         EQU     #03             ; BITS 0-1 -> FONT VARIANT INDEX
 
 DIRSIZ          EQU     3               ; BYTES PER LINE DIRECTORY ENTRY
                                         ;   [1: SEGMENT] [2: WORD OFFSET]
-WORKSIZ         EQU     LINEREC         ; WORK BUFFER SIZE (= MAX RECORD)
+MAXCOLS         EQU     255             ; MAX EDITABLE LINE COLUMNS IN WORKBUF
+WORKATTR        EQU     256             ; ATTRIBUTE OFFSET IN WORKBUF
+WORKSIZ         EQU     512             ; WORK BUFFER SIZE IN PAGE 3 UNBANKED RAM
 CLIPMAX         EQU     2048            ; MAX CLIPBOARD BUFFER CAPACITY
+
+WORKBUF         EQU     #C000           ; CURRENT LINE RECORD IN PAGE 3 UNBANKED RAM
+WORKBUF2        EQU     #C200           ; SECOND LINE RECORD (SPLIT/JOIN/UNDO)
+PREVBUF         EQU     #C400           ; RENDIFF CACHED ROW RECORD
 
 TXPAGE          EQU     #8000           ; PAGE 2 - TEXT WINDOW (SWITCHED)
 

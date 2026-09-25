@@ -55,6 +55,7 @@
 
 ENODOS2      DEFM    "Requires MSX-DOS 2 or Nextor.$"
 ENOMAP       DEFM    "No mapper manager found.$"
+ENOTPA       DEFM    "Insufficient Page 3 memory.$"
 ENOMEM       DEFM    "Out of mapper memory.$"
 ENO2SEG      DEFM    "S6ED requires 2 free mapper segments.$"
 TXTHLP       DEFM    "S6ED v"
@@ -118,6 +119,13 @@ INIT            DBG     "1: INIT START"
                 LD      (HL), 0
                 LDIR
 
+                ; CLEAR PAGE 3 BUFFERS (WORKBUF, WORKBUF2, PREVBUF)
+                LD      HL, WORKBUF
+                LD      DE, WORKBUF + 1
+                LD      BC, 3 * WORKSIZ - 1
+                LD      (HL), 0
+                LDIR
+
                 LD      A, INS_MODE
                 LD      (INSMODE), A
                 LD      A, WRAP_DEV
@@ -154,6 +162,14 @@ INIT            DBG     "1: INIT START"
                 DBG     "2: DOSVER"
                 CALL    DOSVER
                 JP      C, .NODOS2      ; CARRY = DOS1 ONLY
+
+                ; CHECK PAGE 3 TPA HEADROOM (FOR BUFFERS AT #C000..#C5FF)
+                DBG     "2a: TP3CHK"
+                LD      HL, (#0006)
+                LD      DE, TP3MIN
+                OR      A
+                SBC     HL, DE
+                JP      C, .NOTPA
 
                 ; PARSE THE COMMAND LINE WHILE STILL IN TEXT MODE: /H
                 ; PRINTS THE HELP AND EXITS THROUGH TERM WITH NOTHING
@@ -246,6 +262,10 @@ INIT            DBG     "1: INIT START"
                 JP      MAINLOOP
 
 .NODOS2         LD      DE, ENODOS2
+                CALL    STROUT
+                JP      TERM
+
+.NOTPA          LD      DE, ENOTPA
                 CALL    STROUT
                 JP      TERM
 

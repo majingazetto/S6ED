@@ -64,7 +64,7 @@ CELLGLY         PUSH    BC
                 PUSH    HL
                 LD      (VDP_DX), DE
                 LD      C, (HL)         ; C = CHAR
-                LD      DE, TEXTCOLS
+                LD      DE, WORKATTR
                 ADD     HL, DE
                 LD      A, (HL)         ; ATTRIBUTE
                 AND     ATRFMSK         ; 0=NORM, 1=BOLD, 2=ITAL, 3=BI
@@ -362,7 +362,7 @@ RENDIFF         PUSH    BC
                 PUSH    BC
                 PUSH    DE
                 PUSH    HL
-                LD      BC, TEXTCOLS
+                LD      BC, WORKATTR
                 ADD     HL, BC          ; NEW ATTRIBUTE
                 EX      DE, HL
                 ADD     HL, BC          ; OLD ATTRIBUTE

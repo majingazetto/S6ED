@@ -159,11 +159,10 @@ UNDOREC         LD      C, A            ; C = OP_TYPE
                 LD      (HL), D
                 INC     HL              ; HL = HL + 10 (PAYLOAD BASE)
 
-                ; 4. COPY WORKBUF (161 BYTES) TO PAYLOAD
+                ; 4. PACK WORKBUF (LINEREC BYTES) TO PAYLOAD
                 EX      DE, HL          ; DE = DESTINATION (HL + 10)
                 LD      HL, WORKBUF     ; HL = SOURCE
-                LD      BC, LINEREC     ; 161 BYTES
-                LDIR                    ; DE ADVANCES TO HL + 171
+                CALL    UNDOPAK         ; DE ADVANCES BY LINEREC BYTES
 
                 POP     HL              ; HL = START OF THIS RECORD
 
@@ -288,7 +287,7 @@ UNDOJON         LD      A, (UNDOHLD)
                 CALL    UNDOCLS
                 LD      HL, WORKBUF2
                 LD      DE, WORKBUF
-                LD      BC, LINEREC
+                LD      BC, WORKSIZ
                 LDIR
                 LD      HL, (DOCLINE)
                 PUSH    HL
@@ -392,35 +391,35 @@ UNDOSWP         ; 1. SET TARGET DOCLINE
                 LD      H, (IX + 6)
                 LD      (DOCLINE), HL
 
-                ; 2. READ CURRENT DOCUMENT LINE INTO WORKBUF2
-                CALL    LINEREAD        ; READS (DOCLINE) INTO WORKBUF
+                ; 2. READ CURRENT DOCUMENT LINE INTO WORKBUF
+                CALL    LINEREAD        ; READS (DOCLINE) INTO WORKBUF (HL IS DOCLINE)
+
+                ; 3. COPY CURRENT DOCUMENT LINE (WORKBUF) TO WORKBUF2
                 LD      HL, WORKBUF
                 LD      DE, WORKBUF2
-                LD      BC, LINEREC
+                LD      BC, WORKSIZ
                 LDIR                    ; WORKBUF2 NOW HOLDS CURRENT LINE
 
-                ; 3. COPY UNDO PAYLOAD (IX + 10) INTO WORKBUF
+                ; 4. UNPACK UNDO PAYLOAD (IX + 10) INTO WORKBUF
                 PUSH    IX
                 POP     HL
                 LD      DE, UNDOHDR_SZ
                 ADD     HL, DE          ; HL = IX + 10 (PAYLOAD)
                 LD      DE, WORKBUF
-                LD      BC, LINEREC
-                LDIR                    ; WORKBUF NOW HOLDS RESTORED LINE
+                CALL    UNDOUPK         ; WORKBUF NOW HOLDS RESTORED LINE
 
-                ; 4. WRITE RESTORED LINE TO DOCUMENT
+                ; 5. WRITE RESTORED LINE TO DOCUMENT
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
 
-                ; 5. COPY DISPLACED LINE (WORKBUF2) BACK INTO UNDO PAYLOAD (IX + 10)
+                ; 6. PACK DISPLACED LINE (WORKBUF2) BACK INTO UNDO PAYLOAD (IX + 10)
                 PUSH    IX
                 POP     DE
                 LD      HL, UNDOHDR_SZ
                 ADD     HL, DE
                 EX      DE, HL          ; DE = IX + 10
                 LD      HL, WORKBUF2
-                LD      BC, LINEREC
-                LDIR                    ; PAYLOAD SWAPPED FOR REDO!
+                CALL    UNDOPAK         ; PAYLOAD SWAPPED FOR REDO!
 
                 ; 6. SWAP CURX IN RECORD (IX + 7) WITH CURRENT CURX
                 LD      A, (CURX)
@@ -759,6 +758,9 @@ UNDORST         ; 1. CHECK IF LINE DIRECTORY IS FULL
                 POP     HL
                 LD      BC, UNDOHDR_SZ
                 ADD     HL, BC          ; HL = SOURCE (IX + 10)
+                LD      DE, WORKBUF
+                CALL    UNDOUPK
+                LD      HL, WORKBUF
                 LD      A, (NRSEG)
                 LD      DE, (NROFF)
                 CALL    PUTREC
@@ -869,8 +871,7 @@ UNDOSPU         ; 1. UPDATE UNDOPTR AND REDOPTR
                 LD      DE, UNDOHDR_SZ
                 ADD     HL, DE          ; HL = IX + 10 (PAYLOAD)
                 LD      DE, WORKBUF
-                LD      BC, LINEREC     ; 161 BYTES
-                LDIR
+                CALL    UNDOUPK
                 LD      L, (IX + 5)
                 LD      H, (IX + 6)     ; HL = DOCLINE
                 CALL    LINEWRT
@@ -975,6 +976,9 @@ UNDOJNU         ; 1. CHECK IF LINE DIRECTORY IS FULL
                 POP     HL
                 LD      BC, UNDOHDR_SZ
                 ADD     HL, BC          ; HL = SOURCE (IX + 10)
+                LD      DE, WORKBUF
+                CALL    UNDOUPK
+                LD      HL, WORKBUF
                 LD      A, (NRSEG)
                 LD      DE, (NROFF)
                 CALL    PUTREC
@@ -1050,4 +1054,66 @@ REDOJON         ; 1. UPDATE UNDOPTR AND REDOPTR
 
                 ; 4. MARK MODIFIED; ACTUNDO / ACTREDO PAINT ONCE PER GROUP
                 JP      UNDOOK
+
+
+; --- UNDOPAK                   ----------------------------------------
+
+
+; - UNDOPAK ----------------------------
+; - PACK LINE BUFFER INTO UNDO RECORD PAYLOAD (LINEREC BYTES)
+; - IN:  HL = SOURCE BUFFER (WORKBUF OR WORKBUF2)
+; -      DE = DESTINATION IN UNDO RING BUFFER
+; - OUT: DE ADVANCED BY LINEREC BYTES
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+UNDOPAK         ; 1. COPY LENGTH (1 BYTE)
+                LDI                     ; (DE)=(HL), HL++, DE++
+
+                ; 2. COPY TEXT (TEXTCOLS BYTES)
+                PUSH    HL              ; SAVE HL = SOURCE BUFFER + 1
+                LD      BC, TEXTCOLS
+                LDIR                    ; COPIES TEXTCOLS BYTES OF TEXT
+
+                ; 3. ADVANCE HL TO ATTRIBUTES (SOURCE BUFFER + 1 + WORKATTR)
+                POP     HL              ; HL = SOURCE BUFFER + 1
+                LD      BC, WORKATTR
+                ADD     HL, BC          ; HL = SOURCE BUFFER + 1 + WORKATTR
+
+                ; 4. COPY ATTRIBUTES (TEXTCOLS BYTES)
+                LD      BC, TEXTCOLS
+                LDIR                    ; COPIES TEXTCOLS BYTES OF ATTRS
+                RET
+
+
+; --- UNDOUPK                   ----------------------------------------
+
+
+; - UNDOUPK ----------------------------
+; - UNPACK UNDO RECORD PAYLOAD (LINEREC BYTES) INTO LINE BUFFER
+; - IN:  HL = SOURCE PAYLOAD IN UNDO RING BUFFER
+; -      DE = DESTINATION BUFFER (WORKBUF OR WORKBUF2)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+UNDOUPK         ; 1. COPY LENGTH (1 BYTE)
+                LDI                     ; (DE)=(HL), HL++, DE++
+
+                ; 2. COPY TEXT (TEXTCOLS BYTES)
+                PUSH    DE              ; SAVE DE = DEST BUFFER + 1
+                LD      BC, TEXTCOLS
+                LDIR                    ; HL = SRC ATTR, DE = DEST BUFFER + 1 + TEXTCOLS
+
+                ; 3. ADVANCE DEST TO ATTRIBUTES (DEST BUFFER + 1 + WORKATTR)
+                POP     DE              ; DE = DEST BUFFER + 1
+                LD      BC, WORKATTR
+                EX      DE, HL          ; HL = DEST BUFFER + 1, DE = SRC ATTR
+                ADD     HL, BC          ; HL = DEST BUFFER + 1 + WORKATTR
+                EX      DE, HL          ; DE = DEST BUFFER + 1 + WORKATTR, HL = SRC ATTR
+
+                ; 4. COPY ATTRIBUTES (TEXTCOLS BYTES)
+                LD      BC, TEXTCOLS
+                LDIR                    ; COPIES TEXTCOLS BYTES OF ATTRS
+                RET
 

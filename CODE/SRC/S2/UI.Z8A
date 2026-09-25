@@ -465,6 +465,10 @@ DRWCUR          PUSH    AF
                 PUSH    HL
                 PUSH    IX
 
+                LD      A, (CURX)
+                CP      TEXTCOLS
+                JR      NC, .OFFSCR
+
                 CALL    VIDBANK
 
                 ; ONE COLUMN AT (CURX, CURY + 1)
@@ -478,7 +482,7 @@ DRWCUR          PUSH    AF
 
                 CALL    TXTBANK
 
-                POP     IX
+.OFFSCR         POP     IX
                 POP     HL
                 POP     DE
                 POP     BC

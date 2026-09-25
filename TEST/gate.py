@@ -2432,8 +2432,8 @@ class D1Insert(Case):
             Check('D1/length', len(first_line) == 80,
                   'line length 80' if len(first_line) == 80 else
                   'line length %d' % len(first_line)),
-            Check('D1/curx', run.var('saved', 'CURX') == 79,
-                  'CURX = %s (expected 79)' % run.var('saved', 'CURX')),
+            Check('D1/curx', run.var('saved', 'CURX') == 80,
+                  'CURX = %s (expected 80)' % run.var('saved', 'CURX')),
         ]
         return checks
 
@@ -2977,6 +2977,56 @@ class D11Margin(Case):
                                 run.var('done', 'TOTLINES') == 3,
                                 'TOTLINES = %s (expected 3)'
                                 % run.var('done', 'TOTLINES')))
+        return checks
+
+
+# --- D12  LONG LINES (VARIABLE-LENGTH STORAGE, MAXCOLS = 255) --------
+
+
+class D12LongLine(Case):
+    name = 'D12-longline'
+    desc = 'lines up to 255 characters without truncation or wrap in WRAP_DEV'
+    origin = ('Phase B variable-length line architecture: MAXCOLS = 255, '
+              'WORKBUF in Page 3 unbanked RAM (#C000), dynamic capacity per line')
+    LINE1 = '0123456789' * 14                 # 140 characters
+    LINE2 = 'SECOND LINE 12345'
+    LINES = [LINE1, LINE2]
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.wait(1.0)
+        t.press('RIGHT', mods=['CTRL'])         # EOL (col 140)
+        t.snap('ateol')
+        t.text('XYZ')                           # append 3 chars -> len 143, curx 143
+        t.snap('appended')
+        t.press('LEFT', repeat=3)               # cursor back at col 140
+        t.press('DEL', repeat=3)                # delete 'XYZ' -> len 140, curx 140
+        t.snap('deleted')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        checks = []
+        checks.append(Check('D12/ateol-curx', run.var('ateol', 'CURX') == 140,
+                            'CURX = %s at EOL (expected 140)'
+                            % run.var('ateol', 'CURX')))
+        checks.append(Check('D12/appended-curx', run.var('appended', 'CURX') == 143,
+                            'CURX = %s after append (expected 143)'
+                            % run.var('appended', 'CURX')))
+        checks.append(Check('D12/deleted-curx', run.var('deleted', 'CURX') == 140,
+                            'CURX = %s after delete (expected 140)'
+                            % run.var('deleted', 'CURX')))
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        want = crlf(self.LINES)
+        checks.append(Check('D12/content', got == want,
+                            'document matches byte for byte with 140-char line'
+                            if got == want else 'got %r' % (got[:60] if got else None)))
         return checks
 
 
@@ -5019,7 +5069,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H24GoToLine(), H25FindReplace(), H26FindCurrentLine(), H27ViEx(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
-         D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(),
+         D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),
          E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit(),
          I1UnixAuto(), I2DosAuto(), I3ConvertDosToUnix(), I4ConvertUnixToDos(),
          U1UndoMod(), U2UndoDel(), U3UndoSplit(), U4UndoJoin(), U5UndoSel(),
