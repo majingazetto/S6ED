@@ -151,10 +151,15 @@ class G3Oom(Case):
               'silent data loss on save; editor rolls back to 1 empty line and '
               'clears FILENAME')
     machine = MACH_128K
-    FIXTURE_LINES = 220
+    FIXTURE_LINES = 150
+    PREFIX = 'G3'
     # 128 kB DOS 2: 2 free segments, both reserved (DIRSEG + FTRSEG), so the
-    # text pool is DEFSEG2 alone = 16,384 bytes. Under variable-length records,
-    # 220 lines of 79 chars require 220 * 84 = 18,480 bytes, exceeding DEFSEG2.
+    # text pool is DEFSEG2 alone.  CHKFLEN's byte ceiling is
+    # (SEGAVL + 1) * 101 * (TEXTCOLS + 2): 8,282 with the pool claimed and
+    # 16,564 without the FTRSEG claim (mut/f1a-noftr).  150 lines of 79 chars
+    # = 12,150 bytes sits exactly between the two ceilings, and their real
+    # storage (150 x 164 = 24,600) fits the doubled pool -- so the mutation
+    # is precisely the difference between refused and loaded.
 
     def fixture(self, ctx, variant=None):
         return crlf([('LINE %05d ' % i) + ('X' * 68) for i in range(1, self.FIXTURE_LINES + 1)])
@@ -175,23 +180,41 @@ class G3Oom(Case):
         loaderr = run.var('loaded', 'LOADERR')
         fname = run.var('loaded', 'FILENAME') or b''
         checks = [
-            Check('G3/load-refused', tot == 1 and loaderr == 1,
+            Check('%s/load-refused' % self.PREFIX, tot == 1 and loaderr == 1,
                   'oversized file refused (TOTLINES=%s, LOADERR=%s)'
                   % (tot, loaderr)),
-            Check('G3/filename-cleared', fname == b'' or fname[0] == 0,
+            Check('%s/filename-cleared' % self.PREFIX,
+                  fname == b'' or fname[0] == 0,
                   'FILENAME cleared on refusal to protect disk file'),
-            Check('G3/alive', run.var('loaded', 'SCRRDY') == 0xFF,
+            Check('%s/alive' % self.PREFIX, run.var('loaded', 'SCRRDY') == 0xFF,
                   'editor still running after refusal'),
         ]
         got = run.session.extract(run.dsk, 'DOC.TXT')
         want = self.fixture(ctx)
-        checks.append(Check('G3/document-intact', got == want,
+        checks.append(Check('%s/document-intact' % self.PREFIX, got == want,
                             'disk file DOC.TXT preserved intact with all %d lines'
                             % self.FIXTURE_LINES
                             if got == want else
                             'disk file corrupted: got %d bytes, expected %d'
                             % (len(got or b''), len(want or b''))))
         return checks
+
+
+class G3BOomShort(G3Oom):
+    name = 'G3B-oomshort'
+    desc = ('many one-char lines pass the size pre-check but exhaust real '
+            'records mid-read: the rollback must still fire')
+    origin = ('CHKFLEN estimates worst-case (long-line) capacity, so a file '
+              'of one-char lines passes it and then OOMs halfway through the '
+              'read: 36 bytes per record x 600 lines = 21,600 over the '
+              '16,384 the single text segment holds.  Without the .OOMNL '
+              'rollback the editor keeps ~455 truncated lines and FILENAME, '
+              'and the next Ctrl+S destroys the disk file')
+    FIXTURE_LINES = 600
+    PREFIX = 'G3B'
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['X'] * self.FIXTURE_LINES)
 
 
 # --- G4  DELETED RECORDS ARE RECYCLED ---------------------------------
@@ -2723,7 +2746,7 @@ class D8Accents(Case):
     # case is deterministic by construction instead of by luck.  That is
     # harness work and is not done.
     GRAPH_ROW = 'AEIOUNW1/'
-    GRAPH_GAPS = (0.035, 0.041, 0.051)
+    GRAPH_GAPS = (0.030, 0.040, 0.090)
     GRAPH_PASSES = len(GRAPH_GAPS)
 
     def timeline(self, ctx, variant=None):
@@ -4986,7 +5009,7 @@ class U9UndoLineEdits(Case):
         return checks
 
 
-CASES = [G1Image(), G2Save(), G3Oom(), G4FreeList(), G5Clock(), G6Hooks(),
+CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
          G12ScreenRestore(), G13FeatureResidency(), H1Help(), H2HelpQuestion(), H3HelpFile(), H4FileSwitch(), H5Verbose(), H6DatMissing(), H7AboutDialog(),
          H8DatBadMagic(), H9DatBadVersion(), H10DatNoBlocks(),

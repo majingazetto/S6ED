@@ -89,18 +89,21 @@ MUTATIONS = [
         'expect': ['S2-1/rows'],
     },
     {
+        # 2026-09-25: under variable-length records, WORKBUF is zeroed at boot
+        # by INIT so an offset of 81 instead of 1 + TEXTCOLS leaves bytes 65..80
+        # as zero when loading from command line, and no yellow bands appear.
+        # What guards against target literal geometry in shared CORE code is
+        # the static target-params check.
         'name': 's2-attr-clear',
-        'why': 'FILELOAD clears the attribute half from the S6 offset, so the '
-               'first 16 attribute bytes of every S2 record stay dirty and '
-               'render as bold (the yellow bands)',
-        'target': 'S2ED',
+        'why': 'FILELOAD clears the attribute half from the S6 offset (81 '
+               'instead of 1 + TEXTCOLS): an S6 literal in shared CORE code',
         'file': 'FILEIO.Z8A',
-        'old': """                LD      DE, 1 + TEXTCOLS
-                ADD     HL, DE          ; HL = ATTR START""",
-        'new': """                LD      DE, 81          ; MUTATION: THE S6 LITERAL
-                ADD     HL, DE          ; HL = ATTR START""",
-        'filter': 'S2-2',
-        'expect': ['S2-2/text-colour'],
+        'old': """                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      (HL), 0""",
+        'new': """                LD      HL, WORKBUF + 81  ; MUTATION: THE S6 LITERAL
+                LD      (HL), 0""",
+        'filter': 'T0',
+        'expect_static': ['target-params'],
     },
     {
         'name': 's2-cursor-cell',
@@ -151,11 +154,16 @@ MUTATIONS = [
         'expect': ['S2-5/cury'],
     },
     {
+        # 2026-09-25: under variable-length records the historical poison (an
+        # attribute byte dragged into the last text column, after which
+        # EDINSCHR saw a full record) is no longer observable -- line I/O is
+        # length-bounded, so the garbage sits past the length and nothing
+        # reads it.  What still guards the class is the static target-params
+        # check: CORE may not spell record geometry as numbers.  The mutation
+        # therefore runs on the S6ED context, where the static checks live.
         'name': 's2-delbk-79',
-        'why': 'EDDELBK walks its shift loop to a literal 79, dragging an '
-               'attribute byte into the last text column -- after which '
-               'EDINSCHR sees a full record and refuses every keystroke',
-        'target': 'S2ED',
+        'why': 'EDDELBK walks its shift loop to a literal 79 and blanks '
+               'WORKBUF + 80: an S6 literal in shared CORE code',
         'file': 'EDIT.Z8A',
         'old': """.SHIFTLP        LD      A, B
                 CP      TEXTCOLS - 1""",
@@ -169,7 +177,7 @@ MUTATIONS = [
                 LD      (HL), ' '       ; BLANK LAST TEXT COL
                 LD      HL, WORKBUF + 80 + TEXTCOLS""")],
         'filter': 'S2-6',
-        'expect': ['S2-6/bs-dev/line'],
+        'expect_static': ['target-params'],
     },
     {
         'name': 's2-enterbot-23',
@@ -803,8 +811,11 @@ MUTATIONS = [
         'name': 's2-selpain-ix',
         'why': 'SELPAIN loads IX once before its row loop and trusts it to '
                'survive SELXOR; PATINV uses IX on S2ED, so every row after '
-               'the first reads its extent out of the pattern shadow.  Only '
-               'this gate can catch it: S6ED\'s LMMV leaves IX alone',
+               'the first reads its extent out of the pattern shadow.  The '
+               'fresh paint survives by luck (the visible rows are covered by '
+               'the first, still-valid pass and by SELDIFF); the un-XOR on '
+               'deselect is what leaves residue.  Only this gate can catch '
+               'it: S6ED\'s LMMV leaves IX alone',
         'target': 'S2ED',
         'file': 'ACTION.Z8A',
         'old': """SELPAIN         LD      B, 0
@@ -814,7 +825,7 @@ MUTATIONS = [
                 LD      B, 0
 .ROWLP          PUSH    BC""",
         'filter': 'S2-19',
-        'expect': ['S2-19/down1'],
+        'expect': ['S2-19/no-residue'],
     },
     {
         'name': 's2-wbox-title',
@@ -922,8 +933,10 @@ MUTATIONS = [
         'name': 'g4-freelist',
         'why': 'LINEDEL abandons the record instead of handing it back',
         'file': 'BUFFER.Z8A',
-        'old': 'CALL    FREEPSH         ; HAND THE RECORD BACK BEFORE IT IS LOST',
-        'new': 'NOP                     ; MUTATION: LEAK THE RECORD',
+        'old': """                LD      A, (TXSEG)      ; A = SEGMENT
+                CALL    FREEPSH""",
+        'new': """                LD      A, (TXSEG)      ; A = SEGMENT
+                NOP                     ; MUTATION: LEAK THE RECORD""",
         'filter': 'G4',
         'expect': ['G4/no-growth'],
     },
@@ -1004,14 +1017,16 @@ SELTMPXB        EQU     SELTMPXB2""")],
     {
         'name': 'f1a-noftr',
         'why': 'SEGRESV skips the mandatory FTRSEG claim, so the text pool '
-               'keeps the segment and the 128 kB ceiling goes back to 202',
+               'keeps the segment and the CHKFLEN byte ceiling doubles '
+               '(8,282 -> 16,564): the G3 fixture loads instead of being '
+               'refused',
         'file': 'MAPPER.Z8A',
         'old': """                CALL    SEGGET          ; 2: FEATURE SEGMENT
                 JP      C, .NOFTR
                 LD      (FTRSEG), A""",
-        'new': """                XOR     A               ; MUTATION: NO FEATURE RESERVATION
+        'new': """                LD      A, (DIRSEG)     ; MUTATION: SHARE DIRSEG INSTEAD OF CLAIMING FTRSEG
                 LD      (FTRSEG), A""",
-        'filter': 'G3',
+        'filter': 'G3-oom',
         'expect': ['G3/load-refused'],
     },
     {
@@ -1022,8 +1037,12 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 JR      C, .OOM""",
         'new': """.STORCR         CALL    STORLINE
                 JR      C, .CLSFIL      ; MUTATION: NO ROLLBACK ON OOM""",
-        'filter': 'G3',
-        'expect': ['G3/load-refused'],
+        # G3's long-line fixture never reaches the read loop: CHKFLEN refuses
+        # it up front.  The mid-read OOM path is exercised by G3B, whose
+        # one-char lines pass the worst-case size estimate but exhaust the
+        # real 36-byte records halfway through the read.
+        'filter': 'G3B',
+        'expect': ['G3B/load-refused'],
     },
     {
         'name': 'g10-align',
