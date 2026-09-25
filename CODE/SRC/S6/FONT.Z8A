@@ -6,6 +6,11 @@
 ; FOUR VRAM FONT TABLES. GLYPH N OF A VARIANT: SX = (N & 31) * 8,
 ; SY = <VARIANT>_SY + (N >> 5) * 8.
 ;
+; THE RIGHT HALF OF EVERY FONT LINE (SX 256-511) IS NEVER READ BY THE
+; BLITTERS. THE NORMAL TABLE USES IT FOR A SECOND COPY OF ITSELF EXPANDED
+; ON COL_UI PAPER (EXPSTAT), SO UI CHROME BLITS OPAQUE GLYPHS THAT CARRY
+; THEIR OWN BACKGROUND AND NEED NO ERASE PASS.
+;
 ; SOURCE: S6ED.FNT, READ FROM DISK AT STARTUP -- FOUR VARIANTS OF FONTSIZ BYTES
 ; (NORMAL, BOLD, ITALIC, BOLD+ITALIC) IN THAT ORDER, EXACTLY FNTFSIZ BYTES.
 ; THE ASSET MUST FOLLOW THE COLUMN RULE PER VARIANT: NORMAL LEAVES COLUMN 5
@@ -117,7 +122,56 @@ FONTINIT        XOR     A
                 CALL    FNTLOAD         ; NEXT VARIANT INTO CLIPBUF
                 POP     HL
                 POP     BC
+
+                ; C = 32: THE NORMAL VARIANT WAS JUST STAGED. ITS 64 VRAM
+                ; LINES GET A SECOND COPY IN THEIR RIGHT HALF (BYTES 64-127,
+                ; SX 256-511, NEVER READ BY THE LEFT-HALF BLITTERS) EXPANDED
+                ; ON COL_UI PAPER, SO UI CHROME BLITS ONE OPAQUE LMMM PER
+                ; CELL INSTEAD OF ERASE + TIMP. SAME LINE WALK AS THE MAIN
+                ; UPLOAD, WITH CLIPBUF AS THE PERMANENT SOURCE.
+                LD      A, C
+                CP      32
+                JR      NZ, .NOUIH
+                PUSH    BC
+                PUSH    HL
+                LD      HL, VR_FNORM + 64
                 LD      DE, CLIPBUF
+                LD      C, 8            ; 8 GLYPH ROWS
+.UIROW          PUSH    DE              ; GLYPH ROW BASE
+                LD      B, 8            ; 8 SCANLINES PER GLYPH ROW
+.UILIN          PUSH    BC
+                PUSH    DE              ; SCANLINE SOURCE START
+                PUSH    HL              ; VRAM LINE ADDRESS
+                CALL    SETWRT
+                DI                      ; SETWRT ENDS WITH AN UNCONDITIONAL EI
+                LD      B, 32           ; 32 GLYPHS SHARE THIS VRAM LINE
+.UIGLP          LD      A, (DE)         ; 1BPP ROW BYTE
+                CALL    EXPSTAT         ; H = PIXELS 0-3, L = PIXELS 4-5
+                LD      A, H
+                OUT     (VDPDR), A
+                LD      A, L
+                OUT     (VDPDR), A
+                LD      HL, 8           ; SAME SCANLINE OF THE NEXT GLYPH
+                ADD     HL, DE
+                EX      DE, HL
+                DJNZ    .UIGLP
+                EI
+
+                POP     HL              ; VRAM LINE ADDRESS
+                LD      DE, 128         ; NEXT VRAM LINE
+                ADD     HL, DE
+                POP     DE              ; SCANLINE SOURCE START
+                INC     DE              ; NEXT SCANLINE OF THE SAME GLYPHS
+                POP     BC
+                DJNZ    .UILIN
+
+                POP     DE              ; GLYPH ROW BASE
+                INC     D               ; + 256 BYTES = NEXT GLYPH ROW
+                DEC     C
+                JR      NZ, .UIROW
+                POP     HL
+                POP     BC
+.NOUIH          LD      DE, CLIPBUF
 
 .NOLOAD         PUSH    DE              ; GLYPH ROW BASE
                 LD      B, 8            ; 8 SCANLINES PER GLYPH ROW
@@ -298,6 +352,46 @@ EXPNORM         LD      HL, 0
                 SET     6, L
 .P5             ADD     A, A
                 RET     NC
+                SET     4, L
+                RET
+
+
+; - EXPSTAT ----------------------------
+; - EXPAND 1BPP ROW BYTE TO 2-BYTE 2BPP, COL_FG INK ON COL_UI PAPER
+; - IN:  A = 1BPP ROW BYTE (BITS 7-2 = 6 PIXELS)
+; - OUT: H = BYTE 0 (PIXELS 0-3), L = BYTE 1 (PIXELS 4-5)
+; - CLOBBERS: AF, HL
+; -
+; - SAME WALK AS EXPNORM, BUT EVERY PIXEL PAIR STARTS AT %10 (COLOR 2) AND
+; - AN INK PIXEL BECOMES %01 (COLOR 1). THE UI CHROME BLITS THIS COPY WITH
+; - PLAIN IMP: THE GLYPH CARRIES ITS OWN COL_UI BACKGROUND, SO A CELL IS
+; - ONE COMMAND WITH NO ERASE PASS AND NO BLANK INTERMEDIATE STATE.
+; -
+
+EXPSTAT         LD      HL, #AAAA       ; 8 PIXELS OF COLOR 2 (6 BLITTED)
+                ADD     A, A            ; BIT 7 -> CARRY
+                JR      NC, .P1
+                RES     7, H
+                SET     6, H            ; PIXEL 0: %10 -> %01
+.P1             ADD     A, A
+                JR      NC, .P2
+                RES     5, H
+                SET     4, H
+.P2             ADD     A, A
+                JR      NC, .P3
+                RES     3, H
+                SET     2, H
+.P3             ADD     A, A
+                JR      NC, .P4
+                RES     1, H
+                SET     0, H
+.P4             ADD     A, A
+                JR      NC, .P5
+                RES     7, L
+                SET     6, L
+.P5             ADD     A, A
+                RET     NC
+                RES     5, L
                 SET     4, L
                 RET
 

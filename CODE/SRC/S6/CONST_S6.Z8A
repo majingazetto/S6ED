@@ -91,6 +91,13 @@ FBOLD_SY        EQU     (VR_FBOLD - VR_DISP) / 128     ; = 320
 FITAL_SY        EQU     (VR_FITAL - VR_DISP) / 128     ; = 384
 FBI_SY          EQU     (VR_FBI   - VR_DISP) / 128     ; = 448
 
+                ; THE RIGHT HALF OF EVERY FONT LINE (BYTES 64-127, SX 256-511)
+                ; IS NEVER READ BY THE BLITTERS. THE NORMAL TABLE STORES THERE
+                ; A SECOND COPY OF ITSELF EXPANDED ON COL_UI PAPER (EXPSTAT),
+                ; SO UI CHROME (STATUS BAR, MENU BAR, CLOCK) BLITS ONE OPAQUE
+                ; IMP GLYPH PER CELL INSTEAD OF ERASE + TIMP.
+FUIR_SX         EQU     256             ; UI-PAPER GLYPHS: SX OFFSET IN VR_FNORM
+
 
 ; --- FEATURE CONTAINER         ----------------------------------------
 
