@@ -56,6 +56,7 @@
 ENODOS2         DEFM    "Requires MSX-DOS 2 or Nextor.$"
 ENOMAP          DEFM    "No mapper manager found.$"
 ENOMEM          DEFM    "Out of mapper memory.$"
+ENOTPA          DEFM    "Insufficient Page 3 memory.$"
 ENO2SEG         DEFM    "S2ED requires 2 free mapper segments.$"
 TXTHLP          DEFM    "S2ED v1.0 - Screen 2 text editor for MSX / TMS9918", 13, 10
                 DEFM    "Requires MSX-DOS 2 or Nextor and 2 free mapper "
@@ -151,6 +152,14 @@ INIT            DBG     "1: INIT START (S2ED)"
                 CALL    DOSVER
                 JP      C, .NODOS2
 
+                ; CHECK PAGE 3 TPA HEADROOM (FOR WSVBUF AT #C000..#C5FF)
+                DBG     "2a: TP3CHK"
+                LD      HL, (#0006)
+                LD      DE, TP3MIN
+                OR      A
+                SBC     HL, DE
+                JP      C, .NOTPA
+
                 ; PARSE COMMAND LINE PARAMETERS IN TEXT MODE
                 DBG     "2b: PARAMS"
                 CALL    PARAMS
@@ -239,6 +248,10 @@ INIT            DBG     "1: INIT START (S2ED)"
                 JP      MAINLOOP
 
 .NODOS2         LD      DE, ENODOS2
+                CALL    STROUT
+                JP      TERM
+
+.NOTPA          LD      DE, ENOTPA
                 CALL    STROUT
                 JP      TERM
 
