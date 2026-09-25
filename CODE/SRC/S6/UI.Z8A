@@ -9,9 +9,10 @@
 ; - DRWSTAT ----------------------------
 ; - DRAW / REFRESH THE STATUS BAR (ROW 25)
 ; - BUILDS THE TEXT (BLDSTAT) AND REPAINTS ONLY THE CELLS THAT DIFFER FROM
-; - WHAT IS ON SCREEN (STATPRV), TWO COMMANDS EACH. A CURSOR MOVE THAT
-; - CHANGES ONE DIGIT COSTS ~1 MS INSTEAD OF THE ~31 MS OF A FULL REBUILD,
-; - WHICH IS WHAT LETS MAINLOOP CALL THIS AFTER EVERY KEY.
+; - WHAT IS ON SCREEN (STATPRV), ONE OPAQUE LMMM EACH (STATCEL). A CURSOR
+; - MOVE THAT CHANGES ONE DIGIT COSTS WELL UNDER 1 MS AND SHOWS NO BLANK
+; - INTERMEDIATE STATE, WHICH IS WHAT LETS MAINLOOP CALL THIS AFTER EVERY
+; - KEY.
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
@@ -97,14 +98,16 @@ DRWSTAT         CALL    BLDSTAT         ; STATBUF = THE TEXT THE BAR SHOULD SHOW
 
 
 ; - STATCEL ----------------------------
-; - REPAINT ONE STATUS BAR CELL: UI BACKGROUND, THEN THE GLYPH ON TOP
+; - REPAINT ONE STATUS BAR CELL: ONE OPAQUE LMMM FROM THE UI-PAPER FONT
+; - COPY (SEE BLTCHTR). THE GLYPH CARRIES ITS COL_UI BACKGROUND, SO THERE
+; - IS NO ERASE PASS AND NO BLANK CELL BETWEEN COMMANDS -- THE FLASH THE
+; - OLD ERASE + TIMP PAIR SHOWED ON EVERY KEYPRESS.
 ; - IN:  A = CHARACTER, C = COLUMN (0..79)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-STATCEL         PUSH    AF
-                LD      L, C
+STATCEL         LD      L, C
                 LD      H, 0
                 LD      D, H
                 LD      E, L
@@ -112,26 +115,7 @@ STATCEL         PUSH    AF
                 ADD     HL, DE
                 ADD     HL, HL          ; COLUMN * 6
                 LD      DE, STBTX_X
-                ADD     HL, DE
-                LD      (VDP_DX), HL
-                PUSH    HL
-                LD      HL, STBTX_Y
-                LD      (VDP_DY), HL
-                LD      HL, CELLW
-                LD      (VDP_NX), HL
-                LD      HL, CELLH
-                LD      (VDP_NY), HL
-                LD      A, COL_UI
-                LD      (VDP_CLR), A
-                XOR     A
-                LD      (VDP_ARG), A
-                LD      HL, VDPCMBLK
-                LD      A, VDP_LMMV | VDP_IMP
-                CALL    LMMV
-                POP     HL              ; DX
-                POP     AF
-                CP      ' '
-                RET     Z
+                ADD     HL, DE          ; HL = DX
                 LD      DE, STBTX_Y
                 JP      BLTCHTR         ; A = CHAR, HL = DX, DE = DY
 
@@ -625,7 +609,7 @@ UPDMCLK         LD      A, (SHOWCLK)
                 LD      A, VDP_LMMV | VDP_IMP
                 CALL    LMMV
 
-                ; BLIT STRING "HH:MM" WITH TIMP TRANSPARENCY
+                ; BLIT STRING "HH:MM" (OPAQUE UI-PAPER GLYPHS)
                 LD      HL, CLKBUF
                 LD      DE, 476
                 LD      BC, 0
@@ -657,12 +641,18 @@ DECDIG2         LD      D, '0'
 
 
 ; - BLTCHTR ----------------------------
-; - BLIT CHARACTER WITH TIMP TRANSPARENCY
+; - BLIT ONE UI CHROME CHARACTER, OPAQUE, FROM THE UI-PAPER FONT COPY
 ; - IN:  A  = ASCII CHAR
 ; -      HL = DX
 ; -      DE = DY
 ; - OUT: NONE
 ; - CLOBBERS: NONE
+; -
+; - THE GLYPHS COME FROM THE RIGHT HALF OF THE NORMAL TABLE (SX = FUIR_SX
+; - + (CHAR & 31) * 8), WHERE FONTINIT STORES A SECOND COPY EXPANDED ON
+; - COL_UI PAPER (EXPSTAT). EVERY CALLER PAINTS OVER FLAT COL_UI CHROME
+; - (STATUS BAR, MENU BAR, CLOCK, FILENAME), SO THE COPY BLITS WITH PLAIN
+; - IMP: ONE COMMAND PER CELL, NO ERASE PASS, NO TRANSPARENT GAP.
 ; -
 
 BLTCHTR         PUSH    AF
@@ -682,6 +672,8 @@ BLTCHTR         PUSH    AF
                 ADD     HL, HL          ; * 2
                 ADD     HL, HL          ; * 4
                 ADD     HL, HL          ; * 8
+                LD      DE, FUIR_SX     ; RIGHT HALF OF THE NORMAL TABLE
+                ADD     HL, DE
                 LD      (VDP_SX), HL
 
                 LD      A, B
@@ -707,7 +699,7 @@ BLTCHTR         PUSH    AF
                 LD      (VDP_ARG), A
 
                 LD      HL, VDPCMBLK
-                LD      A, VDP_LMMM | VDP_TIMP
+                LD      A, VDP_LMMM | VDP_IMP
                 CALL    LMMM
 
                 POP     HL
@@ -718,7 +710,7 @@ BLTCHTR         PUSH    AF
 
 
 ; - BLTSTR -----------------------------
-; - BLIT ASCIIZ STRING WITH TIMP
+; - BLIT ASCIIZ STRING OF UI CHROME (OPAQUE, SEE BLTCHTR)
 ; - IN:  HL = POINTER TO ASCIIZ STRING
 ; -      DE = DX
 ; -      BC = DY

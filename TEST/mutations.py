@@ -928,16 +928,35 @@ MUTATIONS = [
         'expect': ['G4/no-growth'],
     },
     {
-        'name': 'g5-hmmv',
-        'why': 'the HH:MM clear truncated to byte units leaves two pixel columns',
-        'file': 'UI.Z8A',
-        'old': 'LD      HL, 5 * CELLW   ; 5 GLYPHS',
-        'new': 'LD      HL, 28          ; MUTATION: HMMV BYTE TRUNCATION',
+        # The clock residue defect this slot used to inject (a byte-truncated
+        # HMMV clear) is dead by construction since 2026-09-25: chrome glyphs
+        # blit opaque from the UI-paper font copy, so a repainted cell is
+        # fully overwritten whatever the clear did. The invariant that matters
+        # now is the paper color itself.
+        'name': 'g5-uipaper',
+        'why': 'chrome glyphs lose their COL_UI paper, so every blitted cell '
+               'paints a black box instead of the bar colour',
+        'file': 'FONT.Z8A',
+        'old': 'EXPSTAT         LD      HL, #AAAA       ; 8 PIXELS OF COLOR 2 (6 BLITTED)',
+        'new': 'EXPSTAT         LD      HL, #0000       ; MUTATION: PAPER = COLOR 0',
         'filter': 'G5',
         # Which sample goes red depends on which digits happen to change, so
         # the requirement is that at least one of them does.  G5 guarantees a
         # revealing transition is in the window; see the note on SAMPLES.
         'expect_any': ['G5/c%d' % i for i in range(7)],
+    },
+    {
+        # 2026-09-25: with exactly TEXTCOLS bytes the BLDSTAT NUL terminator
+        # lands on STATPRV+0, the cell cache reads "never painted" forever and
+        # every keystroke full-repaints the bar (HMMV + 80 blits, ~45 ms).
+        'name': 'd1-statbuf',
+        'why': 'STATBUF shrinks to TEXTCOLS, so the terminator overwrites '
+               'STATPRV+0 and the status bar full-repaints on every key',
+        'file': 'VARS.Z8A',
+        'old': 'STATBUF         DEFS    TEXTCOLS + 1',
+        'new': 'STATBUF         DEFS    TEXTCOLS      ; MUTATION: TERMINATOR ON STATPRV',
+        'filter': 'D1',
+        'expect_static': ['statbuf-term'],
     },
     {
         'name': 'g7-selrange',

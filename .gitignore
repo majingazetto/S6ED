@@ -21,6 +21,12 @@ CODE/screen*.png
 # --- TEST HARNESS OUTPUT ---
 TEST/out/
 
+# --- PROBE GENERATED FILES (DEV/probe/probe_stat.py regenerates them) ---
+DEV/probe/probe.dsk
+DEV/probe/probe.tcl
+DEV/probe/TEST.TXT
+DEV/probe/AUTOEXEC.BAT
+
 # --- OS ---
 .DS_Store
 
