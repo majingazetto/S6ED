@@ -240,11 +240,11 @@ MUTATIONS = [
         # One literal here and the allocation stops following whatever the
         # target actually declared above it.
         'name': 't0-tpa-fixed',
-        'why': 'the S2 window save buffer is pinned to a literal address '
+        'why': 'the S2 font buffer is pinned to a literal address '
                'instead of chaining off the top of the undo ring',
         'file': 'VARS.Z8A',
-        'old': 'WSVBUF          EQU     UNDOTOP',
-        'new': 'WSVBUF          EQU     #6D5B',
+        'old': 'FONT4H          EQU     ((UNDOTOP + 255) / 256) * 256',
+        'new': 'FONT4H          EQU     #6A00',
         'filter': 'T0',
         'expect_static': ['tpa-chain'],
     },
@@ -254,9 +254,9 @@ MUTATIONS = [
                'the dialog opens and restores perfectly, and eats the undo '
                'transaction while it is open',
         'target': 'S2ED',
-        'file': 'VARS.Z8A',
-        'old': 'WSVBUF          EQU     UNDOTOP',
-        'new': 'WSVBUF          EQU     UNDOBAS',
+        'file': 'S2/CONST_S2.Z8A',
+        'old': 'WSVBUF          EQU     #C000',
+        'new': 'WSVBUF          EQU     #5990',
         'filter': 'S2-12',
         'expect': ['S2-12/content'],
     },
