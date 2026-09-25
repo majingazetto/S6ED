@@ -58,6 +58,20 @@ SEGLAST         EQU     (LINEPSEG - 1) * LINEREC
                                         ; OFFSET OF THE LAST RECORD THAT STILL
                                         ; FITS WHOLE INSIDE A 16KB SEGMENT
 
+SEGSIZE         EQU     16384           ; 16KB MAPPER SEGMENT SPAN
+
+                ; VARIABLE LINE RECORD HEADER (IN MAPPED TEXT SEGMENT)
+RECHDR_SZ       EQU     4               ; 4 BYTES: [RECCAP: 2B][RECLEN: 2B]
+RECCAP          EQU     0               ; OFFSET 0: ALLOCATED CAPACITY FOR TEXT
+RECLEN          EQU     2               ; OFFSET 2: ACTIVE TEXT LENGTH (OR TOMBVAL)
+RECTXT          EQU     4               ; OFFSET 4: START OF ASCII TEXT
+TOMBVAL         EQU     #FFFF           ; RECLEN INDICATING DEAD/TOMBSTONED RECORD
+QUANTUM         EQU     16              ; ALLOCATION QUANTUM (16 CHARACTERS)
+DEF_CAP         EQU     16              ; DEFAULT CHAR CAPACITY FOR NEW RECORD
+DEF_PAY         EQU     DEF_CAP * 2     ; DEFAULT PAYLOAD BYTES (16 TEXT + 16 ATTR = 32B)
+RECDEF_SZ       EQU     RECHDR_SZ + DEF_PAY ; 36 BYTES PER DEFAULT NEW RECORD
+
+
 
 ; --- UNDO SUBSYSTEM            ----------------------------------------
 

@@ -78,6 +78,7 @@ TXTHLP       DEFM    "S6ED v"
                 INCLUDE FONT.Z8A
                 INCLUDE MAPPER.Z8A
                 INCLUDE BUFFER.Z8A
+                INCLUDE COMPACT.Z8A
                 INCLUDE RENDER.Z8A
                 INCLUDE SCROLL.Z8A
                 INCLUDE EDIT.Z8A

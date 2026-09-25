@@ -49,7 +49,7 @@ BUFRESET        CALL    SEGTRIM
                 CALL    APPBANK         ; MAP TO PAGE 2
 
                 LD      HL, TXPAGE
-                CALL    RECBLNK         ; EMPTY RECORD AT OFFSET 0
+                CALL    RECBLNK0        ; EMPTY RECORD AT OFFSET 0
 
                 ; WRITE DIR ENTRY 0: SEG=TXSEG0, OFF=0
                 LD      HL, 0
@@ -61,7 +61,7 @@ BUFRESET        CALL    SEGTRIM
                 LD      A, FREENIL
                 LD      (FREEHD), A     ; SEGTRIM JUST DROPPED THE GROWN
                                         ; SEGMENTS; ANY LINK INTO THEM IS DEAD
-                LD      HL, LINEREC     ; RECORD 0 IS TAKEN, NEXT ONE STARTS HERE
+                LD      HL, RECDEF_SZ   ; RECORD 0 IS TAKEN, NEXT ONE STARTS HERE
                 LD      (LINEOFF), HL
 
                 LD      HL, 1
@@ -73,6 +73,26 @@ BUFRESET        CALL    SEGTRIM
                 LD      (CURX), A
                 LD      (CURY), A
                 JP      UNDOINIT
+
+
+; --- RECBLNK0                  ----------------------------------------
+
+; - RECBLNK0 ---------------------------
+; - WRITE DEFAULT EMPTY RECORD AT TXPAGE (MAPPER)
+; - IN:  HL = RECORD BASE IN TXPAGE
+; - OUT: HL = UNCHANGED
+; - CLOBBERS: AF
+; -
+RECBLNK0        PUSH    HL
+                LD      (HL), DEF_PAY   ; RECCAP LOW (32)
+                INC     HL
+                LD      (HL), 0         ; RECCAP HIGH (0)
+                INC     HL
+                LD      (HL), 0         ; RECLEN LOW (0)
+                INC     HL
+                LD      (HL), 0         ; RECLEN HIGH (0)
+                POP     HL
+                RET
 
 
 ; --- RECBLNK                   ----------------------------------------
@@ -199,19 +219,97 @@ DIRBANK         PUSH    HL
 
 ; --- LINEREAD                  ----------------------------------------
 
-; - LINEREAD ---------
+; - LINEREAD ---------------------------
 ; - LOAD LINE RECORD FROM TEXT SEGMENT INTO WORKBUF
-; - HL: LINE NUMBER (0-BASED)
+; - IN:  HL = LINE NUMBER (0-BASED)
+; - OUT: WORKBUF POPULATED (LEN + TEXT PADDED TO TEXTCOLS + ATTRS 0)
+; - CLOBBERS: ALL
 ; -
-
 LINEREAD        CALL    DIRREAD         ; A=SEG, DE=OFFSET (PAGE 2 = DIRSEG)
                 LD      (TXSEG), A
-                CALL    PUTP2           ; UNCONDITIONAL: A RECORD NEVER LIVES IN
-                LD      HL, TXPAGE      ; DIRSEG, SO .SAME WOULD ALWAYS MISS
-                ADD     HL, DE          ; HL = SOURCE
-                LD      DE, WORKBUF
-                LD      BC, WORKSIZ
-                LDIR
+                CALL    PUTP2           ; PAGE 2 = RECORD SEGMENT
+                LD      HL, TXPAGE
+                ADD     HL, DE          ; HL = RECORD BASE IN TXPAGE
+
+                ; RECORD HEADER: [RECCAP: 2B][RECLEN: 2B]
+                LD      A, (HL)         ; A = RECCAP LOW (PAYLOAD BYTES)
+                SRL     A               ; A = C (CHARACTER CAPACITY)
+                LD      C, A            ; C = C
+                INC     HL
+                INC     HL              ; HL = TXPAGE + DE + RECLEN
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)         ; DE = RECLEN (E = L)
+                INC     HL              ; HL = TXPAGE + DE + RECTXT (START OF TEXT)
+
+                ; WORKBUF: [0] = LEN
+                LD      A, E            ; LENGTH L (0..TEXTCOLS)
+                LD      (WORKBUF), A
+                OR      A
+                JR      Z, .EMPTY
+
+                ; L > 0:
+                PUSH    BC              ; [SP] = C
+                PUSH    HL              ; [SP] = TEXT SOURCE
+
+                ; COPY L BYTES OF TEXT: HL -> WORKBUF + 1
+                LD      DE, WORKBUF + 1
+                LD      A, (WORKBUF)
+                LD      C, A
+                LD      B, 0            ; BC = L
+                LDIR                    ; COPIES TEXT TO WORKBUF + 1..L
+
+                ; PAD REMAINING CHARACTERS UP TO TEXTCOLS WITH SPACES
+                LD      A, TEXTCOLS
+                LD      HL, WORKBUF
+                SUB     (HL)            ; A = TEXTCOLS - L
+                JR      Z, .NOTXPAD     ; L == TEXTCOLS: NO PADDING
+                LD      B, A            ; B = SPACES COUNT
+                EX      DE, HL          ; HL = DE (WORKBUF + 1 + L)
+.SPCLP          LD      (HL), ' '
+                INC     HL
+                DJNZ    .SPCLP
+
+.NOTXPAD        ; NOW COPY ATTRIBUTES!
+                POP     HL              ; HL = TEXT SOURCE
+                POP     BC              ; C = CAPACITY C
+                LD      B, 0
+                ADD     HL, BC          ; HL = ATTR SOURCE (TEXT SOURCE + C)
+
+                ; COPY L BYTES OF ATTRS: HL -> WORKBUF + 1 + TEXTCOLS
+                LD      DE, WORKBUF + 1 + TEXTCOLS
+                LD      A, (WORKBUF)    ; A = L
+                LD      C, A
+                LD      B, 0            ; BC = L
+                LDIR                    ; COPIES ATTRS
+
+                ; ZERO REMAINING ATTRIBUTES UP TO TEXTCOLS
+                LD      A, TEXTCOLS
+                LD      HL, WORKBUF
+                SUB     (HL)            ; A = TEXTCOLS - L
+                RET     Z               ; L == TEXTCOLS: ALL DONE!
+
+                LD      B, A            ; B = COUNT OF REMAINING ATTRS
+                EX      DE, HL          ; HL = DE (WORKBUF + 1 + TEXTCOLS + L)
+.ATRZLP         LD      (HL), 0
+                INC     HL
+                DJNZ    .ATRZLP
+                RET
+
+.EMPTY          ; L == 0:
+                ; PAD TEXTCOLS SPACES AT WORKBUF + 1
+                LD      HL, WORKBUF + 1
+                LD      B, TEXTCOLS
+.EMPSPC         LD      (HL), ' '
+                INC     HL
+                DJNZ    .EMPSPC
+
+                ; ZERO TEXTCOLS ATTRS AT WORKBUF + 1 + TEXTCOLS
+                ; HL IS ALREADY AT WORKBUF + 1 + TEXTCOLS!
+                LD      B, TEXTCOLS
+.EMPATR         LD      (HL), 0
+                INC     HL
+                DJNZ    .EMPATR
                 RET
 
 
@@ -227,32 +325,197 @@ LINEREAD        CALL    DIRREAD         ; A=SEG, DE=OFFSET (PAGE 2 = DIRSEG)
 
 LINELEN         CALL    DIRREAD         ; A = SEG, DE = OFFSET (PAGE 2 = DIRSEG)
                 LD      (TXSEG), A
-                CALL    PUTP2           ; UNCONDITIONAL, SAME REASON AS LINEREAD
+                CALL    PUTP2           ; PAGE 2 = RECORD SEGMENT
+                LD      HL, TXPAGE + RECLEN
+                ADD     HL, DE          ; HL = TXPAGE + DE + RECLEN
+                LD      A, (HL)         ; A = RECLEN LOW (0..TEXTCOLS)
+                RET
+
+
+; --- PUTREC                    ----------------------------------------
+
+
+; - PUTREC -----------------------------
+; - WRITE RECORD INTO MAPPED RAM
+; - IN:  A  = SEGMENT
+; -      DE = OFFSET IN SEGMENT
+; -      HL = SOURCE BUFFER ([HL]=LEN, [HL+1]=TEXT, [HL+1+TEXTCOLS]=ATTR)
+; - OUT: NONE (PAGE 2 LEFT BANKED ON SEGMENT A)
+; - CLOBBERS: AF, BC, DE, HL
+; -
+PUTREC          PUSH    IX
+                PUSH    HL              ; SAVE SOURCE BUFFER PTR
+                PUSH    DE              ; SAVE OFFSET
+                CALL    RECBANK         ; BANK PAGE 2
+                POP     DE              ; DE = OFFSET
+                POP     IX              ; IX = SOURCE BUFFER
+
+                ; HL = RECORD BASE IN TXPAGE
                 LD      HL, TXPAGE
-                ADD     HL, DE
-                LD      A, (HL)
+                ADD     HL, DE          ; HL = TXPAGE + DE
+
+                ; GET C = RECCAP / 2
+                LD      A, (HL)         ; A = RECCAP LOW (PAYLOAD BYTES)
+                SRL     A               ; A = C
+                LD      C, A            ; C = CAPACITY C
+
+                ; GET L = SOURCE LENGTH
+                LD      A, (IX + 0)     ; A = L
+
+                ; WRITE RECLEN AT HL + RECLEN (HL + 2)
+                INC     HL
+                INC     HL              ; HL = RECORD BASE + 2 (RECLEN)
+                LD      (HL), A         ; RECLEN LOW = L
+                INC     HL
+                LD      (HL), 0         ; RECLEN HIGH = 0
+                INC     HL              ; HL = RECORD BASE + 4 (DEST TEXT)
+
+                ; IF L == 0, NO PAYLOAD TO COPY
+                OR      A
+                JR      NZ, .HASPAY
+                POP     IX
+                RET
+
+.HASPAY         ; L > 0:
+                PUSH    BC              ; [SP] = C
+                PUSH    HL              ; [SP] = DEST TEXT
+                PUSH    AF              ; [SP] = L
+
+                ; COPY TEXT: SOURCE (IX + 1) -> DEST (HL)
+                EX      DE, HL          ; DE = DEST TEXT
+                PUSH    IX
+                POP     HL
+                INC     HL              ; HL = SOURCE BUFFER + 1 (SOURCE TEXT)
+                LD      C, A
+                LD      B, 0            ; BC = L
+                LDIR                    ; COPIES L BYTES TEXT
+
+                ; COPY ATTRIBUTES: SOURCE (IX + 1 + TEXTCOLS) -> DEST (DEST TEXT + C)
+                POP     AF              ; A = L
+                POP     DE              ; DE = DEST TEXT
+                POP     BC              ; C = CAPACITY C
+                LD      B, 0
+                EX      DE, HL
+                ADD     HL, BC          ; HL = DEST TEXT + C (DEST ATTR)
+                EX      DE, HL          ; DE = DEST ATTR
+
+                PUSH    IX
+                POP     HL
+                LD      BC, 1 + TEXTCOLS
+                ADD     HL, BC          ; HL = SOURCE BUFFER + 1 + TEXTCOLS (SOURCE ATTR)
+
+                LD      C, A
+                LD      B, 0            ; BC = L
+                LDIR                    ; COPIES L BYTES ATTRS
+                POP     IX
                 RET
 
 
 ; --- LINEWRT                   ----------------------------------------
 
-; - LINEWRT ----------
-; - WRITE WORKBUF BACK TO TEXT SEGMENT
-; - HL: LINE NUMBER
-; -
 
-LINEWRT         ; TODO: IMPLEMENT REPACKING IF SIZE CHANGES
-                ; FOR NOW, ASSUME FIXED SIZE OR SUFFICIENT SPACE
-                CALL    DIRREAD         ; PAGE 2 = DIRSEG ON RETURN
-                LD      (TXSEG), A
-                CALL    PUTP2           ; UNCONDITIONAL, SAME REASON AS LINEREAD
-                EX      DE, HL
-                LD      DE, TXPAGE
-                ADD     HL, DE          ; HL = DEST
-                EX      DE, HL
+; - LINEWRT ----------------------------
+; - WRITE WORKBUF BACK TO TEXT SEGMENT
+; - IN:  HL = LINE NUMBER (0-BASED)
+; - OUT: CY = 0 SUCCESS, CY = 1 OOM (ON CAPACITY EXPANSION)
+; - CLOBBERS: ALL
+; -
+LINEWRT         PUSH    HL              ; SAVE LINE NUMBER
+                CALL    DIRREAD         ; A = SEG, DE = OFFSET (PAGE 2 = DIRSEG)
+                CALL    RECBANK         ; PAGE 2 = RECORD SEGMENT
+                LD      HL, TXPAGE
+                ADD     HL, DE          ; HL = RECORD BASE IN TXPAGE
+                LD      A, (HL)         ; A = RECCAP LOW (PAYLOAD BYTES)
+                SRL     A               ; A = C (CHARACTER CAPACITY)
+                LD      C, A            ; C = C
+                EX      DE, HL          ; DE = RECORD BASE, HL = OFFSET (NOT NEEDED)
+
+                ; COMPARE WORKBUF[0] WITH C
+                LD      A, (WORKBUF)    ; A = NEW LEN (L)
+                CP      C
+                JR      C, .INPLAC      ; L < C: FITS IN PLACE
+                JR      Z, .INPLAC      ; L == C: FITS IN PLACE
+
+                ; L > C: CANNOT FIT IN PLACE, MUST RELOCATE!
+                ; 1. TOMBSTONE OLD RECORD: SET RECLEN = TOMBVAL (#FFFF)
+                EX      DE, HL          ; HL = RECORD BASE
+                INC     HL
+                INC     HL              ; HL = RECORD BASE + RECLEN
+                LD      (HL), #FF
+                INC     HL
+                LD      (HL), #FF
+
+                ; 2. ALLOCATE NEW RECORD WITH CAPACITY FOR WORKBUF[0]
+                LD      A, (WORKBUF)
+                LD      C, A            ; C = REQUIRED CAPACITY
+                CALL    NEWREC
+                JR      C, .OOM         ; CY = 1: OUT OF MEMORY
+
+                ; NEWREC RETURNED: A = NEW SEG, DE = NEW OFFSET
+                ; 3. WRITE WORKBUF TO NEW RECORD VIA PUTREC
+                PUSH    AF
+                PUSH    DE
                 LD      HL, WORKBUF
-                LD      BC, WORKSIZ
-                LDIR
+                CALL    PUTREC          ; COPIES WORKBUF TEXT + ATTRS TO (A, DE)
+                POP     DE              ; DE = NEW OFFSET
+                POP     AF              ; A = NEW SEG
+
+                ; 4. UPDATE DIRECTORY ENTRY FOR LINE
+                POP     HL              ; RESTORE LINE NUMBER
+                CALL    DIRWRITE        ; WRITE (A, DE) AT LINE HL
+                OR      A               ; CY = 0: SUCCESS
+                RET
+
+.OOM            POP     HL              ; BALANCE PUSH HL
+                SCF                     ; CY = 1: OOM
+                RET
+
+.INPLAC         ; FITS IN PLACE!
+                ; DE = RECORD BASE (TXPAGE + OFFSET)
+                ; C  = CAPACITY C
+                ; A  = NEW LEN L
+                EX      DE, HL          ; HL = RECORD BASE
+                INC     HL
+                INC     HL              ; HL = RECORD BASE + RECLEN
+                LD      (HL), A         ; RECLEN LOW = L
+                INC     HL
+                LD      (HL), 0         ; RECLEN HIGH = 0
+                INC     HL              ; HL = RECORD BASE + 4 (DEST TEXT)
+
+                OR      A
+                JR      Z, .DONE        ; L == 0: NO PAYLOAD TO COPY
+
+                ; L > 0:
+                ; HL = DEST TEXT
+                ; C  = CAPACITY C
+                ; A  = L
+                PUSH    BC              ; [SP] = C
+                PUSH    HL              ; [SP] = DEST TEXT
+                PUSH    AF              ; [SP] = L
+
+                ; COPY TEXT: WORKBUF + 1 -> DEST TEXT
+                EX      DE, HL          ; DE = DEST TEXT
+                LD      HL, WORKBUF + 1
+                LD      C, A
+                LD      B, 0            ; BC = L
+                LDIR                    ; COPIES TEXT
+
+                ; COPY ATTRIBUTES: WORKBUF + 1 + TEXTCOLS -> DEST ATTR (DEST TEXT + C)
+                POP     AF              ; A = L
+                POP     DE              ; DE = DEST TEXT
+                POP     BC              ; C = CAPACITY C
+                LD      B, 0
+                EX      DE, HL
+                ADD     HL, BC          ; HL = DEST TEXT + C (DEST ATTR)
+                EX      DE, HL          ; DE = DEST ATTR
+
+                LD      HL, WORKBUF + 1 + TEXTCOLS
+                LD      C, A
+                LD      B, 0            ; BC = L
+                LDIR                    ; COPIES ATTRS
+
+.DONE           POP     HL              ; BALANCE PUSH HL (RESTORE LINE NUMBER)
+                OR      A               ; CY = 0: SUCCESS
                 RET
 
 
@@ -365,55 +628,141 @@ FREEPOP         LD      A, (FREEHD)
                 RET
 
 
-; - NEWREC -----------
+; --- NEWREC                    ----------------------------------------
+
+; - NEWREC -----------------------------
 ; - RESERVE SPACE FOR ONE NEW LINE RECORD
-; - TAKES A DELETED RECORD OFF THE FREE LIST IF THERE IS ONE, AND ONLY
-; - EXTENDS THE APPEND CURSOR WHEN THERE IS NOT. THE RECORD HANDED BACK IS
-; - THEREFORE NOT ALWAYS IN APPSEG -- CALLERS MUST BANK THE SEGMENT THIS
-; - RETURNS, NOT THE APPEND SEGMENT.
-; - IN:  NONE
+; - IN:  C = MINIMUM TEXT CAPACITY NEEDED (0 = DEF_CAP)
 ; - OUT: CY = 0  A  = SEGMENT NUMBER
 ; -              DE = OFFSET OF THE RESERVED RECORD
 ; -              PAGE 2 IS LEFT BANKED ON THAT SEGMENT
-; -      CY = 1  THE MAPPER HAS NO SEGMENT LEFT. NOTHING WAS RESERVED AND
-; -              NOTHING WAS MUTATED -- LINEOFF AND APPSEG ARE UNTOUCHED, SO
-; -              THE CALLER CAN SIMPLY REFUSE THE EDIT.
+; -      CY = 1  OOM (NO MAPPER MEMORY)
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
-; - THIS USED TO ABORT THROUGH ERRMEM, WHICH EXITS TO DOS. ON A STOCK 128 KB
-; - MACHINE THE MAPPER RUNS OUT AT 303 LINES, SO A SINGLE RETURN KEY THREW
-; - THE WHOLE DOCUMENT AWAY. MEASURED ON PHILIPS NMS 8250.
-; -
-; - ERRMEM'S CALLER TODAY IS SEGRESV (THE BOOT-TIME CLAIM OF THE MANDATORY
-; - SEGMENTS), WHERE REFUSING TO START IS THE ONLY HONEST MOVE. THE EDIT
-; - PATHS REFUSE SILENTLY FOR NOW, THE SAME WAY THEY ALREADY DO WHEN THE
-; - DIRECTORY IS FULL -- TELLING THE USER WHY IS A STATUS BAR JOB AND IS NOT
-; - WIRED UP YET.
-; -
+NEWREC          LD      A, C
+                CP      DEF_CAP + 1
+                JR      NC, .GROW       ; C > DEF_CAP: CANNOT USE 36-BYTE FREE LIST
 
-NEWREC          CALL    FREEPOP         ; REUSE A DELETED RECORD IF THERE IS ONE
-                RET     NC              ; CY = 0: A = SEGMENT, DE = OFFSET
+                ; C <= DEF_CAP: TRY 36-BYTE FREE LIST FIRST
+                CALL    FREEPOP
+                JR      C, .GROW        ; LIST EMPTY: ALLOCATE FROM APPSEG
 
+                ; FREEPOP RETURNED A = SEG, DE = OFFSET (PAGE 2 BANKED)
+                ; INITIALIZE DEFAULT HEADER AT TXPAGE + DE
+                LD      HL, TXPAGE
+                ADD     HL, DE
+                LD      (HL), DEF_PAY   ; RECCAP LOW (32)
+                INC     HL
+                LD      (HL), 0         ; RECCAP HIGH (0)
+                INC     HL
+                LD      (HL), 0         ; RECLEN LOW (0)
+                INC     HL
+                LD      (HL), 0         ; RECLEN HIGH (0)
+                LD      A, (TXSEG)
+                OR      A               ; CY = 0: SUCCESS
+                RET
+
+.GROW           ; COMPUTE CAPACITY: ROUND UP TO QUANTUM (16), MIN DEF_CAP (16)
+                LD      A, C
+                ADD     A, QUANTUM - 1
+                AND     ~(QUANTUM - 1)
+                CP      DEF_CAP
+                JR      NC, .CAPOK
+                LD      A, DEF_CAP
+.CAPOK          ; A = CHARACTER CAPACITY (16, 32, 48, 64, 80)
+                ; PAYLOAD P = 2 * CAPACITY (32, 64, 96, 128, 160)
+                RLCA                    ; A = P (PAYLOAD BYTES)
+                LD      C, A            ; C = P
+                ; TOTAL RECORD SIZE = RECHDR_SZ (4) + P
+                ADD     A, RECHDR_SZ
+                LD      E, A
+                LD      D, 0            ; DE = TOTAL RECORD SIZE
+                PUSH    BC              ; [SP] = P IN C
+                LD      B, D
+                LD      C, E            ; BC = TOTAL RECORD SIZE
+                CALL    RECGET
+                POP     BC              ; RESTORE P IN C
+                RET     C               ; OOM
+
+                ; RECGET RETURNED: A = SEG, DE = OFFSET (PAGE 2 BANKED)
+                ; INITIALIZE HEADER AT TXPAGE + DE
+                PUSH    AF
+                PUSH    DE
+                LD      HL, TXPAGE
+                ADD     HL, DE
+                LD      (HL), C         ; RECCAP LOW = P
+                INC     HL
+                LD      (HL), 0         ; RECCAP HIGH = 0
+                INC     HL
+                LD      (HL), 0         ; RECLEN LOW (0)
+                INC     HL
+                LD      (HL), 0         ; RECLEN HIGH (0)
+                POP     DE
+                POP     AF
+                OR      A               ; CY = 0: SUCCESS
+                RET
+
+
+; --- RECGET                    ----------------------------------------
+
+; - RECGET -----------------------------
+; - ALLOCATE BC BYTES IN APPSEG (WITH COMPACTION OR EXPANSION)
+; - IN:  BC = TOTAL RECORD SIZE IN BYTES
+; - OUT: CY = 0  A  = APPSEG
+; -              DE = OFFSET IN APPSEG
+; -              PAGE 2 BANKED ON APPSEG
+; -      CY = 1  OOM
+; - CLOBBERS: ALL
+; -
+RECGET          ; 1. CHECK IF RECORD FITS IN APPSEG AT (LINEOFF)
                 LD      HL, (LINEOFF)
-                LD      DE, SEGLAST + 1
+                LD      DE, SEGSIZE
+                EX      DE, HL
+                OR      A
+                SBC     HL, DE          ; HL = SEGSIZE - LINEOFF
+                LD      D, B
+                LD      E, C            ; DE = NEEDED BYTES
                 CALL    CMPHLDE
-                JR      C, .HAVE        ; A WHOLE RECORD STILL FITS
+                JR      NC, .ALLOC      ; FITS!
 
-                CALL    SEGGET          ; SEGMENT FULL, CLAIM ANOTHER
-                RET     C               ; NO MAPPER MEMORY -- CALLER DECIDES
+                ; 2. DOES NOT FIT: TRY COMPACTING APPSEG
+                PUSH    BC
+                LD      A, (APPSEG)
+                CALL    SEGCOMP
+                POP     BC
+
+                ; CHECK AGAIN AFTER COMPACTION
+                LD      HL, (LINEOFF)
+                LD      DE, SEGSIZE
+                EX      DE, HL
+                OR      A
+                SBC     HL, DE
+                LD      D, B
+                LD      E, C
+                CALL    CMPHLDE
+                JR      NC, .ALLOC      ; FITS AFTER COMPACTION!
+
+                ; 3. STILL DOES NOT FIT: CLAIM A FRESH SEGMENT
+                PUSH    BC
+                CALL    SEGGET
+                POP     BC
+                RET     C               ; OOM
+
+                ; NEW SEGMENT CLAIMED: A = NEW SEGMENT
                 LD      (APPSEG), A
                 LD      HL, 0
                 LD      (LINEOFF), HL
 
-.HAVE           CALL    APPBANK
+.ALLOC          CALL    APPBANK
                 LD      HL, (LINEOFF)
                 PUSH    HL
-                LD      DE, LINEREC
+                LD      D, B
+                LD      E, C
                 ADD     HL, DE
-                LD      (LINEOFF), HL   ; ADVANCE PAST THE RESERVED RECORD
-                POP     DE              ; DE = OFFSET
+                LD      (LINEOFF), HL
+                POP     DE              ; DE = ALLOCATED OFFSET
                 LD      A, (APPSEG)
-                OR      A               ; CY = 0: RESERVED
+                OR      A               ; CY = 0: SUCCESS
                 RET
 
 
@@ -458,23 +807,41 @@ LINEINS         LD      DE, (TOTLINES)
 
 ; --- LINEDEL                   ----------------------------------------
 
-; - LINEDEL ----------
+; - LINEDEL ----------------------------
 ; - CLOSE THE DIRECTORY SLOT OF LINE N
 ; - IN:  HL = LINE NUMBER (0-BASED)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; - SHIFTS ENTRIES N+1..TOTLINES-1 DOWN ONE SLOT. TOTLINES IS LEFT ALONE.
-; - THE RECORD GOES BACK ON THE FREE LIST FOR NEWREC TO HAND OUT AGAIN.
 ; -
-
 LINEDEL         PUSH    HL              ; SAVE N
-                CALL    DIRREAD         ; A = SEGMENT, DE = OFFSET OF ITS RECORD
-                CALL    FREEPSH         ; HAND THE RECORD BACK BEFORE IT IS LOST
-                POP     HL
+                CALL    DIRREAD         ; A = SEGMENT, DE = OFFSET OF RECORD
+                CALL    RECBANK         ; BANK RECORD SEGMENT INTO PAGE 2
+
+                ; CHECK RECCAP AT TXPAGE + DE
+                LD      HL, TXPAGE
+                ADD     HL, DE          ; HL = RECORD BASE
+                LD      A, (HL)         ; A = RECCAP LOW
+                LD      C, A            ; C = RECCAP LOW
+
+                ; TOMBSTONE RECORD: SET RECLEN = TOMBVAL (#FFFF)
+                INC     HL
+                INC     HL              ; HL = TXPAGE + DE + RECLEN
+                LD      (HL), #FF
+                INC     HL
+                LD      (HL), #FF
+
+                ; IF RECCAP == DEF_PAY (32), PUSH ONTO FREE LIST FOR REUSE
+                LD      A, C
+                CP      DEF_PAY
+                JR      NZ, .NOFREE
+                LD      A, (TXSEG)      ; A = SEGMENT
+                CALL    FREEPSH
+
+.NOFREE         POP     HL              ; RESTORE N
                 PUSH    HL              ; SAVE N
 
-                ; FREEPSH LEFT PAGE 2 ON THE FREED RECORD'S SEGMENT; THE
-                ; CLOSE-UP BELOW RUNS IN THE DIRECTORY WINDOW INSTEAD.
+                ; SHIFT DIRECTORY ENTRIES N+1..TOTLINES-1 DOWN ONE SLOT
                 CALL    DIRBANK
 
                 LD      DE, (TOTLINES)
@@ -498,8 +865,8 @@ LINEDEL         PUSH    HL              ; SAVE N
                 CALL    DIRADR          ; HL = SLOT N
                 PUSH    HL
                 LD      DE, DIRSIZ
-                ADD     HL, DE          ; HL = SLOT N+1, THE SOURCE
-                POP     DE              ; DE = SLOT N, THE DESTINATION
+                ADD     HL, DE          ; HL = SLOT N+1 (SOURCE)
+                POP     DE              ; DE = SLOT N (DEST)
                 LDIR
 
 .NOMOVE         POP     HL

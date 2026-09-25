@@ -145,27 +145,18 @@ FILELOAD        PUSH    HL
                 LD      (WASCR), A
                 POP     AF
                 
-                ; APPEND TO CURRENT LINE IN TXPAGE. THE LOADER *IS* THE APPEND
-                ; CURSOR WHILE IT RUNS, SO IT BANKS APPSEG EXPLICITLY -- TXSEG
-                ; MAY HOLD DIRSEG AFTER ANY DIRECTORY WRITE (BUFRESET'S ENTRY 0
-                ; WRITE INCLUDED), AND BANKING THAT HERE WOULD LAND THE RECORD
-                ; INSIDE THE DIRECTORY.
+                ; APPEND TO WORKBUF IN TPA RAM
                 LD      B, A
-                LD      A, (APPSEG)
-                CALL    RECBANK
-                
                 LD      A, (CURLLEN)
                 CP      TEXTCOLS
-                JP      NC, .SKIP       ; TRUNCATE AT THE RECORD'S TEXT WIDTH
-                
-                LD      HL, TXPAGE + 1  ; SKIP LEN BYTE
-                LD      DE, (LINEOFF)
-                ADD     HL, DE
+                JP      NC, .SKIP       ; TRUNCATE AT TEXT WIDTH
+
+                LD      HL, WORKBUF + 1
                 LD      E, A
                 LD      D, 0
-                ADD     HL, DE          ; HL = TXPAGE + LINEOFF + 1 + CURLLEN
+                ADD     HL, DE          ; HL = WORKBUF + 1 + CURLLEN
                 LD      (HL), B
-                
+
                 INC     A
                 LD      (CURLLEN), A
                 JP      .SKIP
@@ -189,15 +180,9 @@ FILELOAD        PUSH    HL
 
 .TABSP          LD      A, (CURLLEN)
                 CP      TEXTCOLS
-                JP      NC, .SKIP       ; TRUNCATE AT THE RECORD'S TEXT WIDTH
+                JP      NC, .SKIP       ; TRUNCATE AT TEXT WIDTH
 
-                LD      A, (APPSEG)
-                CALL    RECBANK
-
-                LD      HL, TXPAGE + 1
-                LD      BC, (LINEOFF)
-                ADD     HL, BC
-                LD      A, (CURLLEN)
+                LD      HL, WORKBUF + 1
                 LD      C, A
                 LD      B, 0
                 ADD     HL, BC
@@ -297,102 +282,56 @@ FILELOAD        PUSH    HL
 
 ; - STORLINE ---------------------------
 ; - FINISH CURRENT LINE, ADD TO DIRECTORY, PREPARE NEXT
-; - IN:  NONE (USES CURLLEN, LINEOFF, TXSEG, TOTLINES)
+; - IN:  NONE (USES CURLLEN, TOTLINES)
 ; - OUT: CY = 1  NO ROOM LEFT (DIRECTORY FULL, OR NO MAPPER SEGMENT LEFT)
 ; - CLOBBERS: ALL
 ; -
 
-STORLINE        ; REFUSE IF THE LINE DIRECTORY IS FULL. EDNWLIN AND EDPSHWR
-                ; ALREADY GUARD THEIR OWN INSERTS; THE LOADER DID NOT, AND A
-                ; LONG ENOUGH FILE WOULD HAVE WALKED PAST THE END OF THE
-                ; DIRECTORY. THE CALLER'S .OOM PATH SHOWS WHAT LOADED.
+STORLINE        ; 1. CHECK IF LINE DIRECTORY IS FULL
                 LD      HL, (TOTLINES)
                 LD      DE, MAXLINES
                 CALL    CMPHLDE
-                JR      C, .HAVROOM
+                JR      C, .HAVDIR
                 SCF
-                RET
+                RET                     ; DIRECTORY FULL
 
-.HAVROOM        LD      A, (APPSEG)
-                CALL    RECBANK         ; THE RECORD GOES TO THE APPEND SEGMENT,
-                                        ; NOT WHATEVER TXSEG HOLDS (DIRSEG AFTER
-                                        ; ANY DIRECTORY WRITE)
-                LD      HL, TXPAGE
-                LD      DE, (LINEOFF)
-                ADD     HL, DE          ; HL = START OF RECORD
-                
+.HAVDIR         ; 2. SET LENGTH IN WORKBUF[0] AND ZERO ATTRIBUTES
                 LD      A, (CURLLEN)
-                LD      (HL), A         ; WRITE LEN
-                
-                ; PAD UNUSED CHARS (CURLLEN..TEXTCOLS-1) WITH SPACE (#20)
-                PUSH    HL
-                INC     HL              ; HL = TXPAGE + LINEOFF + 1
-                LD      E, A
-                LD      D, 0
-                ADD     HL, DE          ; HL = TXPAGE + LINEOFF + 1 + CURLLEN
-                LD      A, TEXTCOLS
-                SUB     E
-                JR      Z, .PADEND
-                LD      B, A
-.PADLP          LD      (HL), ' '
-                INC     HL
-                DJNZ    .PADLP
-.PADEND         POP     HL
+                LD      (WORKBUF), A
 
-                ; CLEAR THE ATTRIBUTE HALF. THESE THREE FIGURES ARE THE
-                ; RECORD LAYOUT AND MUST COME FROM TEXTCOLS: AS LITERAL
-                ; 81 / 79 THEY LEFT THE FIRST 16 ATTRIBUTE BYTES OF EVERY
-                ; S2 RECORD UNCLEARED -- WHICH RENDERED AS RANDOM BOLD --
-                ; AND RAN 32 BYTES PAST THE END OF THE RECORD.
-                PUSH    HL
-                LD      DE, 1 + TEXTCOLS
-                ADD     HL, DE          ; HL = ATTR START
+                LD      HL, WORKBUF + 1 + TEXTCOLS
                 LD      (HL), 0
                 LD      D, H
                 LD      E, L
                 INC     DE
                 LD      BC, TEXTCOLS - 1
                 LDIR
-                POP     HL
 
-                ; ADD TO DIRECTORY
+                ; 3. ALLOCATE RECORD IN MAPPER VIA NEWREC
+                LD      C, A            ; C = CAPACITY NEEDED
+                CALL    NEWREC
+                RET     C               ; OOM: NO MAPPER MEMORY
+
+                ; NEWREC RETURNED: A = SEG, DE = OFFSET (PAGE 2 BANKED)
+                ; 4. WRITE WORKBUF INTO (A, DE) IN MAPPER
+                PUSH    AF
+                PUSH    DE
+                LD      HL, WORKBUF
+                CALL    PUTREC
+                POP     DE              ; DE = OFFSET
+                POP     AF              ; A = SEG
+
+                ; 5. ADD TO DIRECTORY
                 LD      HL, (TOTLINES)
-                LD      A, (APPSEG)     ; THE RECORD WAS JUST WRITTEN THERE
-                LD      DE, (LINEOFF)
                 CALL    DIRWRITE
-                
+
+                ; 6. INCREMENT TOTLINES
                 LD      HL, (TOTLINES)
                 INC     HL
                 LD      (TOTLINES), HL
 
-                ; PREPARE NEXT LINE RECORD OFFSET
-                LD      HL, (LINEOFF)
-                LD      DE, WORKSIZ
-                ADD     HL, DE
-                LD      (LINEOFF), HL
-                
-                ; CHECK IF THE SEGMENT IS FULL (101 RECORDS OF 161 BYTES)
-                LD      DE, SEGLAST + 1
-                CALL    CMPHLDE
-                JR      C, .NOTFULL
-
-                CALL    SEGGET
-                RET     C               ; CY = 1: OUT OF MEMORY FOR NEXT SEGMENT
-                LD      (TXSEG), A
-                ; THE LOADER *IS* THE APPEND CURSOR WHILE IT RUNS, SO APPSEG
-                ; HAS TO FOLLOW. WITHOUT THIS IT KEPT THE VALUE BUFRESET LEFT
-                ; -- THE FIRST SEGMENT -- WHILE LINEOFF WALKED INTO THE SECOND,
-                ; AND THE FIRST NEWLINE AFTER LOADING RESERVED A RECORD AT
-                ; (FIRST SEGMENT, OFFSET INSIDE THE LAST ONE), LANDING ON TOP
-                ; OF A LINE ALREADY THERE. MEASURED ON A 200 LINE DOCUMENT:
-                ; LINEOFF 15939 = RECORD 99 OF SEGMENT 0, SO ONE RETURN KEY
-                ; OVERWROTE LINE 99 WITH THE TEXT BEING SPLIT OFF LINE 0.
-                LD      (APPSEG), A
-                CALL    PUTP2
-                LD      HL, 0
-                LD      (LINEOFF), HL
-
-.NOTFULL        XOR     A
+                ; 7. RESET CURLLEN
+                XOR     A
                 LD      (CURLLEN), A
                 AND     A               ; CY = 0: SUCCESS
                 RET
