@@ -4602,6 +4602,240 @@ THEME=DEFAULT
         return checks
 
 
+# --- H28  PARAMETRIC TEXTWIDTH (PHASE C2) -----------------------------
+
+
+class H28TextWidth(Case):
+    name = 'H28-textwidth'
+    desc = ('TEXTWIDTH= in the CFG, push-wrap at a custom margin, and the VI '
+            'ex console :set tw=/nowrap/wrap with SAVETW round-trip')
+    origin = ('Phase C2 (2026-09-27): the wrap margin is TXTWIDTH, not '
+              'TEXTCOLS.  WRAP_DEV is TXTWIDTH = 0: free typing up to '
+              'MAXCOLS with horizontal scroll, and WRAP=TXT on top of a '
+              'TXTWIDTH never widens it.  Lines longer than the margin are '
+              'data, never broken by viewing or by a later mode change.')
+    variants = ('cfg40', 'ex', 'longtail')
+
+    # longtail: a loaded line longer than the margin, edited near its start.
+    # The pushed tail is LEN + 1 - SPLIT = 81 characters, far over the
+    # margin-sized record EDPSHWR used to reserve (40 -> 48 by quantum), and
+    # PUTREC does not check capacity: the attributes landed on text 48..80
+    # (measured: 48 x then 33 NULs on disk).
+    LONG = 'x' * 120
+    LONGNB = ['NEIGHBOUR ONE', 'NEIGHBOUR TWO']
+
+    # keymatrixdown without SHIFT types lowercase.
+    HEAD = 'a' * 38 + ' '         # 39 chars: the pushed word breaks after it
+    WORD = 'b' * 10
+    TW40 = 40
+
+    def config(self, ctx, variant=None):
+        if variant == 'longtail':
+            return ("PROFILE=STD\r\nTEXTWIDTH=40\r\nMARKUP=OFF\r\n"
+                    "CLOCK=0\r\nTABWIDTH=4\r\nEOL=AUTO\r\nAUTOALIGN=OFF\r\n")
+        if variant == 'cfg40':
+            # Spaced form, on purpose: CFGVAL owns the whitespace rule.
+            return ("; TEXTWIDTH in the form that broke TABWIDTH\r\n"
+                    "PROFILE = STD\r\n"
+                    "TEXTWIDTH = 40\r\n"
+                    "MARKUP = OFF\r\n"
+                    "CLOCK = 0\r\n"
+                    "TABWIDTH = 4\r\n"
+                    "EOL = AUTO\r\n"
+                    "AUTOALIGN = OFF\r\n")
+        return ("PROFILE=VI\nWRAP=DEV\nMARKUP=OFF\nCLOCK=0\n"
+                "TABWIDTH=4\nEOL=AUTO\nAUTOALIGN=OFF\n")
+
+    def fixture(self, ctx, variant=None):
+        if variant == 'longtail':
+            return crlf([self.LONG] + self.LONGNB)
+        return crlf([''])
+
+    def key_for(self, ch):
+        if ch == ':':
+            return (';', ['SHIFT'])
+        if ch == ' ':
+            return ('SPACE', [])
+        return (ch.upper(), [])
+
+    def type_str(self, t, s):
+        for ch in s:
+            k, mods = self.key_for(ch)
+            t.press(k, mods=mods)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        if variant == 'longtail':
+            t.wait(1.0)
+            t.press('RIGHT', repeat=5)
+            t.text('y')                 # push-wrap inside a 120-char line
+            t.snap('pushed')
+            # The next record is allocated right behind the tail's: an
+            # overflowing tail and a new line cannot both survive.
+            t.press('DOWN', repeat=3)
+            t.press('RIGHT', mods=['CTRL'])
+            t.press('RETURN')
+            t.text('z')
+            t.snap('after')
+            t.press('S', mods=['CTRL'])
+            t.wait(3.0)
+            t.snap('saved')
+            return t
+        if variant == 'cfg40':
+            # 38 a's + space: 39 chars, cursor at 39.  The first b fills the
+            # last column (CURX stays 39 on a full line); the second b
+            # push-wraps the one-letter word, the remaining 8 land after it.
+            t.text('a' * 38 + ' ' + self.WORD)
+            t.snap('wrapped')
+            t.press('S', mods=['CTRL'])
+            t.wait(3.0)
+            t.snap('saved')
+            return t
+        # ex variant: VI profile, no TEXTWIDTH in the CFG (defaults 0 / DEV).
+        self.type_str(t, ':set tw=48')
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('setw48')
+        self.type_str(t, ':set nowrap')
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('nowrap')
+        # TXTWIDTH = 0: type straight past column 80, no wrap, LEFTCOL scrolls.
+        self.type_str(t, 'i')
+        t.text('c' * 85)
+        t.snap('free')
+        t.press('ESC')
+        # The 85-char line must survive the mode change untouched.
+        # The 85-char free-typing burst leaves the BIOS keyboard ISR draining
+        # the tail of the run while the console is already open: a lone RETURN
+        # here landed inside that window and was never buffered (measured:
+        # console open with ':set wrap' complete, INPLEN = 9, buffer pointers
+        # equal).  Two presses a second apart bracket the drain.
+        self.type_str(t, ':set wrap')
+        t.press('RETURN')
+        t.wait(1.0)
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('rewrap')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        run40, runex = runs['cfg40'], runs['ex']
+        runlt = runs['longtail']
+
+        # - longtail: the pushed tail is longer than the margin ---------
+        head = 'x' * 5 + 'y' + 'x' * 34
+        tail = 'x' * (len(self.LONG) - 39)
+        checks.append(Check('H28/longtail/totlines',
+                            runlt.var('pushed', 'TOTLINES') == 4,
+                            'TOTLINES = %s after the push (expected 4)'
+                            % runlt.var('pushed', 'TOTLINES')))
+        got = runlt.session.extract(runlt.dsk, 'DOC.TXT')
+        want = crlf([head, tail] + self.LONGNB + ['z'])
+        checks.append(Check('H28/longtail/content', got == want,
+                            'an 81-char tail pushed under TW=40 survives '
+                            'with its neighbours byte for byte'
+                            if got == want else 'got %r' % got))
+
+        # - cfg40: TEXTWIDTH=40 from the CFG, in spaced form ------------
+        checks.append(Check('H28/cfg40/boot-txtwidth',
+                            run40.var('boot', 'TXTWIDTH') == self.TW40 and
+                            run40.var('boot', 'SAVETW') == self.TW40,
+                            'TXTWIDTH = %s, SAVETW = %s (expected 40/40)'
+                            % (run40.var('boot', 'TXTWIDTH'),
+                               run40.var('boot', 'SAVETW'))))
+        checks.append(Check('H28/cfg40/boot-wrap',
+                            run40.var('boot', 'WRAPMODE') == 1,
+                            'TEXTWIDTH=40 implies WRAPMODE = TXT (got %s)'
+                            % run40.var('boot', 'WRAPMODE')))
+        stat = run40.snaps.get('boot', {}).get('STATBUF', [])
+        stat = ''.join(chr(c) for c in stat) if stat else ''
+        checks.append(Check('H28/cfg40/boot-flag', '[T' in stat,
+                            'status bar shows [T] (wrap on): %r' % stat))
+        checks.append(Check('H28/cfg40/totlines',
+                            run40.var('wrapped', 'TOTLINES') == 2,
+                            'TOTLINES = %s after typing past column 40'
+                            % run40.var('wrapped', 'TOTLINES')))
+        checks.append(Check('H28/cfg40/cursor',
+                            run40.var('wrapped', 'DOCLINE') == 1 and
+                            run40.var('wrapped', 'CURX') == 10,
+                            'cursor (DOCLINE, CURX) = (%s, %s), expected (1, 10)'
+                            % (run40.var('wrapped', 'DOCLINE'),
+                               run40.var('wrapped', 'CURX'))))
+        wb = run40.snaps.get('wrapped', {}).get('WORKBUF', [])
+        tail = bytes(wb[1:11]) if len(wb) >= 11 else b''
+        checks.append(Check('H28/cfg40/tail',
+                            wb and wb[0] == 10 and tail == self.WORD.encode(),
+                            'current line holds the pushed word (%d chars)'
+                            % (wb[0] if wb else -1)))
+        got = run40.session.extract(run40.dsk, 'DOC.TXT')
+        want = crlf([self.HEAD, self.WORD])
+        checks.append(Check('H28/cfg40/content', got == want,
+                            'saved document wraps at column 40'
+                            if got == want else 'got %r' % (got,)))
+
+        # - ex: :set tw=48 / nowrap / wrap -------------------------------
+        checks.append(Check('H28/ex/boot-dev',
+                            runex.var('boot', 'TXTWIDTH') == 0 and
+                            runex.var('boot', 'WRAPMODE') == 0 and
+                            runex.var('boot', 'SAVETW') == 80,
+                            'no CFG key: TXTWIDTH = %s, WRAPMODE = %s, '
+                            'SAVETW = %s (expected 0/0/80)'
+                            % (runex.var('boot', 'TXTWIDTH'),
+                               runex.var('boot', 'WRAPMODE'),
+                               runex.var('boot', 'SAVETW'))))
+        checks.append(Check('H28/ex/setw48',
+                            runex.var('setw48', 'TXTWIDTH') == 48 and
+                            runex.var('setw48', 'WRAPMODE') == 1 and
+                            runex.var('setw48', 'SAVETW') == 48,
+                            ':set tw=48 -> TXTWIDTH = %s, WRAPMODE = %s, '
+                            'SAVETW = %s (expected 48/1/48)'
+                            % (runex.var('setw48', 'TXTWIDTH'),
+                               runex.var('setw48', 'WRAPMODE'),
+                               runex.var('setw48', 'SAVETW'))))
+        checks.append(Check('H28/ex/nowrap',
+                            runex.var('nowrap', 'TXTWIDTH') == 0 and
+                            runex.var('nowrap', 'WRAPMODE') == 0 and
+                            runex.var('nowrap', 'SAVETW') == 48,
+                            ':set nowrap -> TXTWIDTH = %s, WRAPMODE = %s, '
+                            'SAVETW kept at %s (expected 0/0/48)'
+                            % (runex.var('nowrap', 'TXTWIDTH'),
+                               runex.var('nowrap', 'WRAPMODE'),
+                               runex.var('nowrap', 'SAVETW'))))
+        checks.append(Check('H28/ex/free-typing',
+                            runex.var('free', 'TOTLINES') == 1 and
+                            runex.var('free', 'CURX') == 85,
+                            'nowrap: 85 chars on one line, CURX = %s, '
+                            'TOTLINES = %s'
+                            % (runex.var('free', 'CURX'),
+                               runex.var('free', 'TOTLINES'))))
+        checks.append(Check('H28/ex/free-scroll',
+                            runex.var('free', 'LEFTCOL') == 9,
+                            'LEFTCOL = %s after scrolling past column 80 '
+                            '(expected 9: 80 - 80 + 1 + 8)'
+                            % runex.var('free', 'LEFTCOL')))
+        wb = runex.snaps.get('free', {}).get('WORKBUF', [])
+        checks.append(Check('H28/ex/free-line',
+                            wb and wb[0] == 85,
+                            'the line holds all 85 characters (LEN = %s)'
+                            % (wb[0] if wb else '?')))
+        checks.append(Check('H28/ex/rewrap',
+                            runex.var('rewrap', 'TXTWIDTH') == 48 and
+                            runex.var('rewrap', 'WRAPMODE') == 1,
+                            ':set wrap restores SAVETW: TXTWIDTH = %s, '
+                            'WRAPMODE = %s (expected 48/1)'
+                            % (runex.var('rewrap', 'TXTWIDTH'),
+                               runex.var('rewrap', 'WRAPMODE'))))
+        wb = runex.snaps.get('rewrap', {}).get('WORKBUF', [])
+        checks.append(Check('H28/ex/long-line-survives',
+                            wb and wb[0] == 85,
+                            'the 85-char line is untouched by the mode '
+                            'change (LEN = %s)' % (wb[0] if wb else '?')))
+        return checks
+
+
 
 # --- U6..U9  EDITS THAT USED TO ESCAPE THE HISTORY -------------------
 #
@@ -5067,6 +5301,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(), H18WindowRobustness(),
          H19QuitDialog(), H20QuitDirty(), H21Shadow(), H22FileMenu(), H23MenuNav(),
          H24GoToLine(), H25FindReplace(), H26FindCurrentLine(), H27ViEx(),
+         H28TextWidth(),
          B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),

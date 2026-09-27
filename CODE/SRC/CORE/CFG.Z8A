@@ -87,6 +87,28 @@ CFGLOAD         LD      HL, CFGNAME
 
 .NOTWRP         POP     HL
                 PUSH    HL
+                LD      DE, KEYTW
+                CALL    STRPREF
+                JR      NC, .NOTTW1
+                CALL    CFGVAL
+                JR      NC, .NOTTW1
+                CALL    PARSTW
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JP      .SKPLIN
+
+.NOTTW1         POP     HL
+                PUSH    HL
+                LD      DE, KEYTW2
+                CALL    STRPREF
+                JR      NC, .NOTTW2
+                CALL    CFGVAL
+                JR      NC, .NOTTW2
+                CALL    PARSTW
+                POP     HL              ; RESTORE HL TO START OF LINE
+                JP      .SKPLIN
+
+.NOTTW2         POP     HL
+                PUSH    HL
                 LD      DE, KEYMKUP
                 CALL    STRPREF
                 JR      NC, .NOTMKP
@@ -402,8 +424,45 @@ PARSWRP         LD      A, (HL)
                 RET
 .SETDEV         XOR     A
                 LD      (WRAPMODE), A
+                LD      (TXTWIDTH), A
                 RET
 .SETTXT         LD      A, 1
+                LD      (WRAPMODE), A
+                LD      A, (TXTWIDTH)
+                OR      A
+                RET     NZ
+                LD      A, (SAVETW)
+                OR      A
+                JR      NZ, .HAVSTW
+                LD      A, TEXTCOLS
+.HAVSTW         LD      (TXTWIDTH), A
+                RET
+
+
+; --- PARSTW                    ----------------------------------------
+
+
+; - PARSTW -----------------------------
+; - PARSE TXTWIDTH VALUE (0..255)
+; - IN:  HL = POINTER TO VALUE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+PARSTW          CALL    ATOI16
+                LD      A, H
+                OR      A
+                JR      Z, .WOK
+                LD      L, 255
+.WOK            LD      A, L
+                LD      (TXTWIDTH), A
+                OR      A
+                JR      Z, .TWZERO
+                LD      (SAVETW), A
+                LD      A, WRAP_TXT
+                LD      (WRAPMODE), A
+                RET
+.TWZERO         LD      A, WRAP_DEV
                 LD      (WRAPMODE), A
                 RET
 
@@ -903,6 +962,8 @@ CFGNAME         DEFM    "S6ED.CFG", 0
                 ENDIF
 KEYPROF         DEFM    "PROFILE", 0
 KEYWRAP         DEFM    "WRAP", 0
+KEYTW           DEFM    "TEXTWIDTH", 0
+KEYTW2          DEFM    "TW", 0
 KEYMKUP         DEFM    "MARKUP", 0
 KEYCLK          DEFM    "CLOCK", 0
 KEYTAB          DEFM    "TABWIDTH", 0

@@ -1191,6 +1191,10 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
                 JP      Z, .CMDE
                 CP      'E'
                 JP      Z, .CMDE
+                CP      's'
+                JP      Z, .CMDSET
+                CP      'S'
+                JP      Z, .CMDSET
 
                 ; UNKNOWN COMMAND
 .BADCMD         LD      HL, .STRERRC
@@ -1333,6 +1337,181 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
                 CALL    REDRAW
                 JP      DRWSTAT
 
+.CMDSET         ; MUST MATCH "set " OR "SET "
+                INC     HL
+                LD      A, (HL)
+                OR      #20
+                CP      'e'
+                JP      NZ, .BADCMD
+                INC     HL
+                LD      A, (HL)
+                OR      #20
+                CP      't'
+                JP      NZ, .BADCMD
+                INC     HL
+                LD      A, (HL)
+                CP      ' '
+                JP      NZ, .BADCMD
+
+.SETSKP         INC     HL
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .SETSKP
+                OR      A
+                JP      Z, .BADCMD
+
+                ; FIRST CHAR OF SETTING: 'w' (wrap), 'n' (nowrap), 't' (tw/textwidth)
+                OR      #20
+                CP      'w'
+                JR      Z, .SETWRP
+                CP      'n'
+                JR      Z, .SETNOW
+                CP      't'
+                JP      Z, .SETTW
+                JP      .BADCMD
+
+.SETWRP         ; EXPECT "wrap"
+                INC     HL
+                LD      A, (HL)
+                OR      #20
+                CP      'r'
+                JP      NZ, .BADCMD
+                INC     HL
+                LD      A, (HL)
+                OR      #20
+                CP      'a'
+                JP      NZ, .BADCMD
+                INC     HL
+                LD      A, (HL)
+                OR      #20
+                CP      'p'
+                JP      NZ, .BADCMD
+                INC     HL
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .WPOK
+                OR      A
+                JP      NZ, .BADCMD
+.WPOK           LD      A, WRAP_TXT
+                LD      (WRAPMODE), A
+                LD      A, (TXTWIDTH)
+                OR      A
+                JP      NZ, .SETOUT
+                LD      A, (SAVETW)
+                OR      A
+                JR      NZ, .WPHSTW
+                LD      A, TEXTCOLS
+.WPHSTW         LD      (TXTWIDTH), A
+                JP      .SETOUT
+
+.SETNOW         ; EXPECT "nowrap"
+                INC     HL
+                LD      A, (HL)
+                OR      #20
+                CP      'o'
+                JP      NZ, .BADCMD
+                INC     HL
+                LD      A, (HL)
+                OR      #20
+                CP      'w'
+                JP      NZ, .BADCMD
+                INC     HL
+                LD      A, (HL)
+                OR      #20
+                CP      'r'
+                JP      NZ, .BADCMD
+                INC     HL
+                LD      A, (HL)
+                OR      #20
+                CP      'a'
+                JP      NZ, .BADCMD
+                INC     HL
+                LD      A, (HL)
+                OR      #20
+                CP      'p'
+                JP      NZ, .BADCMD
+                INC     HL
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .NWPOK
+                OR      A
+                JP      NZ, .BADCMD
+.NWPOK          LD      A, (TXTWIDTH)
+                OR      A
+                JR      Z, .NWPSAV
+                LD      (SAVETW), A
+.NWPSAV         XOR     A
+                LD      (TXTWIDTH), A
+                LD      (WRAPMODE), A
+                JP      .SETOUT
+
+.SETTW          ; EXPECT "tw=" OR "textwidth="
+                INC     HL
+                LD      A, (HL)
+                OR      #20
+                CP      'w'
+                JR      Z, .CKTW
+                CP      'e'
+                JR      Z, .CKTXTW
+                JP      .BADCMD
+
+.CKTW           INC     HL
+                JR      .TWEQLP
+
+.CKTXTW         LD      DE, .STRTXTW    ; "xtwidth"
+.TWMLP          LD      A, (DE)
+                OR      A
+                JR      Z, .TWEQLP
+                INC     HL
+                LD      C, A
+                LD      A, (HL)
+                OR      #20
+                CP      C
+                JP      NZ, .BADCMD
+                INC     DE
+                JR      .TWMLP
+
+.TWEQLP         LD      A, (HL)
+                CP      ' '
+                JR      NZ, .TWEQCK
+                INC     HL
+                JR      .TWEQLP
+.TWEQCK         CP      '='
+                JP      NZ, .BADCMD
+                INC     HL              ; PAST '='
+
+.PARSTW         LD      A, (HL)
+                CP      ' '
+                JR      NZ, .PSTWVAL
+                INC     HL
+                JR      .PARSTW
+
+.PSTWVAL        LD      A, (HL)
+                SUB     '0'
+                JP      C, .BADCMD
+                CP      10
+                JP      NC, .BADCMD
+                CALL    ATOI16
+                LD      A, H
+                OR      A
+                JR      Z, .TW8OK
+                LD      L, 255
+.TW8OK          LD      A, L
+                LD      (TXTWIDTH), A
+                OR      A
+                JR      Z, .TWEXZ
+                LD      (SAVETW), A
+                LD      A, WRAP_TXT
+                LD      (WRAPMODE), A
+                JR      .SETOUT
+.TWEXZ          LD      A, WRAP_DEV
+                LD      (WRAPMODE), A
+
+.SETOUT         XOR     A
+                LD      (STATMSG), A
+                CALL    REDRAW
+                JP      DRWSTAT
+
 .ERNOF          LD      HL, .STRNOF
                 CALL    .SETMSG
                 JP      DRWSTAT
@@ -1379,6 +1558,7 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
 .STRNOF         DEFM    "No file name", 0
 .STRMOD         DEFM    "No write since last change (! overrides)", 0
 .STRARG         DEFM    "Argument required", 0
+.STRTXTW        DEFM    "xtwidth", 0
 
 
 ; --- GOTOLN                    ----------------------------------------
