@@ -1042,7 +1042,12 @@ SELTMPXB        EQU     SELTMPXB2""")],
         # one-char lines pass the worst-case size estimate but exhaust the
         # real 36-byte records halfway through the read.
         'filter': 'G3B',
-        'expect': ['G3B/load-refused'],
+        # .CLSFIL is entered with .PROCLP's PUSH HL still on the stack, so
+        # the RET that follows is undefined: which address it lands on moves
+        # with the code layout.  Measured 2026-09-27: 12 bytes added to
+        # EDPSHWR turned a refused load into a dead session.  Either one is
+        # the defect showing.
+        'expect_any': ['G3B/load-refused', 'G3B-oomshort'],
     },
     {
         'name': 'g10-align',
@@ -2191,6 +2196,89 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 JP      DRWSTAT""",
         'filter': 'S2-22',
         'expect': ['S2-22/highlight'],
+    },
+    # --- H28 PARAMETRIC TEXTWIDTH (PHASE C2) --------------------------
+    {
+        'name': 'h28-fixedmargin',
+        'why': 'EDINSCHR measures the wrap margin against TEXTCOLS again, '
+               'so TEXTWIDTH=40 still wraps at 80 and typing past column 40 '
+               'never splits the line',
+        'file': 'EDIT.Z8A',
+        'old': """.WRTXT          ; WRAP_TXT:
+                LD      A, (TXTWIDTH)
+                OR      A
+                JR      Z, .INSDEV      ; TXTWIDTH == 0: FREE TYPING UP TO MAXCOLS
+
+                LD      D, A            ; D = TXTWIDTH""",
+        'new': """.WRTXT          ; WRAP_TXT:
+                LD      D, TEXTCOLS     ; MUTATION: FIXED 80-COLUMN MARGIN""",
+        'filter': 'H28',
+        'expect': ['H28/cfg40/totlines', 'H28/cfg40/content'],
+    },
+    {
+        'name': 'h28-cfgwrap',
+        'why': 'PARSTW stores the margin but forgets to switch WRAPMODE, so '
+               'TEXTWIDTH= is parsed and then ignored by every edit path',
+        'file': 'CFG.Z8A',
+        'old': """.WOK            LD      A, L
+                LD      (TXTWIDTH), A
+                OR      A
+                JR      Z, .TWZERO
+                LD      (SAVETW), A
+                LD      A, WRAP_TXT
+                LD      (WRAPMODE), A
+                RET""",
+        'new': """.WOK            LD      A, L
+                LD      (TXTWIDTH), A
+                OR      A
+                JR      Z, .TWZERO
+                LD      (SAVETW), A     ; MUTATION: WRAPMODE LEFT IN DEV
+                RET""",
+        'filter': 'H28',
+        'expect': ['H28/cfg40/boot-wrap', 'H28/cfg40/content'],
+    },
+    {
+        'name': 'h28-exsavetw',
+        'why': ':set tw=48 updates TXTWIDTH but not SAVETW.  Only setw48 '
+               'catches it: :set nowrap re-saves TXTWIDTH into SAVETW on the '
+               'unmutated path, so from there on SAVETW is right again',
+        'file': 'ACTION.Z8A',
+        'old': """.TW8OK          LD      A, L
+                LD      (TXTWIDTH), A
+                OR      A
+                JR      Z, .TWEXZ
+                LD      (SAVETW), A
+                LD      A, WRAP_TXT
+                LD      (WRAPMODE), A
+                JR      .SETOUT""",
+        'new': """.TW8OK          LD      A, L
+                LD      (TXTWIDTH), A   ; MUTATION: SAVETW NOT UPDATED
+                OR      A
+                JR      Z, .TWEXZ
+                LD      A, WRAP_TXT
+                LD      (WRAPMODE), A
+                JR      .SETOUT""",
+        'filter': 'H28',
+        'expect': ['H28/ex/setw48'],
+    },
+    {
+        'name': 'h28-pwreserve',
+        'why': 'EDPSHWR reserves the pushed tail a margin-sized record again. '
+               'A loaded line longer than the margin sends LEN + 1 - SPLIT '
+               'characters down and PUTREC does not check capacity, so the '
+               'attributes overwrite the text past the record\'s capacity',
+        'file': 'EDIT.Z8A',
+        'old': """                LD      A, (WORKBUF)
+                CP      MAXCOLS
+                JR      NC, .PWRCAP     ; LEN + 1 WOULD WRAP TO 0
+                INC     A
+.PWRCAP         CP      C
+                JR      C, .PWRES       ; LEN + 1 < MARGIN: MARGIN WINS
+                LD      C, A
+.PWRES          CALL    NEWREC""",
+        'new': """                CALL    NEWREC          ; MUTATION: MARGIN-SIZED RESERVE""",
+        'filter': 'H28',
+        'expect': ['H28/longtail/content'],
     },
 ]
 

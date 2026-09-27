@@ -125,6 +125,10 @@ INIT            DBG     "1: INIT START (S2ED)"
                 LD      (INSMODE), A
                 LD      A, WRAP_DEV
                 LD      (WRAPMODE), A
+                XOR     A
+                LD      (TXTWIDTH), A
+                LD      A, TEXTCOLS
+                LD      (SAVETW), A
                 LD      A, MKUP_MD
                 LD      (MKUPMD), A
                 LD      A, 1

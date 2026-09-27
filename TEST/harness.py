@@ -42,6 +42,7 @@ DEFAULT_VARS = [
     ('MODIFIED', 1), ('SEGCNT', 1), ('LINEOFF', 2), ('FREEHD', 1),
     ('FREEOF', 2), ('TXSEG', 1), ('APPSEG', 1), ('DIRSEG', 1), ('TXSEG0', 1),
     ('SELACT', 1), ('SELDRAWN', 1), ('CLIPLEN', 2), ('WRAPMODE', 1),
+    ('TXTWIDTH', 1), ('SAVETW', 1),
     ('TABWIDTH', 1), ('AUTOALGN', 1), ('KMAPID', 1), ('MKUPMD', 1),
     ('SAVEEOL', 1), ('CLKPH', 1), ('CLKHZ', 1), ('SCRRDY', 1),
     ('SHOWCLK', 1), ('CLKMIN', 1), ('KMAPID', 1), ('VIMODE', 1),

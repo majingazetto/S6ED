@@ -27,7 +27,7 @@ EDINSCHR        PUSH    AF
                 JR      Z, .WRTXT
 
                 ; WRAP_DEV:
-                LD      A, (CURX)
+.INSDEV         LD      A, (CURX)
                 CP      MAXCOLS
                 RET     NC              ; AT/PAST MAXCOLS (255), NO INSERT
                 LD      A, (WORKBUF)
@@ -36,20 +36,30 @@ EDINSCHR        PUSH    AF
                 JR      .DOINS
 
 .WRTXT          ; WRAP_TXT:
-                LD      A, (CURX)
-                CP      TEXTCOLS
-                RET     NC              ; PAST THE LAST COLUMN, NO INSERT
+                LD      A, (TXTWIDTH)
+                OR      A
+                JR      Z, .INSDEV      ; TXTWIDTH == 0: FREE TYPING UP TO MAXCOLS
 
-                ; LAST COLUMN STILL FREE? THEN SHIFT-AND-INSERT IS SAFE AND THE
-                ; CURSOR COLUMN DOES NOT MATTER -- NOTHING FALLS OFF THE EDGE.
-                LD      A, (WORKBUF + TEXTCOLS)
+                LD      D, A            ; D = TXTWIDTH
+                LD      A, (CURX)
+                CP      D
+                RET     NC              ; AT/PAST TXTWIDTH, NO INSERT
+
+                ; LAST COLUMN STILL FREE? (CHECK WORKBUF + TXTWIDTH)
+                PUSH    DE
+                LD      E, D
+                LD      D, 0
+                LD      HL, WORKBUF
+                ADD     HL, DE          ; HL = WORKBUF + TXTWIDTH
+                LD      A, (HL)
+                POP     DE
                 CP      ' '
                 JR      Z, .DOINS
 
-                ; THE LAST COLUMN IS OCCUPIED: INSERTING WOULD PUSH TEXT OUT
-                ; OF THE RECORD. WHAT FOLLOWS IS THE WRAP MODE'S DECISION.
+                ; THE LAST COLUMN IS OCCUPIED: PUSH-WRAP DECISION
                 LD      A, (CURX)
-                CP      TEXTCOLS - 1
+                DEC     D               ; D = TXTWIDTH - 1
+                CP      D
                 JP      NZ, EDPSHWR
                 LD      A, C
                 CP      ' '
@@ -83,13 +93,17 @@ EDINSCHR        PUSH    AF
                 CP      WRAP_TXT
                 JR      Z, .CKWTXT
                 ; WRAP_DEV: CAN ADVANCE UP TO MAXCOLS - 1
-                LD      A, B
+.ADVDEV         LD      A, B
                 CP      MAXCOLS
                 JR      NC, .NOMOV
                 LD      (CURX), A
                 JR      .NOMOV
-.CKWTXT         LD      A, B
-                CP      TEXTCOLS
+.CKWTXT         LD      A, (TXTWIDTH)
+                OR      A
+                JR      Z, .ADVDEV
+                LD      D, A            ; D = TXTWIDTH
+                LD      A, B
+                CP      D
                 JR      NC, .NOMOV
                 LD      (CURX), A
 .NOMOV          LD      A, #FF
@@ -136,11 +150,15 @@ EDINSRUN        LD      (WBSRC), HL     ; SURVIVES LINEREAD
                 CP      WRAP_TXT
                 JR      Z, .IRWTXT
                 ; WRAP_DEV: MAXCOLS
-                LD      A, MAXCOLS
+.IRDEV          LD      A, MAXCOLS
                 SUB     C
                 JR      .IRGOTRM
-.IRWTXT         LD      A, TEXTCOLS
+.IRWTXT         LD      A, (TXTWIDTH)
+                OR      A
+                JR      Z, .IRDEV
                 SUB     C
+                JR      NC, .IRGOTRM
+                XOR     A               ; ROOM = 0
 .IRGOTRM        LD      C, A            ; C = ROOM
                 LD      A, (WBRUN)
                 CP      C
@@ -176,16 +194,20 @@ EDINSRUN        LD      (WBSRC), HL     ; SURVIVES LINEREAD
                 CP      WRAP_TXT
                 JR      Z, .IRCLTXT
                 ; WRAP_DEV: CLAMP TO MAXCOLS - 1
-                LD      A, B
+.IRCLDEV        LD      A, B
                 CP      MAXCOLS
                 JR      C, .IRSETX
                 LD      A, MAXCOLS - 1
                 JR      .IRSETX
-.IRCLTXT        ; WRAP_TXT: CLAMP TO TEXTCOLS - 1
+.IRCLTXT        LD      A, (TXTWIDTH)
+                OR      A
+                JR      Z, .IRCLDEV
+                LD      D, A            ; D = TXTWIDTH
                 LD      A, B
-                CP      TEXTCOLS
+                CP      D
                 JR      C, .IRSETX
-                LD      A, TEXTCOLS - 1
+                LD      A, D
+                DEC     A               ; A = TXTWIDTH - 1
 .IRSETX         LD      (CURX), A
 
                 LD      A, #FF
@@ -219,8 +241,23 @@ EDPSHWR         CALL    UNDOCLS
                 ; BEFORE TOUCHING ANYTHING -- SAME REASON AS IN EDNWLIN. POP
                 ; DOES NOT TOUCH THE FLAGS, SO NEWREC'S CARRY SURVIVES IT.
                 PUSH    BC              ; SAVE C (CHAR TO INSERT)
-                LD      C, TEXTCOLS
-                CALL    NEWREC
+                LD      A, (TXTWIDTH)
+                OR      A
+                JR      NZ, .PWHAVRC
+                LD      A, TEXTCOLS
+.PWHAVRC        LD      C, A            ; C = WRAP MARGIN
+                ; A LINE LONGER THAN THE MARGIN (LOADED, OR TYPED UNDER NOWRAP)
+                ; SENDS MORE THAN THE MARGIN DOWN: THE TAIL IS AT MOST
+                ; LEN + 1 - SPLIT, AND PUTREC DOES NOT CHECK CAPACITY.
+                ; RESERVE MAX(MARGIN, LEN + 1); LEN = 255 ASKS FOR 256.
+                LD      A, (WORKBUF)
+                CP      MAXCOLS
+                JR      NC, .PWRCAP     ; LEN + 1 WOULD WRAP TO 0
+                INC     A
+.PWRCAP         CP      C
+                JR      C, .PWRES       ; LEN + 1 < MARGIN: MARGIN WINS
+                LD      C, A
+.PWRES          CALL    NEWREC
                 POP     BC
                 RET     C               ; NO MAPPER MEMORY: LEAVE THE LINE ALONE
                 LD      (NRSEG), A
@@ -233,7 +270,15 @@ EDPSHWR         CALL    UNDOCLS
 
                 ; 1. SPLIT COLUMN = START OF THE TRAILING WORD
                 PUSH    BC              ; SAVE C (CHAR TO INSERT)
-                LD      B, TEXTCOLS - 2 ; SCAN BACK FROM COLUMN 78
+                LD      A, (TXTWIDTH)
+                OR      A
+                JR      NZ, .PWHAVTW
+                LD      A, TEXTCOLS
+.PWHAVTW        CP      3
+                JR      C, .PWHBRK      ; TOO SHORT TO SCAN: HARD BREAK
+                DEC     A
+                DEC     A               ; A = TXTWIDTH - 2
+                LD      B, A            ; SCAN BACK FROM TXTWIDTH - 2
 .PWSCAN         LD      E, B
                 LD      D, 0
                 LD      HL, WORKBUF + 1
@@ -247,7 +292,11 @@ EDPSHWR         CALL    UNDOCLS
                 JR      NZ, .PWSCAN
 
                 ; NO SPACE AT ALL: ONE LONG WORD, HARD BREAK AT THE LAST COLUMN
-                LD      A, TEXTCOLS - 1
+.PWHBRK         LD      A, (TXTWIDTH)
+                OR      A
+                JR      NZ, .PWHB1
+                LD      A, TEXTCOLS
+.PWHB1          DEC     A               ; A = TXTWIDTH - 1
                 JR      .PWSPL
 
 .PWFND          LD      A, B
@@ -315,11 +364,17 @@ EDPSHWR         CALL    UNDOCLS
                 LD      (TOTLINES), HL
 
                 ; 8. CURSOR LANDS ONE PAST THE CHARACTER JUST TYPED
+                LD      A, (TXTWIDTH)
+                OR      A
+                JR      NZ, .PWHAVT2
+                LD      A, TEXTCOLS
+.PWHAVT2        LD      C, A            ; C = TXTWIDTH
                 LD      A, (PWCOL)
                 INC     A
-                CP      TEXTCOLS
+                CP      C
                 JR      C, .PWSETX
-                LD      A, TEXTCOLS - 1
+                LD      A, C
+                DEC     A               ; A = TXTWIDTH - 1
 .PWSETX         LD      (CURX), A
 
                 LD      A, (PWTAIL)
@@ -637,6 +692,22 @@ SETCURY         LD      HL, (DOCLINE)
 EDTGLWRP        LD      A, (WRAPMODE)
                 XOR     1
                 LD      (WRAPMODE), A
+                OR      A
+                JR      Z, .TGLDEV
+                ; TOGGLED TO WRAP_TXT: RESTORE TXTWIDTH FROM SAVETW
+                LD      A, (SAVETW)
+                OR      A
+                JR      NZ, .SETTW
+                LD      A, TEXTCOLS
+.SETTW          LD      (TXTWIDTH), A
+                RET
+.TGLDEV         ; TOGGLED TO WRAP_DEV: SAVE TXTWIDTH AND SET TO 0
+                LD      A, (TXTWIDTH)
+                OR      A
+                JR      Z, .SAVZERO
+                LD      (SAVETW), A
+.SAVZERO        XOR     A
+                LD      (TXTWIDTH), A
                 RET
 
 
@@ -705,14 +776,19 @@ REFLOW          LD      (RFLINE), HL
                 ; 3. LOAD LINE L INTO WORKBUF
                 LD      HL, (RFLINE)
                 CALL    LINEREAD
+                LD      A, (TXTWIDTH)
+                OR      A
+                JR      NZ, .RFHAVTW
+                LD      A, TEXTCOLS
+.RFHAVTW        LD      C, A            ; C = TARGET WIDTH
                 LD      A, (WORKBUF)
-                CP      TEXTCOLS
-                JP      NC, .RFNEXT     ; LINE L IS FULL, ADVANCE TO L+1
+                CP      C
+                JP      NC, .RFNEXT     ; LINE L >= TARGET WIDTH, ADVANCE TO L+1
 
                 ; 4. CALCULATE AVAILABLE SPACE ON LINE L
                 LD      E, A            ; E = LEN_A
-                LD      A, TEXTCOLS
-                SUB     E               ; A = TEXTCOLS - LEN_A
+                LD      A, C
+                SUB     E               ; A = TARGET WIDTH - LEN_A
                 LD      (RFSPACE), A
                 XOR     A
                 LD      (RFSEP), A
@@ -1646,16 +1722,23 @@ EFFCURX         LD      A, (WRAPMODE)
                 CP      WRAP_TXT
                 JR      Z, .EFWTXT
                 ; WRAP_DEV: THE CURSOR ALWAYS MEANS ITS EXACT COLUMN
-                LD      A, (CURX)
+.EFDEV          LD      A, (CURX)
                 RET
 
-.EFWTXT         LD      A, (WORKBUF)    ; LINE LENGTH
-                CP      TEXTCOLS
+.EFWTXT         LD      A, (TXTWIDTH)
+                OR      A
+                JR      Z, .EFDEV       ; TXTWIDTH == 0 -> EXACT CURX
+                PUSH    BC
+                LD      B, A            ; B = TXTWIDTH
+                LD      A, (WORKBUF)    ; LINE LENGTH
+                CP      B
                 LD      A, (CURX)       ; DOES NOT TOUCH THE FLAGS
-                RET     C               ; NOT FULL: THE CURSOR MEANS ITSELF
-                CP      TEXTCOLS - 1
-                RET     NZ              ; NOT PARKED AT THE MARGIN
-                INC     A               ; A = TEXTCOLS: PAST THE LAST COLUMN
+                JR      C, .EFDONE      ; NOT FULL: THE CURSOR MEANS ITSELF
+                DEC     B               ; B = TXTWIDTH - 1
+                CP      B
+                JR      NZ, .EFDONE     ; NOT PARKED AT MARGIN
+                INC     A               ; A = TXTWIDTH: PAST THE LAST COLUMN
+.EFDONE         POP     BC
                 RET
 
 
@@ -1818,7 +1901,18 @@ EDMOVCHR        CP      CRIGHT
 ; - CLOBBERS: B
 ; -
 
-GETMAXC         LD      B, A
+GETMAXC         LD      B, A            ; B = LINE LENGTH
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                JR      NZ, .GMCDEV
+                LD      A, (TXTWIDTH)
+                OR      A
+                JR      Z, .GMCDEV
+                CP      B               ; LINE LENGTH == TXTWIDTH?
+                JR      NZ, .GMCDEV
+                DEC     A               ; YES: CLAMP TO TXTWIDTH - 1
+                RET
+.GMCDEV         ; DEV MODE OR LINE LENGTH != TXTWIDTH:
                 LD      A, (KMAPID)
                 CP      3               ; 3 = VI PROFILE
                 JR      NZ, .NOTVI
@@ -1833,20 +1927,11 @@ GETMAXC         LD      B, A
                 JR      .CLAMP
 .NOTVI          LD      A, B
 .CLAMP          LD      B, A            ; B = CANDIDATE CURX
-                LD      A, (WRAPMODE)
-                CP      WRAP_TXT
-                JR      Z, .CLTXT
-                ; WRAP_DEV: CLAMP TO MAXCOLS - 1
+                ; CLAMP TO MAXCOLS - 1
                 LD      A, B
                 CP      MAXCOLS
                 RET     C
                 LD      A, MAXCOLS - 1
-                RET
-.CLTXT          ; WRAP_TXT: CLAMP TO TEXTCOLS - 1
-                LD      A, B
-                CP      TEXTCOLS
-                RET     C
-                LD      A, TEXTCOLS - 1
                 RET
 
 

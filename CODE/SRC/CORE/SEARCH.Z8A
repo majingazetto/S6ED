@@ -427,9 +427,14 @@ DOREPL          LD      A, (SRCHLEN)
                 LD      A, (WRAPMODE)
                 CP      WRAP_TXT
                 JR      NZ, .FITSLN
+                LD      A, (TXTWIDTH)
+                OR      A
+                JR      Z, .FITSLN
+                LD      B, A            ; B = TXTWIDTH
                 LD      A, E
-                CP      TEXTCOLS + 1
+                CP      B
                 JR      C, .FITSLN
+                JR      Z, .FITSLN
 .OVRFLW         SCF
                 RET                     ; LINE OVERFLOW: REFUSE
 .FITSLN
@@ -664,9 +669,15 @@ DORPLAL         LD      A, (SRCHLEN)
                 LD      A, (WRAPMODE)
                 CP      WRAP_TXT
                 JR      NZ, .ALOK
-                LD      A, E
-                CP      TEXTCOLS + 1
-                JR      NC, .NEXTLIN    ; WOULD OVERFLOW: SKIP
+                LD      A, (TXTWIDTH)
+                OR      A
+                JR      Z, .ALOK
+                LD      B, A            ; B = TXTWIDTH
+                LD      A, E            ; A = NEWLEN
+                CP      B
+                JR      C, .ALOK        ; NEWLEN < TXTWIDTH: OK
+                JR      Z, .ALOK        ; NEWLEN == TXTWIDTH: OK
+                JR      .NEXTLIN        ; WOULD OVERFLOW: SKIP
 .ALOK
 
                 ; UNDO RECORD: FIRST REPLACEMENT IN GROUP IS MOD, SUBSEQUENT ARE CHAINED
