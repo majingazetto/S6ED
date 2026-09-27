@@ -26,19 +26,18 @@ CHKFLEN         PUSH    DE              ; [SP+2] = FILE SIZE HIGH
 
                 ; COMPUTE SEGLNS * (TEXTCOLS + 2) -> 24-BIT RESULT IN D:HL
                 LD      BC, (SEGLNS)
-                LD      A, TEXTCOLS + 2
-                LD      E, A
+                LD      E, TEXTCOLS + 2
                 LD      HL, 0
                 LD      D, 0
                 LD      A, 8
-.MULLP          SRL     E
+.MULLP          ADD     HL, HL
+                RL      D
+                RLC     E
                 JR      NC, .NOADD
                 ADD     HL, BC
                 JR      NC, .NOADD
                 INC     D
-.NOADD          SLA     C
-                RL      B
-                DEC     A
+.NOADD          DEC     A
                 JR      NZ, .MULLP
 
                 ; D = MAX HIGH BYTE, HL = MAX LOW WORD
@@ -277,6 +276,7 @@ FILELOAD        PUSH    HL
                 XOR     A
                 LD      (CURX), A
                 LD      (CURY), A
+                LD      (LEFTCOL), A
                 AND     A               ; CY = 0: SUCCESSFUL LOAD
                 RET
 

@@ -98,7 +98,13 @@ MAINLOOP        ; CHECK CLOCK / COLON UPDATE
                 CALL    DISPKEY
 
 .DRAWCUR        ; STATUS BAR FOLLOWS THE KEY (LN / COL / FLAGS), THEN THE CURSOR
-                CALL    DRWSTAT
+                CALL    ADJLCOL
+                JR      NC, .NOSCRL
+                CALL    REDRAW
+                LD      A, (SELACT)
+                OR      A
+                CALL    NZ, SELPOST
+.NOSCRL         CALL    DRWSTAT
                 CALL    DRWCUR
                 CALL    CHKCLK          ; UPDATE CLOCK EVEN WHILE MOVING/TYPING
                 LD      A, 1

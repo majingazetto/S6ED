@@ -38,6 +38,7 @@ MACH_MSX1_1M = ('Custom_MSX1_DOS2_1M', 'nextor')
 # the difference between a diagnosis and another session.
 DEFAULT_VARS = [
     ('TOTLINES', 2), ('DOCLINE', 2), ('TOPLINE', 2), ('CURX', 1), ('CURY', 1),
+    ('LEFTCOL', 1),
     ('MODIFIED', 1), ('SEGCNT', 1), ('LINEOFF', 2), ('FREEHD', 1),
     ('FREEOF', 2), ('TXSEG', 1), ('APPSEG', 1), ('DIRSEG', 1), ('TXSEG0', 1),
     ('SELACT', 1), ('SELDRAWN', 1), ('CLIPLEN', 2), ('WRAPMODE', 1),

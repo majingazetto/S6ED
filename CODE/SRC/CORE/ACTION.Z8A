@@ -260,6 +260,53 @@ ACTBOT          CALL    CHKUNSEL
                 JP      REDRAW
 
 
+; --- ADJLCOL                   ----------------------------------------
+
+
+; - ADJLCOL ----------------------------
+; - ADJUST HORIZONTAL VIEWPORT (LEFTCOL) ACCORDING TO CURX
+; - IN:  NONE (USES CURX, LEFTCOL)
+; - OUT: CY = 1  LEFTCOL CHANGED (REDRAW NEEDED)
+; -      CY = 0  LEFTCOL UNCHANGED
+; - CLOBBERS: AF, HL
+; -
+
+ADJLCOL         LD      A, (CURX)
+                LD      HL, LEFTCOL
+                CP      (HL)
+                JR      C, .LEFTOVR
+
+                SUB     (HL)            ; A = CURX - LEFTCOL
+                CP      TEXTCOLS
+                JR      NC, .RGHTOVR
+                OR      A               ; CLEAR CARRY
+                RET
+
+.LEFTOVR        LD      A, (CURX)
+                SUB     8
+                JR      NC, .SETL
+                XOR     A               ; CLAMP TO 0
+.SETL           LD      (LEFTCOL), A
+                SCF                     ; CARRY = 1 (CHANGED)
+                RET
+
+.RGHTOVR        LD      A, (CURX)
+                SUB     TEXTCOLS
+                ADD     A, 9            ; TARGET = CURX - TEXTCOLS + 1 + 8
+                CP      MAXCOLS - TEXTCOLS
+                JR      C, .ROK
+                LD      A, MAXCOLS - TEXTCOLS
+.ROK            LD      HL, LEFTCOL
+                CP      (HL)
+                JR      Z, .NOCHG
+                LD      (HL), A
+                SCF                     ; CARRY = 1 (CHANGED)
+                RET
+
+.NOCHG          OR      A               ; NO CHANGE: CLEAR CARRY
+                RET
+
+
 ; --- ACTWLFT                   ----------------------------------------
 
 
@@ -1687,17 +1734,49 @@ SELEXT          LD      E, (IX + 0)
                 CALL    LINELEN         ; A = LENGTH
                 POP     BC
                 INC     A
-                CP      TEXTCOLS
-                JR      C, .XBCAP
-                LD      A, TEXTCOLS
-.XBCAP          LD      C, A
+                JR      NZ, .LENOK
+                DEC     A               ; CAP AT 255 IF 255 + 1 WRAPPED TO 0
+.LENOK          LD      C, A
 .XBSET          LD      A, C
                 CP      B
                 JR      Z, .NONE        ; XB == XA
-                RET     C               ; XB < XA
-                LD      D, B
-                LD      E, C
-                RET                     ; CY = 0 FROM THE CP
+                JR      C, .NONE        ; XB < XA
+
+                ; CLIP LOGICAL [B, C) TO VIEWPORT [LEFTCOL, LEFTCOL + TEXTCOLS)
+                LD      A, (LEFTCOL)
+                LD      H, A            ; H = LEFTCOL
+                CP      C
+                JR      NC, .NONE       ; LEFTCOL >= C -> OFFSCREEN LEFT
+
+                ADD     A, TEXTCOLS     ; A = LEFTCOL + TEXTCOLS
+                LD      L, A            ; L = RIGHT BOUND
+                LD      A, B
+                CP      L
+                JR      NC, .NONE       ; B >= RIGHT BOUND -> OFFSCREEN RIGHT
+
+                ; COMPUTE D = VISIBLE SCREEN XA
+                LD      A, B
+                SUB     H               ; A = B - LEFTCOL
+                JR      NC, .SAOK
+                XOR     A               ; B < LEFTCOL -> CLAMP TO SCREEN COL 0
+.SAOK           LD      D, A            ; D = SCREEN XA
+
+                ; COMPUTE E = VISIBLE SCREEN XB
+                LD      A, C
+                CP      L
+                JR      C, .SBIN        ; C < RIGHT BOUND -> SB = C - LEFTCOL
+                LD      A, TEXTCOLS     ; C >= RIGHT BOUND -> CLAMP TO TEXTCOLS
+                JR      .SBOK
+.SBIN           SUB     H               ; A = C - LEFTCOL
+.SBOK           LD      E, A            ; E = SCREEN XB
+
+                ; CHECK IF VISIBLE INTERVAL IS NON-EMPTY: E > D
+                LD      A, E
+                CP      D
+                JR      Z, .NONE
+                JR      C, .NONE
+                RET                     ; CY = 0 FROM CP (SINCE E > D)
+
 .NONE           SCF
                 RET
 
