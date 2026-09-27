@@ -9,7 +9,8 @@
 ; - REDRAW ALL TEXT ROWS (TXRFIRST TO TXRLAST)
 ; -
 
-REDRAW          XOR     A
+REDRAW          CALL    ADJLCOL
+                XOR     A
                 LD      (SELDRAWN), A
                 LD      B, TXRFIRST
 .ROWLOOP        PUSH    BC
@@ -176,10 +177,20 @@ RENDEROW        PUSH    BC
                 CALL    ROWSET
 
                 ; 2. WALK THE COLUMNS. HL = TEXT, DE = DX, C = COLUMN, B = LEN
+                LD      A, (LEFTCOL)
+                LD      E, A
                 LD      A, (WORKBUF)
-                LD      B, A
-                LD      C, 0
+                SUB     E               ; A = LEN - LEFTCOL
+                JP      C, .ALLBLK
+                JP      Z, .ALLBLK
+                CP      TEXTCOLS
+                JR      C, .LENOK
+                LD      A, TEXTCOLS
+.LENOK          LD      B, A            ; B = VISIBLE LINE LENGTH ON SCREEN
+                LD      C, 0            ; SCREEN COLUMN
                 LD      HL, WORKBUF + 1
+                LD      D, 0
+                ADD     HL, DE          ; HL = WORKBUF + 1 + LEFTCOL
                 LD      DE, TXORG_X
 
 .CELL           LD      A, C
@@ -281,6 +292,7 @@ RENDEROW        PUSH    BC
                 POP     HL              ; TEXT POINTER AT END
                 JP      .CELL
 
+.ALLBLK         CALL    CLRROW
 .DONE           POP     BC
                 RET
 
@@ -323,6 +335,11 @@ RENDIFF         PUSH    BC
                 LD      DE, (PREVLIN)
                 CALL    CMPHLDE
                 JP      NZ, .MISS
+                LD      A, (LEFTCOL)
+                LD      E, A
+                LD      A, (PREVLCOL)
+                CP      E
+                JP      NZ, .MISS
 
                 ; HIT: RENDER THE LINE INTO WORKBUF AND DIFF IT AGAINST PREVBUF
                 CALL    LINEREAD
@@ -330,23 +347,54 @@ RENDIFF         PUSH    BC
                 POP     BC
                 PUSH    BC
                 CALL    ROWSET
-                LD      HL, WORKBUF + 1 ; NEW TEXT
-                LD      DE, PREVBUF + 1 ; OLD TEXT
+
+                LD      A, (LEFTCOL)
+                LD      E, A
+                LD      A, (WORKBUF)
+                SUB     E
+                JR      C, .NEW0
+                JR      Z, .NEW0
+                CP      TEXTCOLS
+                JR      C, .NEWOK
+                LD      A, TEXTCOLS
+                JR      .NEWOK
+.NEW0           XOR     A
+.NEWOK          LD      (NEWVIS), A
+
+                LD      A, (PREVBUF)
+                SUB     E
+                JR      C, .OLD0
+                JR      Z, .OLD0
+                CP      TEXTCOLS
+                JR      C, .OLDOK
+                LD      A, TEXTCOLS
+                JR      .OLDOK
+.OLD0           XOR     A
+.OLDOK          LD      (OLDVIS), A
+
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE          ; HL = WORKBUF + 1 + LEFTCOL
+                PUSH    HL
+                LD      HL, PREVBUF + 1
+                ADD     HL, DE          ; HL = PREVBUF + 1 + LEFTCOL
+                EX      DE, HL          ; DE = PREVBUF + 1 + LEFTCOL
+                POP     HL              ; HL = WORKBUF + 1 + LEFTCOL
                 LD      C, 0            ; COLUMN
 
 .DLOOP          LD      A, C
                 CP      TEXTCOLS
                 JR      Z, .DDONE
 
-                ; B = NEW CHARACTER, A SPACE PAST THE NEW LENGTH
+                ; B = NEW CHARACTER, A SPACE PAST THE NEW VISIBLE LENGTH
                 LD      B, ' '
-                LD      A, (WORKBUF)
+                LD      A, (NEWVIS)
                 CP      C
                 JR      C, .NEWB
                 JR      Z, .NEWB
                 LD      B, (HL)
-.NEWB           ; A = OLD CHARACTER, A SPACE PAST THE OLD LENGTH
-                LD      A, (PREVBUF)
+.NEWB           ; A = OLD CHARACTER, A SPACE PAST THE OLD VISIBLE LENGTH
+                LD      A, (OLDVIS)
                 CP      C
                 LD      A, ' '
                 JR      C, .OLDB
@@ -401,7 +449,9 @@ RENDIFF         PUSH    BC
                 INC     C
                 JR      .DLOOP
 
-.DDONE          LD      HL, WORKBUF     ; THE CACHE IS NOW WHAT IS ON SCREEN
+.DDONE          LD      A, (LEFTCOL)
+                LD      (PREVLCOL), A
+                LD      HL, WORKBUF     ; THE CACHE IS NOW WHAT IS ON SCREEN
                 LD      DE, PREVBUF
                 LD      BC, WORKSIZ
                 LDIR
@@ -425,6 +475,8 @@ RENDIFF         PUSH    BC
                 LD      (PREVLIN), HL
                 LD      A, B
                 LD      (PREVROW), A
+                LD      A, (LEFTCOL)
+                LD      (PREVLCOL), A
                 LD      HL, WORKBUF
                 LD      DE, PREVBUF
                 LD      BC, WORKSIZ

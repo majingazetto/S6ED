@@ -21,7 +21,8 @@
 ; - CLOBBERS: ALL
 ; -
 
-REDRAW          XOR     A
+REDRAW          CALL    ADJLCOL
+                XOR     A
                 LD      (SELDRAWN), A
                 LD      B, TXRFIRST
 .RDLP           PUSH    BC
@@ -211,9 +212,11 @@ COMROW          LD      A, B
 
                 LD      B, 0            ; B = CELL INDEX (0..31)
 
-.CELLP          ; GET LEFT CHARACTER AND ATTRIBUTE (COL = 2*B)
+.CELLP          ; GET LEFT CHARACTER AND ATTRIBUTE (COL = LEFTCOL + 2*B)
                 LD      A, B
                 ADD     A, A            ; A = 2*B
+                LD      HL, LEFTCOL
+                ADD     A, (HL)         ; A = LEFTCOL + 2*B
                 LD      E, A
                 LD      A, (WORKBUF)    ; LINE LENGTH
                 CP      E
@@ -236,10 +239,12 @@ COMROW          LD      A, B
                 PUSH    AF
                 PUSH    DE
 
-                ; GET RIGHT CHARACTER AND ATTRIBUTE (COL = 2*B + 1)
+                ; GET RIGHT CHARACTER AND ATTRIBUTE (COL = LEFTCOL + 2*B + 1)
                 LD      A, B
                 ADD     A, A
                 INC     A               ; A = 2*B + 1
+                LD      HL, LEFTCOL
+                ADD     A, (HL)         ; A = LEFTCOL + 2*B + 1
                 LD      E, A
                 LD      A, (WORKBUF)
                 CP      E
@@ -492,10 +497,17 @@ RENDIFF         PUSH    BC
                 LD      DE, (PREVLIN)
                 CALL    CMPHLDE
                 JR      NZ, .MISS
+                LD      A, (LEFTCOL)
+                LD      E, A
+                LD      A, (PREVLCOL)
+                CP      E
+                JR      NZ, .MISS
 
                 ; CACHE HIT: UPDATE ROW AND COMMITTED CACHE
                 POP     BC
                 CALL    RENDEROW
+                LD      A, (LEFTCOL)
+                LD      (PREVLCOL), A
                 LD      HL, WORKBUF
                 LD      DE, PREVBUF
                 LD      BC, WORKSIZ
@@ -516,6 +528,8 @@ RENDIFF         PUSH    BC
                 LD      (PREVLIN), HL
                 LD      A, B
                 LD      (PREVROW), A
+                LD      A, (LEFTCOL)
+                LD      (PREVLCOL), A
                 LD      HL, WORKBUF
                 LD      DE, PREVBUF
                 LD      BC, WORKSIZ

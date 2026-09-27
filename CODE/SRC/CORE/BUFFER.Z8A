@@ -72,6 +72,7 @@ BUFRESET        CALL    SEGTRIM
                 XOR     A
                 LD      (CURX), A
                 LD      (CURY), A
+                LD      (LEFTCOL), A
                 JP      UNDOINIT
 
 

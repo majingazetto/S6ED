@@ -756,11 +756,13 @@ DRWCUR          PUSH    AF
                 PUSH    HL
 
                 LD      A, (CURX)
+                LD      HL, LEFTCOL
+                SUB     (HL)            ; A = CURX - LEFTCOL
+                JR      C, .OFFSCR      ; CURX < LEFTCOL
                 CP      TEXTCOLS
-                JR      NC, .OFFSCR
+                JR      NC, .OFFSCR     ; CURX >= LEFTCOL + TEXTCOLS
 
-                ; DX = TXORG_X + CURX * 6
-                LD      A, (CURX)
+                ; DX = TXORG_X + SCREEN_X * 6
                 LD      L, A
                 LD      H, 0
                 ADD     HL, HL          ; * 2

@@ -17,6 +17,7 @@ CODE/*.COM
 CODE/debug*.txt
 CODE/basic_screen6.txt
 CODE/screen*.png
+scratch/
 
 # --- TEST HARNESS OUTPUT ---
 TEST/out/

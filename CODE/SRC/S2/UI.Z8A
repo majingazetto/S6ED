@@ -466,17 +466,19 @@ DRWCUR          PUSH    AF
                 PUSH    IX
 
                 LD      A, (CURX)
+                LD      HL, LEFTCOL
+                SUB     (HL)            ; A = CURX - LEFTCOL
+                JR      C, .OFFSCR      ; CURX < LEFTCOL
                 CP      TEXTCOLS
-                JR      NC, .OFFSCR
+                JR      NC, .OFFSCR     ; CURX >= LEFTCOL + TEXTCOLS
+                LD      C, A            ; C = SCREEN_X
 
                 CALL    VIDBANK
 
-                ; ONE COLUMN AT (CURX, CURY + 1)
+                ; ONE COLUMN AT (SCREEN_X, CURY + 1)
                 LD      A, (CURY)
                 INC     A
                 LD      H, A            ; H = SCREEN ROW (1..22)
-                LD      A, (CURX)
-                LD      C, A            ; C = COLUMN
                 LD      B, 1
                 CALL    PATINV
 
