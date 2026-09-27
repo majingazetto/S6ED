@@ -98,10 +98,18 @@ MUTATIONS = [
         'why': 'FILELOAD clears the attribute half from the S6 offset (81 '
                'instead of 1 + TEXTCOLS): an S6 literal in shared CORE code',
         'file': 'FILEIO.Z8A',
-        'old': """                LD      HL, WORKBUF + 1 + TEXTCOLS
-                LD      (HL), 0""",
+        'old': """                LD      HL, WORKBUF + 1 + WORKATTR
+                LD      (HL), 0
+                LD      D, H
+                LD      E, L
+                INC     DE
+                LD      BC, MAXCOLS - 1""",
         'new': """                LD      HL, WORKBUF + 81  ; MUTATION: THE S6 LITERAL
-                LD      (HL), 0""",
+                LD      (HL), 0
+                LD      D, H
+                LD      E, L
+                INC     DE
+                LD      BC, MAXCOLS - 1""",
         'filter': 'T0',
         'expect_static': ['target-params'],
     },
@@ -165,17 +173,19 @@ MUTATIONS = [
         'why': 'EDDELBK walks its shift loop to a literal 79 and blanks '
                'WORKBUF + 80: an S6 literal in shared CORE code',
         'file': 'EDIT.Z8A',
-        'old': """.SHIFTLP        LD      A, B
-                CP      TEXTCOLS - 1""",
-        'new': """.SHIFTLP        LD      A, B
-                CP      79              ; MUTATION: THE S6 LITERAL""",
+        # Re-anchored 2026-09-27: since Phase B, EDDELBK shifts by the line
+        # length and addresses the attribute half through WORKATTR.  The
+        # defect is the same one: an S6 geometry literal (the 81-byte
+        # attribute offset, the 80-column blank) in EDDELBK's shift and blank.
+        'old': """                LD      HL, WORKATTR
+                ADD     HL, DE          ; HL = DEST ATTR (DEST TEXT + WORKATTR)""",
+        'new': """                LD      HL, 81          ; MUTATION: THE S6 LITERAL
+                ADD     HL, DE          ; HL = DEST ATTR (DEST TEXT + WORKATTR)""",
         'also': [('EDIT.Z8A',
-                  """.BLANKLS        LD      HL, WORKBUF + TEXTCOLS
-                LD      (HL), ' '       ; BLANK LAST TEXT COL
-                LD      HL, WORKBUF + TEXTCOLS + TEXTCOLS""",
-                  """.BLANKLS        LD      HL, WORKBUF + 80
-                LD      (HL), ' '       ; BLANK LAST TEXT COL
-                LD      HL, WORKBUF + 80 + TEXTCOLS""")],
+                  """                LD      BC, WORKATTR
+                ADD     HL, BC          ; HL = WORKBUF + L + WORKATTR""",
+                  """                LD      BC, 80          ; MUTATION: THE S6 LITERAL
+                ADD     HL, BC          ; HL = WORKBUF + L + WORKATTR""")],
         'filter': 'S2-6',
         'expect_static': ['target-params'],
     },
@@ -263,8 +273,10 @@ MUTATIONS = [
                'transaction while it is open',
         'target': 'S2ED',
         'file': 'S2/CONST_S2.Z8A',
-        'old': 'WSVBUF          EQU     #C000',
-        'new': 'WSVBUF          EQU     #5990',
+        # Re-anchored 2026-09-27: WSVBUF moved to page 3 (#C600).  Symbolic,
+        # so the mutation follows the undo ring wherever the layout puts it.
+        'old': 'WSVBUF          EQU     #C600',
+        'new': 'WSVBUF          EQU     UNDOBAS         ; MUTATION: ON THE UNDO RING',
         'filter': 'S2-12',
         'expect': ['S2-12/content'],
     },
@@ -902,7 +914,7 @@ MUTATIONS = [
         'name': 't0-layout-off',
         'why': 'CORE addresses the attribute half of a line record as + 81',
         'file': 'ACTION.Z8A',
-        'old': 'LD      HL, WORKBUF + 1 + TEXTCOLS\n                ADD     HL, DE\n                EX      DE, HL          ; DE = DEST\n\n                LD      A, (DWFROM)',
+        'old': 'LD      HL, WORKBUF + 1 + WORKATTR\n                ADD     HL, DE\n                EX      DE, HL          ; DE = DEST\n\n                LD      A, (DWFROM)',
         'new': 'LD      HL, WORKBUF + 81\n                ADD     HL, DE\n                EX      DE, HL          ; DE = DEST\n\n                LD      A, (DWFROM)',
         'filter': 'T0',
         'expect_static': ['target-params'],
@@ -915,8 +927,10 @@ MUTATIONS = [
         'name': 't0-geom-imm',
         'why': 'CORE bounds a record loop with the literal 79',
         'file': 'EDIT.Z8A',
-        'old': '.SHIFTLP        LD      A, B\n                CP      TEXTCOLS - 1',
-        'new': '.SHIFTLP        LD      A, B\n                CP      79',
+        # Re-anchored 2026-09-27: the shift loop is gone since Phase B; the
+        # record bound CORE checks today is MAXCOLS in EDINSCHR.
+        'old': 'CP      MAXCOLS\n                RET     NC              ; AT/PAST MAXCOLS (255), NO INSERT',
+        'new': 'CP      79\n                RET     NC              ; AT/PAST MAXCOLS (255), NO INSERT',
         'filter': 'T0',
         'expect_static': ['target-params'],
     },
