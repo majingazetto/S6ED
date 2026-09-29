@@ -2194,10 +2194,15 @@ class S220UndoSelDel(S2Case):
                    for lb in ('deleted', 'undone', 'redone', 'undone2')]
             ok = (run.var('deleted', 'UNDOPTR') != 0 and
                   tot == [n - gone, n, n - gone, n])
+            if v == 'big':
+                ok = (ok and run.var('undone', 'CURY') == 0 and
+                      run.var('undone', 'TOPLINE') <= 0)
             checks.append(Check('S2-20/%s/cycle' % v, ok,
                                 'recorded; TOTLINES through the cycle %s' % tot
-                                if ok else 'UNDOPTR %s, TOTLINES %s'
-                                % (run.var('deleted', 'UNDOPTR'), tot)))
+                                if ok else 'UNDOPTR %s, TOTLINES %s, undone top=%s cury=%s'
+                                % (run.var('deleted', 'UNDOPTR'), tot,
+                                   run.var('undone', 'TOPLINE'),
+                                   run.var('undone', 'CURY'))))
             got = run.session.extract(run.dsk, 'DOC.TXT')
             want = crlf(self.want(v))
             checks.append(Check('S2-20/%s/content' % v, got == want,

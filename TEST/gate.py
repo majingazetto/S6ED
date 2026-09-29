@@ -4926,6 +4926,13 @@ class U6UndoSelDel(Case):
             t.wait(1.0)
             t.snap('scrolled')
             t.press('A', mods=['CTRL'])
+            t.press('DEL')
+            t.wait(1.0)
+            t.snap('deleted')
+            t.press('S', mods=['CTRL'])
+            t.wait(3.0)
+            t.snap('saved')
+            return t
         elif variant == 'single':
             t.press('RIGHT', repeat=2)
             t.press('RIGHT', mods=['SHIFT'], repeat=5)
@@ -4943,10 +4950,22 @@ class U6UndoSelDel(Case):
         checks = []
         for v in self.variants:
             run = runs[v]
-            n = len(self.lines(v))
             if v == 'scrolled':
-                gone, col = n - 1, 0
-            elif v == 'single':
+                # The selection began above the viewport: ACTDLS must bring
+                # the cursor back on screen via SHOWLN so CURY is not negative.
+                ok = (run.var('scrolled', 'TOPLINE') > 0 and
+                      run.var('deleted', 'TOPLINE') <= 0 and
+                      run.var('deleted', 'CURY') == 0)
+                checks.append(Check('U6/scrolled/visible', ok,
+                                    'cursor on screen after delete'
+                                    if ok else
+                                    'scrolled top=%s; deleted top=%s cury=%s'
+                                    % (run.var('scrolled', 'TOPLINE'),
+                                       run.var('deleted', 'TOPLINE'),
+                                       run.var('deleted', 'CURY'))))
+                continue
+            n = len(self.lines(v))
+            if v == 'single':
                 gone, col = 0, 2
             else:
                 gone, col = 3, 3
@@ -4971,18 +4990,6 @@ class U6UndoSelDel(Case):
                                 'document restored byte for byte'
                                 if got == want else
                                 'got %r' % (got[:8] if got else got)))
-            if v == 'scrolled':
-                # The selection began above the viewport: the cursor has to be
-                # brought back on screen, after the delete and after the undo.
-                vis = [(lb, run.var(lb, 'TOPLINE'), run.var(lb, 'CURY'))
-                       for lb in ('deleted', 'undone', 'redone', 'undone2')]
-                ok = run.var('scrolled', 'TOPLINE') > 0 and all(
-                    top <= 0 and cury == 0 for _, top, cury in vis)
-                checks.append(Check('U6/scrolled/visible', ok,
-                                    'cursor on screen after delete and undo'
-                                    if ok else 'TOPLINE/CURY: %s (scrolled '
-                                    'TOPLINE %s)' % (vis, run.var(
-                                        'scrolled', 'TOPLINE'))))
         return checks
 
 
@@ -4998,9 +5005,9 @@ class U7UndoRing(Case):
     cfg = UNDO_CFG
     variants = ('evict', 'selfloop', 'toobig', 'depth')
     LINES = ['R%02d %s' % (i, 'LINE OF THE RING TEST') for i in range(60)]
-    # 171-byte records: 47 fit under the top of the 8 KB ring, so 50 edits
+    # 171-byte records: 23 fit under the top of the 4 KB ring, so 26 edits
     # wrap it three times and evict exactly the three oldest
-    EDITS, KEPT = 50, 47
+    EDITS, KEPT = 26, 23
 
     def fixture(self, ctx, variant=None):
         return crlf(self.LINES)
@@ -5009,8 +5016,8 @@ class U7UndoRing(Case):
         t = Timeline()
         t.wait(1.0)
         if variant == 'evict':
-            # 46 records (UNDOGMAX): lines 0..45, from BAS to BAS + 7866
-            t.press('DOWN', mods=['SHIFT'], repeat=45)
+            # 22 records (UNDOGMAX): lines 0..21, from BAS to BAS + 3762
+            t.press('DOWN', mods=['SHIFT'], repeat=21)
             t.press('DEL')
             t.wait(1.0)
             t.snap('deleted')
@@ -5027,17 +5034,17 @@ class U7UndoRing(Case):
                 t.wait(1.0)
             t.snap('undone')
         elif variant == 'selfloop':
-            # R0 at BAS, then a 46-record group behind it: 47 records, full
+            # R0 at BAS, then a 22-record group behind it: 23 records, full
             t.text('X')
             t.press('LEFT')
             t.press('DOWN')
-            t.press('DOWN', mods=['SHIFT'], repeat=45)
+            t.press('DOWN', mods=['SHIFT'], repeat=21)
             t.press('DEL')
             t.press('Z', mods=['CTRL'])     # the group goes to redo
             t.wait(1.0)
             t.snap('ungrouped')
             # The new record wraps onto R0, the head of the undo chain
-            t.press('DOWN', repeat=49)
+            t.press('DOWN', repeat=25)
             t.text('Y')
             t.press('Z', mods=['CTRL'])
             t.wait(1.0)
@@ -5071,7 +5078,7 @@ class U7UndoRing(Case):
     def verify(self, ctx, runs):
         checks = []
         got = disk_lines(runs['evict'])
-        want = self.LINES[45:]
+        want = self.LINES[21:]
         checks.append(Check('U7/evict/content', got == want,
                             'the evicted group is not replayed: Ctrl+Z x3 '
                             'undoes Z and Y and stops'
@@ -5093,8 +5100,8 @@ class U7UndoRing(Case):
         checks.append(Check('U7/selfloop/content', got == want,
                             'Y undone once and stays undone'
                             if got == want else
-                            'line 50 = %r' % (got[50] if got and
-                                              len(got) > 50 else got)))
+                            'line 26 = %r' % (got[26] if got and
+                                              len(got) > 26 else got)))
         checks.append(Check('U7/selfloop/empty',
                             run.var('undone2', 'UNDOPTR') == 0 and
                             run.var('undone2', 'REDOPTR') != 0,

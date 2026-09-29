@@ -197,7 +197,7 @@ Every case names the defect it was derived from in its `origin` field.
 | I3 | convert DOS document to UNIX on save via EOL=UNIX | `PARSEOL` `AUTOLOD=0` and `SAVEEOL=1` |
 | I4 | convert UNIX document to DOS on save via EOL=DOS | `PARSEOL` `AUTOLOD=0` and `SAVEEOL=0` |
 | U6 | deleting a selection is one undo step, on every shape: several lines, one line, with older history below it, started above the viewport | `ACTDLS` recording nothing, so Ctrl+Z replayed a stale record on the line that now had its number |
-| U7 | a group lives or dies whole in the ring; a new edit cuts the redo chain; a delete over `UNDOGMAX` drops the history; 50 edits keep the last 47 | `UNDOEVC` evicting every record above the write point on each wrap, and the head left linked to stale redo records |
+| U7 | a group lives or dies whole in the ring; a new edit cuts the redo chain; a delete over `UNDOGMAX` drops the history; 26 edits keep the last 23 | `UNDOEVC` evicting every record above the write point on each wrap, and the head left linked to stale redo records |
 | U8 | push-wrap and reflow, which move text across lines unrecorded, drop the history | the record of an earlier edit naming a line they shifted |
 | U9 | paste, word delete, markup wrap and a bold toggle across lines each undo in one step | `EDINSRUN`, `ACTDWLFT`, `WRAPSEL`, `APPLSEL` writing lines with no record |
 | H18-H20 | window robustness, dirty quit prompt with unsaved changes alert, and drop shadow | Fase 3a & C3 window engine |

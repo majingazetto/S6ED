@@ -2100,13 +2100,15 @@ SELTMPXB        EQU     SELTMPXB2""")],
     {
         'name': 'undo-pnt-showln',
         'why': 'the repaint after an undo trusts the recorded TOPLINE, which '
-               'need not show a cursor restored above it',
+               'need not show a cursor restored above it (catchable on S2ED where '
+               'UNDOGMAX 28 > ROWSVIS 22)',
+        'target': 'S2ED',
         'file': 'UNDO.Z8A',
         'old': """UNDOPNT         LD      HL, (DOCLINE)
                 CALL    SHOWLN""",
         'new': """UNDOPNT         CALL    SETCURY         ; MUTATION: TOPLINE TRUSTED""",
-        'filter': 'U6',
-        'expect': ['U6/scrolled/visible'],
+        'filter': 'S2-20',
+        'expect': ['S2-20/big/cycle'],
     },
     {
         'name': 's2-undo-seldel',
