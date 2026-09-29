@@ -205,7 +205,6 @@ CFGHAND         DEFB    0               ; S6ED.CFG FILE HANDLE
 CFGLEN          DEFB    0               ; CURRENT LINE LENGTH IN LINBUF
 CFGPTR          DEFW    0               ; SCAN POINTER INTO THE CLIPBUF CHUNK
 CFGREM          DEFW    0               ; BYTES LEFT UNREAD IN THE CHUNK
-LINBUF          DEFS    LINMAX, 0       ; ONE CFG LINE, NULL-TERMINATED
 CFGFNP          DEFW    0               ; CFGLOAD: ASCIIZ NAME OF THE CFG TO READ
 
 
@@ -220,7 +219,6 @@ CFGFNP          DEFW    0               ; CFGLOAD: ASCIIZ NAME OF THE CFG TO REA
 LOADFLG         DEFB    0               ; LOAD_FLAG (#0037) AS FOUND AT INIT
 HOMELEN         DEFB    0               ; LENGTH OF THE DIRECTORY PREFIX IN HOMEPTH
 CFGLOC          DEFB    0               ; 1 = CURRENT DIR IS NOT HOME: READ ITS CFG TOO
-HOMEPTH         DEFS    HOMEMAX, 0      ; PROGRAM STRING, THEN HOME-RELATIVE NAMES
 
 
 ; --- MODAL TEXT INPUT          ----------------------------------------
@@ -263,7 +261,6 @@ RPLCNT          DEFW    0               ; REPLACE ALL COUNTER
 ; --- FILE                      ----------------------------------------
 
 
-FILENAME        DEFS    FNAMLEN, 0      ; CURRENT FILENAME (ASCIIZ)
 FILEHAND        DEFB    0               ; OPEN FILE HANDLE
 SAVHAND         DEFB    0               ; FILESAVE: HANDLE OF THE FILE BEING WRITTEN
 WASCR           DEFB    0               ; 1 = LAST CHAR PROCESSED WAS CR

@@ -195,12 +195,15 @@ CHKFILE         LD      A, (PARBUF)     ; TOTAL PARAM COUNT
 .FOUND          POP     BC
                 LD      HL, PARMTMP
                 LD      DE, FILENAME
+                LD      B, FNAMLEN - 1  ; THE COPY USED TO BE UNBOUNDED
 .COPY           LD      A, (HL)
                 LD      (DE), A
                 AND     A
                 JR      Z, .DONE
                 INC     HL
                 INC     DE
-                JR      .COPY
+                DJNZ    .COPY
+                XOR     A
+                LD      (DE), A         ; TRUNCATED: TERMINATE
 .DONE           AND     A               ; CY=0
                 RET

@@ -114,6 +114,7 @@ is caught only by `S2-8/matches-document`. Measured, 2026-09-21.
 | `S2-23-home-path` | `H29-home-path` on the S2 target, and the measurement that Nextor's `COMMAND2` on an MSX1 sets `PROGRAM` and `LOAD_FLAG` exactly as MSX-DOS 2 does |
 | `S2-24-shipped-disk` | `B5-shipped-disk` on the S2 target: `S2ED.DSK` as `make dsk-s2` builds it, booted on the MSX1 under Nextor |
 | `S2-25-new-document` | `H30-new-document` on S2ED, whose `DONEW` / `DOASK` live in `S2/WINDOW.Z8A` |
+| `S2-26-long-path` | `H33-long-path` on S2ED, row 0 compared with the computed bar |
 
 Two traps this suite met while being built, both worth knowing before adding a
 case:
@@ -213,6 +214,7 @@ Every case names the defect it was derived from in its `origin` field.
 | H30 | Ctrl+N and File > New: a clean document is replaced at once, a modified one only after YES in the New Document dialog (`DONEW` = `DOASK` with its text) | New reset a modified document without asking; Ctrl+N bound nowhere |
 | H31 | `:e` loads, `:e` on a missing file opens an empty document under that name (vi), `:e` on an oversized file keeps the current document and its name, `:e!` clears `MODIFIED` | `FILELOAD` reset the document before opening, and `:e` put the new name in `FILENAME` first: a refused load left the old text under the refused file's name |
 | H32 | Ctrl+S with no file name reports `[NO FILE NAME]` | `FILESAVE` returned in silence |
+| H33 | a 48-character path on the command line: loaded, Ctrl+S writes it back to the same place (read with `dskfat get`), row 0 shows only `NOTES.TXT` (glyphs checked at their right-aligned position, no ink to their left) | `FILENAME` was 40 bytes, `CHKFILE` copied into it unbounded, and the menu bar printed the whole string |
 
 **G7 is the general one.** A full `REDRAW` repaints from the document alone, so
 comparing the screen before and after one is a test of every differential painter

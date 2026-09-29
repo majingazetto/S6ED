@@ -126,6 +126,13 @@ INIT            DBG     "1: INIT START"
                 LD      (HL), 0
                 LDIR
 
+                ; CLEAR THE PAGE 3 SCRATCH BLOCK (HOMEPTH, LINBUF, FILENAME)
+                LD      HL, P3BASE
+                LD      DE, P3BASE + 1
+                LD      BC, P3TOP - P3BASE - 1
+                LD      (HL), 0
+                LDIR
+
                 ; LOAD_FLAG IS ZEROED BY EVERY DOS 2 CALL, SO IT HAS TO BE
                 ; READ BEFORE THE FIRST ONE (DOSVER): HOMEINIT TRUSTS THE
                 ; PROGRAM ENVIRONMENT ITEM ONLY WHEN THE SHELL SET IT NOW.

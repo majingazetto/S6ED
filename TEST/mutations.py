@@ -11,6 +11,50 @@ import shutil
 
 MUTATIONS = [
     {
+        'name': 'f1-fnamlen40',
+        'why': 'FILENAME back to 40 bytes: a 48-character path is cut on the '
+               'command line and the file it names cannot be found',
+        'file': 'CONST_CORE.Z8A',
+        'old': "FNAMLEN         EQU     64",
+        'new': "FNAMLEN         EQU     40              ; MUTATION",
+        'filter': 'H33',
+        'expect': ['H33/loaded', 'H33/filename'],
+    },
+    {
+        'name': 's2-f1-fnamlen40',
+        'why': 'FILENAME back to 40 bytes on S2ED',
+        'target': 'S2ED',
+        'file': 'CONST_CORE.Z8A',
+        'old': "FNAMLEN         EQU     64",
+        'new': "FNAMLEN         EQU     40              ; MUTATION",
+        'filter': 'S2-26',
+        'expect': ['S2-26/loaded', 'S2-26/filename'],
+    },
+    {
+        'name': 'f1-fnbase',
+        'why': 'the menu bar prints the whole FILENAME, path included, over '
+               'the menu titles',
+        'file': 'UI.Z8A',
+        'old': """                CALL    FNBASE
+                PUSH    HL              ; FOR BLTSTR""",
+        'new': """                LD      HL, FILENAME    ; MUTATION: THE WHOLE PATH
+                PUSH    HL              ; FOR BLTSTR""",
+        'filter': 'H33',
+        'expect': ['H33/menu-name'],
+    },
+    {
+        'name': 's2-f1-fnbase',
+        'why': 'S2ED\'s menu bar copies the whole FILENAME, path included',
+        'target': 'S2ED',
+        'file': 'UI.Z8A',
+        'old': """                CALL    FNBASE
+                PUSH    HL              ; FOR THE COPY BELOW""",
+        'new': """                LD      HL, FILENAME    ; MUTATION: THE WHOLE PATH
+                PUSH    HL              ; FOR THE COPY BELOW""",
+        'filter': 'S2-26',
+        'expect': ['S2-26/menu-name'],
+    },
+    {
         'name': 'f0-new-noask',
         'why': 'the defect as it shipped: New resets a modified document '
                'without asking',

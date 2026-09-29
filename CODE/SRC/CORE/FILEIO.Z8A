@@ -329,6 +329,32 @@ FNAMSET         LD      DE, FILENAME
                 RET
 
 
+; - FNBASE -----------------------------
+; - THE LAST ITEM OF FILENAME: WHAT FOLLOWS ITS LAST '\' OR ':'
+; - IN:  NONE
+; - OUT: HL = FIRST CHARACTER OF THE NAME PROPER (FILENAME ITSELF WHEN
+; -      IT CARRIES NO PATH)
+; - CLOBBERS: AF, DE
+; -
+
+FNBASE          LD      HL, FILENAME
+                LD      D, H
+                LD      E, L            ; DE = START OF THE CURRENT ITEM
+.SCAN           LD      A, (HL)
+                INC     HL
+                OR      A
+                JR      Z, .DONE
+                CP      #5C             ; '\'
+                JR      Z, .ITEM
+                CP      ':'
+                JR      NZ, .SCAN
+.ITEM           LD      D, H
+                LD      E, L            ; A NEW ITEM STARTS AFTER IT
+                JR      .SCAN
+.DONE           EX      DE, HL
+                RET
+
+
 ; - STORLINE ---------------------------
 ; - FINISH CURRENT LINE, ADD TO DIRECTORY, PREPARE NEXT
 ; - IN:  NONE (USES CURLLEN, TOTLINES)

@@ -352,7 +352,9 @@ DRWMENU         CALL    VIDBANK
                 LD      A, (FILENAME)
                 OR      A
                 JR      Z, .NODRAW
-                LD      HL, FILENAME
+                ; ONLY THE LAST ITEM: FILENAME IS A FULL PATH SINCE F1
+                CALL    FNBASE
+                PUSH    HL              ; FOR THE COPY BELOW
                 LD      B, 0
 .FNLEN          LD      A, (HL)
                 OR      A
@@ -362,8 +364,14 @@ DRWMENU         CALL    VIDBANK
                 LD      A, B
                 CP      20
                 JR      NZ, .FNLEN
-.FNDON          ; B = LENGTH (1..20)
-                ; END AT COL 62, START AT 63 - B
+.FNDON          ; B = LENGTH (0..20). 0 ONLY IF THE PATH ENDS IN A SEPARATOR,
+                ; AND THEN THE LDIR BELOW WOULD COPY 64 KB WITH BC = 0.
+                LD      A, B
+                OR      A
+                JR      NZ, .FNHAS
+                POP     HL
+                JR      .NODRAW
+.FNHAS          ; END AT COL 62, START AT 63 - B
                 LD      A, 63
                 SUB     B
                 LD      E, A
@@ -371,7 +379,7 @@ DRWMENU         CALL    VIDBANK
                 LD      HL, STATBUF
                 ADD     HL, DE          ; HL = DESTINATION IN STATBUF
                 EX      DE, HL          ; DE = DESTINATION
-                LD      HL, FILENAME
+                POP     HL
                 LD      C, B
                 LD      B, 0
                 LDIR
