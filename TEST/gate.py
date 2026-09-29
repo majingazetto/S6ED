@@ -543,6 +543,56 @@ class G8Config(Case):
         return checks
 
 
+# --- B4  CFG BEYOND THE BUFFER ------------------------------------------
+
+
+class B4CfgStream(Case):
+    name = 'B4-cfg-stream'
+    desc = 'a CFG far past the old 1024-byte cap and the 2048-byte chunk'
+    origin = ('CFGLOAD read at most 1024 bytes of S6ED.CFG and silently '
+              'dropped the rest, and the shipped CFG was already 922 bytes.  '
+              'The loader now streams CLIPMAX-byte chunks and parses line by '
+              'line, so the file size is no longer capped by any buffer')
+    AMBER = [0x00, 0x00, 0x70, 0x04, 0x20, 0x01, 0x70, 0x06]
+
+    # 32 comment lines of 81 bytes push every real key past byte 2048, so a
+    # single-chunk loader cannot see them.  The overlong line (130 spaces
+    # before the key) must be dropped whole: if its TABWIDTH=2 leaked
+    # through, it would win over the TABWIDTH=8 above it.  PROFILE comes
+    # last with no trailing EOL, the EOF-with-pending-line path.
+    cfg = ((';' + ' pad' * 19 + '\r\n') * 32 +
+           "TABWIDTH = 8\r\n" +
+           ' ' * 130 + "TABWIDTH = 2\r\n" +
+           "THEME = AMBER\r\n" +
+           "PROFILE=WS")
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', palette=True)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        checks = []
+        checks.append(Check('B4/past-chunk',
+                            run.var('boot', 'TABWIDTH') == 8,
+                            'TABWIDTH=%s (key past byte 2048, overlong '
+                            'sibling dropped)' % run.var('boot', 'TABWIDTH')))
+        checks.append(Check('B4/no-final-eol',
+                            run.var('boot', 'KMAPID') == 1,
+                            'KMAPID=%s (PROFILE=WS, no trailing EOL)'
+                            % run.var('boot', 'KMAPID')))
+        pal = run.snaps.get('boot', {}).get('PALDATA')
+        checks.append(Check('B4/theme', pal == self.AMBER,
+                            'PALDATA = %s'
+                            % (' '.join('%02X' % b for b in pal)
+                               if pal else '?')))
+        return checks
+
+
 # --- G9  THE LINE DIRECTORY SURVIVES BANKING --------------------------
 
 
@@ -5309,7 +5359,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H19QuitDialog(), H20QuitDirty(), H21Shadow(), H22FileMenu(), H23MenuNav(),
          H24GoToLine(), H25FindReplace(), H26FindCurrentLine(), H27ViEx(),
          H28TextWidth(),
-         B2Font(), B3Rom(), F1Scroll(), F2Keyrun(),
+         B2Font(), B3Rom(), B4CfgStream(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),
          E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit(),

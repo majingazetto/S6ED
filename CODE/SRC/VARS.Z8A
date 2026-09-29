@@ -195,6 +195,19 @@ PSTRUN          DEFB    0               ; LENGTH OF THE RUN BEING INSERTED
 CLIPBUF         DEFS    CLIPMAX, 0      ; CLIPBOARD BUFFER IN PAGE 0 RAM
 
 
+; --- CFG LOADER STATE          ----------------------------------------
+
+
+                ; CFGLOAD RUNS DURING INIT, BEFORE ANY EDITING, SO EACH
+                ; CHUNK IT READS GOES INTO CLIPBUF; THIS STATE SURVIVES
+                ; PRSLINE, WHICH CLOBBERS EVERY REGISTER.
+CFGHAND         DEFB    0               ; S6ED.CFG FILE HANDLE
+CFGLEN          DEFB    0               ; CURRENT LINE LENGTH IN LINBUF
+CFGPTR          DEFW    0               ; SCAN POINTER INTO THE CLIPBUF CHUNK
+CFGREM          DEFW    0               ; BYTES LEFT UNREAD IN THE CHUNK
+LINBUF          DEFS    LINMAX, 0       ; ONE CFG LINE, NULL-TERMINATED
+
+
 ; --- MODAL TEXT INPUT          ----------------------------------------
 
 

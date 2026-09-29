@@ -10,6 +10,9 @@
 
 ; - CFGLOAD ----------------------------
 ; - LOAD S6ED.CFG IF PRESENT AND APPLY
+; - THE FILE IS STREAMED IN CLIPMAX-BYTE CHUNKS THROUGH CLIPBUF (IDLE
+; - DURING INIT) AND EVERY COMPLETE LINE IS PARSED FROM LINBUF, SO THE
+; - CFG SIZE IS NOT CAPPED BY ANY BUFFER: EOF IS A READ THAT RETURNS 0.
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
@@ -18,50 +21,107 @@
 CFGLOAD         LD      HL, CFGNAME
                 CALL    DSKOPEN
                 RET     C               ; FILE NOT FOUND: USE DEFAULTS
+                LD      (CFGHAND), A
 
-                PUSH    AF              ; SAVE FILE HANDLE (DSKREAD CLOBBERS BC)
-                LD      HL, 1024        ; READ UP TO 1024 BYTES INTO CLIPBUF
+.RDCHNK         LD      A, (CFGHAND)
+                LD      HL, CLIPMAX
                 LD      DE, CLIPBUF
-                CALL    DSKREAD         ; HL = BYTES READ
-                LD      C, L
-                LD      B, H            ; BC = BYTES READ
-                POP     AF              ; A = FILE HANDLE
-                PUSH    BC              ; KEEP BYTE COUNT ACROSS CLOSE
-                CALL    DSKCLOSE
-                POP     BC              ; BC = BYTES READ
-
-                LD      A, B
-                OR      C
-                RET     Z               ; EMPTY FILE
-
-                ; NULL-TERMINATE BUFFER
+                CALL    DSKREAD         ; HL = BYTES READ (0 = EOF)
+                LD      A, H
+                OR      L
+                JR      Z, .EOF
+                LD      (CFGREM), HL
                 LD      HL, CLIPBUF
-                ADD     HL, BC
-                LD      (HL), 0
+                LD      (CFGPTR), HL
 
-                ; PARSE LINES FROM CLIPBUF
-                LD      HL, CLIPBUF
-.LINELP         LD      A, (HL)
+.CHR            LD      HL, (CFGREM)
+                LD      A, H
+                OR      L
+                JR      Z, .RDCHNK      ; CHUNK EXHAUSTED: READ MORE
+                DEC     HL
+                LD      (CFGREM), HL
+                LD      HL, (CFGPTR)
+                LD      A, (HL)
+                INC     HL
+                LD      (CFGPTR), HL
+                CP      13              ; CR
+                JR      Z, .EOL
+                CP      10              ; LF
+                JR      Z, .EOL
+                LD      C, A            ; KEEP THE CHARACTER
+                LD      A, (CFGLEN)
+                CP      LINMAX - 1
+                JR      NC, .CHR        ; LINE FULL: DROP UNTIL EOL
+                LD      E, A
+                LD      D, 0
+                LD      HL, LINBUF
+                ADD     HL, DE
+                LD      (HL), C
+                INC     A
+                LD      (CFGLEN), A
+                JR      .CHR
+
+.EOL            LD      A, (CFGLEN)
                 OR      A
-                JP      Z, .CFGDON      ; END OF BUFFER: APPLY PALETTE IF DIRTY
+                JR      Z, .CHR         ; EMPTY LINE (INCL. THE LF OF CRLF)
+                CALL    .TERMPRS
+                JR      .CHR
 
-                ; SKIP LEADING WHITESPACE / EMPTY LINES
+.EOF            LD      A, (CFGHAND)
+                CALL    DSKCLOSE
+                LD      A, (CFGLEN)
+                OR      A
+                CALL    NZ, .TERMPRS    ; LAST LINE WITHOUT EOL
+
+                LD      A, (PALDIRT)
+                OR      A
+                RET     Z
+                ; S2ED'S SETPAL TAKES NO ARGUMENT: IT REAPPLIES THE ROLE
+                ; VARIABLES A THEME= LINE JUST REWROTE. S6ED'S STREAMS THE
+                ; V9938 PALETTE BLOCK AT HL.
+                IFNDEF  S2ED
+                LD      HL, PALDATA
+                ENDIF
+                JP      SETPAL
+
+.TERMPRS        ; TERMINATE LINBUF, PARSE THE LINE, RESET THE LENGTH
+                LD      A, (CFGLEN)
+                LD      E, A
+                LD      D, 0
+                LD      HL, LINBUF
+                ADD     HL, DE
+                LD      (HL), 0
+                XOR     A
+                LD      (CFGLEN), A
+                LD      HL, LINBUF
+                JP      PRSLINE
+
+
+; --- PRSLINE                   ----------------------------------------
+
+
+; - PRSLINE ----------------------------
+; - PARSE ONE NULL-TERMINATED CFG LINE
+; - IN:  HL = LINE START (LINBUF)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+PRSLINE         LD      A, (HL)
+                OR      A
+                RET     Z               ; EMPTY LINE
                 CP      ' '
                 JR      Z, .NEXTCH
                 CP      9               ; TAB
                 JR      Z, .NEXTCH
-                CP      13              ; CR
-                JR      Z, .NEXTCH
-                CP      10              ; LF
-                JR      Z, .NEXTCH
                 CP      ';'             ; COMMENT
-                JP      Z, .SKPLIN
+                RET     Z
                 CP      '#'             ; COMMENT
-                JP      Z, .SKPLIN
+                RET     Z
                 JR      .PARSLN
 
 .NEXTCH         INC     HL
-                JR      .LINELP
+                JR      PRSLINE
 
 .PARSLN         ; CHECK "PROFILE"
                 PUSH    HL
@@ -71,8 +131,8 @@ CFGLOAD         LD      HL, CFGNAME
                 CALL    CFGVAL          ; "PROFILE = ..." ALSO ACCEPTED
                 JR      NC, .NOTPRF
                 CALL    PARSPRF
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
 .NOTPRF         POP     HL
                 PUSH    HL
@@ -82,8 +142,8 @@ CFGLOAD         LD      HL, CFGNAME
                 CALL    CFGVAL
                 JR      NC, .NOTWRP
                 CALL    PARSWRP
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
 .NOTWRP         POP     HL
                 PUSH    HL
@@ -93,8 +153,8 @@ CFGLOAD         LD      HL, CFGNAME
                 CALL    CFGVAL
                 JR      NC, .NOTTW1
                 CALL    PARSTW
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
 .NOTTW1         POP     HL
                 PUSH    HL
@@ -104,8 +164,8 @@ CFGLOAD         LD      HL, CFGNAME
                 CALL    CFGVAL
                 JR      NC, .NOTTW2
                 CALL    PARSTW
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
 .NOTTW2         POP     HL
                 PUSH    HL
@@ -115,8 +175,8 @@ CFGLOAD         LD      HL, CFGNAME
                 CALL    CFGVAL
                 JR      NC, .NOTMKP
                 CALL    PARSMKP
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
 .NOTMKP         POP     HL
                 PUSH    HL
@@ -126,8 +186,8 @@ CFGLOAD         LD      HL, CFGNAME
                 CALL    CFGVAL
                 JR      NC, .NOTCLK
                 CALL    PARSCLK
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
 .NOTCLK         POP     HL
                 PUSH    HL
@@ -137,8 +197,8 @@ CFGLOAD         LD      HL, CFGNAME
                 CALL    CFGVAL
                 JR      NC, .NOTTAB
                 CALL    PARSTAB
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
 .NOTTAB         POP     HL
                 PUSH    HL
@@ -148,8 +208,8 @@ CFGLOAD         LD      HL, CFGNAME
                 CALL    CFGVAL
                 JR      NC, .NOTEOL
                 CALL    PARSEOL
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
 .NOTEOL         POP     HL
                 PUSH    HL
@@ -159,8 +219,8 @@ CFGLOAD         LD      HL, CFGNAME
                 CALL    CFGVAL
                 JR      NC, .NOTALN
                 CALL    PARSALN
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
 .NOTALN         POP     HL
                 PUSH    HL
@@ -170,8 +230,8 @@ CFGLOAD         LD      HL, CFGNAME
                 CALL    CFGVAL
                 JR      NC, .NOTSHD
                 CALL    PARSSHD
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
 .NOTSHD         POP     HL
                 PUSH    HL
@@ -181,8 +241,8 @@ CFGLOAD         LD      HL, CFGNAME
                 CALL    CFGVAL
                 JR      NC, .NOTTHM
                 CALL    PARSTHM
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
                 IFDEF   S2ED
                 ; NO COLOR_* KEYS ON S2ED. THE TMS9918 PALETTE IS FIXED, SO
@@ -202,8 +262,8 @@ CFGLOAD         LD      HL, CFGNAME
                 JR      NC, .NOTCBG
                 LD      C, 0            ; COLOR 0 = BG
                 CALL    PARSCOL
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
 .NOTCBG         POP     HL
                 PUSH    HL
@@ -220,8 +280,8 @@ CFGLOAD         LD      HL, CFGNAME
                 JR      NC, .NOTCTX
                 LD      C, 1            ; COLOR 1 = FG / TEXT
                 CALL    PARSCOL
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
 .NOTCTX         POP     HL
                 PUSH    HL
@@ -232,8 +292,8 @@ CFGLOAD         LD      HL, CFGNAME
                 JR      NC, .NOTCUI
                 LD      C, 2            ; COLOR 2 = UI
                 CALL    PARSCOL
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
 .NOTCUI         POP     HL
                 PUSH    HL
@@ -250,43 +310,13 @@ CFGLOAD         LD      HL, CFGNAME
                 JR      NC, .NOTCHI
                 LD      C, 3            ; COLOR 3 = HIGHLIGHT
                 CALL    PARSCOL
-                POP     HL              ; RESTORE HL TO START OF LINE
-                JP      .SKPLIN
+                POP     HL
+                RET
 
                 ENDIF
 
 .NOTCHI         POP     HL
-
-.SKPLIN         ; ADVANCE HL TO END OF CURRENT LINE (CR, LF, OR 0)
-                LD      A, (HL)
-                OR      A
-                JR      Z, .CFGDON
-                CP      13
-                JR      Z, .EOLS
-                CP      10
-                JR      Z, .EOLS
-                INC     HL
-                JR      .SKPLIN
-
-.EOLS           ; SKIP CR/LF CHARACTERS
-                INC     HL
-                LD      A, (HL)
-                CP      10
-                JR      Z, .EOLS
-                CP      13
-                JR      Z, .EOLS
-                JP      .LINELP
-
-.CFGDON         LD      A, (PALDIRT)
-                OR      A
-                RET     Z
-                ; S2ED'S SETPAL TAKES NO ARGUMENT: IT REAPPLIES THE ROLE
-                ; VARIABLES A THEME= LINE JUST REWROTE. S6ED'S STREAMS THE
-                ; V9938 PALETTE BLOCK AT HL.
-                IFNDEF  S2ED
-                LD      HL, PALDATA
-                ENDIF
-                JP      SETPAL
+                RET
 
 
 ; --- STRPREF                   ----------------------------------------
