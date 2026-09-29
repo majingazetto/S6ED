@@ -12,8 +12,8 @@ import os
 import re
 
 import vram
-from cases import (Case, DEFAULT_CFG, HomePathCase, ShippedDiskCase, crlf,
-                   numbered)
+from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
+                   ShippedDiskCase, crlf, numbered)
 from harness import MACH_128K, MACH_JP
 from keys import Timeline
 from result import Check
@@ -4886,6 +4886,41 @@ class H32SaveNoName(Case):
         ]
 
 
+# --- H33  A FULL PATH AS THE FILE NAME ---------------------------------
+
+
+class H33LongPath(LongPathCase):
+    name = 'H33-long-path'
+    desc = ('a 48-character path on the command line is loaded, saved back '
+            'to the same place, and the menu bar shows only NOTES.TXT')
+    origin = ('FILENAME was 40 bytes and CHKFILE copied the argument into it '
+              'unbounded; the menu bar printed the whole string, so a path '
+              'would have overrun it')
+
+    def boot_vram(self):
+        return 'menu'
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        checks = self.path_checks(ctx, run, 'H33', Check, asciiz)
+        buf = run.blob('boot', 'menu')
+        font = font_of(ctx)
+        if buf is None or font is None:
+            return checks + [Check('H33/menu-name', False, 'no row 0 dump')]
+        x0 = 470 - 6 * len(self.NAME)          # right-aligned before the clock
+        bad = [i for i, ch in enumerate(self.NAME)
+               if vram.ink_mask(buf, x0 + 6 * i, 0, w=6, h=8,
+                                ground=vram.COL_UI) !=
+               vram.glyph_mask(font, ch, width=6)]
+        stray = sum(sum(r) for r in vram.ink_mask(buf, 236, 0, w=x0 - 236,
+                                                  h=8, ground=vram.COL_UI))
+        checks.append(Check('H33/menu-name', not bad and stray == 0,
+                            'row 0 shows %s right-aligned and nothing of the '
+                            'path to its left (%d glyphs off, %d stray px)'
+                            % (self.NAME, len(bad), stray)))
+        return checks
+
+
 # --- H28  PARAMETRIC TEXTWIDTH (PHASE C2) -----------------------------
 
 
@@ -5593,7 +5628,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H19QuitDialog(), H20QuitDirty(), H21Shadow(), H22FileMenu(), H23MenuNav(),
          H24GoToLine(), H25FindReplace(), H26FindCurrentLine(), H27ViEx(),
          H28TextWidth(), H29HomePath(), H30NewDocument(), H31EditOpen(),
-         H32SaveNoName(),
+         H32SaveNoName(), H33LongPath(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),

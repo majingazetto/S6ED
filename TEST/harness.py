@@ -78,7 +78,7 @@ BYTE_VARS = [
     ('SELSTRL', 6), ('DRWSTRL', 6), ('CLKBUF', 6), ('PALDATA', 8),
     ('STATBUF', 80), ('VCOLTXT', 12), ('SRCHPAT', 19), ('RPLCPAT', 19),
     ('CLIPBUF', 32),
-    ('WORKBUF', 81), ('HOMEPTH', 80), ('FILENAME', 40), ('STATMSG', 44),
+    ('WORKBUF', 81), ('HOMEPTH', 80), ('FILENAME', 64), ('STATMSG', 44),
 ]
 
 HOOK_ADDR = 0xFD9F      # H.TIMI: nothing of ours may ever live behind it
@@ -130,12 +130,19 @@ class Session(object):
         shutil.copy(os.path.join(ctx.res_dir, 'DOS2.DSK'), dsk)
 
         staged = []
+        nested = []                     # (directory, host path, 8.3 name)
         for name, data in case.disk_files(ctx, self.variant).items():
-            path = os.path.join(self.dir, name)
+            # "DIR\\SUB\\NAME" goes into a subdirectory, written by dskfat
+            # (dsktool knows only the root).  The host copy gets a flat name.
+            parts = name.replace('/', '\\').split('\\')
+            path = os.path.join(self.dir, '_'.join(parts))
             mode = 'wb' if isinstance(data, bytes) else 'w'
             with open(path, mode) as fh:
                 fh.write(data)
-            staged.append(path)
+            if len(parts) > 1:
+                nested.append(('\\'.join(parts[:-1]), path, parts[-1]))
+            else:
+                staged.append(path)
         for src in case.disk_copies(ctx):  # noqa: E501
             dst = os.path.join(self.dir, os.path.basename(src))
             if os.path.abspath(src) != os.path.abspath(dst):
@@ -149,7 +156,24 @@ class Session(object):
                            cwd=self.dir, capture_output=True, text=True)
         if r.returncode != 0:
             raise RuntimeError('dsktool A failed: %s' % (r.stdout + r.stderr))
+        for folder, path, name in nested:
+            r = subprocess.run(['python3', ctx.dskfat, dsk, 'add', folder,
+                                '%s=%s' % (path, name)],
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                raise RuntimeError('dskfat add failed: %s'
+                                   % (r.stdout + r.stderr))
         return dsk
+
+    def extract_path(self, dsk, path):
+        """Read a file in any directory back off the disk (dskfat get)."""
+        out = os.path.join(self.dir, 'x_' + path.replace('\\', '_'))
+        r = subprocess.run(['python3', self.ctx.dskfat, dsk, 'get', path, out],
+                           capture_output=True, text=True)
+        if r.returncode != 0 or not os.path.exists(out):
+            return None
+        with open(out, 'rb') as fh:
+            return fh.read()
 
     def extract(self, dsk, name):
         """The end-to-end verdict is read back off the disk, not off the screen."""

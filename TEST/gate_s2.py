@@ -17,8 +17,8 @@ is also the video shadow, so on the default machine there is nothing spare
 """
 
 import pattern
-from gate import H30NewDocument
-from cases import Case, HomePathCase, ShippedDiskCase, crlf
+from gate import H30NewDocument, asciiz
+from cases import Case, HomePathCase, LongPathCase, ShippedDiskCase, crlf
 from harness import MACH_MSX1
 from keys import Timeline
 from result import Check
@@ -2595,6 +2595,31 @@ class S225NewDocument(H30NewDocument):
     TAG = 'S2-25'
 
 
+class S226LongPath(LongPathCase):
+    name = 'S2-26-long-path'
+    desc = 'H33-long-path on S2ED: row 0 is compared with the computed bar'
+    origin = 'H33-long-path on the S2 target'
+    machine = MACH_MSX1
+    cfg = S2_CFG
+
+    def boot_vram(self):
+        return 'patcol'
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        checks = self.path_checks(ctx, run, 'S2-26', Check, asciiz)
+        dump = run.blob('boot', 'patcol')
+        if dump is None:
+            return checks + [Check('S2-26/menu-name', False, 'no VRAM dump')]
+        got = pattern.row_of(dump[:0x2000], pattern.MNUROW)
+        want = pattern.compose_row(font(ctx), menubar(ctx, fname=self.NAME))
+        dif = pattern.differing_columns(got, want)
+        checks.append(Check('S2-26/menu-name', not dif,
+                            'row 0 shows only %s' % self.NAME if not dif else
+                            'row 0 columns differ: %s' % dif[:6]))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -2602,7 +2627,7 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S216Menu(), S217MenuNav(), S218Goto(),
          S219SelLines(), S220UndoSelDel(), S221FindReplace(),
          S222FindCurrentLine(), S223HomePath(),
-         S224ShippedDisk(), S225NewDocument()]
+         S224ShippedDisk(), S225NewDocument(), S226LongPath()]
 
 
 def run(ctx, cases=None):

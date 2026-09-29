@@ -417,8 +417,10 @@ DRWFNAM         ; 1. CLEAR FILENAME REGION IN ROW 0
                 OR      A
                 RET     Z               ; NO FILENAME
 
-                ; 3. COMPUTE LENGTH OF FILENAME (CAPPED AT 30)
-                LD      HL, FILENAME
+                ; 3. COMPUTE LENGTH OF THE NAME PROPER (CAPPED AT 30). ONLY THE
+                ; LAST ITEM IS SHOWN: FILENAME IS A FULL PATH SINCE F1.
+                CALL    FNBASE
+                PUSH    HL              ; FOR BLTSTR
                 LD      B, 0
 .LNLEN          LD      A, (HL)
                 OR      A
@@ -449,9 +451,9 @@ DRWFNAM         ; 1. CLEAR FILENAME REGION IN ROW 0
                 OR      A
                 SBC     HL, DE          ; HL = START X
 
-                ; PRINT FILENAME AT (DX = HL, DY = 0)
+                ; PRINT THE NAME AT (DX = HL, DY = 0)
                 EX      DE, HL          ; DE = START X
-                LD      HL, FILENAME
+                POP     HL
                 LD      BC, 0           ; DY = 0
                 JP      BLTSTR
 

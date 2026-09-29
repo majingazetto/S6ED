@@ -351,7 +351,7 @@ mutation.
 | Phase | Content | Gate |
 |---|---|---|
 | **F0** | Bind `Ctrl+N` / `Ctrl+O`, `DOASK` (with `DOQIT` rewritten on it), New asks first, `FILELOAD` opens before resetting, `FILESAVE` with no name reports it | case: New with `MODIFIED` asks and No keeps the document; `:e NOEXIST` keeps the document (disk read-back) |
-| **F1** | `FNAMMAX`, `FNBASE`, `CURDIR` extracted from `HOMEINIT`, `ED_FILE` in `WINEDIT` (both targets) | a 50-character path on the command line is loaded, saved back to the same path and shown as its last item |
+| **F1** | **Done 2026-09-29**: `FNAMLEN` 64, `HOMEPTH` / `LINBUF` / `FILENAME` moved to a page-3 scratch block (`P3BASE`..`P3TOP`, `TP3MIN` derived from it), `CHKFILE` bounded, `FNBASE` for the menu bar, `CURDIR` extracted from `HOMEINIT`. `ED_FILE` moved to F2, its first user — shipped alone it would be code no case can reach | `H33-long-path` / `S2-26-long-path`: a 48-character path loaded, saved back (read off the disk with `dskfat get`), row 0 showing only the last item |
 | **F2a** | **Done 2026-09-29**: what `DIR` prints, measured on four machines (§3.4) | the F2 case compares against these strings |
 | **F2** | `CORE/BROWSE.Z8A` scan, sort and path editing; S6 `DOBRW`; Open wired to the menu, `Ctrl+O` and `:e` | fixture disk with subdirectories built by `dskfat`: navigate into `SUB\`, open a file there, `FILENAME` = full path; `..\` present below the root and absent at it, `BS` up lands on the directory left; a hidden and a system file listed and drawn italic; drive entry; mask; more than `BRWMAX` entries |
 | **F3** | S2: `WINNOSV`, S2 `DOBRW` on the 4 × 12 grid | the same cases on S2, plus the `VCOLBSEL` bar owning whole cells (computed pattern table) |

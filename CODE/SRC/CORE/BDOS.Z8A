@@ -459,6 +459,7 @@ DSKWRITE        LD      B,A
 ; - FOR THIS RUN: A CP/M LOADER LEAVES THE PREVIOUS PROGRAM'S VALUE. ANY
 ; - FAILURE LEAVES HOMELEN = 0 AND EVERY NAME BARE, AS BEFORE.
 ; - LINBUF IS SCRATCH HERE: CFGLOAD HAS NOT RUN YET AND REFILLS IT.
+; - CURDIR BUILDS THE CURRENT DIRECTORY THERE.
 ; -
 
 HOMEINIT        LD      A, (LOADFLG)
@@ -485,36 +486,11 @@ HOMEINIT        LD      A, (LOADFLG)
                 RET     NC              ; NO ROOM LEFT FOR A NAME AFTER IT
                 LD      (HOMELEN), A
 
-                ; BUILD "D:\PATH\" FOR THE CURRENT DIRECTORY IN LINBUF. _CURDRV
-                ; GOES STRAIGHT TO DOS: IT RETURNS THE DRIVE IN A, WHICH THE
-                ; BDOS WRAPPER WOULD TAKE FOR AN ERROR CODE ON ANY DRIVE BUT A:.
-                LD      C, _CURDRV
-                CALL    DOS
-                ADD     A, 'A'
-                LD      HL, LINBUF
-                LD      (HL), A
-                INC     HL
-                LD      (HL), ':'
-                INC     HL
-                LD      (HL), #5C           ; '\'
-                INC     HL
-                PUSH    HL
-                EX      DE, HL          ; DE = 64-BYTE PATH BUFFER
-                LD      B, 0            ; CURRENT DRIVE
-                LD      C, _GETCD
-                CALL    BDOS
-                POP     HL
+                ; "D:\PATH\" OF THE CURRENT DIRECTORY, IN LINBUF
+                LD      DE, LINBUF
+                XOR     A               ; CURRENT DRIVE
+                CALL    CURDIR
                 JR      C, .LOCAL       ; CANNOT TELL: READ THE LOCAL CFG TOO
-                LD      A, (HL)
-                OR      A
-                JR      Z, .CMP         ; ROOT: THE PREFIX IS ALREADY "D:\"
-.TAIL           INC     HL
-                LD      A, (HL)
-                OR      A
-                JR      NZ, .TAIL
-                LD      (HL), #5C           ; '\'
-                INC     HL
-                LD      (HL), 0
 
 .CMP            LD      HL, HOMEPTH
                 LD      DE, LINBUF
@@ -545,6 +521,54 @@ HOMEINIT        LD      A, (LOADFLG)
                 RET
 
 .PRGENV         DEFM    "PROGRAM", 0
+
+
+; - CURDIR -----------------------------
+; - BUILD "D:\PATH\" FOR THE CURRENT DIRECTORY OF A DRIVE
+; - IN:  A = DRIVE (0 = CURRENT, 1 = A: ...), DE = BUFFER OF AT LEAST
+; -      3 + 64 + 1 BYTES
+; - OUT: CY = 0: BUFFER = ASCIIZ PATH WITH A TRAILING '\' ("A:\" AT THE
+; -      ROOT). CY = 1: _GETCD FAILED, BUFFER UNDEFINED
+; - CLOBBERS: ALL
+; -
+; - _CURDRV GOES STRAIGHT TO DOS: IT RETURNS THE DRIVE IN A, WHICH THE
+; - BDOS WRAPPER WOULD TAKE FOR AN ERROR CODE ON ANY DRIVE BUT A:.
+; -
+
+CURDIR          PUSH    DE
+                LD      B, A            ; B = DRIVE FOR _GETCD
+                OR      A
+                JR      NZ, .HAVDRV
+                PUSH    BC
+                LD      C, _CURDRV
+                CALL    DOS             ; A = 0 FOR A:
+                POP     BC
+                INC     A               ; 1 = A:
+.HAVDRV         ADD     A, 'A' - 1
+                POP     HL              ; HL = BUFFER
+                LD      (HL), A
+                INC     HL
+                LD      (HL), ':'
+                INC     HL
+                LD      (HL), #5C       ; '\'
+                INC     HL
+                PUSH    HL
+                EX      DE, HL          ; DE = 64-BYTE PATH BUFFER
+                LD      C, _GETCD
+                CALL    BDOS
+                POP     HL
+                RET     C
+                LD      A, (HL)
+                OR      A
+                RET     Z               ; ROOT: THE PREFIX IS ALREADY "D:\"
+.TAIL           INC     HL
+                LD      A, (HL)
+                OR      A
+                JR      NZ, .TAIL
+                LD      (HL), #5C       ; '\'
+                INC     HL
+                LD      (HL), A         ; A = 0; OR A LEFT CY = 0
+                RET
 
 
 ; - HOMEFN -----------------------------

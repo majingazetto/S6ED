@@ -258,3 +258,54 @@ class ShippedDiskCase(Case):
                   'font file read from \\TOOLS (FNTOK %s)'
                   % run.var('boot', 'FNTOK')),
         ]
+
+
+class LongPathCase(Case):
+    """A document 48 characters deep, named on the command line.
+
+    FILENAME held 40 bytes, so a path this long could not even be named.  It
+    is loaded, edited, saved back to the same place (read back off the disk
+    with dskfat) and the menu bar shows only its last item.
+    """
+
+    DIRS = 'LONGDIR1\\LONGDIR2\\LONGDIR3\\LONGDIR4'
+    NAME = 'NOTES.TXT'
+    PATH = 'A:\\' + DIRS + '\\' + NAME
+    LINES = ['FIRST LINE', 'SECOND LINE', 'THIRD LINE']
+
+    def disk_files(self, ctx, variant=None):
+        files = Case.disk_files(self, ctx, variant)
+        files[self.DIRS + '\\' + self.NAME] = crlf(self.LINES)
+        files['AUTOEXEC.BAT'] = '%s %s\r\n' % (ctx.prefix, self.PATH)
+        return files
+
+    def boot_vram(self):
+        return None
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram=self.boot_vram())
+        t.text('Z')
+        t.wait(0.5)
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def path_checks(self, ctx, run, tag, check, asciiz):
+        got = run.session.extract_path(run.dsk, self.DIRS + '\\' + self.NAME)
+        want = crlf(['Z' + self.LINES[0]] + self.LINES[1:])
+        return [
+            check('%s/loaded' % tag,
+                  run.var('boot', 'TOTLINES') == len(self.LINES),
+                  'TOTLINES = %s from a %d-character path'
+                  % (run.var('boot', 'TOTLINES'), len(self.PATH))),
+            check('%s/filename' % tag,
+                  asciiz(run, 'boot', 'FILENAME') == self.PATH,
+                  'FILENAME = %r' % asciiz(run, 'boot', 'FILENAME')),
+            check('%s/saved' % tag,
+                  got == want and run.var('saved', 'MODIFIED') == 0,
+                  'Ctrl+S wrote the file back to its path (%s bytes, '
+                  'MODIFIED %s)' % (None if got is None else len(got),
+                                    run.var('saved', 'MODIFIED'))),
+        ]
