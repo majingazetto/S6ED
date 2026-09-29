@@ -2620,6 +2620,37 @@ class S226LongPath(LongPathCase):
         return checks
 
 
+class S227DialogKeys(S2Case):
+    name = 'S2-27-dialog-keys'
+    desc = ('46 keys into a modal: F1 opens File, 45 DOWN walk its five '
+            'selectable items nine times round and land back on New')
+    origin = ('WINPOLL returned CHGET\'s flags as "key / no key", and CHGET '
+              'leaves Z set when its pointer wraps the 40-byte keyboard '
+              'buffer: every dialog dropped one keystroke in forty')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['ONE', 'TWO'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('F1')
+        t.press('DOWN', repeat=45)
+        t.wait(1.0)
+        t.snap('menu', at='WINPOLL')
+        t.press('ESC')
+        t.wait(0.5)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        sel = run.var('menu', 'MNUSEL')
+        return [Check('S2-27/every-key',
+                      run.var('menu', 'MNUID') == 0 and sel == 0,
+                      'File menu, 45 DOWN over 5 items: MNUSEL %s (0 = no '
+                      'key dropped)' % sel)]
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -2627,7 +2658,8 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S216Menu(), S217MenuNav(), S218Goto(),
          S219SelLines(), S220UndoSelDel(), S221FindReplace(),
          S222FindCurrentLine(), S223HomePath(),
-         S224ShippedDisk(), S225NewDocument(), S226LongPath()]
+         S224ShippedDisk(), S225NewDocument(), S226LongPath(),
+         S227DialogKeys()]
 
 
 def run(ctx, cases=None):

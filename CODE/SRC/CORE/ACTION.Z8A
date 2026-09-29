@@ -74,6 +74,7 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTFPRV         ; 62 (FIND PREV)
                 DEFW    ACTEXMOD        ; 63 (VI ':' COMMAND CONSOLE)
                 DEFW    ACTNEW          ; 64 (CTRL + N / FILE > NEW)
+                DEFW    ACTOPEN         ; 65 (CTRL + O / FILE > OPEN)
                 ASSERT  ($ - ACTTBL) / 2 == ACMAX
 
 
@@ -1336,7 +1337,7 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
                 CP      ' '
                 JR      Z, .ECHECK
                 OR      A
-                JP      Z, .ERARG
+                JP      Z, ACTOPEN      ; :e ALONE: THE FILE BROWSER
                 JP      .BADCMD
 
 .ECHECK         ; CHECK MODIFIED BEFORE LOADING
@@ -1374,39 +1375,7 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
                 CALL    .CPYFN
                 LD      HL, LINBUF
 
-.EOPEN          PUSH    HL
-                LD      A, (SELACT)
-                OR      A
-                CALL    NZ, ACTDSEL
-                XOR     A
-                LD      (STATMSG), A
-                POP     HL
-                PUSH    HL
-                CALL    FILELOAD
-                POP     HL
-                JR      NC, .EDRAW
-                LD      B, A
-                LD      A, (LOADERR)
-                OR      A
-                JR      NZ, .EDRAW      ; TOO LARGE: THE STATUS BAR SAYS SO
-                LD      A, B
-                CP      ENOFIL
-                JR      NZ, .ECANT
-                ; NOT FOUND: A NEW, EMPTY DOCUMENT UNDER THAT NAME, AS IN VI.
-                ; :e WITHOUT ! ALREADY REFUSED A MODIFIED DOCUMENT.
-                PUSH    HL
-                CALL    FILENEW
-                POP     HL
-                CALL    FNAMSET
-                XOR     A
-                LD      (MODIFIED), A
-                LD      HL, .STRNEWF
-                JR      .EMSG
-.ECANT          LD      HL, .STRCANT
-.EMSG           CALL    .SETMSG
-.EDRAW          CALL    REDRAW
-                CALL    DRWMENU
-                JP      DRWSTAT
+.EOPEN          JP      OPENDOC
 
 .CMDSET         ; MUST MATCH "set " OR "SET "
                 INC     HL
@@ -1627,11 +1596,89 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
 .STRERRC        DEFM    "Not an editor command", 0
 .STRSAVD        DEFM    "[SAVED]", 0
 .STRNOF         DEFM    "No file name", 0
-.STRNEWF        DEFM    "[NEW FILE]", 0
-.STRCANT        DEFM    "[CANNOT OPEN]", 0
 .STRMOD         DEFM    "No write since last change (! overrides)", 0
 .STRARG         DEFM    "Argument required", 0
 .STRTXTW        DEFM    "xtwidth", 0
+
+
+; --- OPENDOC / ACTOPEN          ----------------------------------------
+
+
+; - OPENDOC ----------------------------
+; - LOAD A DOCUMENT BY NAME AND REPAINT: THE COMMON TAIL OF :e AND OF
+; - FILE > OPEN. THE CALLER HAS ALREADY DEALT WITH A MODIFIED DOCUMENT.
+; - IN:  HL = ASCIIZ NAME (NOT FILENAME ITSELF: FILELOAD COMMITS IT)
+; - OUT: NONE. A MISSING FILE OPENS AN EMPTY DOCUMENT UNDER THAT NAME, AS
+; -      VI DOES; ANY OTHER FAILURE KEEPS THE DOCUMENT AND SAYS SO.
+; - CLOBBERS: ALL
+; -
+
+OPENDOC         PUSH    HL
+                LD      A, (SELACT)
+                OR      A
+                CALL    NZ, ACTDSEL
+                XOR     A
+                LD      (STATMSG), A
+                POP     HL
+                PUSH    HL
+                CALL    FILELOAD
+                POP     HL
+                JR      NC, .EDRAW
+                LD      B, A
+                LD      A, (LOADERR)
+                OR      A
+                JR      NZ, .EDRAW      ; TOO LARGE: THE STATUS BAR SAYS SO
+                LD      A, B
+                CP      ENOFIL
+                JR      NZ, .ECANT
+                ; NOT FOUND: A NEW, EMPTY DOCUMENT UNDER THAT NAME, AS IN VI.
+                ; :e WITHOUT ! ALREADY REFUSED A MODIFIED DOCUMENT.
+                PUSH    HL
+                CALL    FILENEW
+                POP     HL
+                CALL    FNAMSET
+                XOR     A
+                LD      (MODIFIED), A
+                LD      HL, .STRNEWF
+                JR      .EMSG
+.ECANT          LD      HL, .STRCANT
+.EMSG           CALL    ACTEXMOD.SETMSG
+.EDRAW          CALL    REDRAW
+                CALL    DRWMENU
+                JP      DRWSTAT
+
+.STRNEWF        DEFM    "[NEW FILE]", 0
+.STRCANT        DEFM    "[CANNOT OPEN]", 0
+
+
+; - ACTOPEN ----------------------------
+; - FILE > OPEN (CTRL + O, VI :e WITH NO NAME): THE FILE BROWSER. A
+; - MODIFIED DOCUMENT IS ONLY GIVEN UP AFTER A YES, BEFORE THE BROWSER
+; - OPENS -- MODALS ARE SEQUENTIAL, NEVER NESTED.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTOPEN         LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .BROWSE
+                ; FTR-BUDGET: S6ED 9,711 B FREE, S2ED 4,341 B (2026-09-29)
+                LD      A, (FTRSEG)
+                LD      HL, DOOPN
+                CALL    FCALL
+                LD      A, (WINRES)
+                OR      A
+                RET     Z               ; NO: KEEP THE DOCUMENT
+.BROWSE         XOR     A
+                LD      (BRWMODE), A    ; BRW_OPEN
+                ; FTR-BUDGET: S6ED 9,711 B FREE, S2ED 4,341 B (2026-09-29)
+                LD      A, (FTRSEG)
+                LD      HL, DOBRW
+                CALL    FCALL
+                RET     C               ; CANCELLED
+                LD      HL, BRWOUT
+                JP      OPENDOC
 
 
 ; --- GOTOLN                    ----------------------------------------
@@ -3557,6 +3604,8 @@ MNUENT          ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
 .FILMNU         LD      A, (MNUSEL)
                 OR      A
                 JR      Z, .FNEW
+                CP      1
+                JP      Z, ACTOPEN
                 CP      2
                 JR      Z, .FSAVE
                 CP      5

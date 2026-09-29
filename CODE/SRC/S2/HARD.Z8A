@@ -148,6 +148,9 @@ _DEFAB          EQU     #63
 _DEFER          EQU     #64
 _DOSVER         EQU     #6F
 _FFIRST         EQU     #40
+_FNEXT          EQU     #41
+_LOGIN          EQU     #18
+_DSKCHK         EQU     #6E
 _CURDRV         EQU     #19
 _GETCD          EQU     #59
 _PARSE          EQU     #5B

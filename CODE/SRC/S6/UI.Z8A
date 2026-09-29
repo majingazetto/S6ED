@@ -828,7 +828,17 @@ WINPOLL         CALL    CHKCLK
                 CALL    BIOSCALL
                 RET     Z
                 LD      IX, CHGET
-                JP      BIOSCALL
+                CALL    BIOSCALL
+                ; CHGET RETURNS THE KEY IN A AND NO FLAG AT ALL: WHEN ITS
+                ; POINTER WRAPS FROM THE END OF THE 40-BYTE KEYBOARD BUFFER
+                ; ITS LAST COMPARE LEAVES Z SET, AND A CALLER TESTING Z FOR
+                ; "NO KEY" DROPPED ONE KEYSTROKE IN FORTY -- IN EVERY DIALOG.
+                ; MEASURED IN THE FILE BROWSER, 2026-09-29.
+                LD      C, A
+                XOR     A
+                INC     A               ; NZ: A KEY
+                LD      A, C
+                RET
 
 
 ; - WINKIL -----------------------------
