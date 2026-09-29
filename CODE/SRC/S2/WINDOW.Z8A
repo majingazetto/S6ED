@@ -927,9 +927,10 @@ DOABT           LD      A, 6
 ; --- DOQIT                     ----------------------------------------
 
 
-; - DOQIT / DONEW ----------------------
-; - THE TWO YES / NO QUESTIONS THE EDITOR ASKS TODAY: QUIT TO DOS, AND
-; - DISCARD THE DOCUMENT FOR A NEW ONE. BOTH ARE DOASK WITH THEIR TEXT.
+; - DOQIT / DOOPN / DONEW --------------
+; - THE YES / NO QUESTIONS THE EDITOR ASKS TODAY: QUIT TO DOS, AND
+; - DISCARD THE DOCUMENT FOR A NEW ONE OR AN OPENED ONE. ALL ARE DOASK
+; - WITH THEIR TEXT.
 ; - IN:  NONE
 ; - OUT: AS DOASK
 ; - CLOBBERS: ALL
@@ -937,6 +938,10 @@ DOABT           LD      A, 6
 
 DOQIT           LD      HL, DOASK.TITQIT
                 LD      DE, DOASK.STRQIT
+                JR      DOASK
+
+DOOPN           LD      HL, DOASK.TITOPN
+                LD      DE, DOASK.STRNEW
                 JR      DOASK
 
 DONEW           LD      HL, DOASK.TITNEW
@@ -1075,10 +1080,24 @@ DOASK           PUSH    DE              ; QUESTION, FOR AFTER WINOPEN
 .TITQIT         DEFM    "Quit S2ED", 0
 .STRQIT         DEFM    "Exit to MSX-DOS?", 0
 .TITNEW         DEFM    "New Document", 0
+.TITOPN         DEFM    "Open", 0
 .STRNEW         DEFM    "Discard changes?", 0
 .STRWRN         DEFM    "Unsaved changes!", 0
 .BTNYES         DEFM    "[  YES ]", 0
 .BTNNO          DEFM    "[  NO  ]", 0
+
+
+; - DOBRW ------------------------------
+; - THE FILE BROWSER. NOT ON S2ED YET (SPEC_FILE_BROWSER F3): IT CANCELS,
+; - SO CTRL + O AND VI :e WITH NO NAME DO NOTHING HERE, AS FILE > OPEN
+; - ALWAYS DID.
+; - IN:  NONE
+; - OUT: CY = 1 (CANCELLED)
+; - CLOBBERS: NONE
+; -
+
+DOBRW           SCF
+                RET
 
 
 ; --- WINEDIT                   ----------------------------------------

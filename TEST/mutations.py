@@ -11,6 +11,194 @@ import shutil
 
 MUTATIONS = [
     {
+        'name': 'f2-winpoll-flags',
+        'why': 'the defect as it shipped: WINPOLL returns CHGET\'s flags, which '
+               'are Z when the keyboard buffer pointer wraps, so every dialog '
+               'dropped one key in forty',
+        'file': 'UI.Z8A',
+        'old': """                LD      IX, CHGET
+                CALL    BIOSCALL
+                ; CHGET RETURNS THE KEY IN A AND NO FLAG AT ALL: WHEN ITS""",
+        'new': """                LD      IX, CHGET
+                JP      BIOSCALL        ; MUTATION: CHGET'S FLAGS AS THE ANSWER
+                ; CHGET RETURNS THE KEY IN A AND NO FLAG AT ALL: WHEN ITS""",
+        'filter': 'H35',
+        'expect': ['H35/every-key'],
+    },
+    {
+        'name': 's2-f2-winpoll-flags',
+        'why': 'the same WINPOLL defect on S2ED',
+        'target': 'S2ED',
+        'file': 'UI.Z8A',
+        'old': """                LD      IX, CHGET
+                CALL    BIOSCALL
+                ; CHGET RETURNS THE KEY IN A AND NO FLAG AT ALL: WHEN ITS""",
+        'new': """                LD      IX, CHGET
+                JP      BIOSCALL        ; MUTATION: CHGET'S FLAGS AS THE ANSWER
+                ; CHGET RETURNS THE KEY IN A AND NO FLAG AT ALL: WHEN ITS""",
+        'filter': 'S2-27',
+        'expect': ['S2-27/every-key'],
+    },
+    {
+        'name': 'f2-mask-ignored',
+        'why': 'the scan keeps every file whatever the mask says',
+        'file': 'BROWSE.Z8A',
+        'old': """                CALL    BRWMATCH        ; A FILE: IF THE MASK LETS IT THROUGH
+                JR      NZ, .NEXT       ; (THE SLOT IS SIMPLY REUSED)""",
+        'new': """                CALL    BRWMATCH        ; MUTATION: RESULT IGNORED""",
+        'filter': 'H34',
+        'expect': ['H34/mask/masked'],
+    },
+    {
+        'name': 'f2-mask-dirs',
+        'why': 'directories go through the mask too, so *.TXT hides the way '
+               'into every subdirectory',
+        'file': 'BROWSE.Z8A',
+        'old': """                AND     #10             ; A DIRECTORY: ALWAYS
+                JR      NZ, .TAKE""",
+        'new': """                AND     #10             ; MUTATION: MASKED LIKE A FILE""",
+        'filter': 'H34',
+        'expect': ['H34/mask/masked'],
+    },
+    {
+        'name': 'f2-no-parent',
+        'why': 'no parent entry below the root, so there is no way back up',
+        'file': 'BROWSE.Z8A',
+        'old': """                CALL    BRWROOT
+                JR      Z, .NOUP
+                CALL    BRWFREE""",
+        'new': """                CALL    BRWROOT
+                JR      .NOUP           ; MUTATION: NEVER A PARENT
+                CALL    BRWFREE""",
+        'filter': 'H34',
+        # Without the parent every later key lands one entry off, a file
+        # opens early and the next WINPOLL snapshot never fires.
+        'expect_any': ['H34/nav/into', 'H34-browse-open'],
+    },
+    {
+        'name': 'f2-no-reselect',
+        'why': 'going up lands on the first entry, not on the directory left',
+        'file': 'BROWSE.Z8A',
+        'old': """.SELPRV         ; COMING BACK UP: SELECT THE DIRECTORY JUST LEFT
+                LD      A, (BRWPREV)""",
+        'new': """.SELPRV         ; COMING BACK UP: SELECT THE DIRECTORY JUST LEFT
+                JR      .CLRPRV         ; MUTATION: FORGET IT
+                LD      A, (BRWPREV)""",
+        'filter': 'H34',
+        'expect': ['H34/nav/back-up'],
+    },
+    {
+        'name': 'f2-no-hidden',
+        'why': 'the search attributes leave out hidden and system files',
+        'file': 'CONST_CORE.Z8A',
+        'old': "ATR_ALL         EQU     #16",
+        'new': "ATR_ALL         EQU     #10             ; MUTATION: NO H, NO S",
+        'filter': 'H34',
+        'expect': ['H34/nav/listing'],
+    },
+    {
+        'name': 'f2-no-italic',
+        'why': 'hidden and system entries are drawn like any other',
+        'file': 'BROWSER.Z8A',
+        'old': """                AND     %00000110       ; HIDDEN OR SYSTEM: ITALIC""",
+        'new': """                AND     0               ; MUTATION: ALWAYS UPRIGHT""",
+        'filter': 'H34',
+        'expect': ['H34/nav/drawn'],
+    },
+    {
+        'name': 'f2-date-env',
+        'why': 'the date format ignores the DATE environment item',
+        'file': 'BROWSE.Z8A',
+        'old': """.DATE           LD      HL, .DATENM""",
+        'new': """.DATE           RET                     ; MUTATION: ALWAYS YMD
+                LD      HL, .DATENM""",
+        'filter': 'H34',
+        'expect': ['H34/nav/info'],
+    },
+    {
+        'name': 'f2-rowmv-wrong',
+        'why': 'a one-row scroll moves the grid the wrong way',
+        'file': 'BROWSER.Z8A',
+        'old': """                CP      1
+                JR      NZ, .RMDOWN""",
+        'new': """                CP      1
+                JR      Z, .RMDOWN      ; MUTATION: BACKWARDS""",
+        'filter': 'H35',
+        'expect': ['H35/scroll-paint'],
+    },
+    {
+        'name': 'f2-no-more',
+        'why': 'a full listing does not say so',
+        'file': 'BROWSE.Z8A',
+        'old': """                JR      C, .ROOM
+                LD      A, 1
+                LD      (BRWMORE), A""",
+        'new': """                JR      C, .ROOM
+                XOR     A               ; MUTATION: SILENT
+                LD      (BRWMORE), A""",
+        'filter': 'H35',
+        'expect': ['H35/capacity'],
+    },
+    {
+        'name': 'f2-start-cwd',
+        'why': 'the browser always starts in the current directory, not in '
+               'the one the document came from',
+        'file': 'BROWSER.Z8A',
+        'old': """.INITP          LD      A, (FILENAME + 1)
+                CP      ':'
+                JR      NZ, .CWD""",
+        'new': """.INITP          LD      A, (FILENAME + 1)
+                CP      ':'
+                JR      .CWD            ; MUTATION""",
+        'filter': 'H35',
+        'expect': ['H35/start-dir'],
+    },
+    {
+        'name': 'f2-open-noask',
+        'why': 'Open throws a modified document away without asking',
+        'file': 'ACTION.Z8A',
+        'old': """ACTOPEN         LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .BROWSE""",
+        'new': """ACTOPEN         LD      A, (MODIFIED)
+                OR      A
+                JR      .BROWSE         ; MUTATION: NEVER ASK""",
+        'filter': 'H34',
+        'expect_any': ['H34/dirty/kept', 'H34-browse-open'],
+    },
+    {
+        'name': 'f2-ctrl-o',
+        'why': 'Ctrl+O is bound in no keymap again',
+        'file': 'KEYMAP.Z8A',
+        'old': """                DEFB    CTRL_O,  MODCTRL, ACOPEN
+""",
+        'new': "",
+        'filter': 'H34',
+        'expect_any': ['H34/nav/listing', 'H34-browse-open'],
+    },
+    {
+        'name': 'f2-vi-e',
+        'why': 'Vi :e with no name says "Argument required" instead of '
+               'opening the browser',
+        'file': 'ACTION.Z8A',
+        'old': """                JP      Z, ACTOPEN      ; :e ALONE: THE FILE BROWSER""",
+        'new': """                JP      Z, .ERARG       ; MUTATION""",
+        'filter': 'H34',
+        'expect_any': ['H34/vi/listing', 'H34-browse-open'],
+    },
+    {
+        'name': 'f2-typed-absolute',
+        'why': 'a name typed in the field is taken as a whole path instead '
+               'of relative to the directory being browsed',
+        'file': 'BROWSER.Z8A',
+        'old': """                CP      ':'
+                JR      NZ, .RELAT""",
+        'new': """                CP      ':'
+                JR      Z, .RELAT       ; MUTATION: INVERTED""",
+        'filter': 'H34',
+        'expect': ['H34/typed/opened'],
+    },
+    {
         'name': 'f1-fnamlen40',
         'why': 'FILENAME back to 40 bytes: a 48-character path is cut on the '
                'command line and the file it names cannot be found',

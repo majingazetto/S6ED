@@ -134,13 +134,19 @@ class Session(object):
         for name, data in case.disk_files(ctx, self.variant).items():
             # "DIR\\SUB\\NAME" goes into a subdirectory, written by dskfat
             # (dsktool knows only the root).  The host copy gets a flat name.
+            # A dict value carries a fixed 'date' (ISO) and 'attr' ("+hs")
+            # for the file, and always goes through dskfat.
+            meta = {}
+            if isinstance(data, dict):
+                meta, data = data, data['data']
             parts = name.replace('/', '\\').split('\\')
             path = os.path.join(self.dir, '_'.join(parts))
             mode = 'wb' if isinstance(data, bytes) else 'w'
             with open(path, mode) as fh:
                 fh.write(data)
-            if len(parts) > 1:
-                nested.append(('\\'.join(parts[:-1]), path, parts[-1]))
+            if len(parts) > 1 or meta:
+                nested.append(('\\'.join(parts[:-1]) or '.', path, parts[-1],
+                               meta))
             else:
                 staged.append(path)
         for src in case.disk_copies(ctx):  # noqa: E501
@@ -156,12 +162,18 @@ class Session(object):
                            cwd=self.dir, capture_output=True, text=True)
         if r.returncode != 0:
             raise RuntimeError('dsktool A failed: %s' % (r.stdout + r.stderr))
-        for folder, path, name in nested:
-            r = subprocess.run(['python3', ctx.dskfat, dsk, 'add', folder,
-                                '%s=%s' % (path, name)],
+        for folder, path, name, meta in nested:
+            cmd = ['python3', ctx.dskfat, dsk, 'add']
+            if meta.get('date'):
+                cmd.append('--date=%s' % meta['date'])
+            r = subprocess.run(cmd + [folder, '%s=%s' % (path, name)],
                                capture_output=True, text=True)
+            if r.returncode == 0 and meta.get('attr'):
+                r = subprocess.run(['python3', ctx.dskfat, dsk, 'attr',
+                                    folder + '\\' + name, meta['attr']],
+                                   capture_output=True, text=True)
             if r.returncode != 0:
-                raise RuntimeError('dskfat add failed: %s'
+                raise RuntimeError('dskfat failed: %s'
                                    % (r.stdout + r.stderr))
         return dsk
 
@@ -307,7 +319,7 @@ class Session(object):
                 continue
             fn = 'rb' if size == 1 else 'rw'
             a('    p "KV %s %s [%s %d]"' % (label, name, fn, sym[name]))
-        for name, count in BYTE_VARS:
+        for name, count in BYTE_VARS + spec.get('bytes', []):
             if name not in sym.addr:
                 continue
             a('    set t ""')
@@ -360,6 +372,10 @@ class Session(object):
                 addr, length, kind = 0x2000, 6144, 'col'
             elif spec['vram'] == 'patcol':
                 addr, length, kind = 0x0000, 0x2000 + 6144, 'patcol'
+            elif spec['vram'] == 'screen':
+                # The whole Screen 6 page 0, menu row included: 212 lines
+                # of 128 bytes.  Read with vram.pixel(..., first_line=0).
+                addr, length, kind = 0, 212 * 128, 'screen'
             elif spec['vram'] == 'text':
                 # Text-mode name table (screens 0/1, linear from #0000):
                 # boot banners and switch output, for cases that never
@@ -452,7 +468,7 @@ class Session(object):
                 run.snaps.setdefault(label, {})[name] = [
                     int(v) for v in value.split()]
         for (_, label, spec) in timeline.snaps:
-            for kind in ('vram', 'menu', 'dir', 'image', 'pal', 'font',
+            for kind in ('vram', 'menu', 'screen', 'dir', 'image', 'pal', 'font',
                          'text', 'pat', 'col', 'patcol'):
                 path = os.path.join(self.dir, '%s.%s' % (label, kind))
                 if os.path.exists(path):

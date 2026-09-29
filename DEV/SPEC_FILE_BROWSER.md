@@ -353,7 +353,7 @@ mutation.
 | **F0** | Bind `Ctrl+N` / `Ctrl+O`, `DOASK` (with `DOQIT` rewritten on it), New asks first, `FILELOAD` opens before resetting, `FILESAVE` with no name reports it | case: New with `MODIFIED` asks and No keeps the document; `:e NOEXIST` keeps the document (disk read-back) |
 | **F1** | **Done 2026-09-29**: `FNAMLEN` 64, `HOMEPTH` / `LINBUF` / `FILENAME` moved to a page-3 scratch block (`P3BASE`..`P3TOP`, `TP3MIN` derived from it), `CHKFILE` bounded, `FNBASE` for the menu bar, `CURDIR` extracted from `HOMEINIT`. `ED_FILE` moved to F2, its first user — shipped alone it would be code no case can reach | `H33-long-path` / `S2-26-long-path`: a 48-character path loaded, saved back (read off the disk with `dskfat get`), row 0 showing only the last item |
 | **F2a** | **Done 2026-09-29**: what `DIR` prints, measured on four machines (§3.4) | the F2 case compares against these strings |
-| **F2** | `CORE/BROWSE.Z8A` scan, sort and path editing; S6 `DOBRW`; Open wired to the menu, `Ctrl+O` and `:e` | fixture disk with subdirectories built by `dskfat`: navigate into `SUB\`, open a file there, `FILENAME` = full path; `..\` present below the root and absent at it, `BS` up lands on the directory left; a hidden and a system file listed and drawn italic; drive entry; mask; more than `BRWMAX` entries |
+| **F2** | **Done 2026-09-29 (S6ED)**: `CORE/BROWSE.Z8A` (scan, binary-insertion sort, mask match, paths, information line, `ED_FILE` class `BRWCHR`), `S6/BROWSER.Z8A` (`DOBRW`), Open wired to File > Open, Ctrl+O and Vi `:e` with no name; S2ED gets a cancelling `DOBRW` stub until F3. Changes measured on the way are in §11 | `H34-browse-open` (6 variants), `H35-browse-many` (170 files, scroll, capacity, 85 keys through one dialog), `S2-27-dialog-keys`, 16 mutations |
 | **F3** | S2: `WINNOSV`, S2 `DOBRW` on the 4 × 12 grid | the same cases on S2, plus the `VCOLBSEL` bar owning whole cells (computed pattern table) |
 | **F4** | Save As on both targets: overwrite confirmation, reopen on No | save into a subdirectory; overwrite No and then Yes; the file is read back off the disk with `dskfat get` |
 
@@ -399,3 +399,50 @@ replaces the `MD` / `COPY` in `AUTOEXEC.BAT` that H29 uses.
    directory, `BS` goes up, the selection returns to the directory left (§3.1).
 6. Date and time: **the format is not ours** — it comes from the `DATE` and
    `TIME` environment items, formatted by the rules measured from `DIR` (§3.4).
+
+---
+
+## 11. What F2 measured and changed (2026-09-29)
+
+1. **The information line is not read on demand.** `_FFIRST` on the exact name
+   was measured at 0.12-1.34 s in a 170-entry floppy directory, with the
+   keyboard deaf while the Disk ROM read. The scan already receives size,
+   date, time and attributes in the File Info Block, so each entry now keeps
+   them: `BRWESZ` is 19 bytes (name 11, flags 1 with the archive bit moved to
+   bit 3, size 3, date 2, time 2). The line follows the selection key by key.
+2. **The listing lives at the top of the feature container on S6ED**, not in
+   page 3: `BRWIDX` / `BRWENT` = `FTRTOP - BRWMAX * (BRWESZ + 1)`, 3,200 B, with
+   `ASSERT BLK0END <= BRWIDX`. DOBRW runs there, so it is addressable whenever
+   the listing is, and page 3 keeps only the small strings. `TP3MIN` drops from
+   `#D520` (the page-3 design) to `#CD0D`, so the editor does not refuse to boot
+   on a smaller TPA for the browser's sake. `FTRFREE` (below the listing) is
+   3,548 B. S2ED will need its own answer in F3 — `WSVBUF` is idle there while
+   the browser runs without a background save.
+3. **One `_FFIRST` / `_FNEXT` walk, not two.** Each `_FNEXT` costs 18-40 ms on
+   the NMS 8250 floppy; the directory pass and the mask pass are one pass with
+   `*.*`, directories always kept, files matched against the mask by
+   `BRWMATCH` (DOS semantics: `?` any, `*` fills its field).
+4. **Binary insertion.** The linear walk was 4.8 s for 160 entries; binary
+   search is 0.35 s. A 170-file directory now lists in ~5 s (it was 12 s),
+   all of it DOS; a typical floppy directory in 1-2 s.
+5. **Disk checking is switched off for the walk** (`_DSKCHK`, restored after):
+   DOS re-reads the boot sector whenever a File Info Block is used on drives
+   without change detection. No measurable gain on the emulated NMS 8250;
+   kept for real drives, to be confirmed on metal.
+6. **One-row scrolls move the grid with `YMMM`** and paint only the row that
+   came in: a full repaint measured 0.65 s, longer than a key repeat; the row
+   scroll is 0.155 s.
+7. **`WINPOLL` dropped one key in forty, in every dialog, on both targets.**
+   It returned `CHGET`'s flags as "key / no key", and `CHGET` leaves Z set when
+   its pointer wraps the 40-byte keyboard buffer. Fixed in `S6/UI.Z8A` and
+   `S2/UI.Z8A`; `H35/every-key` and `S2-27/every-key` push 85 and 46 keys
+   through one dialog.
+8. In Open mode, moving onto a file copies its name into the field; in Save
+   As mode the typed name stays (it would be overwritten while browsing).
+
+Open points for the user: the editor installs no disk error handler
+(`_DEFER` / `_DEFAB`), so a drive with no disk or a write-protected disk
+brings up DOS's own prompt over Screen 6 — the browser's drive entries make
+that easy to reach. And the harness schedules the timeline at 2 * T0 + offset
+(`after time` is relative in openMSX), uniform across cases and harmless, but
+wrong.

@@ -1,0 +1,1054 @@
+;                                       ****************************************
+;                                       * FILE BROWSER: LISTING AND PATHS      *
+;                                       ****************************************
+;
+; THE TARGET-AGNOSTIC HALF OF THE FILE BROWSER (DEV/SPEC_FILE_BROWSER.MD):
+; SCANNING A DIRECTORY INTO THE SORTED LISTING, EDITING THE BROWSED PATH AND
+; FORMATTING THE INFORMATION LINE. THE WINDOW ITSELF IS EACH TARGET'S DOBRW.
+;
+; PHASED IN THE FEATURE CONTAINER; EVERY BUFFER IS IN PAGE 3 (CONST_CORE).
+; DOS 2 ONLY: _FFIRST / _FNEXT FILL A FILE INFO BLOCK, _LOGIN LISTS THE
+; DRIVES, _GENV READS DATE AND TIME. THE BROWSER NEVER CALLS _CHDIR OR
+; _SELDSK: BRWPATH IS ITS OWN, SO THERE IS NOTHING TO RESTORE ON CLOSE AND
+; THE LOCAL CFG KEEPS MEANING THE DIRECTORY THE EDITOR WAS RUN FROM.
+;
+; AN ENTRY IS BRWESZ = 12 BYTES: THE 8.3 NAME SPACE-PADDED TO 11 CHARACTERS
+; AS IN A DIRECTORY ENTRY, THEN A FLAGS BYTE (BRFDIR / BRFDRV / BRFUP AND
+; THE DOS R, H, S BITS). BRWIDX HOLDS THE ENTRY NUMBERS IN DISPLAY ORDER, SO
+; THE INSERTION SORT MOVES BYTES, NOT RECORDS: PARENT, DIRECTORIES, FILES,
+; DRIVES, EACH GROUP BY NAME.
+
+
+; --- ENTRIES                   ----------------------------------------
+
+
+; - BRWENTA ----------------------------
+; - ADDRESS OF AN ENTRY BY ITS NUMBER
+; - IN:  A = ENTRY NUMBER
+; - OUT: HL = BRWENT + A * BRWESZ
+; - CLOBBERS: AF, DE
+; -
+
+                ASSERT  BRWESZ == 19
+BRWENTA         LD      L, A
+                LD      H, 0
+                LD      D, H
+                LD      E, L            ; DE = N
+                ADD     HL, HL
+                PUSH    HL              ; 2N
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; 16N
+                ADD     HL, DE          ; 17N
+                POP     DE
+                ADD     HL, DE          ; 19N
+                LD      DE, BRWENT
+                ADD     HL, DE
+                RET
+
+
+; - BRWPOS -----------------------------
+; - ADDRESS OF THE ENTRY SHOWN AT A POSITION OF THE SORTED LISTING
+; - IN:  A = POSITION (0 .. BRWCNT - 1)
+; - OUT: HL = ENTRY
+; - CLOBBERS: AF, DE
+; -
+
+BRWPOS          LD      HL, BRWIDX
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                LD      A, (HL)
+                JR      BRWENTA
+
+
+; - BRWFLG -----------------------------
+; - FLAGS BYTE OF AN ENTRY
+; - IN:  HL = ENTRY
+; - OUT: A = FLAGS
+; - CLOBBERS: AF
+; -
+
+BRWFLG          PUSH    HL
+                PUSH    DE
+                LD      DE, BREFLG
+                ADD     HL, DE
+                LD      A, (HL)
+                POP     DE
+                POP     HL
+                RET
+
+
+; - BRWCAT -----------------------------
+; - SORT GROUP OF AN ENTRY: 0 PARENT, 1 DIRECTORY, 2 FILE, 3 DRIVE
+; - IN:  HL = ENTRY
+; - OUT: A = GROUP
+; - CLOBBERS: AF
+; -
+
+BRWCAT          CALL    BRWFLG
+                BIT     5, A            ; BRFUP
+                JR      NZ, .UP
+                BIT     7, A            ; BRFDIR
+                JR      NZ, .DIR
+                BIT     6, A            ; BRFDRV
+                LD      A, 2
+                RET     Z
+                INC     A
+                RET
+.UP             XOR     A
+                RET
+.DIR            LD      A, 1
+                RET
+
+
+; - BRWCMP -----------------------------
+; - ORDER OF TWO ENTRIES: GROUP FIRST, THEN THE PADDED NAME
+; - IN:  HL = ENTRY A, DE = ENTRY B
+; - OUT: CY = 1 IF A SORTS BEFORE B
+; - CLOBBERS: AF, BC
+; -
+
+BRWCMP          CALL    BRWCAT
+                LD      B, A
+                EX      DE, HL
+                CALL    BRWCAT
+                EX      DE, HL
+                LD      C, A
+                LD      A, B
+                CP      C
+                RET     NZ              ; DIFFERENT GROUPS: CY SAYS WHICH
+                PUSH    HL
+                PUSH    DE
+                LD      B, BRENAM
+.LP             LD      A, (DE)
+                LD      C, A
+                LD      A, (HL)
+                CP      C
+                JR      NZ, .DONE
+                INC     HL
+                INC     DE
+                DJNZ    .LP             ; EQUAL: CP LEFT CY = 0
+.DONE           POP     DE
+                POP     HL
+                RET
+
+
+; - BRWFREE ----------------------------
+; - THE NEXT FREE ENTRY, OR NONE WHEN THE LISTING IS FULL
+; - IN:  NONE
+; - OUT: CY = 0: HL = FREE ENTRY, ITS 11 NAME BYTES ALREADY SPACES AND
+; -      THE REST ZERO. CY = 1: FULL (BRWMORE SET)
+; - CLOBBERS: AF, B, DE
+; -
+
+BRWFREE         LD      A, (BRWCNT)
+                CP      BRWMAX
+                JR      C, .ROOM
+                LD      A, 1
+                LD      (BRWMORE), A
+                SCF
+                RET
+.ROOM           CALL    BRWENTA
+                PUSH    HL
+                LD      B, BRENAM
+.SP             LD      (HL), ' '
+                INC     HL
+                DJNZ    .SP
+                LD      B, BRWESZ - BRENAM
+.ZERO           LD      (HL), 0         ; FLAGS, SIZE, DATE, TIME
+                INC     HL
+                DJNZ    .ZERO
+                POP     HL
+                OR      A
+                RET
+
+
+; - BRWADD -----------------------------
+; - FILE THE ENTRY JUST WRITTEN AT BRWENT[BRWCNT] IN THE SORTED ORDER. THE
+; - POSITION IS FOUND BY BINARY SEARCH: A LINEAR WALK WAS MEASURED AT ~30 MS
+; - PER ENTRY WITH 160 OF THEM, 4.8 S FOR THE LISTING.
+; - IN:  NONE
+; - OUT: BRWCNT + 1
+; - CLOBBERS: ALL
+; -
+
+BRWADD          LD      A, (BRWCNT)
+                LD      (BRWHI), A      ; SEARCH [LOW, HIGH) = [0, COUNT)
+                XOR     A
+                LD      (BRWLO), A
+.BSRCH          LD      A, (BRWLO)
+                LD      B, A
+                LD      A, (BRWHI)
+                CP      B
+                JR      Z, .FOUND       ; LOW == HIGH: THIS IS THE PLACE
+                ADD     A, B
+                RRA                     ; MID, THE CARRY OF THE ADD SHIFTED IN
+                LD      (BRWMID), A
+                LD      A, (BRWCNT)
+                CALL    BRWENTA
+                PUSH    HL              ; THE NEW ENTRY
+                LD      A, (BRWMID)
+                CALL    BRWPOS
+                EX      DE, HL          ; DE = THE ENTRY AT MID
+                POP     HL
+                CALL    BRWCMP          ; CY = THE NEW ONE SORTS FIRST
+                LD      A, (BRWMID)
+                JR      C, .LEFT
+                INC     A
+                LD      (BRWLO), A      ; IT GOES AFTER MID
+                JR      .BSRCH
+.LEFT           LD      (BRWHI), A      ; IT GOES AT OR BEFORE MID
+                JR      .BSRCH
+.FOUND          LD      B, A            ; B = ITS POSITION
+                LD      A, (BRWCNT)
+                LD      C, A            ; C = ITS NUMBER
+.INS            LD      A, C
+                SUB     B
+                JR      Z, .PUT         ; NOTHING TO SHIFT
+                PUSH    BC
+                LD      HL, BRWIDX
+                LD      E, C
+                LD      D, 0
+                ADD     HL, DE          ; HL = BRWIDX + C
+                LD      D, H
+                LD      E, L
+                DEC     HL
+                LD      C, A
+                LD      B, 0
+                LDDR                    ; POSITIONS B .. C-1 MOVE UP ONE
+                POP     BC
+.PUT            LD      HL, BRWIDX
+                LD      E, B
+                LD      D, 0
+                ADD     HL, DE
+                LD      (HL), C
+                LD      A, C
+                INC     A
+                LD      (BRWCNT), A
+                RET
+
+
+; - BRWPAD -----------------------------
+; - SPACE-PAD AN ASCIIZ 8.3 NAME INTO 11 CHARACTERS
+; - IN:  DE = ASCIIZ NAME ("NAME.EXT"), HL = 11-BYTE DESTINATION
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+BRWPAD          PUSH    HL
+                LD      B, BRENAM
+.SP             LD      (HL), ' '
+                INC     HL
+                DJNZ    .SP
+                POP     HL
+                PUSH    HL              ; [SP] = DESTINATION
+                LD      B, 8
+.NM             LD      A, (DE)
+                OR      A
+                JR      Z, .END
+                CP      '.'
+                JR      Z, .EXT
+                LD      (HL), A
+                INC     HL
+                INC     DE
+                DJNZ    .NM
+.SKIP           LD      A, (DE)         ; A NAME OVER 8: DROP THE REST
+                OR      A
+                JR      Z, .END
+                CP      '.'
+                JR      Z, .EXT
+                INC     DE
+                JR      .SKIP
+.EXT            POP     HL
+                LD      BC, 8
+                ADD     HL, BC
+                INC     DE              ; PAST THE DOT
+                LD      B, 3
+.EX             LD      A, (DE)
+                OR      A
+                RET     Z
+                LD      (HL), A
+                INC     HL
+                INC     DE
+                DJNZ    .EX
+                RET
+.END            POP     HL
+                RET
+
+
+; - BRWTXT -----------------------------
+; - AN ENTRY AS IT IS PRINTED: "NAME.EXT", "SUB\", "..\", "B:"
+; - IN:  HL = ENTRY, DE = DESTINATION (AT LEAST HOMENAM + 1 BYTES)
+; - OUT: DE = ITS TERMINATING NUL
+; - CLOBBERS: AF, BC, HL
+; -
+
+BRWTXT          CALL    BRWFLG
+                LD      C, A            ; C = FLAGS
+                BIT     5, C            ; BRFUP
+                JR      Z, .NUP
+                LD      A, '.'
+                LD      (DE), A
+                INC     DE
+                LD      (DE), A
+                INC     DE
+                JR      .SLASH
+.NUP            BIT     6, C            ; BRFDRV
+                JR      Z, .NAME
+                LD      A, (HL)
+                LD      (DE), A
+                INC     DE
+                LD      A, ':'
+                LD      (DE), A
+                INC     DE
+                JR      .END
+.NAME           LD      B, 8
+.NM             LD      A, (HL)
+                INC     HL
+                CP      ' '
+                JR      Z, .NMSK
+                LD      (DE), A
+                INC     DE
+.NMSK           DJNZ    .NM
+                LD      A, (HL)
+                CP      ' '
+                JR      Z, .NOEXT
+                LD      A, '.'
+                LD      (DE), A
+                INC     DE
+                LD      B, 3
+.EX             LD      A, (HL)
+                INC     HL
+                CP      ' '
+                JR      Z, .EXSK
+                LD      (DE), A
+                INC     DE
+.EXSK           DJNZ    .EX
+.NOEXT          BIT     7, C            ; BRFDIR
+                JR      Z, .END
+.SLASH          LD      A, #5C          ; '\'
+                LD      (DE), A
+                INC     DE
+.END            XOR     A
+                LD      (DE), A
+                RET
+
+
+; --- PATHS                     ----------------------------------------
+
+
+; - BRWCAT2 ----------------------------
+; - APPEND AN ASCIIZ STRING TO BRWNAME AFTER A PREFIX
+; - IN:  HL = PREFIX (ASCIIZ), DE = SUFFIX (ASCIIZ)
+; - OUT: BRWNAME = PREFIX + SUFFIX. CY = 1 IF IT WOULD NOT FIT IN FNAMLEN
+; -      (BRWNAME IS THEN UNDEFINED)
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+BRWCAT2         PUSH    DE
+                LD      DE, BRWNAME
+                LD      B, FNAMLEN - 1  ; ROOM FOR CHARACTERS
+                CALL    .COPY
+                POP     HL
+                RET     C
+.COPY           LD      A, (HL)
+                LD      (DE), A
+                OR      A
+                RET     Z               ; CY = 0 FROM THE OR
+                INC     HL
+                INC     DE
+                DJNZ    .COPY
+                XOR     A
+                LD      (DE), A
+                SCF                     ; FULL BEFORE THE NUL: TOO LONG
+                RET
+
+
+; - BRWPTXT ----------------------------
+; - BRWNAME = BRWPATH + AN ENTRY'S NAME, WITHOUT A DIRECTORY'S TRAILING '\'
+; - IN:  HL = ENTRY
+; - OUT: CY = 1 IF THE PATH WOULD NOT FIT
+; - CLOBBERS: ALL
+; -
+
+BRWPTXT         LD      DE, BRWFIB      ; SCRATCH FOR THE ENTRY TEXT
+                CALL    BRWTXT          ; DE = ITS NUL
+                DEC     DE
+                LD      A, (DE)
+                CP      #5C             ; '\'
+                JR      NZ, .KEEP
+                XOR     A
+                LD      (DE), A
+.KEEP           LD      HL, BRWPATH
+                LD      DE, BRWFIB
+                JR      BRWCAT2
+
+
+; - BRWUP ------------------------------
+; - GO UP ONE DIRECTORY: "A:\X\Y\" BECOMES "A:\X\" AND "Y" IS KEPT IN
+; - BRWPREV SO THE NEXT SCAN CAN SELECT IT AGAIN
+; - IN:  NONE (BRWPATH MUST NOT BE A ROOT)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+BRWUP           LD      HL, BRWPATH
+.END            LD      A, (HL)
+                OR      A
+                JR      Z, .ATEND
+                INC     HL
+                JR      .END
+.ATEND          DEC     HL              ; THE TRAILING '\'
+                LD      (HL), 0
+.BACK           DEC     HL
+                LD      A, (HL)
+                CP      #5C             ; '\'
+                JR      NZ, .BACK
+                INC     HL              ; THE ITEM BEING LEFT
+                PUSH    HL
+                EX      DE, HL
+                LD      HL, BRWPREV
+                CALL    BRWPAD
+                POP     HL
+                LD      (HL), 0
+                RET
+
+
+; - BRWROOT ----------------------------
+; - IS BRWPATH A ROOT ("D:\")?
+; - IN:  NONE
+; - OUT: Z = ROOT
+; - CLOBBERS: AF
+; -
+
+BRWROOT         LD      A, (BRWPATH + 3)
+                OR      A
+                RET
+
+
+; --- SCANNING                  ----------------------------------------
+
+
+; - BRWSCAN ----------------------------
+; - REBUILD THE LISTING OF BRWPATH: PARENT, DIRECTORIES (ALWAYS ALL OF
+; - THEM, SO A MASK NEVER HIDES THE WAY OUT), FILES MATCHING BRWMASK,
+; - DRIVES -- IN ONE _FFIRST / _FNEXT WALK. THE SELECTION GOES TO THE DIRECTORY NAMED IN BRWPREV IF THERE
+; - IS ONE (COMING BACK UP), OTHERWISE TO THE TOP.
+; - IN:  NONE
+; - OUT: BRWCNT, BRWIDX, BRWENT, BRWMORE, BRWSEL, BRWTOP
+; - CLOBBERS: ALL
+; -
+
+BRWSCAN         XOR     A
+                LD      (BRWCNT), A
+                LD      (BRWMORE), A
+                LD      (BRWSEL), A
+                LD      (BRWTOP), A
+
+                ; THE PARENT, UNLESS THIS IS A ROOT
+                CALL    BRWROOT
+                JR      Z, .NOUP
+                CALL    BRWFREE
+                LD      (HL), '.'
+                INC     HL
+                LD      (HL), '.'
+                LD      DE, BREFLG - 1
+                ADD     HL, DE
+                LD      (HL), BRFUP
+                CALL    BRWADD
+
+.NOUP           CALL    BRWMPAT         ; THE MASK AS A PADDED PATTERN
+
+                ; DISK CHECKING OFF FOR THE WALK, THEN BACK AS IT WAS. WITH IT ON,
+                ; DOS RE-READS THE BOOT SECTOR EVERY TIME A FILE INFO BLOCK IS
+                ; USED (FUNCTION.TXT, 6EH), WHICH ON A DRIVE WITHOUT CHANGE-DETECT
+                ; HARDWARE IS ONE EXTRA SECTOR READ PER _FNEXT. THE WALK ONLY
+                ; READS, SO A DISK SWAPPED HALFWAY GIVES A WRONG LISTING, NEVER
+                ; A DAMAGED DISK.
+                XOR     A               ; GET
+                LD      C, _DSKCHK
+                CALL    BDOS
+                LD      A, B
+                PUSH    AF              ; THE SETTING TO PUT BACK
+                LD      A, 1            ; SET ...
+                LD      B, #FF          ; ... DISABLED
+                LD      C, _DSKCHK
+                CALL    BDOS
+                CALL    .PASS
+                POP     AF
+                LD      B, A
+                LD      A, 1
+                LD      C, _DSKCHK
+                CALL    BDOS
+
+                ; DRIVES. _LOGIN RETURNS THE VECTOR IN HL AND NOTHING IN A,
+                ; SO IT GOES STRAIGHT TO DOS, NOT THROUGH THE BDOS WRAPPER.
+                LD      C, _LOGIN
+                CALL    DOS
+                LD      C, L
+                LD      B, 'A'
+.DRV            SRL     C
+                JR      NC, .NODRV
+                PUSH    BC
+                CALL    BRWFREE
+                POP     BC
+                JR      C, .SELPRV
+                LD      (HL), B
+                INC     HL
+                LD      (HL), ':'
+                LD      DE, BREFLG - 1
+                ADD     HL, DE
+                LD      (HL), BRFDRV
+                PUSH    BC
+                CALL    BRWADD
+                POP     BC
+.NODRV          INC     B
+                LD      A, C
+                OR      A
+                JR      NZ, .DRV
+
+.SELPRV         ; COMING BACK UP: SELECT THE DIRECTORY JUST LEFT
+                LD      A, (BRWPREV)
+                CP      ' ' + 1
+                RET     C               ; NONE (ZERO OR BLANK)
+                LD      B, 0
+.FNDPRV         LD      A, (BRWCNT)
+                CP      B
+                JR      Z, .CLRPRV
+                LD      A, B
+                PUSH    BC
+                CALL    BRWPOS
+                LD      DE, BRWPREV
+                LD      B, BRENAM
+.CMPPRV         LD      A, (DE)
+                CP      (HL)
+                JR      NZ, .NOTPRV
+                INC     HL
+                INC     DE
+                DJNZ    .CMPPRV
+                POP     BC
+                LD      A, B
+                LD      (BRWSEL), A
+                JR      .CLRPRV
+.NOTPRV         POP     BC
+                INC     B
+                JR      .FNDPRV
+.CLRPRV         XOR     A
+                LD      (BRWPREV), A
+                RET
+
+                ; .PASS: ONE _FFIRST / _FNEXT WALK OF BRWPATH + "*.*". EVERY
+                ; DIRECTORY IS KEPT, A FILE ONLY IF IT MATCHES BRWPAT. ONE WALK,
+                ; NOT ONE FOR DIRECTORIES AND ANOTHER FOR THE MASK: EACH _FNEXT
+                ; WAS MEASURED AT 18-40 MS ON A FLOPPY.
+.PASS           LD      HL, BRWPATH
+                LD      DE, .ALL
+                CALL    BRWCAT2         ; BRWNAME = PATH + "*.*"
+                RET     C               ; TOO LONG TO SEARCH: NOTHING
+                LD      DE, BRWNAME
+                LD      B, ATR_ALL
+                LD      IX, BRWFIB
+                LD      C, _FFIRST
+                CALL    BDOS
+.LOOP           RET     C               ; .NOFIL OR ANY ERROR: THE WALK ENDS
+                LD      A, (BRWFIB + 1)
+                CP      '.'
+                JR      Z, .NEXT        ; "." AND "..": THE PARENT IS OURS
+                CALL    BRWFREE
+                RET     C               ; FULL: BRWMORE IS SET
+                PUSH    HL
+                LD      DE, BRWFIB + 1
+                CALL    BRWPAD
+                POP     HL
+                LD      A, (BRWFIB + 14)
+                AND     #10             ; A DIRECTORY: ALWAYS
+                JR      NZ, .TAKE
+                CALL    BRWMATCH        ; A FILE: IF THE MASK LETS IT THROUGH
+                JR      NZ, .NEXT       ; (THE SLOT IS SIMPLY REUSED)
+.TAKE           LD      DE, BREFLG
+                ADD     HL, DE
+                LD      A, (BRWFIB + 14)
+                LD      C, A
+                AND     BRFATR
+                BIT     4, C
+                JR      Z, .NODIR
+                OR      BRFDIR
+.NODIR          BIT     5, C
+                JR      Z, .FLAGS
+                OR      BRFARC
+.FLAGS          LD      (HL), A         ; +BREFLG
+                INC     HL
+                EX      DE, HL
+                LD      HL, BRWFIB + 21 ; SIZE, LOW 24 BITS
+                LD      BC, 3
+                LDIR                    ; +BRESIZ
+                LD      HL, BRWFIB + 17 ; DATE ...
+                LDI
+                LDI                     ; +BREDAT
+                LD      HL, BRWFIB + 15 ; ... AND TIME
+                LDI
+                LDI                     ; +BRETIM
+                CALL    BRWADD
+.NEXT           LD      IX, BRWFIB
+                LD      C, _FNEXT
+                CALL    BDOS
+                JR      .LOOP
+
+.ALL            DEFM    "*.*", 0
+
+
+; - BRWMPAT ----------------------------
+; - BRWMASK AS A PADDED 8.3 PATTERN IN BRWPAT, THE WAY DOS READS A MASK:
+; - '*' FILLS THE REST OF ITS FIELD WITH '?', A MISSING EXTENSION IS "   "
+; - IN:  NONE
+; - OUT: BRWPAT
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+BRWMPAT         LD      HL, BRWPAT
+                LD      B, BRENAM
+.SP             LD      (HL), ' '
+                INC     HL
+                DJNZ    .SP
+                LD      DE, BRWMASK
+                LD      HL, BRWPAT
+                LD      B, 8
+                CALL    .FIELD
+.TODOT          LD      A, (DE)         ; PAST WHATEVER IS LEFT OF THE NAME
+                OR      A
+                RET     Z
+                INC     DE
+                CP      '.'
+                JR      NZ, .TODOT
+                LD      HL, BRWPAT + 8
+                LD      B, 3
+                ; FALLS THROUGH: THE EXTENSION
+.FIELD          LD      A, (DE)
+                OR      A
+                RET     Z
+                CP      '.'
+                RET     Z
+                CP      '*'
+                JR      Z, .STAR
+                LD      (HL), A
+                INC     HL
+                INC     DE
+                DJNZ    .FIELD
+                RET
+.STAR           INC     DE
+.STLP           LD      (HL), '?'
+                INC     HL
+                DJNZ    .STLP
+                RET
+
+
+; - BRWMATCH ---------------------------
+; - DOES A PADDED NAME MATCH BRWPAT ('?' MATCHES ANY CHARACTER)?
+; - IN:  HL = PADDED NAME (AN ENTRY)
+; - OUT: Z = IT MATCHES. HL PRESERVED
+; - CLOBBERS: AF, BC, DE
+; -
+
+BRWMATCH        PUSH    HL
+                LD      DE, BRWPAT
+                LD      B, BRENAM
+.LP             LD      A, (DE)
+                CP      '?'
+                JR      Z, .ANY
+                CP      (HL)
+                JR      NZ, .DONE       ; NZ: NO MATCH
+.ANY            INC     HL
+                INC     DE
+                DJNZ    .LP
+                XOR     A               ; Z: A MATCH
+.DONE           POP     HL
+                RET
+
+
+; --- INFORMATION LINE          ----------------------------------------
+
+
+; - BRWDTEN ----------------------------
+; - READ THE DATE AND TIME FORMAT FROM THE ENVIRONMENT, AS DIR USES IT:
+; - THE FIELD ORDER IS THE FIRST LETTER OF EACH OF THE THREE DATE ITEMS,
+; - AND TIME=24 MEANS A 24-HOUR CLOCK. MEASURED 2026-09-29 ON MSX-DOS 2 AND
+; - NEXTOR (SPEC_FILE_BROWSER §3.4). ANYTHING UNREADABLE FALLS BACK TO
+; - yy-mm-dd, THE DOCUMENTED DEFAULT.
+; - IN:  NONE
+; - OUT: BRWDORD = THREE OF 'Y' 'M' 'D', BRWT24 = 0 / 1
+; - CLOBBERS: ALL
+; -
+
+BRWDTEN         LD      HL, .YMD
+                LD      DE, BRWDORD
+                LD      BC, 3
+                LDIR
+                XOR     A
+                LD      (BRWT24), A
+
+                LD      HL, .TIME
+                LD      DE, BRWNAME
+                LD      B, FNAMLEN
+                LD      C, _GENV
+                CALL    BDOS
+                JR      C, .DATE
+                LD      HL, (BRWNAME)
+                LD      DE, '2' + 256 * '4'
+                OR      A
+                SBC     HL, DE
+                JR      NZ, .DATE
+                LD      A, (BRWNAME + 2)
+                OR      A
+                JR      NZ, .DATE
+                INC     A
+                LD      (BRWT24), A
+
+.DATE           LD      HL, .DATENM
+                LD      DE, BRWNAME
+                LD      B, FNAMLEN
+                LD      C, _GENV
+                CALL    BDOS
+                RET     C
+                LD      HL, BRWNAME
+                LD      DE, BRWFIB      ; THE THREE LETTERS, TENTATIVELY
+                LD      B, 3
+.ITEM           LD      A, (HL)         ; SKIP TO THE NEXT LETTER
+                OR      A
+                RET     Z               ; FEWER THAN THREE: KEEP THE DEFAULT
+                INC     HL
+                AND     #DF             ; UPPER CASE
+                CP      'D'
+                JR      Z, .GOT
+                CP      'M'
+                JR      Z, .GOT
+                CP      'Y'
+                JR      NZ, .ITEM
+.GOT            LD      (DE), A
+                INC     DE
+.REST           LD      C, A            ; SKIP THE REST OF THE ITEM
+                LD      A, (HL)
+                AND     #DF
+                CP      C
+                JR      NZ, .NXTIT
+                INC     HL
+                LD      A, C
+                JR      .REST
+.NXTIT          DJNZ    .ITEM
+                LD      HL, BRWFIB
+                LD      DE, BRWDORD
+                LD      BC, 3
+                LDIR
+                RET
+
+.YMD            DEFM    "YMD"
+.TIME           DEFM    "TIME", 0
+.DATENM         DEFM    "DATE", 0
+
+
+; - BRWINFO ----------------------------
+; - FORMAT THE INFORMATION LINE OF THE SELECTED ENTRY INTO BRWINF, FROM
+; - WHAT THE SCAN KEPT IN THE ENTRY: NO DISK ACCESS, SO IT CAN FOLLOW THE
+; - SELECTION KEY BY KEY.
+; - IN:  NONE
+; - OUT: BRWINF = BICLEN CHARACTERS + NUL
+; - CLOBBERS: ALL
+; -
+
+BRWINFO         LD      HL, BRWINF
+                LD      B, BICLEN
+.CLR            LD      (HL), ' '
+                INC     HL
+                DJNZ    .CLR
+                LD      (HL), 0
+
+                CALL    .COUNT
+                LD      A, (BRWCNT)
+                OR      A
+                RET     Z
+                LD      A, (BRWSEL)
+                CALL    BRWPOS
+                PUSH    HL
+                LD      DE, BRWINF
+                CALL    BRWTXT
+                LD      A, ' '
+                LD      (DE), A         ; NO NUL IN THE MIDDLE OF THE LINE
+                POP     HL
+                CALL    BRWFLG
+                BIT     5, A            ; BRFUP
+                LD      DE, .STRUP
+                JP      NZ, .LABEL
+                BIT     6, A            ; BRFDRV
+                LD      DE, .STRDRV
+                JP      NZ, .LABEL
+
+                ; THE STAMP AND ATTRIBUTES THE SCAN KEPT, BACK IN THE FILE
+                ; INFO BLOCK LAYOUT THE FORMATTERS BELOW READ
+                PUSH    HL
+                LD      DE, BREDAT
+                ADD     HL, DE
+                LD      DE, BRWFIB + 17 ; DATE
+                LDI
+                LDI
+                LD      DE, BRWFIB + 15 ; TIME
+                LDI
+                LDI
+                POP     HL
+                CALL    BRWFLG
+                LD      C, A
+                AND     BRFATR
+                BIT     7, C            ; BRFDIR
+                JR      Z, .NOTDIR
+                OR      #10
+.NOTDIR         BIT     3, C            ; BRFARC
+                JR      Z, .ATRSET
+                OR      #20
+.ATRSET         LD      (BRWFIB + 14), A
+                PUSH    HL
+                LD      DE, BRESIZ
+                ADD     HL, DE
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)
+                INC     HL
+                LD      A, (HL)
+                LD      (BRWFIB + 21), DE
+                LD      (BRWFIB + 23), A
+                XOR     A
+                LD      (BRWFIB + 24), A
+                POP     HL
+
+                ; SIZE, OR <DIR>
+                LD      A, (BRWFIB + 14)
+                AND     #10
+                JR      Z, .SIZE
+                LD      HL, .STRDIR
+                LD      DE, BRWINF + BICSIZE + BICSZW - 5
+                CALL    .PUTS
+                JR      .STAMP
+.SIZE           LD      HL, (BRWFIB + 21)
+                LD      DE, (BRWFIB + 23)
+                CALL    B2D32           ; HL = FIRST DIGIT, C = DIGITS
+                LD      A, BICSIZE + BICSZW
+                CALL    .RALIGN
+
+.STAMP          CALL    .DATE
+                CALL    .TIME
+                ; ATTRIBUTES, "RHSA" OR '-'
+                LD      A, (BRWFIB + 14)
+                LD      C, A
+                LD      HL, BRWINF + BICATTR
+                LD      DE, .STRATR
+                LD      B, 4
+.ATR            LD      A, (DE)
+                BIT     0, C
+                JR      NZ, .ATRON
+                LD      A, '-'
+.ATRON          LD      (HL), A
+                INC     HL
+                INC     DE
+                SRL     C               ; R H S ARE BITS 0 1 2 ...
+                LD      A, B
+                CP      2
+                JR      NZ, .ATRNX
+                SRL     C               ; ... AND ARCHIVE IS BIT 5: SKIP 3, 4
+                SRL     C
+.ATRNX          DJNZ    .ATR
+                RET
+
+.LABEL          EX      DE, HL
+                LD      DE, BRWINF + BICSIZE
+                JP      .PUTS
+
+                ; .COUNT: "N/MAX" (OR "N+/MAX") RIGHT-ALIGNED, ENDING AT BICCNTE
+.COUNT          LD      A, BRWMAX
+                CALL    B2D8
+                LD      A, BICCNTE
+                CALL    .RALIGN         ; DE = WHERE IT STARTED
+                DEC     DE
+                LD      A, '/'
+                LD      (DE), A
+                LD      A, (BRWMORE)
+                OR      A
+                JR      Z, .NOMORE
+                DEC     DE
+                LD      A, '+'
+                LD      (DE), A
+.NOMORE         PUSH    DE
+                LD      A, (BRWCNT)
+                CALL    B2D8
+                POP     DE
+                LD      A, E
+                SUB     BRWINF & #FF    ; COLUMN WHERE THE SLASH STANDS
+                JR      .RALIGN
+
+                ; .RALIGN: COPY C DIGITS AT HL SO THEY END JUST BEFORE
+                ; COLUMN A. OUT: DE = WHERE THEY START
+.RALIGN         SUB     C
+                LD      E, A
+                LD      D, 0
+                PUSH    HL
+                LD      HL, BRWINF
+                ADD     HL, DE
+                EX      DE, HL
+                POP     HL
+                PUSH    DE
+                LD      B, 0
+                LDIR
+                POP     DE
+                RET
+
+                ; .PUTS: COPY ASCIIZ HL TO DE, WITHOUT THE NUL
+.PUTS           LD      A, (HL)
+                OR      A
+                RET     Z
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                JR      .PUTS
+
+                ; .DATE: THE THREE FIELDS IN BRWDORD ORDER, '-' BETWEEN
+.DATE           LD      HL, BRWINF + BICDATE
+                LD      DE, BRWDORD
+                LD      B, 3
+.DFLD           PUSH    BC
+                PUSH    DE
+                LD      A, (DE)
+                LD      BC, (BRWFIB + 17)   ; DOS DATE: YYYYYYYM MMMDDDDD
+                CP      'D'
+                JR      Z, .DAY
+                CP      'M'
+                JR      Z, .MONTH
+                LD      A, B            ; YEAR - 1980, TWO DIGITS LIKE DIR
+                SRL     A
+                ADD     A, 80
+.Y100           CP      100
+                JR      C, .PUT2
+                SUB     100
+                JR      .Y100
+.DAY            LD      A, C
+                AND     %00011111
+                JR      .PUT2
+.MONTH          LD      A, C
+                SRL     B
+                RRA
+                SRL     A
+                SRL     A
+                SRL     A
+                SRL     A
+                AND     %00001111
+.PUT2           CALL    .TWO
+                POP     DE
+                POP     BC
+                INC     DE
+                DEC     B
+                RET     Z
+                LD      (HL), '-'
+                INC     HL
+                INC     B
+                DJNZ    .DFLD
+                RET
+
+                ; .TIME: " 9:05a" (TIME=12) OR " 9:05 " / "21:07" (TIME=24)
+.TIME           LD      HL, (BRWFIB + 15)   ; DOS TIME: HHHHHMMM MMMSSSSS
+                LD      A, H
+                SRL     A
+                SRL     A
+                SRL     A               ; A = HOUR
+                LD      C, 'a'
+                LD      B, A
+                LD      A, (BRWT24)
+                OR      A
+                LD      A, B
+                JR      NZ, .HOUR
+                CP      12
+                JR      C, .AM
+                LD      C, 'p'
+                SUB     12
+.AM             OR      A
+                JR      NZ, .HOUR
+                LD      A, 12           ; 00:30 IS 12:30a, 12:45 IS 12:45p
+.HOUR           PUSH    BC
+                PUSH    HL
+                LD      HL, BRWINF + BICTIME
+                CALL    .TWO
+                LD      A, (BRWINF + BICTIME)
+                CP      '0'
+                JR      NZ, .HR2
+                LD      A, ' '          ; HOUR RIGHT-ALIGNED, NOT ZERO-PADDED
+                LD      (BRWINF + BICTIME), A
+.HR2            LD      (HL), ':'
+                INC     HL
+                EX      DE, HL
+                POP     HL              ; THE TIME WORD AGAIN
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; MINUTES NOW IN H BITS 5..0
+                LD      A, H
+                AND     %00111111
+                EX      DE, HL
+                CALL    .TWO
+                POP     BC
+                LD      A, (BRWT24)
+                OR      A
+                RET     NZ              ; 24 HOURS: A SPACE, ALREADY THERE
+                LD      (HL), C
+                RET
+
+                ; .TWO: A (0..99) AS TWO DIGITS AT HL, HL ADVANCED
+.TWO            LD      B, '0' - 1
+.TEN            INC     B
+                SUB     10
+                JR      NC, .TEN
+                ADD     A, '0' + 10
+                LD      (HL), B
+                INC     HL
+                LD      (HL), A
+                INC     HL
+                RET
+
+.STRUP          DEFM    "Parent directory", 0
+.STRDRV         DEFM    "Drive", 0
+.STRDIR         DEFM    "<DIR>", 0
+.STRATR         DEFM    "RHSA"
+
+
+; --- NAME FIELD                ----------------------------------------
+
+
+; - BRWCHR -----------------------------
+; - CHARACTER CLASS ED_FILE: WHAT MAY BE TYPED INTO A FILE NAME FIELD --
+; - THE CHARACTERS OF A DOS 8.3 NAME, THE PATH SEPARATORS AND THE WILDCARDS
+; - IN:  A = CHARACTER
+; - OUT: CY = 0: ACCEPTED, A = IT IN UPPER CASE. CY = 1: REFUSED
+; - CLOBBERS: AF, BC, HL
+; -
+
+BRWCHR          CP      'a'
+                JR      C, .NOLOW
+                CP      'z' + 1
+                JR      NC, .NOLOW
+                SUB     #20
+                OR      A
+                RET
+.NOLOW          CP      'A'
+                JR      C, .NOLET
+                CP      'Z' + 1
+                CCF
+                RET     NC              ; A LETTER
+.NOLET          CP      '0'
+                JR      C, .SYM
+                CP      '9' + 1
+                CCF
+                RET     NC              ; A DIGIT
+.SYM            LD      HL, .OK
+                LD      B, .OKEND - .OK
+.SLP            CP      (HL)
+                RET     Z               ; CY = 0 FROM THE CP
+                INC     HL
+                DJNZ    .SLP
+                SCF
+                RET
+
+.OK             DEFM    "$&#@!%'()-_{}~^`", #5C, ":.*?"
+.OKEND

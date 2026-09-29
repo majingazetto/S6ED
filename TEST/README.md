@@ -115,6 +115,7 @@ is caught only by `S2-8/matches-document`. Measured, 2026-09-21.
 | `S2-24-shipped-disk` | `B5-shipped-disk` on the S2 target: `S2ED.DSK` as `make dsk-s2` builds it, booted on the MSX1 under Nextor |
 | `S2-25-new-document` | `H30-new-document` on S2ED, whose `DONEW` / `DOASK` live in `S2/WINDOW.Z8A` |
 | `S2-26-long-path` | `H33-long-path` on S2ED, row 0 compared with the computed bar |
+| `S2-27-dialog-keys` | 46 keys into the File menu, none dropped: the `WINPOLL` / `CHGET` flag defect on S2ED |
 
 Two traps this suite met while being built, both worth knowing before adding a
 case:
@@ -215,6 +216,8 @@ Every case names the defect it was derived from in its `origin` field.
 | H31 | `:e` loads, `:e` on a missing file opens an empty document under that name (vi), `:e` on an oversized file keeps the current document and its name, `:e!` clears `MODIFIED` | `FILELOAD` reset the document before opening, and `:e` put the new name in `FILENAME` first: a refused load left the old text under the refused file's name |
 | H32 | Ctrl+S with no file name reports `[NO FILE NAME]` | `FILESAVE` returned in silence |
 | H33 | a 48-character path on the command line: loaded, Ctrl+S writes it back to the same place (read with `dskfat get`), row 0 shows only `NOTES.TXT` (glyphs checked at their right-aligned position, no ink to their left) | `FILENAME` was 40 bytes, `CHKFILE` copied into it unbounded, and the menu bar printed the whole string |
+| H34 | the file browser, Open: listing order checked against the session's own disk, selection bar and italic hidden file checked in pixels, RETURN into `SUB\`, information line (size, `DATE`-ordered date, 12-hour time, `RHSA`), BS back up with `SUB\` reselected, mask `*.TXT` keeping every directory, a typed relative path, `Discard changes?` on a dirty document, Vi `:e` and File > Open | File > Open, Ctrl+O and `:e` with no name did nothing |
+| H35 | 170 files: the browser starts in the document's directory, holds `BRWMAX` and says `160+/160`, one-row `YMMM` scrolls verified glyph by glyph, and 85 keys through one dialog with none dropped | the listing is bounded by `BRWMAX`; `WINPOLL` dropped the key that wrapped the BIOS keyboard buffer |
 
 **G7 is the general one.** A full `REDRAW` repaints from the document alone, so
 comparing the screen before and after one is a test of every differential painter

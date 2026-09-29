@@ -63,6 +63,7 @@ KMAPSTD         ; UNMODIFIED CURSORS
                 DEFB    CTRL_R,  MODCTRL, ACFPRV
                 DEFB    CTRL_S,  MODCTRL, ACSAVE
                 DEFB    CTRL_N,  MODCTRL, ACNEW
+                DEFB    CTRL_O,  MODCTRL, ACOPEN
                 DEFB    CTRL_W,  MODCTRL, ACTGLWR
                 DEFB    CTRL_K,  MODCTRL, ACCYCKM
                 DEFB    CTRL_T,  MODCTRL, ACCYCMK

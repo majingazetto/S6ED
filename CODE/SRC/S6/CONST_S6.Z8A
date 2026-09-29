@@ -106,7 +106,27 @@ FUIR_SX         EQU     256             ; UI-PAPER GLYPHS: SX OFFSET IN VR_FNORM
                 ; SCREEN 6 SHADOWS LIVE IN VRAM, NOT IN A MAPPER SEGMENT.
 FTRBASE         EQU     #8000           ; FEATURE CONTAINER BASE
 FTRTOP          EQU     #C000           ; FIRST BYTE PAST THE CONTAINER
+                ; THE FILE BROWSER'S LISTING LIVES AT THE TOP OF THE CONTAINER
+                ; WINDOW: DOBRW RUNS THERE, SO IT IS ADDRESSABLE WHENEVER THE
+                ; LISTING IS, AND IT COSTS NO PAGE 3 -- WHICH WOULD HAVE MADE
+                ; THE EDITOR REFUSE TO BOOT ON A SMALLER TPA JUST FOR ITS SAKE.
+                ; S6ED.Z8A ASSERTS THE PASSENGERS STOP BELOW IT.
+BRWIDX          EQU     FTRTOP - BRWMAX * (BRWESZ + 1) ; SORTED ORDER
+BRWENT          EQU     BRWIDX + BRWMAX ; ENTRIES, BRWESZ BYTES EACH
 P3BASE          EQU     #C600           ; FIRST FREE PAGE 3 BYTE PAST THE LINE BUFFERS
+                DEFINE  BROWSER 1       ; THIS TARGET HAS THE FILE BROWSER
+BRWMAX          EQU     160             ; FILE BROWSER ENTRY CAPACITY
+BRWCOLS         EQU     5               ; FILE BROWSER GRID: COLUMNS...
+BRWROWS         EQU     14              ; ...AND ROWS ON SCREEN
+BRWSLOT         EQU     14              ; CHARACTERS PER GRID SLOT
+                ; INFORMATION LINE COLUMNS (70 CHARACTERS ON S6ED)
+BICSIZE         EQU     14              ; SIZE, RIGHT-ALIGNED IN BICSZW
+BICSZW          EQU     10
+BICDATE         EQU     26              ; DATE, AS DIR PRINTS IT
+BICTIME         EQU     35              ; TIME, AS DIR PRINTS IT
+BICATTR         EQU     43              ; RHSA
+BICCNTE         EQU     70              ; COUNT, RIGHT-ALIGNED, ENDS HERE
+BICLEN          EQU     70              ; LINE LENGTH
 
 
 ; --- PALETTE                   ----------------------------------------
