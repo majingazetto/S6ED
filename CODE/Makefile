@@ -53,6 +53,7 @@ DATFILE			= S6ED.DAT
 
 DSKFILE			= S6ED.DSK
 DSKTOOL			= ../../msxtools/bin/dsktool
+DSKFAT			= python3 ../../msxtools/scripts/dskfat.py
 DSKBASE			= $(RES_DIR)/DOS2.DSK
 
 # --- S2 (Screen 2 TMS9918) Targets -------------------------------------
@@ -102,18 +103,26 @@ $(DATFILE): $(OUTPUT)
 
 dsk: $(DSKFILE)
 
+# The disks are laid out the way the editors are meant to be installed: the
+# programs with their DAT, FNT and general CFG in A:\TOOLS, which
+# AUTOEXEC.BAT puts on the PATH, and the documents in A:\DEV, which is where
+# the editor is run from -- together with a local CFG that is read after the
+# general one.  Testing from the root hid that DAT, FNT and CFG were opened in
+# the current directory; this layout keeps it from hiding anything again.
+# dsktool knows only the root, so the directories are written by dskfat.
+#
 # The S6ED disk carries S2ED too.  An MSX2 runs both editors, so one image
 # lets them be compared side by side without swapping disks: boot goes to
-# S6ED through AUTOEXEC.BAT, and `S2ED TEST_S2.TXT` starts the other.  No
-# swapping is needed here the way dsk-s2 needs it -- S6ED.CFG and S2ED.CFG
-# are different names, and so are TEST.TXT and TEST_S2.TXT.
-DSKCONT			= $(OUTPUT) $(DATFILE) $(FNTFILE) TEST.TXT AUTOEXEC.BAT S6ED.CFG \
-			  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2) TEST_S2.TXT
+# S6ED through AUTOEXEC.BAT, and `S2ED TEST_S2.TXT` starts the other.
+DSKTOOLS		= $(OUTPUT) $(DATFILE) $(FNTFILE) S6ED.CFG \
+			  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2)
+DSKCONT			= $(DSKTOOLS) TEST.TXT TEST_S2.TXT LOCAL_S6.CFG LOCAL_S2.CFG AUTOEXEC.BAT
 
 $(DSKFILE): $(DSKCONT)
 	@cp $(DSKBASE) $(DSKFILE)
-	@$(DSKTOOL) D $(DSKFILE) $(DSKCONT)
-	@$(DSKTOOL) A $(DSKFILE) $(DSKCONT)
+	@$(DSKFAT) $(DSKFILE) add . AUTOEXEC.BAT
+	@$(DSKFAT) $(DSKFILE) add TOOLS $(DSKTOOLS)
+	@$(DSKFAT) $(DSKFILE) add DEV TEST.TXT TEST_S2.TXT LOCAL_S6.CFG=S6ED.CFG LOCAL_S2.CFG=S2ED.CFG
 
 # -	 S2 Targets --------------------------------------------------------------
 
@@ -139,21 +148,14 @@ dsk-s2: $(DSKFILE_S2)
 
 DSKCONT_S2		= $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2)
 
-# TEST.TXT and AUTOEXEC.BAT ship under names the S6ED disk uses too, and
-# dsktool takes the on-disk name from the host file, so the S2 variants are
-# swapped in around the add and put straight back.  The sample document is a
-# different one: it talks about 64 columns and Screen 2.
-$(DSKFILE_S2): $(DSKCONT_S2) TEST_S2.TXT AUTOEXEC_S2.BAT
+# Same layout as the S6ED disk.  The S2 sample document talks about 64 columns
+# and Screen 2, so it goes in as \DEV\TEST.TXT, and the S2 AUTOEXEC as the
+# root AUTOEXEC.BAT: dskfat takes the on-disk name after the '='.
+$(DSKFILE_S2): $(DSKCONT_S2) TEST_S2.TXT AUTOEXEC_S2.BAT LOCAL_S2.CFG
 	@cp $(DSKBASE) $(DSKFILE_S2)
-	@$(DSKTOOL) D $(DSKFILE_S2) $(DSKCONT_S2) TEST.TXT AUTOEXEC.BAT
-	@$(DSKTOOL) A $(DSKFILE_S2) $(DSKCONT_S2)
-	@cp TEST.TXT TEST.S6.TMP
-	@cp AUTOEXEC.BAT AUTOEXEC.S6.TMP
-	@cp TEST_S2.TXT TEST.TXT
-	@cp AUTOEXEC_S2.BAT AUTOEXEC.BAT
-	@$(DSKTOOL) A $(DSKFILE_S2) TEST.TXT AUTOEXEC.BAT
-	@mv TEST.S6.TMP TEST.TXT
-	@mv AUTOEXEC.S6.TMP AUTOEXEC.BAT
+	@$(DSKFAT) $(DSKFILE_S2) add . AUTOEXEC_S2.BAT=AUTOEXEC.BAT
+	@$(DSKFAT) $(DSKFILE_S2) add TOOLS $(DSKCONT_S2)
+	@$(DSKFAT) $(DSKFILE_S2) add DEV TEST_S2.TXT=TEST.TXT LOCAL_S2.CFG=S2ED.CFG
 
 # -	 Build Target ------------------------------------------------------------
 

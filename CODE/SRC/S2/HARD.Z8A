@@ -114,6 +114,7 @@ MJGETP3         EQU     #2D
 
 
 DOS             EQU     #05
+LOADFLAG        EQU     #0037           ; NON-ZERO WHEN THE SHELL HAS JUST SET PROGRAM
 
 _PARAMS         EQU     #80
 
@@ -147,6 +148,10 @@ _DEFAB          EQU     #63
 _DEFER          EQU     #64
 _DOSVER         EQU     #6F
 _FFIRST         EQU     #40
+_CURDRV         EQU     #19
+_GETCD          EQU     #59
+_PARSE          EQU     #5B
+_GENV           EQU     #6B
 _TERM           EQU     #62
 
 

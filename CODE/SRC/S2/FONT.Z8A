@@ -40,7 +40,7 @@ FONTINIT        XOR     A
 
                 ; ATTEMPT TO OPEN S2ED.FNT
                 LD      HL, FNTNAME
-                CALL    DSKOPEN
+                CALL    HOMEOPN
                 JR      C, .USEROM
                 LD      (FNTHAND), A
 

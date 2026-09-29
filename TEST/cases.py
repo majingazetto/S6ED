@@ -1,6 +1,8 @@
 """Case definition: a disk, a timeline and a set of assertions."""
 
 import os
+import shutil
+import subprocess
 
 from keys import Timeline
 from harness import MACH_128K, Session
@@ -101,3 +103,158 @@ def numbered(count, width=26):
     """A fixture whose every line is identifiable on sight and in a diff."""
     alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     return [('LINE %05d %s' % (i, alpha[:1 + (i % width)])) for i in range(1, count + 1)]
+
+
+class HomePathCase(Case):
+    """The program lives in \\TOOLS, found through PATH, and runs from \\DEV.
+
+    The disk is laid out by AUTOEXEC.BAT itself -- MD / COPY / DEL under
+    COMMAND2 -- because dsktool cannot create directories.  Every variant
+    deletes the root copies, so nothing can be found there by accident.
+
+      root         everything in the root, run from there: one directory,
+                   one CFG read (CFGLOC = 0), home = "A:\\"
+      path         general CFG in \\TOOLS, local CFG in \\DEV overriding part
+                   of it; DAT and FNT only in \\TOOLS
+      global-only  no CFG in \\DEV: the general one alone applies
+      fallback     only the .COM in \\TOOLS, DAT and FNT in \\DEV: the setup
+                   that worked before the home directory existed still boots
+    """
+
+    variants = ('root', 'path', 'global-only', 'fallback')
+    fixture_name = 'DOC.TXT'
+    LINES = 5
+    GENERAL = 'TABWIDTH=8\r\nPROFILE=WS\r\nCLOCK=0\r\n'
+    LOCAL = 'TABWIDTH=2\r\nPROFILE=VI\r\n'
+
+    def config(self, ctx, variant=None):
+        # The root S?ED.CFG is only written for the root variant; the others
+        # stage GENERAL.CFG / LOCAL.CFG and copy them into place.
+        return self.GENERAL if variant == 'root' else None
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(self.LINES))
+
+    def disk_files(self, ctx, variant=None):
+        files = Case.disk_files(self, ctx, variant)
+        p = ctx.prefix
+        if variant == 'root':
+            return files
+        files['GENERAL.CFG'] = self.GENERAL
+        files['LOCAL.CFG'] = self.LOCAL
+        cmds = ['MD TOOLS', 'MD DEV', 'COPY %s.COM TOOLS' % p]
+        home = 'DEV' if variant == 'fallback' else 'TOOLS'
+        cmds += ['COPY %s.DAT %s' % (p, home), 'COPY %s.FNT %s' % (p, home)]
+        if variant != 'fallback':
+            cmds.append('COPY GENERAL.CFG TOOLS\\%s.CFG' % p)
+        if variant == 'path':
+            cmds.append('COPY LOCAL.CFG DEV\\%s.CFG' % p)
+        cmds += ['COPY DOC.TXT DEV', 'DEL %s.*' % p, 'DEL DOC.TXT',
+                 'PATH A:\\TOOLS', 'CD \\DEV', '%s DOC.TXT' % p]
+        files['AUTOEXEC.BAT'] = '\r\n'.join(cmds) + '\r\n'
+        return files
+
+    # What each variant must end up with: (TABWIDTH, KMAPID, CFGLOC, HOMEPTH
+    # prefix).  KMAPID: 1 = WS, 3 = VI.
+    WANT = {
+        'root': (8, 1, 0, 'A:\\'),
+        'path': (2, 3, 1, 'A:\\TOOLS\\'),
+        'global-only': (8, 1, 1, 'A:\\TOOLS\\'),
+        'fallback': (4, 0, 1, 'A:\\TOOLS\\'),   # no CFG anywhere: defaults
+    }
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        return t
+
+    def home_checks(self, ctx, runs, tag, check):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            tw, kmap, loc, prefix = self.WANT[variant]
+            v = '%s/%s' % (tag, variant)
+            lines = run.var('boot', 'TOTLINES')
+            checks.append(check('%s/booted' % v, lines == self.LINES,
+                                'reached MAINLOOP with TOTLINES = %s (DOC.TXT '
+                                'read from the current directory)' % lines))
+            hlen = run.var('boot', 'HOMELEN')
+            raw = run.snaps.get('boot', {}).get('HOMEPTH') or []
+            got = ''.join(chr(c) for c in raw[:hlen or 0])
+            checks.append(check('%s/home' % v, got == prefix,
+                                'HOMEPTH prefix %r (HOMELEN %s, LOADFLG %s)'
+                                % (got, hlen, run.var('boot', 'LOADFLG'))))
+            checks.append(check('%s/cfgloc' % v,
+                                run.var('boot', 'CFGLOC') == loc,
+                                'CFGLOC = %s' % run.var('boot', 'CFGLOC')))
+            checks.append(check('%s/font' % v, bool(run.var('boot', 'FNTOK')),
+                                'FNTOK = %s (font file found)'
+                                % run.var('boot', 'FNTOK')))
+            checks.append(check('%s/tabwidth' % v,
+                                run.var('boot', 'TABWIDTH') == tw,
+                                'TABWIDTH = %s' % run.var('boot', 'TABWIDTH')))
+            checks.append(check('%s/profile' % v,
+                                run.var('boot', 'KMAPID') == kmap,
+                                'KMAPID = %s' % run.var('boot', 'KMAPID')))
+        return checks
+
+
+class ShippedDiskCase(Case):
+    """Boot the .DSK the Makefile ships, exactly as a user gets it.
+
+    Every other case builds its own disk with everything in the root; this
+    one is the only proof that the image `make dsk` produces -- AUTOEXEC.BAT
+    putting A:\\TOOLS on the PATH and running the editor from A:\\DEV -- boots
+    into the sample document with the program's own DAT, FNT and CFG.
+    """
+
+    dsk_target = None       # Makefile target that builds the image
+    dsk_name = None         # ...and the image it builds
+    doc_host = None         # host file that goes in as \DEV\TEST.TXT
+
+    def execute(self, ctx):
+        r = subprocess.run(['make', self.dsk_target], cwd=ctx.code_dir,
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError('make %s failed: %s'
+                               % (self.dsk_target, r.stdout + r.stderr))
+        session = Session(ctx, self, None)
+        src = os.path.join(ctx.code_dir, self.dsk_name)
+
+        def build_disk():
+            # A copy: the session must never write into the shipped image.
+            dsk = os.path.join(session.dir, self.dsk_name)
+            shutil.copy(src, dsk)
+            return dsk
+
+        session.build_disk = build_disk
+        return {None: session.run(self.timeline(ctx))}
+
+    def doc_lines(self, ctx):
+        with open(os.path.join(ctx.code_dir, self.doc_host), 'rb') as fh:
+            return len(fh.read().splitlines())
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        return t
+
+    def shipped_checks(self, ctx, runs, tag, check):
+        run = runs[None]
+        want = self.doc_lines(ctx)
+        lines = run.var('boot', 'TOTLINES')
+        hlen = run.var('boot', 'HOMELEN')
+        raw = run.snaps.get('boot', {}).get('HOMEPTH') or []
+        home = ''.join(chr(c) for c in raw[:hlen or 0])
+        return [
+            check('%s/booted' % tag, lines == want,
+                  'TOTLINES = %s, %s has %d lines' % (lines, self.doc_host,
+                                                      want)),
+            check('%s/home' % tag, home == 'A:\\TOOLS\\',
+                  'program found through PATH at %r' % home),
+            check('%s/local-cfg' % tag, run.var('boot', 'CFGLOC') == 1,
+                  'run from \\DEV, so the local CFG is read too (CFGLOC %s)'
+                  % run.var('boot', 'CFGLOC')),
+            check('%s/font' % tag, bool(run.var('boot', 'FNTOK')),
+                  'font file read from \\TOOLS (FNTOK %s)'
+                  % run.var('boot', 'FNTOK')),
+        ]

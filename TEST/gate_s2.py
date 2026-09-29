@@ -17,7 +17,7 @@ is also the video shadow, so on the default machine there is nothing spare
 """
 
 import pattern
-from cases import Case, crlf
+from cases import Case, HomePathCase, ShippedDiskCase, crlf
 from harness import MACH_MSX1
 from keys import Timeline
 from result import Check
@@ -2555,13 +2555,40 @@ class S222FindCurrentLine(S2Case):
         return checks
 
 
+class S223HomePath(HomePathCase):
+    name = 'S2-23-home-path'
+    desc = ('S2ED through PATH from another directory: DAT and FNT next to '
+            'the program, local CFG over the general one -- under Nextor')
+    origin = ('the H29 defect on the S2 target, and the measurement that '
+              'Nextor\'s COMMAND2 sets PROGRAM and LOAD_FLAG on an MSX1 '
+              'exactly as MSX-DOS 2 does')
+    machine = MACH_MSX1
+
+    def verify(self, ctx, runs):
+        return self.home_checks(ctx, runs, 'S2-23', Check)
+
+
+class S224ShippedDisk(ShippedDiskCase):
+    name = 'S2-24-shipped-disk'
+    desc = 'S2ED.DSK as make dsk-s2 ships it, booted on the MSX1 under Nextor'
+    origin = 'B5-shipped-disk on the S2 target'
+    machine = MACH_MSX1
+    dsk_target = 'dsk-s2'
+    dsk_name = 'S2ED.DSK'
+    doc_host = 'TEST_S2.TXT'
+
+    def verify(self, ctx, runs):
+        return self.shipped_checks(ctx, runs, 'S2-24', Check)
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
          S213ShadowCfg(), S214Markup(), S215Quit(),
          S216Menu(), S217MenuNav(), S218Goto(),
          S219SelLines(), S220UndoSelDel(), S221FindReplace(),
-         S222FindCurrentLine()]
+         S222FindCurrentLine(), S223HomePath(),
+         S224ShippedDisk()]
 
 
 def run(ctx, cases=None):

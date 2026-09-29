@@ -120,6 +120,12 @@ INIT            DBG     "1: INIT START (S2ED)"
                 LD      (HL), 0
                 LDIR
 
+                ; LOAD_FLAG IS ZEROED BY EVERY DOS 2 CALL, SO IT HAS TO BE
+                ; READ BEFORE THE FIRST ONE (DOSVER): HOMEINIT TRUSTS THE
+                ; PROGRAM ENVIRONMENT ITEM ONLY WHEN THE SHELL SET IT NOW.
+                LD      A, (LOADFLAG)
+                LD      (LOADFLG), A
+
                 ; INITIALIZE DEFAULTS
                 LD      A, INS_MODE
                 LD      (INSMODE), A
@@ -170,6 +176,11 @@ INIT            DBG     "1: INIT START (S2ED)"
                 OR      A
                 SBC     HL, DE
                 JP      C, .NOTPA
+
+                ; WHERE THE PROGRAM LIVES: S2ED.DAT, .FNT AND THE GENERAL
+                ; CFG ARE READ FROM THERE, THE LOCAL CFG FROM HERE.
+                DBG     "2a2: HOMEINIT"
+                CALL    HOMEINIT
 
                 ; PARSE COMMAND LINE PARAMETERS IN TEXT MODE
                 DBG     "2b: PARAMS"

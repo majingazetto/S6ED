@@ -11,6 +11,112 @@ import shutil
 
 MUTATIONS = [
     {
+        'name': 'b5-dsk-root',
+        'why': 'the disk goes back to carrying the programs in the root, where '
+               'the PATH that AUTOEXEC.BAT sets does not look, so booting it '
+               'never reaches the editor',
+        'file': 'Makefile',
+        'old': '\t@$(DSKFAT) $(DSKFILE) add TOOLS $(DSKTOOLS)',
+        'new': '\t@$(DSKFAT) $(DSKFILE) add . $(DSKTOOLS)',
+        'filter': 'B5',
+        'expect_any': ['B5/booted', 'B5-shipped-disk'],
+    },
+    {
+        'name': 's2-b5-dsk-root',
+        'why': 'the S2 disk carries S2ED in the root again, off the PATH',
+        'target': 'S2ED',
+        'file': 'Makefile',
+        'old': '\t@$(DSKFAT) $(DSKFILE_S2) add TOOLS $(DSKCONT_S2)',
+        'new': '\t@$(DSKFAT) $(DSKFILE_S2) add . $(DSKCONT_S2)',
+        'filter': 'S2-24',
+        'expect_any': ['S2-24/booted', 'S2-24-shipped-disk'],
+    },
+    {
+        'name': 's2-h29-bare-open',
+        'why': 'S2ED opens S2ED.DAT and S2ED.FNT by bare name again, so run '
+               'through PATH it aborts at boot',
+        'target': 'S2ED',
+        'file': 'BDOS.Z8A',
+        'old': """HOMEOPN         PUSH    HL
+                CALL    HOMEFN""",
+        'new': """HOMEOPN         JP      DSKOPEN         ; MUTATION: BARE NAME ONLY
+                PUSH    HL
+                CALL    HOMEFN""",
+        'filter': 'S2-23',
+        'expect_any': ['S2-23/path/booted', 'S2-23-home-path'],
+    },
+    {
+        'name': 'h29-bare-open',
+        'why': 'the defect as it shipped: S6ED.DAT and S6ED.FNT are opened by '
+               'bare name, i.e. in the current directory, so a program found '
+               'through PATH aborts at boot with "S6ED.DAT not found"',
+        'file': 'BDOS.Z8A',
+        'old': """HOMEOPN         PUSH    HL
+                CALL    HOMEFN""",
+        'new': """HOMEOPN         JP      DSKOPEN         ; MUTATION: BARE NAME ONLY
+                PUSH    HL
+                CALL    HOMEFN""",
+        'filter': 'H29',
+        # CHKDAT aborts to DOS: MAINLOOP is never reached.
+        'expect_any': ['H29/path/booted', 'H29-home-path'],
+    },
+    {
+        'name': 'h29-no-fallback',
+        'why': 'HOMEOPN tries only the home directory, so a setup that worked '
+               'before -- the .COM on the PATH, DAT and FNT in the current '
+               'directory -- stops booting',
+        'file': 'BDOS.Z8A',
+        'old': """                POP     BC              ; BC = THE BARE NAME
+                RET     NC""",
+        'new': """                POP     BC              ; BC = THE BARE NAME
+                RET                     ; MUTATION: NO RETRY IN THE CURRENT DIR""",
+        'filter': 'H29',
+        'expect_any': ['H29/fallback/booted', 'H29-home-path'],
+    },
+    {
+        'name': 'h29-loadflag',
+        'why': 'LOAD_FLAG is read after DOSVER, which zeroes it, so PROGRAM is '
+               'never trusted and every name stays bare',
+        'file': 'S6ED.Z8A',
+        'old': """                LD      A, (LOADFLAG)
+                LD      (LOADFLG), A""",
+        'new': """                XOR     A               ; MUTATION: FLAG ALREADY ZEROED
+                LD      (LOADFLG), A""",
+        'filter': 'H29',
+        'expect_any': ['H29/path/booted', 'H29-home-path'],
+    },
+    {
+        'name': 'h29-no-local',
+        'why': 'CFGRUN reads only the general CFG next to the program, so the '
+               'CFG of the directory the editor is run from is ignored',
+        'file': 'XSEG.Z8A',
+        'old': """                LD      A, (CFGLOC)
+                OR      A
+                RET     Z
+                LD      HL, CFGNAME     ; LOCAL""",
+        'new': """                RET                     ; MUTATION: GENERAL CFG ONLY
+                LD      A, (CFGLOC)
+                OR      A
+                RET     Z
+                LD      HL, CFGNAME     ; LOCAL""",
+        'filter': 'H29',
+        'expect': ['H29/path/tabwidth', 'H29/path/profile'],
+    },
+    {
+        'name': 'h29-samedir',
+        'why': 'the directory comparison always reports a difference, so the '
+               'root disk reads its one CFG twice',
+        'file': 'BDOS.Z8A',
+        'old': """                LD      A, (DE)
+                OR      A
+                RET     Z               ; SAME DIRECTORY: ONE CFG, READ ONCE""",
+        'new': """                LD      A, (DE)
+                OR      A
+                JR      .LOCAL          ; MUTATION: NEVER THE SAME""",
+        'filter': 'H29',
+        'expect': ['H29/root/cfgloc'],
+    },
+    {
         'name': 'g8-alntbl',
         'why': 'PARSALN dispatches on the first letter of the value again, so '
                'OFF and ON collide on O and AUTOALIGN=OFF turns auto-align ON',
@@ -396,8 +502,8 @@ MUTATIONS = [
         'why': 'the S6ED disk stops carrying S2ED, so the one image that runs '
                'both editors on an MSX2 quietly goes out with one',
         'file': 'Makefile',
-        'old': '\t\t\t  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2) TEST_S2.TXT',
-        'new': '\t\t\t  $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2) TEST_S2.TXT',
+        'old': '\t\t\t  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2)\n',
+        'new': '\t\t\t  $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2)\n',
         'filter': 'T0',
         'expect_static': ['build-symmetry'],
     },
