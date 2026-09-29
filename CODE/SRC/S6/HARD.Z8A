@@ -224,6 +224,7 @@ _CURDRV         EQU     #19
 _GETCD          EQU     #59
 _PARSE          EQU     #5B
 _GENV           EQU     #6B
+ENOFIL          EQU     #D7             ; DOS 2 ERROR .NOFIL: FILE NOT FOUND
 _TERM           EQU     #62
 
 

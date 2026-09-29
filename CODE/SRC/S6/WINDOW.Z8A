@@ -1028,10 +1028,28 @@ DOABT           LD      HL, 112
 .BTNOK          DEFM    "[  OK  ]", 0
 
 
-; - DOQIT ------------------------------
-; - CONFIRM EXIT TO DOS: TWO SELECTABLE OPTIONS (YES / NO)
-; - IN:  NONE (READS MODIFIED FOR THE UNSAVED-CHANGES WARNING)
-; - OUT: WINRES = 1: QUIT CONFIRMED, 0: CANCELLED
+; - DOQIT / DONEW ----------------------
+; - THE TWO YES / NO QUESTIONS THE EDITOR ASKS TODAY: QUIT TO DOS, AND
+; - DISCARD THE DOCUMENT FOR A NEW ONE. BOTH ARE DOASK WITH THEIR TEXT.
+; - IN:  NONE
+; - OUT: AS DOASK
+; - CLOBBERS: ALL
+; -
+
+DOQIT           LD      HL, DOASK.TITQIT
+                LD      DE, DOASK.STRQIT
+                JR      DOASK
+
+DONEW           LD      HL, DOASK.TITNEW
+                LD      DE, DOASK.STRNEW
+                ; FALLS THROUGH INTO DOASK
+
+
+; - DOASK ------------------------------
+; - ASK A YES / NO QUESTION: TWO SELECTABLE OPTIONS, DEFAULT NO
+; - IN:  HL = ASCIIZ TITLE, DE = ASCIIZ QUESTION (FEATURE SEGMENT)
+; -      READS MODIFIED FOR THE UNSAVED-CHANGES WARNING LINE
+; - OUT: WINRES = 1: CONFIRMED, 0: CANCELLED
 ; - CLOBBERS: ALL
 ; -
 ; - LEFT/RIGHT MOVE THE SELECTION, ENTER/SPACE ACTIVATE IT, Y/N ARE
@@ -1040,7 +1058,9 @@ DOABT           LD      HL, 112
 ; - BUTTONS IN THE COMPOSITION BUFFER AND RE-BLITTS JUST THEIR RECTS
 ; - WITH WINUPD (SYNCED BY ONE WINVSY), SO THE DIALOG NEVER TEARS.
 
-DOQIT           LD      HL, 156
+DOASK           PUSH    DE              ; QUESTION, FOR AFTER WINOPEN
+                PUSH    HL              ; TITLE
+                LD      HL, 156
                 LD      (WINX), HL
                 LD      HL, 74
                 LD      (WINY), HL
@@ -1049,7 +1069,7 @@ DOQIT           LD      HL, 156
                 LD      HL, 64
                 LD      (WINH), HL
 
-                LD      HL, .TITQIT
+                POP     HL
                 CALL    WINOPEN
 
                 ; DEFAULT: NO SELECTED, RESULT CANCELLED
@@ -1059,7 +1079,7 @@ DOQIT           LD      HL, 156
                 LD      (WINRES), A
 
                 ; MESSAGE LINE
-                LD      HL, .STRQIT
+                POP     HL
                 LD      C, 7
                 LD      B, 1
                 XOR     A               ; NORMAL
@@ -1156,6 +1176,8 @@ DOQIT           LD      HL, 156
 
 .TITQIT         DEFM    "Quit S6ED", 0
 .STRQIT         DEFM    "Exit to MSX-DOS?", 0
+.TITNEW         DEFM    "New Document", 0
+.STRNEW         DEFM    "Discard changes?", 0
 .STRWRN         DEFM    "Unsaved changes!", 0
 .BTNYES         DEFM    "[  YES  ]", 0
 .BTNNO          DEFM    "[  NO  ]", 0

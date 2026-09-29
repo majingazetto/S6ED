@@ -32,6 +32,20 @@ def font_of(ctx):
         return fh.read()
 
 
+def asciiz(run, label, name):
+    """A captured ASCIIZ byte range as text; None when it was not captured.
+
+    run.var() of a byte range the snapshot does not carry is None, and
+    `None or b''` reads as an empty string -- which is how G3's
+    filename-cleared check passed for months without FILENAME ever being
+    captured.  Callers must treat None as a failure.
+    """
+    raw = run.snaps.get(label, {}).get(name)
+    if raw is None:
+        return None
+    return bytes(raw).split(b'\0')[0].decode('ascii', 'replace')
+
+
 def one(runs):
     return runs[None]
 
@@ -179,14 +193,14 @@ class G3Oom(Case):
         run = one(runs)
         tot = run.var('loaded', 'TOTLINES')
         loaderr = run.var('loaded', 'LOADERR')
-        fname = run.var('loaded', 'FILENAME') or b''
+        fname = asciiz(run, 'loaded', 'FILENAME')
         checks = [
             Check('%s/load-refused' % self.PREFIX, tot == 1 and loaderr == 1,
                   'oversized file refused (TOTLINES=%s, LOADERR=%s)'
                   % (tot, loaderr)),
-            Check('%s/filename-cleared' % self.PREFIX,
-                  fname == b'' or fname[0] == 0,
-                  'FILENAME cleared on refusal to protect disk file'),
+            Check('%s/filename-cleared' % self.PREFIX, fname == '',
+                  'FILENAME cleared on refusal to protect disk file (%r)'
+                  % fname),
             Check('%s/alive' % self.PREFIX, run.var('loaded', 'SCRRDY') == 0xFF,
                   'editor still running after refusal'),
         ]
@@ -1805,6 +1819,9 @@ class H22FileMenu(Case):
         t.press('SELECT')
         t.snap('menu_for_n', at='WINPOLL')
         t.press('N')
+        # The document is dirty, so New asks first (F0); YES discards it.
+        t.snap('ask_new', at='WINPOLL')
+        t.press('Y')
         t.snap('after_new')
         return t
 
@@ -1941,6 +1958,7 @@ class H22FileMenu(Case):
         checks.append(Check(
             'H22/action-new',
             run.var('before_new', 'MODIFIED') == 0xFF and
+            run.var('ask_new', 'WINACTV') == 1 and
             run.var('after_new', 'MODIFIED') == 0 and
             run.var('after_new', 'TOTLINES') == 1,
             'N accelerator executes New action (MODIFIED %s -> %s, TOTLINES %s)'
@@ -4686,6 +4704,188 @@ class B5ShippedDisk(ShippedDiskCase):
         return self.shipped_checks(ctx, runs, 'B5', Check)
 
 
+# --- H30  FILE > NEW ASKS BEFORE DISCARDING ---------------------------
+
+
+class H30NewDocument(Case):
+    name = 'H30-new-document'
+    desc = ('Ctrl+N and File > New: a clean document is replaced at once, a '
+            'modified one only after YES in the New Document dialog')
+    origin = ('File > New reset the buffer without asking even with unsaved '
+              'changes, and Ctrl+N was bound in no keymap')
+    variants = ('clean', 'dirty-no', 'dirty-yes', 'menu')
+    LINES = 5
+    TAG = 'H30'
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(self.LINES))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        if variant != 'clean' and variant != 'menu':
+            t.text('X')                       # MODIFIED = 1
+            t.wait(0.5)
+            t.snap('typed')
+        if variant == 'menu':
+            t.press('F1')                     # File menu, New preselected
+            t.press('RETURN')
+        else:
+            t.press('N', mods=['CTRL'])
+        if variant in ('dirty-no', 'dirty-yes'):
+            t.snap('asked', at='WINPOLL')
+            t.press('N' if variant == 'dirty-no' else 'Y')
+        t.wait(1.0)
+        t.snap('after')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            v = '%s/%s' % (self.TAG, variant)
+            lines = run.var('after', 'TOTLINES')
+            name = asciiz(run, 'after', 'FILENAME')
+            mod = run.var('after', 'MODIFIED')
+            if variant == 'dirty-no':
+                checks.append(Check('%s/asked' % v,
+                                    run.var('asked', 'WINACTV') == 1,
+                                    'dialog open (WINACTV %s)'
+                                    % run.var('asked', 'WINACTV')))
+                checks.append(Check('%s/kept' % v,
+                                    lines == self.LINES and mod == 0xFF and
+                                    name == 'DOC.TXT',
+                                    'NO keeps the document: TOTLINES %s, '
+                                    'MODIFIED %s, FILENAME %r'
+                                    % (lines, mod, name)))
+                continue
+            if variant == 'dirty-yes':
+                checks.append(Check('%s/asked' % v,
+                                    run.var('asked', 'WINACTV') == 1,
+                                    'dialog open (WINACTV %s)'
+                                    % run.var('asked', 'WINACTV')))
+            checks.append(Check('%s/fresh' % v,
+                                lines == 1 and mod == 0 and name == '' and
+                                run.var('after', 'WINACTV') == 0,
+                                'new empty document: TOTLINES %s, MODIFIED '
+                                '%s, FILENAME %r, WINACTV %s'
+                                % (lines, mod, name,
+                                   run.var('after', 'WINACTV'))))
+        return checks
+
+
+# --- H31  :e KEEPS THE DOCUMENT WHEN IT CANNOT LOAD --------------------
+
+
+class H31EditOpen(Case):
+    name = 'H31-edit-open'
+    desc = (':e OTHER loads it; :e on a missing file opens an empty document '
+            'under that name; :e on an oversized file keeps the current one; '
+            ':e! reloads with MODIFIED cleared')
+    origin = ('FILELOAD reset the buffer before opening the file, and :e '
+              'copied the new name into FILENAME before loading: a refused '
+              ':e left the old document under the new name, so Ctrl+S would '
+              'overwrite the file that had just been refused')
+    cfg = H27ViEx.cfg
+    variants = ('ok', 'noexist', 'toolarge', 'force')
+    LINES = 5
+    OTHER = crlf(['OTHER %d' % i for i in range(1, 4)])
+    BIG = crlf([('LINE %05d ' % i) + ('X' * 68) for i in range(1, 151)])
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(self.LINES))
+
+    def disk_files(self, ctx, variant=None):
+        files = Case.disk_files(self, ctx, variant)
+        files['OTHER.TXT'] = self.OTHER
+        files['BIG.TXT'] = self.BIG
+        return files
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.wait(1.0)
+        if variant == 'force':
+            H27ViEx.type_str(self, t, 'dd')   # MODIFIED = 1
+            t.wait(0.5)
+            t.snap('dirty')
+        cmd = {'ok': ':e OTHER.TXT', 'noexist': ':e NEW.TXT',
+               'toolarge': ':e BIG.TXT', 'force': ':e! OTHER.TXT'}[variant]
+        H27ViEx.type_str(self, t, cmd)
+        t.press('RETURN')
+        t.wait(2.0)
+        t.snap('after')
+        return t
+
+    def key_for(self, ch):
+        return H27ViEx.key_for(self, ch)
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            v = 'H31/%s' % variant
+            lines = run.var('after', 'TOTLINES')
+            name = asciiz(run, 'after', 'FILENAME')
+            mod = run.var('after', 'MODIFIED')
+            msg = asciiz(run, 'after', 'STATMSG')
+            err = run.var('after', 'LOADERR')
+            want = {
+                'ok': (3, 'OTHER.TXT', 0, 0),
+                'force': (3, 'OTHER.TXT', 0, 0),
+                'noexist': (1, 'NEW.TXT', 0, 0),
+                'toolarge': (self.LINES, 'DOC.TXT', None, 1),
+            }[variant]
+            got = (lines, name, mod if want[2] is not None else None, err)
+            checks.append(Check('%s/state' % v, got == want,
+                                'TOTLINES, FILENAME, MODIFIED, LOADERR = %s '
+                                '(want %s)' % (got, want)))
+            if variant == 'force':
+                checks.append(Check('%s/was-dirty' % v,
+                                    run.var('dirty', 'MODIFIED') == 0xFF,
+                                    'dd set MODIFIED before :e! (%s)'
+                                    % run.var('dirty', 'MODIFIED')))
+            if variant == 'noexist':
+                checks.append(Check('%s/message' % v, msg == '[NEW FILE]',
+                                    'status message %r' % msg))
+        return checks
+
+
+# --- H32  SAVE WITH NO NAME SAYS SO -----------------------------------
+
+
+class H32SaveNoName(Case):
+    name = 'H32-save-noname'
+    desc = 'Ctrl+S on a document with no name reports it instead of doing nothing'
+    origin = ('FILESAVE with an empty FILENAME returned SCF in silence, so '
+              'Ctrl+S after File > New looked like a save that never happened')
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.text('ABC')
+        t.wait(0.5)
+        t.press('S', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('after')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        msg = asciiz(run, 'after', 'STATMSG')
+        stat = ''.join(chr(c) for c in
+                       run.snaps.get('after', {}).get('STATBUF', []))
+        return [
+            Check('H32/no-name', asciiz(run, 'boot', 'FILENAME') == '',
+                  'started with no file name (%r)'
+                  % asciiz(run, 'boot', 'FILENAME')),
+            Check('H32/message', msg == '[NO FILE NAME]' and
+                  '[NO FILE NAME]' in stat,
+                  'STATMSG %r, status bar shows it: %s'
+                  % (msg, '[NO FILE NAME]' in stat)),
+            Check('H32/still-modified', run.var('after', 'MODIFIED') == 0xFF,
+                  'MODIFIED %s: nothing was saved' % run.var('after', 'MODIFIED')),
+        ]
+
+
 # --- H28  PARAMETRIC TEXTWIDTH (PHASE C2) -----------------------------
 
 
@@ -5392,7 +5592,8 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(), H18WindowRobustness(),
          H19QuitDialog(), H20QuitDirty(), H21Shadow(), H22FileMenu(), H23MenuNav(),
          H24GoToLine(), H25FindReplace(), H26FindCurrentLine(), H27ViEx(),
-         H28TextWidth(), H29HomePath(),
+         H28TextWidth(), H29HomePath(), H30NewDocument(), H31EditOpen(),
+         H32SaveNoName(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),

@@ -17,6 +17,7 @@ is also the video shadow, so on the default machine there is nothing spare
 """
 
 import pattern
+from gate import H30NewDocument
 from cases import Case, HomePathCase, ShippedDiskCase, crlf
 from harness import MACH_MSX1
 from keys import Timeline
@@ -1510,12 +1511,15 @@ class S216Menu(S2Case):
         t.press('SELECT')
         t.snap('selcancel', vram='patcol')
 
-        # The N accelerator runs File > New on a dirty buffer
+        # The N accelerator runs File > New on a dirty buffer, which asks
+        # first (F0); YES discards it.
         t.text('EDITED')
         t.snap('dirty')
         t.press('F1')
         t.snap('fornew', at='WINPOLL')
         t.press('N')
+        t.snap('asknew', at='WINPOLL')
+        t.press('Y')
         t.snap('new')
         return t
 
@@ -1654,6 +1658,7 @@ class S216Menu(S2Case):
         checks.append(Check('S2-16/accel-new',
                             run.var('new', 'TOTLINES') == 1 and
                             run.var('new', 'MODIFIED') == 0 and
+                            run.var('asknew', 'WINACTV') == 1 and
                             dirty == len(self.LINES),
                             'N runs File > New (%s lines -> %s, MODIFIED=%s)'
                             % (dirty, run.var('new', 'TOTLINES'),
@@ -2581,6 +2586,15 @@ class S224ShippedDisk(ShippedDiskCase):
         return self.shipped_checks(ctx, runs, 'S2-24', Check)
 
 
+class S225NewDocument(H30NewDocument):
+    name = 'S2-25-new-document'
+    desc = 'H30-new-document on S2ED: its own DONEW in S2/WINDOW.Z8A'
+    origin = 'H30-new-document on the S2 target'
+    machine = MACH_MSX1
+    cfg = S2_CFG
+    TAG = 'S2-25'
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -2588,7 +2602,7 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S216Menu(), S217MenuNav(), S218Goto(),
          S219SelLines(), S220UndoSelDel(), S221FindReplace(),
          S222FindCurrentLine(), S223HomePath(),
-         S224ShippedDisk()]
+         S224ShippedDisk(), S225NewDocument()]
 
 
 def run(ctx, cases=None):

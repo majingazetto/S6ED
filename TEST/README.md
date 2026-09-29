@@ -113,6 +113,7 @@ is caught only by `S2-8/matches-document`. Measured, 2026-09-21.
 | `S2-22-find-current-line` | find matches on the current line (forward, backward, top/bottom wrap-arounds): reloads DOCLINE from (DOCLINE) instead of WORKBUF pointer, and verifies inverted pattern highlight survives |
 | `S2-23-home-path` | `H29-home-path` on the S2 target, and the measurement that Nextor's `COMMAND2` on an MSX1 sets `PROGRAM` and `LOAD_FLAG` exactly as MSX-DOS 2 does |
 | `S2-24-shipped-disk` | `B5-shipped-disk` on the S2 target: `S2ED.DSK` as `make dsk-s2` builds it, booted on the MSX1 under Nextor |
+| `S2-25-new-document` | `H30-new-document` on S2ED, whose `DONEW` / `DOASK` live in `S2/WINDOW.Z8A` |
 
 Two traps this suite met while being built, both worth knowing before adding a
 case:
@@ -209,6 +210,9 @@ Every case names the defect it was derived from in its `origin` field.
 | H26 | find on current line: DOCLINE preservation from WORKBUF corruption, forward/backward wrap, and match XOR highlight retention | current-line search pointer & highlight retention |
 | B5 | `S6ED.DSK` as `make dsk` ships it -- `AUTOEXEC.BAT` puts `\TOOLS` on the `PATH` and runs the editor from `\DEV` -- boots into the sample document with the program's own DAT, FNT, general and local CFG | every disk carried everything in the root, which hid that the program files were opened in the current directory |
 | H29 | program in `\TOOLS` found through `PATH`, run from `\DEV` (layout built by `AUTOEXEC.BAT` with `MD`/`COPY`, since dsktool has no directories): DAT/FNT next to the program, general CFG then local CFG, one read when both are the same directory, and the old DAT-in-current-directory setup still boots | DAT, FNT and CFG opened by bare name: run through `PATH` the editor aborted with "S6ED.DAT not found" |
+| H30 | Ctrl+N and File > New: a clean document is replaced at once, a modified one only after YES in the New Document dialog (`DONEW` = `DOASK` with its text) | New reset a modified document without asking; Ctrl+N bound nowhere |
+| H31 | `:e` loads, `:e` on a missing file opens an empty document under that name (vi), `:e` on an oversized file keeps the current document and its name, `:e!` clears `MODIFIED` | `FILELOAD` reset the document before opening, and `:e` put the new name in `FILENAME` first: a refused load left the old text under the refused file's name |
+| H32 | Ctrl+S with no file name reports `[NO FILE NAME]` | `FILESAVE` returned in silence |
 
 **G7 is the general one.** A full `REDRAW` repaints from the document alone, so
 comparing the screen before and after one is a test of every differential painter
