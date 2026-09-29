@@ -9,16 +9,17 @@
 
 
 ; - CFGLOAD ----------------------------
-; - LOAD S6ED.CFG IF PRESENT AND APPLY
+; - LOAD ONE CFG FILE IF PRESENT AND APPLY IT (CFGRUN CALLS IT ONCE FOR
+; - THE GENERAL CFG NEXT TO THE PROGRAM AND ONCE FOR THE LOCAL ONE)
 ; - THE FILE IS STREAMED IN CLIPMAX-BYTE CHUNKS THROUGH CLIPBUF (IDLE
 ; - DURING INIT) AND EVERY COMPLETE LINE IS PARSED FROM LINBUF, SO THE
 ; - CFG SIZE IS NOT CAPPED BY ANY BUFFER: EOF IS A READ THAT RETURNS 0.
-; - IN:  NONE
+; - IN:  CFGFNP = ASCIIZ NAME OF THE FILE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-CFGLOAD         LD      HL, CFGNAME
+CFGLOAD         LD      HL, (CFGFNP)
                 CALL    DSKOPEN
                 RET     C               ; FILE NOT FOUND: USE DEFAULTS
                 LD      (CFGHAND), A
@@ -985,11 +986,6 @@ SKPCOM          LD      A, (HL)
 ; --- CFG DATA                  ----------------------------------------
 
 
-                IFDEF   S2ED
-CFGNAME         DEFM    "S2ED.CFG", 0
-                ELSE
-CFGNAME         DEFM    "S6ED.CFG", 0
-                ENDIF
 KEYPROF         DEFM    "PROFILE", 0
 KEYWRAP         DEFM    "WRAP", 0
 KEYTW           DEFM    "TEXTWIDTH", 0

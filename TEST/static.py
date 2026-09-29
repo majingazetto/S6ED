@@ -615,11 +615,13 @@ def check_build_symmetry(ctx):
     # The S6ED disk carries S2ED too, so one image runs both editors on an
     # MSX2.  Nothing in a build failure would reveal a tidied-up DSKCONT --
     # the disk would simply come out with one editor on it.
-    m = re.search(r'^DSKCONT\s*=(.*?)^\s*$', text, re.M | re.S)
+    # DSKTOOLS is what goes into A:\TOOLS, the directory on the PATH: an
+    # S2ED.COM anywhere else on the disk would not be found from A:\DEV.
+    m = re.search(r'^DSKTOOLS\s*=(.*?)^\s*$', text, re.M | re.S)
     if m is None:
-        bad.append('Makefile has no DSKCONT')
+        bad.append('Makefile has no DSKTOOLS')
     elif '$(OUTPUT_S2)' not in m.group(1):
-        bad.append('the S6ED disk does not carry $(OUTPUT_S2)')
+        bad.append('the S6ED disk does not carry $(OUTPUT_S2) in TOOLS')
     return Check('build-symmetry', not bad, '; '.join(bad) if bad else
                  'build reaches both targets, clean removes what both '
                  'produce, and the S6ED disk carries both')

@@ -442,6 +442,160 @@ DSKWRITE        LD      B,A
                 JP      WRBLK
 
 
+; --- PROGRAM HOME DIRECTORY            ----------------------------------------
+
+
+; - HOMEINIT ---------------------------
+; - FIND THE DIRECTORY THE PROGRAM WAS LOADED FROM AND TELL WHETHER THE
+; - CURRENT DIRECTORY IS A DIFFERENT ONE (WHICH MAY HOLD A LOCAL CFG)
+; - IN:  LOADFLG (LOAD_FLAG, CAPTURED BY INIT BEFORE THE FIRST BDOS CALL)
+; - OUT: HOMELEN, HOMEPTH = DIRECTORY PREFIX, CFGLOC = 1 IF THE CURRENT
+; -      DIRECTORY IS NOT THE HOME ONE
+; - CLOBBERS: ALL
+; -
+; - COMMAND2.COM SETS THE PROGRAM ENVIRONMENT ITEM TO THE WHOLE PATH THE
+; - PROGRAM WAS FOUND AT ("A:\TOOLS\S6ED.COM"), ALSO WHEN IT WAS FOUND
+; - THROUGH PATH. IT IS ONLY TRUSTED WHEN LOAD_FLAG SAYS THE SHELL SET IT
+; - FOR THIS RUN: A CP/M LOADER LEAVES THE PREVIOUS PROGRAM'S VALUE. ANY
+; - FAILURE LEAVES HOMELEN = 0 AND EVERY NAME BARE, AS BEFORE.
+; - LINBUF IS SCRATCH HERE: CFGLOAD HAS NOT RUN YET AND REFILLS IT.
+; -
+
+HOMEINIT        LD      A, (LOADFLG)
+                OR      A
+                RET     Z               ; NOT SET BY THE SHELL: MAY BE STALE
+                LD      HL, .PRGENV
+                LD      DE, HOMEPTH
+                LD      B, HOMEMAX
+                LD      C, _GENV
+                CALL    BDOS
+                RET     C               ; .IENV / .ELONG: KEEP BARE NAMES
+                LD      DE, HOMEPTH
+                LD      B, 0            ; DRIVE / PATH / FILE, NOT A VOLUME
+                LD      C, _PARSE
+                CALL    BDOS
+                RET     C
+                LD      DE, HOMEPTH     ; HL = FIRST CHARACTER OF THE FILENAME
+                OR      A
+                SBC     HL, DE          ; L = LENGTH OF THE DIRECTORY PREFIX
+                LD      A, L
+                OR      A
+                RET     Z               ; NO DIRECTORY IN THE STRING
+                CP      HOMEMAX - HOMENAM + 1
+                RET     NC              ; NO ROOM LEFT FOR A NAME AFTER IT
+                LD      (HOMELEN), A
+
+                ; BUILD "D:\PATH\" FOR THE CURRENT DIRECTORY IN LINBUF. _CURDRV
+                ; GOES STRAIGHT TO DOS: IT RETURNS THE DRIVE IN A, WHICH THE
+                ; BDOS WRAPPER WOULD TAKE FOR AN ERROR CODE ON ANY DRIVE BUT A:.
+                LD      C, _CURDRV
+                CALL    DOS
+                ADD     A, 'A'
+                LD      HL, LINBUF
+                LD      (HL), A
+                INC     HL
+                LD      (HL), ':'
+                INC     HL
+                LD      (HL), #5C           ; '\'
+                INC     HL
+                PUSH    HL
+                EX      DE, HL          ; DE = 64-BYTE PATH BUFFER
+                LD      B, 0            ; CURRENT DRIVE
+                LD      C, _GETCD
+                CALL    BDOS
+                POP     HL
+                JR      C, .LOCAL       ; CANNOT TELL: READ THE LOCAL CFG TOO
+                LD      A, (HL)
+                OR      A
+                JR      Z, .CMP         ; ROOT: THE PREFIX IS ALREADY "D:\"
+.TAIL           INC     HL
+                LD      A, (HL)
+                OR      A
+                JR      NZ, .TAIL
+                LD      (HL), #5C           ; '\'
+                INC     HL
+                LD      (HL), 0
+
+.CMP            LD      HL, HOMEPTH
+                LD      DE, LINBUF
+                LD      A, (HOMELEN)
+                LD      B, A
+.CMPLP          LD      A, (DE)
+                CALL    .UPC
+                LD      C, A
+                LD      A, (HL)
+                CALL    .UPC
+                CP      C
+                JR      NZ, .LOCAL
+                INC     HL
+                INC     DE
+                DJNZ    .CMPLP
+                LD      A, (DE)
+                OR      A
+                RET     Z               ; SAME DIRECTORY: ONE CFG, READ ONCE
+.LOCAL          LD      A, 1
+                LD      (CFGLOC), A
+                RET
+
+.UPC            CP      'a'
+                RET     C
+                CP      'z' + 1
+                RET     NC
+                SUB     #20
+                RET
+
+.PRGENV         DEFM    "PROGRAM", 0
+
+
+; - HOMEFN -----------------------------
+; - BUILD THE HOME-DIRECTORY PATH OF A PROGRAM FILE
+; - IN:  HL = BARE 8.3 NAME (ASCIIZ, AT MOST HOMENAM BYTES)
+; - OUT: HL = HOMEPTH HOLDING PREFIX + NAME, OR THE BARE NAME UNCHANGED
+; -      WHEN THE HOME DIRECTORY IS NOT KNOWN (HOMELEN = 0)
+; - CLOBBERS: AF, DE
+; -
+
+HOMEFN          LD      A, (HOMELEN)
+                OR      A
+                RET     Z
+                LD      DE, HOMEPTH
+                ADD     A, E
+                LD      E, A
+                ADC     A, D
+                SUB     E
+                LD      D, A            ; DE = HOMEPTH + HOMELEN
+.CPY            LD      A, (HL)
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                OR      A
+                JR      NZ, .CPY
+                LD      HL, HOMEPTH
+                RET
+
+
+; - HOMEOPN ----------------------------
+; - OPEN A PROGRAM FILE: NEXT TO THE PROGRAM FIRST, THEN IN THE CURRENT
+; - DIRECTORY, SO A SETUP THAT WORKED BEFORE HOMEINIT STILL WORKS
+; - IN:  HL = BARE 8.3 NAME (ASCIIZ)
+; - OUT: AS DSKOPEN (CY = 1: IN NEITHER PLACE)
+; - CLOBBERS: AS DSKOPEN
+; -
+
+HOMEOPN         PUSH    HL
+                CALL    HOMEFN
+                CALL    DSKOPEN
+                POP     BC              ; BC = THE BARE NAME
+                RET     NC
+                LD      A, (HOMELEN)
+                OR      A
+                SCF
+                RET     Z               ; THE BARE NAME WAS THE ONE TRIED
+                LD      H, B
+                LD      L, C
+                JP      DSKOPEN
+
+
 ; --- PRINT / OUTPUT                    ----------------------------------------
 
 

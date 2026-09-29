@@ -12,7 +12,8 @@ import os
 import re
 
 import vram
-from cases import Case, DEFAULT_CFG, crlf, numbered
+from cases import (Case, DEFAULT_CFG, HomePathCase, ShippedDiskCase, crlf,
+                   numbered)
 from harness import MACH_128K, MACH_JP
 from keys import Timeline
 from result import Check
@@ -4652,6 +4653,39 @@ THEME=DEFAULT
         return checks
 
 
+# --- H29  PROGRAM HOME DIRECTORY -------------------------------------
+
+
+class H29HomePath(HomePathCase):
+    name = 'H29-home-path'
+    desc = ('S6ED run through PATH from another directory finds S6ED.DAT and '
+            'S6ED.FNT next to itself and layers the local CFG over the general')
+    origin = ('DAT, FNT and CFG were opened by bare name, i.e. in the current '
+              'directory: S6ED in A:\\TOOLS on the PATH, run from C:\\DEV, '
+              'aborted at boot with "S6ED.DAT not found" and fell back to the '
+              'ROM font.  Every test disk had everything in the root, so '
+              'nothing ever noticed')
+
+    def verify(self, ctx, runs):
+        return self.home_checks(ctx, runs, 'H29', Check)
+
+
+# --- B5  THE SHIPPED DISK --------------------------------------------
+
+
+class B5ShippedDisk(ShippedDiskCase):
+    name = 'B5-shipped-disk'
+    desc = 'S6ED.DSK as make dsk ships it: \\TOOLS on the PATH, run from \\DEV'
+    origin = ('the disks carried everything in the root, which is why DAT, FNT '
+              'and CFG being opened in the current directory went unnoticed')
+    dsk_target = 'dsk'
+    dsk_name = 'S6ED.DSK'
+    doc_host = 'TEST.TXT'
+
+    def verify(self, ctx, runs):
+        return self.shipped_checks(ctx, runs, 'B5', Check)
+
+
 # --- H28  PARAMETRIC TEXTWIDTH (PHASE C2) -----------------------------
 
 
@@ -5358,8 +5392,8 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H15DatBadBlkID(), H16DatTruncPay(), H17DatPadded(), H18WindowRobustness(),
          H19QuitDialog(), H20QuitDirty(), H21Shadow(), H22FileMenu(), H23MenuNav(),
          H24GoToLine(), H25FindReplace(), H26FindCurrentLine(), H27ViEx(),
-         H28TextWidth(),
-         B2Font(), B3Rom(), B4CfgStream(), F1Scroll(), F2Keyrun(),
+         H28TextWidth(), H29HomePath(),
+         B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),
          E1Cut(), E2Paste(), E3SelScroll(), E4SelAllDel(), E5Replace(), E6SelWordPage(), E7ClipLimit(),

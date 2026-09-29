@@ -78,7 +78,7 @@ FONTINIT        XOR     A
                 LD      (FNTOK), A      ; THE ROM UNTIL THE FILE EARNS IT
 
                 LD      HL, FNTNAME
-                CALL    DSKOPEN
+                CALL    HOMEOPN
                 JR      C, .USEROM      ; NOT THERE
                 LD      (FNTHAND), A
 
