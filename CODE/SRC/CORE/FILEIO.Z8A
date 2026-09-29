@@ -77,38 +77,62 @@ CHKFLEN         PUSH    DE              ; [SP+2] = FILE SIZE HIGH
 
 ; - FILELOAD ---------------------------
 ; - LOAD FILE FROM DISK INTO BUFFER
-; - IN:  HL: FILENAME (ASCIIZ)
-; - OUT: CY = 0: SUCCESS
-; -      CY = 1: ERROR OR NEW FILE (LOADERR = 1 IF FILE TOO LARGE)
+; - IN:  HL: FILENAME (ASCIIZ). MAY BE FILENAME ITSELF (BOOT) OR ANY
+; -      OTHER BUFFER (:e); FILENAME TAKES THE NAME ONLY ON SUCCESS.
+; - OUT: CY = 0: LOADED, FILENAME = THE NAME, MODIFIED = 0
+; -      CY = 1: NOT LOADED. LOADERR = 1: TOO LARGE; OTHERWISE THE FILE
+; -      COULD NOT BE OPENED AND A = THE DOS ERROR (ENOFIL = NOT FOUND)
 ; - CLOBBERS: ALL
 ; -
+; - THE DOCUMENT IS RESET ONLY ONCE THE FILE IS OPEN AND KNOWN TO FIT:
+; - A FAILED OPEN OR A REFUSED SIZE LEAVES THE DOCUMENT, FILENAME AND
+; - MODIFIED EXACTLY AS THEY WERE. IT USED TO RESET FIRST, SO :e ON A
+; - MISSING OR OVERSIZED FILE HAD ALREADY THROWN THE DOCUMENT AWAY.
+; - ONLY A CAPACITY FAILURE HALFWAY THROUGH THE READ (.OOMNL) CAN STILL
+; - LOSE IT, AND THAT PATH CLEARS FILENAME SO CTRL+S CANNOT OVERWRITE
+; - THE FILE WITH THE REMAINS.
+; -
 
-FILELOAD        PUSH    HL
-                CALL    FILENEW         ; RESET BUFFER AND ALLOCATE INITIAL SEGS
-                POP     HL
-
-                XOR     A
+FILELOAD        XOR     A
                 LD      (LOADERR), A
+                PUSH    HL              ; [SP] = NAME
 
                 CALL    DSKOPEN         ; A=HANDLE, DEHL=SIZE
-                RET     C
+                JR      C, .NOOPEN
                 LD      (FILEHAND), A
 
                 ; PRE-CHECK FILE SIZE: REJECT IMMEDIATELY IF FILE CANNOT FIT
                 CALL    CHKFLEN
-                JR      NC, .LENOK
+                JR      NC, .FITOK
 
-                ; FILE EXCEEDS MAXIMUM THEORETICAL CAPACITY
+                ; FILE EXCEEDS MAXIMUM THEORETICAL CAPACITY. AT BOOT THE NAME
+                ; IS FILENAME ITSELF, WHICH MUST NOT KEEP POINTING AT A FILE
+                ; THE EMPTY DOCUMENT WOULD OVERWRITE; FROM :e IT IS ANOTHER
+                ; BUFFER AND THE CURRENT DOCUMENT KEEPS ITS OWN NAME.
                 LD      A, (FILEHAND)
                 CALL    DSKCLOSE
+                POP     HL
+                LD      DE, FILENAME
+                OR      A
+                SBC     HL, DE
+                JR      NZ, .BIGSET
                 XOR     A
-                LD      (FILENAME), A   ; PROTECT DISK FILE AGAINST OVERWRITE
-                INC     A
+                LD      (FILENAME), A   ; PROTECT THE DISK FILE
+.BIGSET         LD      A, 1
                 LD      (LOADERR), A    ; SIGNAL ERROR
                 SCF
                 RET
 
-.LENOK          LD      HL, 0
+.NOOPEN         POP     HL
+                RET                     ; CY = 1, A = DOS ERROR
+
+.FITOK          CALL    FILENEW         ; ONLY NOW DOES THE DOCUMENT GO
+                POP     HL
+                CALL    FNAMSET         ; THE NAME BECOMES THE DOCUMENT'S
+                XOR     A
+                LD      (MODIFIED), A
+
+                LD      HL, 0
                 LD      (TOTLINES), HL
                 LD      (LINEOFF), HL
                 XOR     A
@@ -280,6 +304,31 @@ FILELOAD        PUSH    HL
                 AND     A               ; CY = 0: SUCCESSFUL LOAD
                 RET
 
+; - FNAMSET ----------------------------
+; - MAKE A NAME THE DOCUMENT'S FILENAME
+; - IN:  HL = ASCIIZ NAME (FILENAME ITSELF IS A NO-OP)
+; - OUT: FILENAME = THE NAME, TRUNCATED TO FNAMLEN - 1 CHARACTERS
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+FNAMSET         LD      DE, FILENAME
+                OR      A
+                SBC     HL, DE
+                ADD     HL, DE
+                RET     Z               ; ALREADY THERE
+                LD      B, FNAMLEN - 1
+.CPY            LD      A, (HL)
+                LD      (DE), A
+                OR      A
+                RET     Z
+                INC     HL
+                INC     DE
+                DJNZ    .CPY
+                XOR     A
+                LD      (DE), A
+                RET
+
+
 ; - STORLINE ---------------------------
 ; - FINISH CURRENT LINE, ADD TO DIRECTORY, PREPARE NEXT
 ; - IN:  NONE (USES CURLLEN, TOTLINES)
@@ -351,8 +400,13 @@ FILESAVE        LD      HL, FILENAME
                 LD      A, (HL)
                 OR      A
                 JR      NZ, .DOFSAV
+                ; NO FILENAME: SAY SO INSTEAD OF RETURNING IN SILENCE (A NEW
+                ; DOCUMENT HAS NONE UNTIL SAVE AS EXISTS; :w NAME GIVES ONE)
+                LD      HL, .STRNONM
+                CALL    .SETMSG
+                CALL    DRWSTAT
                 SCF
-                RET                     ; NO FILENAME TO SAVE
+                RET
 
 .DOFSAV         ; DISPLAY "Saving..." ON STATUS BAR BEFORE DISK OPERATION
                 LD      HL, .STRSAVG
@@ -430,6 +484,7 @@ FILESAVE        LD      HL, FILENAME
                 INC     DE
                 JR      .SETMLP
 
+.STRNONM        DEFM    "[NO FILE NAME]", 0
 .STRSAVG        DEFM    "Saving...", 0
 .STRSAVD        DEFM    "[SAVED]", 0
 .STRSERR        DEFM    "[SAVE ERROR]", 0

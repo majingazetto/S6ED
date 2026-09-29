@@ -73,6 +73,7 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTFNXT         ; 61 (FIND NEXT)
                 DEFW    ACTFPRV         ; 62 (FIND PREV)
                 DEFW    ACTEXMOD        ; 63 (VI ':' COMMAND CONSOLE)
+                DEFW    ACTNEW          ; 64 (CTRL + N / FILE > NEW)
                 ASSERT  ($ - ACTTBL) / 2 == ACMAX
 
 
@@ -922,6 +923,40 @@ ACTTGLWR        CALL    EDTGLWRP
 ACTSAVE         JP      FILESAVE
 
 
+; --- ACTNEW                    ----------------------------------------
+
+
+; - ACTNEW -----------------------------
+; - START A NEW, EMPTY DOCUMENT (CTRL + N / FILE > NEW). A MODIFIED
+; - DOCUMENT IS ONLY DISCARDED AFTER A YES IN DONEW (DEFAULT NO).
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTNEW          LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .FRESH
+                ; FTR-BUDGET: S6ED 9,744 B FREE, S2ED 4,374 B (2026-09-29)
+                LD      A, (FTRSEG)
+                LD      HL, DONEW
+                CALL    FCALL
+                LD      A, (WINRES)
+                OR      A
+                RET     Z               ; NO: KEEP THE DOCUMENT
+.FRESH          LD      A, (SELACT)
+                OR      A
+                CALL    NZ, ACTDSEL
+                CALL    FILENEW
+                XOR     A
+                LD      (MODIFIED), A
+                LD      (FILENAME), A
+                LD      (STATMSG), A
+                CALL    REDRAW
+                CALL    DRWMENU
+                JP      DRWSTAT
+
+
 ; --- ACTQUIT                   ----------------------------------------
 
 
@@ -1314,12 +1349,7 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
                 JR      Z, .ESKP1
                 OR      A
                 JP      Z, .ERARG
-                CALL    .CPYFNAM
-                CALL    FILELOAD
-                XOR     A
-                LD      (STATMSG), A
-                CALL    REDRAW
-                JP      DRWSTAT
+                JR      .EARG
 
 .EFORCE         INC     HL
 .ESKP2          LD      A, (HL)
@@ -1329,12 +1359,53 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
                 JR      .ESKP2
 .EFDO           LD      A, (HL)
                 OR      A
-                JR      Z, .ERELD
-                CALL    .CPYFNAM
-.ERELD          CALL    FILELOAD
+                JR      NZ, .EARG
+                LD      HL, FILENAME    ; :e! ALONE: RELOAD THE CURRENT FILE
+                LD      A, (HL)
+                OR      A
+                JP      Z, .ERNOF
+                JR      .EOPEN
+
+.EARG           ; THE NAME GOES TO LINBUF, NOT FILENAME: FILELOAD HANDS IT
+                ; TO FILENAME ONLY IF THE LOAD SUCCEEDS, SO A FAILED :e
+                ; LEAVES THE DOCUMENT UNDER ITS OWN NAME. LINBUF IS THE CFG
+                ; LINE BUFFER, IDLE ONCE INIT HAS APPLIED THE CFG.
+                LD      DE, LINBUF
+                CALL    .CPYFN
+                LD      HL, LINBUF
+
+.EOPEN          PUSH    HL
+                LD      A, (SELACT)
+                OR      A
+                CALL    NZ, ACTDSEL
                 XOR     A
                 LD      (STATMSG), A
-                CALL    REDRAW
+                POP     HL
+                PUSH    HL
+                CALL    FILELOAD
+                POP     HL
+                JR      NC, .EDRAW
+                LD      B, A
+                LD      A, (LOADERR)
+                OR      A
+                JR      NZ, .EDRAW      ; TOO LARGE: THE STATUS BAR SAYS SO
+                LD      A, B
+                CP      ENOFIL
+                JR      NZ, .ECANT
+                ; NOT FOUND: A NEW, EMPTY DOCUMENT UNDER THAT NAME, AS IN VI.
+                ; :e WITHOUT ! ALREADY REFUSED A MODIFIED DOCUMENT.
+                PUSH    HL
+                CALL    FILENEW
+                POP     HL
+                CALL    FNAMSET
+                XOR     A
+                LD      (MODIFIED), A
+                LD      HL, .STRNEWF
+                JR      .EMSG
+.ECANT          LD      HL, .STRCANT
+.EMSG           CALL    .SETMSG
+.EDRAW          CALL    REDRAW
+                CALL    DRWMENU
                 JP      DRWSTAT
 
 .CMDSET         ; MUST MATCH "set " OR "SET "
@@ -1534,7 +1605,7 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
                 JR      .SETMLP
 
 .CPYFNAM        LD      DE, FILENAME
-                LD      B, 38
+.CPYFN          LD      B, FNAMLEN - 1
 .CPYFLP         LD      A, (HL)
                 OR      A
                 JR      Z, .CPYFDN
@@ -1556,6 +1627,8 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
 .STRERRC        DEFM    "Not an editor command", 0
 .STRSAVD        DEFM    "[SAVED]", 0
 .STRNOF         DEFM    "No file name", 0
+.STRNEWF        DEFM    "[NEW FILE]", 0
+.STRCANT        DEFM    "[CANNOT OPEN]", 0
 .STRMOD         DEFM    "No write since last change (! overrides)", 0
 .STRARG         DEFM    "Argument required", 0
 .STRTXTW        DEFM    "xtwidth", 0
@@ -3490,13 +3563,7 @@ MNUENT          ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
                 JR      Z, .FQUIT
                 RET
 
-.FNEW           CALL    FILENEW
-                XOR     A
-                LD      (MODIFIED), A
-                LD      (FILENAME), A
-                CALL    REDRAW
-                CALL    DRWMENU
-                JP      DRWSTAT
+.FNEW           JP      ACTNEW
 
 .FSAVE          JP      FILESAVE
 

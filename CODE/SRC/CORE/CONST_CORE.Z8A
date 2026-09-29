@@ -39,6 +39,7 @@ LINMAX          EQU     128             ; MAX CFG LINE LENGTH INCLUDING NUL
                 ; HOME-RELATIVE NAMES: THE PREFIX IS KEPT AND AN 8.3 NAME PLUS
                 ; ITS NUL (HOMENAM BYTES) IS WRITTEN AFTER IT, SO THE PREFIX
                 ; MAY BE AT MOST HOMEMAX - HOMENAM BYTES LONG.
+FNAMLEN         EQU     40              ; FILENAME BUFFER, NUL INCLUDED
 HOMEMAX         EQU     80              ; PROGRAM STRING BUFFER (DOS 2 PATHS: 63 + NUL)
 HOMENAM         EQU     13              ; LONGEST 8.3 NAME PLUS NUL
 
@@ -224,7 +225,8 @@ ACFIND          EQU     60              ; CTRL + F / EDIT MENU (FIND & REPLACE)
 ACFNXT          EQU     61              ; CTRL + L / F3 (FIND NEXT)
 ACFPRV          EQU     62              ; CTRL + R / SHIFT + F3 (FIND PREV)
 ACEXMOD         EQU     63              ; VI ':' COMMAND LINE CONSOLE
-ACMAX           EQU     64
+ACNEW           EQU     64              ; CTRL + N / FILE > NEW
+ACMAX           EQU     65
 
 SRCHMAX         EQU     18              ; MAX SEARCH / REPLACE PATTERN LENGTH
 SRCH_FND        EQU     0               ; ACTION: FIND NEXT

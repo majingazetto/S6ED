@@ -11,6 +11,132 @@ import shutil
 
 MUTATIONS = [
     {
+        'name': 'f0-new-noask',
+        'why': 'the defect as it shipped: New resets a modified document '
+               'without asking',
+        'file': 'ACTION.Z8A',
+        'old': """ACTNEW          LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .FRESH""",
+        'new': """ACTNEW          LD      A, (MODIFIED)
+                OR      A
+                JR      .FRESH          ; MUTATION: NEVER ASK""",
+        'filter': 'H30',
+        # No dialog ever opens, so the snapshot armed on WINPOLL never fires
+        # and the dirty sessions die waiting for it.
+        'expect_any': ['H30/dirty-no/asked', 'H30-new-document'],
+    },
+    {
+        'name': 'f0-new-ignores-no',
+        'why': 'New asks but discards the document whatever the answer',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      A, (WINRES)
+                OR      A
+                RET     Z               ; NO: KEEP THE DOCUMENT""",
+        'new': """                LD      A, (WINRES)
+                OR      A               ; MUTATION: THE ANSWER IS IGNORED""",
+        'filter': 'H30',
+        'expect': ['H30/dirty-no/kept'],
+    },
+    {
+        'name': 'f0-ctrl-n',
+        'why': 'Ctrl+N is bound in no keymap again',
+        'file': 'KEYMAP.Z8A',
+        'old': """                DEFB    CTRL_N,  MODCTRL, ACNEW
+""",
+        'new': "",
+        'filter': 'H30',
+        # Ctrl+N does nothing: the clean check goes red, and the dirty
+        # sessions die waiting for a dialog that never opens.
+        'expect_any': ['H30/clean/fresh', 'H30-new-document'],
+    },
+    {
+        'name': 'f0-load-order',
+        'why': 'the defect as it shipped: FILELOAD resets the document before '
+               'opening the file, so a refused :e has already thrown it away',
+        'file': 'FILEIO.Z8A',
+        'old': """FILELOAD        XOR     A
+                LD      (LOADERR), A
+                PUSH    HL              ; [SP] = NAME""",
+        'new': """FILELOAD        PUSH    HL
+                CALL    FILENEW         ; MUTATION: RESET BEFORE OPENING
+                POP     HL
+                XOR     A
+                LD      (LOADERR), A
+                PUSH    HL              ; [SP] = NAME""",
+        'filter': 'H31',
+        'expect': ['H31/toolarge/state'],
+    },
+    {
+        'name': 'f0-e-name-first',
+        'why': 'the defect as it shipped: :e copies the new name into FILENAME '
+               'before loading, so a refused load leaves the old document '
+               'under the name of the file it refused',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      DE, LINBUF
+                CALL    .CPYFN
+                LD      HL, LINBUF""",
+        'new': """                CALL    .CPYFNAM        ; MUTATION: STRAIGHT INTO FILENAME
+                LD      HL, FILENAME""",
+        'filter': 'H31',
+        'expect': ['H31/toolarge/state'],
+    },
+    {
+        'name': 'f0-noexist-refused',
+        'why': ':e on a missing file reports an error instead of opening an '
+               'empty document under that name, as vi does',
+        'file': 'ACTION.Z8A',
+        'old': """                CP      ENOFIL
+                JR      NZ, .ECANT""",
+        'new': """                CP      ENOFIL
+                JR      .ECANT          ; MUTATION: NOT FOUND IS AN ERROR""",
+        'filter': 'H31',
+        'expect': ['H31/noexist/state', 'H31/noexist/message'],
+    },
+    {
+        'name': 'f0-load-modified',
+        'why': 'FILELOAD leaves MODIFIED as it was, so the document :e! has '
+               'just read back from disk still counts as unsaved',
+        'file': 'FILEIO.Z8A',
+        'old': """                CALL    FNAMSET         ; THE NAME BECOMES THE DOCUMENT'S
+                XOR     A
+                LD      (MODIFIED), A""",
+        'new': """                CALL    FNAMSET         ; THE NAME BECOMES THE DOCUMENT'S
+                XOR     A               ; MUTATION: MODIFIED LEFT ALONE""",
+        'filter': 'H31',
+        'expect': ['H31/force/state'],
+    },
+    {
+        'name': 'f0-save-silent',
+        'why': 'the defect as it shipped: Ctrl+S with no file name returns '
+               'without a word',
+        'file': 'FILEIO.Z8A',
+        'old': """                LD      HL, .STRNONM
+                CALL    .SETMSG
+                CALL    DRWSTAT
+                SCF
+                RET""",
+        'new': """                SCF                     ; MUTATION: SILENT
+                RET""",
+        'filter': 'H32',
+        'expect': ['H32/message'],
+    },
+    {
+        'name': 's2-f0-donew',
+        'why': 'S2ED\'s DONEW confirms without showing the dialog',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """DONEW           LD      HL, DOASK.TITNEW
+                LD      DE, DOASK.STRNEW""",
+        'new': """DONEW           LD      A, 1            ; MUTATION: YES WITHOUT ASKING
+                LD      (WINRES), A
+                RET
+                LD      HL, DOASK.TITNEW
+                LD      DE, DOASK.STRNEW""",
+        'filter': 'S2-25',
+        'expect_any': ['S2-25/dirty-no/asked', 'S2-25-new-document'],
+    },
+    {
         'name': 'b5-dsk-root',
         'why': 'the disk goes back to carrying the programs in the root, where '
                'the PATH that AUTOEXEC.BAT sets does not look, so booting it '
@@ -618,8 +744,10 @@ MUTATIONS = [
         # SELECT opens nothing, so the timeline's later ESC opens the Quit
         # dialog instead and the WINPOLL gate samples THAT: WINACTV is still
         # 1 and MNUID still 0.  It is the geometry and the accelerator that
-        # tell the two apart, which is why S2-16/open names both.
-        'expect': ['S2-16/open', 'S2-16/accel-new'],
+        # tell the two apart, which is why S2-16/open names both.  Since F0
+        # the accelerator step waits on WINPOLL for the New dialog, which a
+        # stubbed menu never opens, so the session may also die there.
+        'expect_any': ['S2-16/open', 'S2-16/accel-new', 'S2-16-menu'],
     },
     {
         'name': 's2-menu-defsel',

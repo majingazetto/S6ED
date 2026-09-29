@@ -263,7 +263,7 @@ RPLCNT          DEFW    0               ; REPLACE ALL COUNTER
 ; --- FILE                      ----------------------------------------
 
 
-FILENAME        DEFS    40, 0           ; CURRENT FILENAME (ASCIIZ)
+FILENAME        DEFS    FNAMLEN, 0      ; CURRENT FILENAME (ASCIIZ)
 FILEHAND        DEFB    0               ; OPEN FILE HANDLE
 SAVHAND         DEFB    0               ; FILESAVE: HANDLE OF THE FILE BEING WRITTEN
 WASCR           DEFB    0               ; 1 = LAST CHAR PROCESSED WAS CR
