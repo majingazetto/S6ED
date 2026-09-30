@@ -97,6 +97,9 @@ WINOPEN         PUSH    HL              ; TITLE
 
                 ; CLAMP SIZE: (WINNR+1)*(WINNC+1)*9 <= WSVMAX, SHRINKING
                 ; THE LARGER DIMENSION UNTIL THE SAVE BUFFER HOLDS IT
+                LD      A, (WINNOSV)
+                AND     A
+                JR      NZ, .SZOK
 .SZLP           LD      A, (WINNR)
                 INC     A
                 LD      B, A            ; B = ROWS (SHADOW INCLUDED)
@@ -131,7 +134,9 @@ WINOPEN         PUSH    HL              ; TITLE
                 LD      (WINCLIM), A    ; (WINC+WINNC-1)*2, EXCLUSIVE
 
                 ; SAVE BACKGROUND, SHADOW MARGIN INCLUDED
-                CALL    WSAVE
+                LD      A, (WINNOSV)
+                AND     A
+                CALL    Z, WSAVE
 
                 ; DRAW WINDOW BOX AND TITLE INTO THE SHADOWS
                 POP     HL
@@ -158,8 +163,14 @@ WINOPEN         PUSH    HL              ; TITLE
 
 WINCLOS         XOR     A
                 LD      (WINACTV), A
+                LD      A, (WINNOSV)
+                AND     A
+                JR      NZ, .NOSV
                 CALL    WRSTOR
                 JP      WDUMP
+.NOSV           XOR     A
+                LD      (WINNOSV), A
+                RET
 
 
 ; --- WSAVE                     ----------------------------------------
@@ -1085,19 +1096,6 @@ DOASK           PUSH    DE              ; QUESTION, FOR AFTER WINOPEN
 .STRWRN         DEFM    "Unsaved changes!", 0
 .BTNYES         DEFM    "[  YES ]", 0
 .BTNNO          DEFM    "[  NO  ]", 0
-
-
-; - DOBRW ------------------------------
-; - THE FILE BROWSER. NOT ON S2ED YET (SPEC_FILE_BROWSER F3): IT CANCELS,
-; - SO CTRL + O AND VI :e WITH NO NAME DO NOTHING HERE, AS FILE > OPEN
-; - ALWAYS DID.
-; - IN:  NONE
-; - OUT: CY = 1 (CANCELLED)
-; - CLOBBERS: NONE
-; -
-
-DOBRW           SCF
-                RET
 
 
 ; --- WINEDIT                   ----------------------------------------

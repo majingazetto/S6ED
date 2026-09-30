@@ -1676,8 +1676,14 @@ ACTOPEN         LD      A, (MODIFIED)
                 LD      A, (FTRSEG)
                 LD      HL, DOBRW
                 CALL    FCALL
-                RET     C               ; CANCELLED
-                LD      HL, BRWOUT
+                JR      NC, .OK
+                CALL    REDRAW
+                CALL    DRWMENU
+                LD      A, #FF
+                LD      (STATPRV), A
+                CALL    DRWSTAT
+                RET
+.OK             LD      HL, BRWOUT
                 JP      OPENDOC
 
 

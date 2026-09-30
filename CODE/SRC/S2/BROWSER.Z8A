@@ -1,0 +1,882 @@
+;                                       ****************************************
+;                                       * FILE BROWSER WINDOW (SCREEN 2)       *
+;                                       ****************************************
+;
+; THE S2ED HALF OF THE FILE BROWSER (DEV/SPEC_FILE_BROWSER.MD): A GRID OF
+; BRWCOLS X BRWROWS SLOTS OF BRWSLOT CHARACTERS (4 X 12 OF 14 = 56 COLUMNS,
+; 28 CELLS WIDE IN A 30-CELL WINDOW), A SEPARATOR, THE INFORMATION LINE,
+; THE NAME FIELD AND TWO BUTTONS. THE LISTING, THE PATHS AND THE LINE'S TEXT
+; ARE CORE/BROWSE.Z8A.
+;
+; A SLOT IS 14 CHARACTERS = 7 CELLS WIDE AND STARTS AT CELL 2 + 7 * COLUMN,
+; ALIGNED EXACTLY TO CELL BOUNDARIES SO THE SELECTION BAR OWNS WHOLE CELLS
+; WITHOUT ATTRIBUTE CLASH.
+
+BRWWINR         EQU     2               ; WINDOW TOP ROW
+BRWWINC         EQU     1               ; WINDOW LEFT CELL
+BRWWINNR        EQU     18              ; WINDOW HEIGHT IN ROWS
+BRWWINNC        EQU     30              ; WINDOW WIDTH IN CELLS
+BRWSLW          EQU     7               ; SLOT WIDTH IN CELLS
+BRWSLW8         EQU     56              ; SLOT WIDTH IN PATTERN BYTES (7 * 8)
+
+
+; --- DOBRW                     ----------------------------------------
+
+
+; - DOBRW ------------------------------
+; - THE FILE BROWSER: OPEN (BRWMODE = BRW_OPEN) OR SAVE AS (BRW_SAVE)
+; - IN:  BRWMODE
+; - OUT: CY = 1: CANCELLED. CY = 0: BRWOUT = THE FULL PATH CHOSEN
+; - CLOBBERS: ALL
+; -
+; - RETURN ON A FILE, OR ON THE BUTTON WITH AN EMPTY FIELD, TAKES THE
+; - SELECTED ENTRY; A DIRECTORY, THE PARENT OR A DRIVE IS ENTERED INSTEAD.
+; - A NAME TYPED IN THE FIELD WINS OVER THE SELECTION: WITH '*' OR '?' IT
+; - BECOMES THE MASK, ENDING IN '\' IT IS A DIRECTORY TO GO TO, OTHERWISE
+; - IT IS THE FILE -- RELATIVE TO BRWPATH UNLESS IT STARTS WITH "D:".
+; -
+
+DOBRW           LD      A, 1
+                LD      (WINNOSV), A    ; NO BACKGROUND SAVE: WINDOW TOO LARGE FOR WSVBUF
+                LD      A, BRWWINR
+                LD      (WINR), A
+                LD      A, BRWWINC
+                LD      (WINC), A
+                LD      A, BRWWINNR
+                LD      (WINNR), A
+                LD      A, BRWWINNC
+                LD      (WINNC), A
+                LD      A, BRWFLDR
+                LD      (EDROW), A
+                LD      A, 10           ; FIELD CHAR COLUMN
+                LD      (EDCOL), A
+                LD      A, 38           ; FIELD WIDTH IN CHARACTERS
+                LD      (EDWID), A
+
+                CALL    .INITP
+                LD      HL, .MASKD
+                LD      DE, BRWMASK
+                LD      BC, 4
+                LDIR
+                XOR     A
+                LD      (INPLEN), A
+                LD      (INPBUF), A
+                LD      (BRWPREV), A
+                LD      A, (BRWMODE)
+                OR      A
+                LD      A, BRF_LIST
+                JR      Z, .FOCUS
+                CALL    .SEED           ; SAVE AS: THE CURRENT NAME TO EDIT
+                LD      A, BRF_FLD
+.FOCUS          LD      (BRWFOC), A
+
+                CALL    BRWDTEN
+                CALL    BRWSCAN
+                CALL    .TITLE
+                LD      HL, BRWTTL
+                CALL    WINOPEN         ; DRAWS FRAME, TITLE, SHADOW, AND WDUMP
+                CALL    .PAINT          ; PAINTS ALL CONTENTS AND DUMPS ROWS 3..18
+
+                ; --- THE KEY LOOP
+.KEYLP          CALL    WINPOLL
+                JP      Z, .KEYLP
+
+.KEY            CP      ESC
+                JP      Z, .CANCEL
+                CP      TAB
+                JP      Z, .NEXTF
+                LD      C, A
+                LD      A, (BRWFOC)
+                CP      BRF_LIST
+                JP      Z, .KLIST
+                CP      BRF_FLD
+                JP      Z, .KFLD
+                LD      A, C            ; A BUTTON HAS THE FOCUS
+                CP      CR
+                JR      Z, .KBTN
+                CP      ' '
+                JP      NZ, .KEYLP
+.KBTN           LD      A, (BRWFOC)
+                CP      BRF_CANC
+                JP      Z, .CANCEL
+                JP      .ACCEPT
+
+                ; --- THE GRID HAS THE FOCUS
+.KLIST          LD      A, C
+                CP      CUP
+                JR      Z, .MVUP
+                CP      CDOWN
+                JR      Z, .MVDN
+                CP      CLEFT
+                JR      Z, .MVL
+                CP      CRIGHT
+                JR      Z, .MVR
+                CP      CR
+                JP      Z, .ACTIV
+                CP      ' '
+                JP      Z, .ACTIV
+                CP      BS
+                JP      Z, .GOUP
+                JP      .JUMP
+
+.MVUP           LD      A, (BRWSEL)
+                SUB     BRWCOLS
+                JP      C, .KEYLP
+                JR      .SETSEL
+.MVDN           LD      A, (BRWSEL)
+                ADD     A, BRWCOLS
+                LD      HL, BRWCNT
+                CP      (HL)
+                JP      NC, .KEYLP      ; NO ENTRY BELOW
+                JR      .SETSEL
+.MVL            LD      A, (BRWSEL)
+                OR      A
+                JP      Z, .KEYLP
+                DEC     A
+                JR      .SETSEL
+.MVR            LD      A, (BRWSEL)
+                INC     A
+                LD      HL, BRWCNT
+                CP      (HL)
+                JP      NC, .KEYLP
+
+                ; .SETSEL: A = THE NEW SELECTION
+.SETSEL         LD      HL, BRWSEL
+                LD      B, (HL)         ; B = THE OLD ONE
+                LD      (HL), A         ; A = THE NEW ONE
+                PUSH    BC
+                CALL    .SCROLL         ; A = HOW GRID MOVED (0=SAME, 1=MOVED)
+                POP     BC
+                OR      A
+                JR      NZ, .SELSCR
+                ; SAME VIEWPORT: REDRAW OLD SLOT AND NEW SLOT
+                LD      A, B
+                PUSH    AF
+                CALL    .SLOT           ; PAINT OLD SLOT (VCOLWIN)
+                LD      A, (BRWSEL)
+                CALL    .SLOT           ; PAINT NEW SLOT (VCOLBSEL)
+                POP     AF
+                CALL    .ROWOF          ; B = OLD GRID ROW
+                LD      A, (BRWTOP)
+                LD      C, A
+                LD      A, B
+                SUB     C
+                ADD     A, BRWRLST
+                LD      D, A            ; D = OLD SCREEN ROW
+                LD      A, (BRWSEL)
+                CALL    .ROWOF          ; B = NEW GRID ROW
+                LD      A, (BRWTOP)
+                LD      C, A
+                LD      A, B
+                SUB     C
+                ADD     A, BRWRLST      ; A = NEW SCREEN ROW
+                CP      D
+                JR      Z, .ONEROW
+                PUSH    AF
+                LD      A, D
+                CALL    WDUMPR          ; DUMP OLD ROW
+                POP     AF
+.ONEROW         CALL    WDUMPR          ; DUMP NEW ROW
+                JR      .SELFLD
+
+.SELSCR         ; VIEWPORT MOVED: FULL GRID REDRAW
+                CALL    .LIST
+                CALL    .DUMPG          ; DUMPS ROWS 3..14
+.SELFLD         CALL    .INFO
+                LD      A, BRWINFR
+                CALL    WDUMPR          ; DUMP INFO ROW
+                LD      A, (BRWMODE)
+                OR      A
+                JP      NZ, .KEYLP      ; SAVE AS: TYPED NAME STAYS
+                CALL    .SELENT
+                CALL    BRWFLG
+                AND     BRFDIR | BRFDRV | BRFUP
+                JP      NZ, .KEYLP      ; NOT A PLAIN FILE
+                LD      DE, INPBUF
+                CALL    BRWTXT
+                LD      A, E
+                SUB     INPBUF & #FF
+                LD      (INPLEN), A
+                CALL    .FIELD
+                LD      A, BRWFLDR
+                CALL    WDUMPR          ; DUMP FIELD ROW
+                JP      .KEYLP
+
+                ; .JUMP: A LETTER OR DIGIT SELECTS THE NEXT ENTRY STARTING
+                ; WITH IT, WRAPPING AROUND
+.JUMP           LD      A, C
+                CALL    BRWCHR
+                JP      C, .KEYLP
+                LD      C, A            ; C = WHAT TO LOOK FOR, UPPER CASE
+                LD      A, (BRWCNT)
+                OR      A
+                JP      Z, .KEYLP
+                LD      B, A            ; B = ENTRIES TO TRY
+                LD      A, (BRWSEL)
+.JMPLP          INC     A
+                LD      HL, BRWCNT
+                CP      (HL)
+                JR      C, .JMPIN
+                XOR     A
+.JMPIN          PUSH    AF
+                PUSH    BC
+                CALL    BRWPOS
+                POP     BC
+                LD      A, (HL)
+                CP      C
+                JR      NZ, .JMPNO
+                CALL    BRWFLG
+                AND     BRFUP
+                JR      NZ, .JMPNO      ; ".." DOES NOT START WITH '.'
+                POP     AF
+                JP      .SETSEL
+.JMPNO          POP     AF
+                DJNZ    .JMPLP
+                JP      .KEYLP
+
+                ; --- THE FIELD HAS THE FOCUS
+.KFLD           LD      A, C
+                CP      CR
+                JP      Z, .ACCEPT
+                CP      BS
+                JR      Z, .FLDBS
+                CALL    BRWCHR
+                JP      C, .KEYLP
+                LD      B, A
+                LD      A, (INPLEN)
+                LD      C, A
+                LD      A, (EDWID)
+                CP      C
+                JP      Z, .KEYLP       ; FULL
+                LD      HL, INPBUF
+                LD      E, C
+                LD      D, 0
+                ADD     HL, DE
+                LD      (HL), B
+                INC     HL
+                LD      (HL), 0
+                LD      A, C
+                INC     A
+                LD      (INPLEN), A
+                JR      .FLDUPD
+.FLDBS          LD      A, (INPLEN)
+                OR      A
+                JP      Z, .KEYLP
+                DEC     A
+                LD      (INPLEN), A
+                LD      E, A
+                LD      D, 0
+                LD      HL, INPBUF
+                ADD     HL, DE
+                LD      (HL), 0
+.FLDUPD         CALL    .FIELD
+                LD      A, BRWFLDR
+                CALL    WDUMPR
+                JP      .KEYLP
+
+                ; --- TAB: THE NEXT STOP OF THE FOCUS
+.NEXTF          LD      A, (BRWFOC)
+                INC     A
+                CP      BRFOCN
+                JR      C, .NFSET
+                XOR     A
+.NFSET          LD      (BRWFOC), A
+                ; UPDATE FIELD CARET / COLOR
+                CALL    .FIELD
+                LD      A, BRWFLDR
+                CALL    WDUMPR
+                ; UPDATE BUTTON HIGHLIGHTS
+                CALL    .BTNS
+                LD      A, BRWBTNR
+                CALL    WDUMPR
+                JP      .KEYLP
+
+                ; --- ACT ON THE SELECTED ENTRY
+.ACTIV          LD      A, (BRWCNT)
+                OR      A
+                JP      Z, .KEYLP
+                CALL    .SELENT
+                CALL    BRWFLG
+                BIT     5, A            ; BRFUP
+                JR      NZ, .GOUP
+                BIT     6, A            ; BRFDRV
+                JR      NZ, .DRIVE
+                BIT     7, A            ; BRFDIR
+                JR      NZ, .INTO
+                CALL    BRWPTXT         ; A FILE: THE CHOICE
+                JP      C, .KEYLP
+                JP      .CHOSEN
+
+.GOUP           CALL    BRWROOT
+                JP      Z, .KEYLP
+                CALL    BRWUP
+                JP      .RESCAN
+
+.INTO           LD      DE, BRWFIB      ; "SUB\" AFTER THE PATH
+                CALL    BRWTXT
+                LD      HL, BRWPATH
+                LD      DE, BRWFIB
+                CALL    BRWCAT2
+                JP      C, .KEYLP
+                JP      .NEWDIR
+
+.DRIVE          LD      A, (HL)         ; THE LETTER
+                SUB     'A' - 1         ; 1 = A:
+                PUSH    AF
+                LD      HL, BRWPATH     ; KEEP THE PATH, IN CASE THE DRIVE
+                LD      DE, BRWNAME     ; CANNOT BE READ
+                LD      BC, FNAMLEN
+                LDIR
+                POP     AF
+                LD      DE, BRWPATH
+                CALL    CURDIR
+                JP      NC, .RESCAN
+                LD      HL, BRWNAME
+                LD      DE, BRWPATH
+                LD      BC, FNAMLEN
+                LDIR
+                JP      .KEYLP
+
+                ; --- RETURN IN THE FIELD, OR THE OPEN / SAVE BUTTON
+.ACCEPT         LD      A, (INPLEN)
+                OR      A
+                JP      Z, .ACTIV       ; NOTHING TYPED: THE SELECTION
+                LD      HL, INPBUF
+                LD      B, A
+.WILD           LD      A, (HL)
+                CP      '*'
+                JR      Z, .MASK
+                CP      '?'
+                JR      Z, .MASK
+                INC     HL
+                DJNZ    .WILD
+                LD      A, (INPBUF + 1) ; "D:..." IS A WHOLE PATH
+                CP      ':'
+                JR      NZ, .RELAT
+                LD      HL, INPBUF
+                LD      DE, BRWNAME
+                LD      BC, INPSIZ
+                LDIR
+                JR      .ISDIR
+.RELAT          LD      HL, BRWPATH
+                LD      DE, INPBUF
+                CALL    BRWCAT2
+                JP      C, .KEYLP       ; WOULD NOT FIT
+.ISDIR          LD      HL, BRWNAME     ; ENDING IN '\': GO THERE
+.ENDLP          LD      A, (HL)
+                OR      A
+                JR      Z, .ATEND
+                INC     HL
+                JR      .ENDLP
+.ATEND          DEC     HL
+                LD      A, (HL)
+                CP      #5C             ; '\'
+                JR      NZ, .CHOSEN
+                CALL    .CLRFLD
+                JR      .NEWDIR
+
+.MASK           LD      A, (INPLEN)     ; A MASK: AN 8.3 NAME, NO PATH
+                CP      HOMENAM
+                JP      NC, .KEYLP
+                LD      HL, INPBUF
+                LD      B, A
+.MSKCHK         LD      A, (HL)
+                CP      #5C
+                JP      Z, .KEYLP
+                CP      ':'
+                JP      Z, .KEYLP
+                INC     HL
+                DJNZ    .MSKCHK
+                LD      HL, INPBUF
+                LD      DE, BRWMASK
+                LD      BC, HOMENAM
+                LDIR
+                CALL    .CLRFLD
+                JR      .RESCAN
+
+                ; .NEWDIR: BRWNAME IS THE DIRECTORY TO BROWSE. IT MUST LEAVE
+                ; ROOM FOR A NAME, OR NOTHING IN IT COULD BE OPENED.
+.NEWDIR         LD      HL, BRWNAME
+                LD      B, FNAMLEN - HOMENAM
+.NDLEN          LD      A, (HL)
+                OR      A
+                JR      Z, .NDOK
+                INC     HL
+                DJNZ    .NDLEN
+                JP      .KEYLP          ; TOO DEEP
+.NDOK           LD      HL, BRWNAME
+                LD      DE, BRWPATH
+                LD      BC, FNAMLEN
+                LDIR
+                XOR     A
+                LD      (BRWPREV), A
+
+.RESCAN         CALL    BRWSCAN
+                CALL    .TITLE
+                LD      HL, BRWTTL
+                CALL    WBOX            ; UPDATES BOX AND TITLE IN SHADOW
+                CALL    WSHDW
+                CALL    .PAINT
+                JP      .KEYLP
+
+.CHOSEN         LD      HL, BRWNAME
+                LD      DE, BRWOUT
+                LD      BC, FNAMLEN
+                LDIR
+                CALL    WINCLOS
+                OR      A               ; CY = 0: CHOSEN
+                RET
+
+.CANCEL         CALL    WINCLOS
+                SCF                     ; CY = 1: CANCELLED
+                RET
+
+.MASKD          DEFM    "*.*", 0
+
+
+; --- DOBRW: HELPERS            ----------------------------------------
+
+
+                ; .INITP: BRWPATH = THE DIRECTORY OF FILENAME WHEN IT IS A
+                ; WHOLE PATH ("D:\..."), ELSE THE CURRENT DIRECTORY
+.INITP          LD      A, (FILENAME + 1)
+                CP      ':'
+                JR      NZ, .CWD
+                LD      A, (FILENAME + 2)
+                CP      #5C
+                JR      NZ, .CWD
+                CALL    FNBASE          ; HL = WHERE THE NAME STARTS
+                LD      DE, FILENAME
+                OR      A
+                SBC     HL, DE
+                LD      B, H
+                LD      C, L            ; BC = LENGTH OF THE DIRECTORY
+                LD      HL, FILENAME
+                LD      DE, BRWPATH
+                LDIR
+                XOR     A
+                LD      (DE), A
+                RET
+
+.CWD            XOR     A               ; CURRENT DRIVE
+                LD      DE, BRWPATH
+                CALL    CURDIR
+                RET     NC
+                LD      HL, .ROOTA      ; UNREADABLE: THE ROOT OF A:
+                LD      DE, BRWPATH
+                LD      BC, 4
+                LDIR
+                RET
+.ROOTA          DEFM    "A:", #5C, 0
+
+                ; .SEED: THE NAME OF THE DOCUMENT, TO EDIT IN SAVE AS
+.SEED           CALL    FNBASE
+                LD      DE, INPBUF
+                LD      B, 0
+.SDLP           LD      A, (HL)
+                LD      (DE), A
+                OR      A
+                JR      Z, .SDEND
+                INC     HL
+                INC     DE
+                INC     B
+                LD      A, (EDWID)
+                CP      B
+                JR      NZ, .SDLP
+                XOR     A
+                LD      (DE), A
+.SDEND          LD      A, B
+                LD      (INPLEN), A
+                RET
+
+.CLRFLD         XOR     A
+                LD      (INPLEN), A
+                LD      (INPBUF), A
+                RET
+
+                ; .SELENT: HL = THE SELECTED ENTRY
+.SELENT         LD      A, (BRWSEL)
+                JP      BRWPOS
+
+                ; .TITLE: " Open  A:\DEV\*.* ", CUT TO THE WINDOW
+.TITLE          LD      HL, .TITOPN
+                LD      A, (BRWMODE)
+                OR      A
+                JR      Z, .TTLGO
+                LD      HL, .TITSAV
+.TTLGO          LD      DE, BRWTTL
+                LD      B, 54           ; MAX TITLE LENGTH
+                CALL    .TTCPY
+                LD      HL, BRWPATH
+                CALL    .TTCPY
+                LD      HL, BRWMASK
+                CALL    .TTCPY
+                XOR     A
+                LD      (DE), A
+                RET
+.TTCPY          LD      A, B
+                OR      A
+                RET     Z
+                LD      A, (HL)
+                OR      A
+                RET     Z
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                DEC     B
+                JR      .TTCPY
+
+.TITOPN         DEFM    " Open  ", 0
+.TITSAV         DEFM    " Save As  ", 0
+
+                ; .SCROLL: KEEP THE SELECTED ROW ON SCREEN. OUT: A = 0 THE
+                ; GRID STAYS, 1 IT MOVED.
+.SCROLL         LD      A, (BRWSEL)
+                CALL    .ROWOF          ; B = ITS ROW
+                LD      A, (BRWTOP)
+                LD      C, A            ; C = THE OLD TOP
+                CP      B
+                JR      Z, .SCOK
+                JR      C, .SCBLOW
+                LD      A, B            ; ABOVE THE TOP: IT BECOMES THE TOP
+                LD      (BRWTOP), A
+                LD      A, 1
+                RET
+.SCBLOW         ADD     A, BRWROWS
+                DEC     A               ; LAST ROW ON SCREEN
+                CP      B
+                JR      NC, .SCOK
+                LD      A, B
+                SUB     BRWROWS - 1
+                LD      (BRWTOP), A
+                LD      A, 1
+                RET
+.SCOK           XOR     A
+                RET
+
+                ; .ROWOF: A = POSITION -> B = GRID ROW (A >> 2), A = COLUMN (A & 3)
+.ROWOF          PUSH    AF
+                SRL     A
+                SRL     A
+                LD      B, A            ; B = ROW
+                POP     AF
+                AND     %00000011       ; A = COL (0..3)
+                RET
+
+                ; .SLOT: PAINT THE SLOT OF POSITION A INTO PATSHAD AND COLMAP
+.SLOT           PUSH    AF
+                CALL    .ROWOF          ; B = GRID ROW, A = GRID COL
+                LD      C, A            ; C = GRID COL (0..3)
+                LD      A, (BRWTOP)
+                LD      E, A
+                LD      A, B
+                SUB     E
+                JP      C, .SLOTOF      ; B < TOP: OFF SCREEN
+                CP      BRWROWS
+                JP      NC, .SLOTOF     ; B >= TOP + BRWROWS: OFF SCREEN
+                ; A = VISIBLE ROW (0..11)
+                ADD     A, BRWRLST
+                LD      B, A            ; B = SCREEN ROW (3..14)
+                ; START CELL: 2 + C * 7
+                LD      A, C
+                ADD     A, A            ; C * 2
+                ADD     A, A            ; C * 4
+                ADD     A, C            ; C * 5
+                ADD     A, C            ; C * 6
+                ADD     A, C            ; C * 7
+                ADD     A, 2
+                LD      C, A            ; C = START CELL (2, 9, 16, 23)
+
+                ; 1. CLEAR 7 CELLS IN PATSHAD (7 * 8 = 56 BYTES)
+                PUSH    BC
+                LD      A, #80
+                ADD     A, B
+                LD      H, A
+                LD      A, C
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A            ; HL = PATSHAD + ROW*256 + CELL*8
+                LD      B, BRWSLW8
+                XOR     A
+.SLPCLR         LD      (HL), A
+                INC     HL
+                DJNZ    .SLPCLR
+                POP     BC
+
+                ; 2. DETERMINE COLOR
+                POP     AF              ; A = POSITION
+                PUSH    AF
+                LD      E, A
+                LD      A, (BRWCNT)
+                CP      E
+                JR      Z, .SLBLNK
+                JR      C, .SLBLNK
+                ; VALID ENTRY: CHECK IF SELECTED
+                LD      A, (BRWSEL)
+                CP      E
+                JR      NZ, .SLNOSEL
+                LD      A, (VCOLBSEL)   ; SELECTED: VCOLBSEL
+                JR      .SLCOL
+.SLNOSEL        LD      A, E
+                CALL    BRWPOS
+                CALL    BRWFLG
+                AND     %00000110       ; HIDDEN OR SYSTEM
+                JR      Z, .SLNORM
+                LD      A, (VCOLHI)     ; HIDDEN/SYSTEM: VCOLHI
+                JR      .SLCOL
+.SLNORM         LD      A, (VCOLWIN)    ; NORMAL: VCOLWIN
+                JR      .SLCOL
+.SLBLNK         LD      A, (VCOLWIN)    ; BLANK: VCOLWIN
+
+.SLCOL          ; FILL 7 CELLS IN COLMAP WITH COLOR A
+                PUSH    AF              ; SAVE COLOR
+                PUSH    BC
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = ROW * 32
+                LD      E, C
+                LD      D, 0
+                ADD     HL, DE          ; HL = ROW * 32 + CELL
+                LD      DE, COLMAP
+                ADD     HL, DE          ; HL = COLMAP + ROW * 32 + CELL
+                POP     BC              ; RESTORE B = ROW, C = CELL
+                POP     AF              ; RESTORE COLOR
+                PUSH    AF
+                PUSH    BC
+                LD      B, BRWSLW
+.SLCCLR         LD      (HL), A
+                INC     HL
+                DJNZ    .SLCCLR
+                POP     BC              ; B = ROW, C = START CELL
+                POP     DE              ; D = COLOR (HIGH BYTE FROM PUSH AF)
+
+                ; 3. DRAW TEXT (IF ENTRY < BRWCNT)
+                POP     AF              ; A = POSITION (FROM PUSH AF AT .SLOT)
+                LD      HL, BRWCNT
+                CP      (HL)
+                RET     NC              ; PAST LAST ENTRY: BLANK
+                PUSH    DE              ; SAVE D = COLOR
+                PUSH    BC              ; SAVE B = ROW, C = START CELL
+                CALL    BRWPOS          ; A = POSITION -> HL = ENTRY
+                LD      DE, BRWNAME
+                CALL    BRWTXT          ; FORMATS NAME TO BRWNAME
+                POP     BC              ; RESTORE B = ROW, C = START CELL
+                POP     DE              ; RESTORE D = COLOR
+                LD      A, C
+                ADD     A, A
+                LD      C, A            ; C = CHAR COLUMN (C * 2)
+                LD      HL, BRWNAME
+                LD      A, D            ; A = COLOR BYTE
+                JP      WINPUTS
+
+.SLOTOF         POP     AF
+                RET
+
+                ; .LIST: EVERY SLOT ON SCREEN
+.LIST           LD      A, (BRWTOP)
+                ADD     A, A
+                ADD     A, A            ; A = TOP * 4
+                LD      B, BRWCOLS * BRWROWS
+.LSLP           PUSH    AF
+                PUSH    BC
+                CALL    .SLOT
+                POP     BC
+                POP     AF
+                INC     A
+                DJNZ    .LSLP
+                RET
+
+                ; .DUMPG: DUMP ALL 12 GRID ROWS (ROWS 3..14)
+.DUMPG          LD      A, BRWRLST
+                LD      B, BRWROWS
+.DGPLP          PUSH    AF
+                PUSH    BC
+                CALL    WDUMPR
+                POP     BC
+                POP     AF
+                INC     A
+                DJNZ    .DGPLP
+                RET
+
+                ; .PAINT: EVERYTHING BELOW THE TITLE BAR
+.PAINT          ; 1. SEPARATOR LINE ON ROW 15: SCANLINE 0 OF CELLS 2..29 = #FF
+                LD      A, #80 + BRWSEPR
+                LD      H, A
+                LD      L, 2 * 8        ; 16
+                LD      B, 28
+                LD      DE, 8
+.SEPLP          LD      (HL), #FF
+                ADD     HL, DE
+                DJNZ    .SEPLP
+                ; COLOR OF ROW 15 CELLS 2..29: VCOLHI
+                LD      HL, COLMAP + BRWSEPR * 32 + 2
+                LD      A, (VCOLHI)
+                LD      B, 28
+.SEPCOL         LD      (HL), A
+                INC     HL
+                DJNZ    .SEPCOL
+
+                ; 2. GRID SLOTS (ROWS 3..14)
+                CALL    .LIST
+
+                ; 3. INFO LINE (ROW 16)
+                CALL    .INFO
+
+                ; 4. FIELD (ROW 17)
+                CALL    .FIELD
+
+                ; 5. BUTTONS (ROW 18)
+                CALL    .BTNS
+
+                ; 6. DUMP ALL INNER ROWS 3..18 (16 ROWS)
+                LD      A, BRWRLST
+                LD      B, BRWBTNR - BRWRLST + 1 ; 16 ROWS
+.PTDUMP         PUSH    AF
+                PUSH    BC
+                CALL    WDUMPR
+                POP     BC
+                POP     AF
+                INC     A
+                DJNZ    .PTDUMP
+                RET
+
+                ; .INFO: FORMAT AND DRAW THE INFORMATION LINE AT ROW 16
+.INFO           ; CLEAR CELLS 2..29 OF ROW BRWINFR (56 CHARS = 28 CELLS)
+                LD      A, #80 + BRWINFR
+                LD      H, A
+                LD      L, 2 * 8
+                LD      B, 28 * 8       ; 224 BYTES
+                XOR     A
+.INFCLR         LD      (HL), A
+                INC     HL
+                DJNZ    .INFCLR
+                LD      HL, COLMAP + BRWINFR * 32 + 2
+                LD      A, (VCOLWIN)
+                LD      B, 28
+.INFCOL         LD      (HL), A
+                INC     HL
+                DJNZ    .INFCOL
+
+                ; FORMAT INFORMATION LINE INTO BRWINF
+                CALL    BRWINFO         ; 56 CHARS IN BRWINF
+
+                ; DRAW IT AT ROW 16, CHAR COL 4
+                LD      B, BRWINFR
+                LD      C, 4
+                LD      HL, BRWINF
+                LD      A, (VCOLWIN)
+                JP      WINPUTS
+
+                ; .FIELD: DRAW "Name: " AND THE INPUT BOX AT ROW 17
+.FIELD          ; DRAW "Name: " AT CHAR COL 4
+                LD      B, BRWFLDR
+                LD      C, 4
+                LD      HL, .STRNAM
+                LD      A, (VCOLWIN)
+                CALL    WINPUTS
+
+                ; FIELD BOX: CHAR COL 10 TO COL 47 (38 CHARS = 19 CELLS, CELLS 5..23)
+                LD      A, (BRWFOC)
+                CP      BRF_FLD
+                JR      NZ, .FLDNOR
+                LD      A, (VCOLTXT)
+                JR      .FLDSET
+.FLDNOR         LD      A, (VCOLWIN)
+.FLDSET         PUSH    AF
+
+                ; CLEAR PATTERNS OF CELLS 5..23 (19 * 8 = 152 BYTES)
+                LD      A, #80 + BRWFLDR
+                LD      H, A
+                LD      L, 5 * 8        ; 40
+                LD      B, 19 * 8       ; 152
+                XOR     A
+.FLDPAT         LD      (HL), A
+                INC     HL
+                DJNZ    .FLDPAT
+
+                ; FILL COLOR OF CELLS 5..23
+                POP     AF
+                PUSH    AF
+                LD      HL, COLMAP + BRWFLDR * 32 + 5
+                LD      B, 19
+.FLDCOL         LD      (HL), A
+                INC     HL
+                DJNZ    .FLDCOL
+
+                ; DRAW TEXT OF INPBUF AT CHAR COL 10
+                POP     AF              ; A = COLOR
+                PUSH    AF
+                LD      B, BRWFLDR
+                LD      C, 10
+                LD      HL, INPBUF
+                CALL    WINPUTS
+
+                ; DRAW CARET IF BRWFOC == BRF_FLD
+                POP     AF
+                LD      A, (BRWFOC)
+                CP      BRF_FLD
+                RET     NZ
+                LD      A, (INPLEN)
+                ADD     A, 10
+                LD      C, A            ; C = CHAR COL OF CARET
+                LD      B, BRWFLDR
+                LD      A, #DB          ; SOLID BLOCK CARET
+                LD      HL, VCOLTXT
+                LD      E, (HL)         ; COLOR
+                JP      WINPUTC
+
+.STRNAM         DEFM    "Name: ", 0
+
+                ; .BTNS: DRAW BUTTONS AT ROW 18
+.BTNS           ; CLEAR ROW 18 CELLS 2..29
+                LD      A, #80 + BRWBTNR
+                LD      H, A
+                LD      L, 2 * 8
+                LD      B, 28 * 8
+                XOR     A
+.BTNCLR         LD      (HL), A
+                INC     HL
+                DJNZ    .BTNCLR
+                LD      HL, COLMAP + BRWBTNR * 32 + 2
+                LD      A, (VCOLWIN)
+                LD      B, 28
+.BTNCOL         LD      (HL), A
+                INC     HL
+                DJNZ    .BTNCOL
+
+                ; BUTTON 1: [ Open ] OR [ Save ] AT CHAR COL 38 (4 CELLS, 19..22)
+                LD      HL, .BTNOPN
+                LD      A, (BRWMODE)
+                OR      A
+                JR      Z, .BTB1
+                LD      HL, .BTNSAV
+.BTB1           LD      A, (VCOLWIN)
+                LD      DE, BRWFOC
+                LD      A, (DE)
+                CP      BRF_OK
+                JR      NZ, .B1COL
+                LD      A, (VCOLBSEL)
+.B1COL          LD      B, BRWBTNR
+                LD      C, 38
+                CALL    WINPUTS
+
+                ; BUTTON 2: [Cancel] AT CHAR COL 48 (4 CELLS, 24..27)
+                LD      HL, .BTNCAN
+                LD      A, (VCOLWIN)
+                LD      DE, BRWFOC
+                LD      A, (DE)
+                CP      BRF_CANC
+                JR      NZ, .B2COL
+                LD      A, (VCOLBSEL)
+.B2COL          LD      B, BRWBTNR
+                LD      C, 48
+                JP      WINPUTS
+
+.BTNOPN         DEFM    "[ Open ]", 0
+.BTNSAV         DEFM    "[ Save ]", 0
+.BTNCAN         DEFM    "[Cancel]", 0

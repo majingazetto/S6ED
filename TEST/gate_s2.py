@@ -16,9 +16,10 @@ is also the video shadow, so on the default machine there is nothing spare
 (`SEGAVL = 0`), which is the point of using it.
 """
 
+import os
 import pattern
 from gate import H30NewDocument, asciiz
-from cases import Case, HomePathCase, LongPathCase, ShippedDiskCase, crlf
+from cases import Case, HomePathCase, LongPathCase, ShippedDiskCase, crlf, numbered
 from harness import MACH_MSX1
 from keys import Timeline
 from result import Check
@@ -2651,6 +2652,356 @@ class S227DialogKeys(S2Case):
                       'key dropped)' % sel)]
 
 
+BRWESZ = 19                     # CONST_CORE: bytes per browser entry
+BRWRLST = 3                     # CONST_S2: first grid row on screen
+BRW_BYTES = [('BRWCNT', 1), ('BRWSEL', 1), ('BRWTOP', 1), ('BRWFOC', 1),
+             ('BRWMORE', 1), ('BRWIDX', 64), ('BRWENT', 19 * 64),
+             ('BRWINF', 72), ('BRWPATH', 64), ('BRWMASK', 13), ('BRWOUT', 64),
+             ('INPBUF', 40)]
+
+
+def brw_listing(run, label):
+    """The browser's listing at a snapshot, as it is printed, in order."""
+    sn = run.snaps.get(label, {})
+    idx, ent, cnt = sn.get('BRWIDX'), sn.get('BRWENT'), sn.get('BRWCNT')
+    if idx is None or ent is None or cnt is None:
+        return None
+    cnt = cnt[0]
+    out = []
+    for n in idx[:min(cnt, 64)]:
+        if n >= 64:
+            out.append('?')             # not in the captured range
+            continue
+        raw = bytes(ent[n * BRWESZ:n * BRWESZ + 11]).decode('ascii', 'replace')
+        flags = ent[n * BRWESZ + 11]
+        if flags & 0x20:
+            out.append('..\\')
+        elif flags & 0x40:
+            out.append(raw[0] + ':')
+        else:
+            name = raw[:8].rstrip()
+            if raw[8:].strip():
+                name += '.' + raw[8:].rstrip()
+            out.append(name + ('\\' if flags & 0x80 else ''))
+    return out
+
+
+class S228BrowseOpen(S2Case):
+    name = 'S2-28-browse-open'
+    desc = ('File > Open, Ctrl+O and :e on S2ED: the browser lists, navigates '
+            'into and out of directories, filters by mask, and opens a file by '
+            'selection or by a typed relative path')
+    origin = ('F3 of the file browser spec: S2ED file browser in SCREEN 2 / '
+              'TMS9918')
+    variants = ('nav', 'mask', 'typed', 'dirty', 'vi', 'menu')
+    NOTES = crlf(['N1', 'N2', 'N3'])
+
+    def config(self, ctx, variant=None):
+        if variant == 'vi':
+            return S2_CFG.replace('PROFILE=STD', 'PROFILE=VI')
+        return S2_CFG
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def disk_files(self, ctx, variant=None):
+        files = S2Case.disk_files(self, ctx, variant)
+        files['SUB\\NOTES.TXT'] = {'data': self.NOTES,
+                                   'date': '2026-09-29T09:05'}
+        files['AAA\\ONE.TXT'] = crlf(['ONE'])
+        files['HID.TXT'] = {'data': b'hidden\r\n', 'attr': '+h'}
+        return files
+
+    def key_for(self, ch):
+        if ch == ':':
+            return (';', ['SHIFT'])
+        if ch == '!':
+            return ('1', ['SHIFT'])
+        if ch == ' ':
+            return ('SPACE', [])
+        return (ch.upper(), [])
+
+    def type_str(self, t, s):
+        for ch in s:
+            k, mods = self.key_for(ch)
+            t.press(k, mods=mods)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        b = BRW_BYTES
+        if variant == 'dirty':
+            t.text('X')
+            t.wait(0.5)
+            t.press('O', mods=['CTRL'])
+            t.snap('asked', at='WINPOLL')
+            t.press('N')
+            t.wait(1.0)
+            t.snap('kept', bytes_=b)
+            return t
+        if variant == 'vi':
+            t.wait(0.5)
+            t.text(':e')
+            t.press('RETURN')
+        elif variant == 'menu':
+            t.press('F1')
+            t.press('DOWN')
+            t.press('RETURN')
+        else:
+            t.press('O', mods=['CTRL'])
+        t.wait(0.5)
+        t.snap('open', at='WINPOLL', vram='patcol', bytes_=b)
+        if variant in ('vi', 'menu'):
+            t.press('ESC')
+            t.wait(1.0)
+            t.snap('closed', bytes_=b)
+            return t
+        if variant == 'mask':
+            t.press('TAB')
+            t.text('*.TXT')
+            t.press('RETURN')
+            t.wait(0.5)
+            t.snap('masked', at='WINPOLL', bytes_=b)
+            t.press('ESC')
+            t.wait(1.0)
+            t.snap('closed', bytes_=b)
+            return t
+        if variant == 'typed':
+            t.press('TAB')
+            t.text('sub\\notes.txt')
+            t.press('RETURN')
+            t.wait(2.0)
+            t.snap('loaded', bytes_=b)
+            return t
+        # nav
+        t.press('RIGHT')                  # SUB\
+        t.press('RETURN')
+        t.wait(0.5)
+        t.snap('insub', at='WINPOLL', bytes_=b)
+        t.press('RIGHT')                  # NOTES.TXT
+        t.wait(1.0)
+        t.snap('onnotes', at='WINPOLL', bytes_=b)
+        t.press('BS')                     # back up: SUB\ selected again
+        t.wait(0.5)
+        t.snap('backup', at='WINPOLL', bytes_=b)
+        t.press('RETURN')
+        t.press('RIGHT')
+        t.press('RETURN')                 # open NOTES.TXT
+        t.wait(2.0)
+        t.snap('loaded', bytes_=b)
+        return t
+
+    def root_listing(self, run):
+        """What the root must list: from the session's own disk."""
+        import sys
+        sys.path.insert(0, os.path.dirname(run.session.ctx.dskfat))
+        import dskfat
+        fs = dskfat.Fat12(run.dsk)
+        dirs, files = [], []
+        for off in fs.entries(0):
+            name = dskfat.from83(fs.img[off:off + 11])
+            (dirs if fs.img[off + 11] & 0x10 else files).append(
+                (bytes(fs.img[off:off + 11]), name))
+        return ([n + '\\' for _, n in sorted(dirs)] +
+                [n for _, n in sorted(files)])
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            v = 'S2-28/%s' % variant
+            if variant == 'dirty':
+                checks.append(Check('%s/asked' % v,
+                                    run.var('asked', 'WINACTV') == 1,
+                                    'Discard changes? shown (WINACTV %s)'
+                                    % run.var('asked', 'WINACTV')))
+                checks.append(Check('%s/kept' % v,
+                                    run.var('kept', 'TOTLINES') == 5 and
+                                    run.var('kept', 'MODIFIED') == 0xFF and
+                                    run.var('kept', 'WINACTV') == 0,
+                                    'NO keeps the document (TOTLINES %s, '
+                                    'MODIFIED %s)'
+                                    % (run.var('kept', 'TOTLINES'),
+                                       run.var('kept', 'MODIFIED'))))
+                continue
+            got = brw_listing(run, 'open')
+            want = self.root_listing(run)
+            files = [x for x in (got or []) if not x.endswith(':')]
+            drives = [x for x in (got or []) if x.endswith(':')]
+            checks.append(Check('%s/listing' % v,
+                                run.var('open', 'WINACTV') == 1 and
+                                files == want and drives[:1] == ['A:'],
+                                'directories then files, sorted, then the '
+                                'drives: %s' % got))
+            if variant == 'nav':
+                dump = run.blob('open', 'patcol')
+                col_ok = False
+                if dump is not None and got:
+                    # Slot 0 (AAA\) is selected
+                    crow0 = pattern.colour_row(dump[0x2000:], BRWRLST)
+                    sel_ok = all(crow0[i] == pattern.COLBSEL for i in range(2 * 8, 9 * 8))
+
+                    # DOC.TXT is normal (COLWIN)
+                    pos_doc = got.index('DOC.TXT')
+                    row_doc = BRWRLST + (pos_doc // 4)
+                    cell_doc = 2 + (pos_doc % 4) * 7
+                    crow_doc = pattern.colour_row(dump[0x2000:], row_doc)
+                    norm_ok = all(crow_doc[i] == pattern.COLWIN
+                                  for i in range(cell_doc * 8, (cell_doc + 7) * 8))
+
+                    # HID.TXT is hidden (COLHI)
+                    pos_hid = got.index('HID.TXT')
+                    row_hid = BRWRLST + (pos_hid // 4)
+                    cell_hid = 2 + (pos_hid % 4) * 7
+                    crow_hid = pattern.colour_row(dump[0x2000:], row_hid)
+                    hi_ok = all(crow_hid[i] == pattern.COLHI
+                                for i in range(cell_hid * 8, (cell_hid + 7) * 8))
+
+                    col_ok = sel_ok and norm_ok and hi_ok
+
+                checks.append(Check('%s/drawn' % v, col_ok,
+                                    'slot 0 wears COLBSEL, HID.TXT wears COLHI, DOC.TXT wears COLWIN'
+                                    if col_ok else
+                                    'color check failed on row %d' % BRWRLST))
+                path = asciiz(run, 'insub', 'BRWPATH')
+                checks.append(Check('%s/into' % v,
+                                    path == 'A:\\SUB\\' and
+                                    brw_listing(run, 'insub')[:2] ==
+                                    ['..\\', 'NOTES.TXT'],
+                                    'RETURN on SUB\\ browses %r: %s'
+                                    % (path, brw_listing(run, 'insub'))))
+                info = asciiz(run, 'onnotes', 'BRWINF') or ''
+                checks.append(Check('%s/info' % v,
+                                    info.startswith('NOTES.TXT') and
+                                    info[14:21].strip() == str(len(self.NOTES))
+                                    and info[23:38] == '09-29-26  9:05a'
+                                    and info[41:45] == '---A',
+                                    'information line %r' % info))
+                checks.append(Check('%s/field' % v,
+                                    asciiz(run, 'onnotes', 'INPBUF') ==
+                                    'NOTES.TXT',
+                                    'selecting a file names it in the field '
+                                    '(%r)' % asciiz(run, 'onnotes', 'INPBUF')))
+                up = brw_listing(run, 'backup') or []
+                sel = (run.var('backup', 'BRWSEL') or [None])[0]
+                checks.append(Check('%s/back-up' % v,
+                                    asciiz(run, 'backup', 'BRWPATH') == 'A:\\'
+                                    and sel is not None and sel < len(up) and
+                                    up[sel] == 'SUB\\',
+                                    'BS goes up with SUB\\ selected (sel %s '
+                                    'of %s)' % (sel, up[:3])))
+            if variant in ('nav', 'typed'):
+                checks.append(Check('%s/opened' % v,
+                                    asciiz(run, 'loaded', 'FILENAME') ==
+                                    'A:\\SUB\\NOTES.TXT' and
+                                    run.var('loaded', 'TOTLINES') == 3 and
+                                    run.var('loaded', 'WINACTV') == 0,
+                                    'FILENAME %r, TOTLINES %s'
+                                    % (asciiz(run, 'loaded', 'FILENAME'),
+                                       run.var('loaded', 'TOTLINES'))))
+            if variant == 'mask':
+                got = brw_listing(run, 'masked') or []
+                names = [x for x in got if not x.endswith(':')]
+                checks.append(Check('%s/masked' % v,
+                                    asciiz(run, 'masked', 'BRWMASK') ==
+                                    '*.TXT' and
+                                    names == ['AAA\\', 'SUB\\', 'DOC.TXT',
+                                              'HID.TXT'],
+                                    'mask *.TXT keeps every directory and '
+                                    'only matching files: %s' % got))
+            if variant in ('mask', 'vi', 'menu'):
+                checks.append(Check('%s/cancel' % v,
+                                    run.var('closed', 'WINACTV') == 0 and
+                                    asciiz(run, 'closed', 'FILENAME') ==
+                                    'DOC.TXT' and
+                                    run.var('closed', 'TOTLINES') == 5,
+                                    'ESC closes and keeps the document '
+                                    '(FILENAME %r)'
+                                    % asciiz(run, 'closed', 'FILENAME')))
+        return checks
+
+
+class S229BrowseMany(S2Case):
+    name = 'S2-29-browse-many'
+    desc = ('70 files in one directory: the browser starts where the '
+            'document lives, keeps BRWMAX entries (64) and says so, and '
+            'scrolls the grid a row at a time to keep the selection on screen')
+    origin = ('F3 of the file browser spec: S2ED capacity ceiling (BRWMAX = 64) '
+              'and 12 rows of 4 show 48 of them')
+    FILES = 70
+
+    def disk_files(self, ctx, variant=None):
+        files = S2Case.disk_files(self, ctx, variant)
+        for i in range(self.FILES):
+            files['BIG\\F%03d.TXT' % i] = crlf(['FILE %d' % i])
+        files['AUTOEXEC.BAT'] = '%s A:\\BIG\\F000.TXT\r\n' % ctx.prefix
+        return files
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('O', mods=['CTRL'])
+        t.wait(5.0)
+        t.snap('open', at='WINPOLL', bytes_=BRW_BYTES)
+        t.press('DOWN', repeat=14)
+        t.wait(0.5)
+        t.snap('down', at='WINPOLL', vram='patcol', bytes_=BRW_BYTES)
+        t.press('UP', repeat=14)
+        t.wait(2.0)
+        t.snap('up', at='WINPOLL', bytes_=BRW_BYTES)
+        t.press('RIGHT', repeat=45)
+        t.wait(1.0)
+        t.snap('right', at='WINPOLL', bytes_=BRW_BYTES)
+        t.press('ESC')
+        t.wait(0.5)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        b1 = lambda label, name: (run.var(label, name) or [None])[0]
+        got = brw_listing(run, 'open') or []
+        info = asciiz(run, 'open', 'BRWINF') or ''
+        buf = run.blob('down', 'patcol')
+        crow14 = pattern.colour_row(buf[0x2000:], 14) if buf else None
+        bar_ok = bool(crow14 and all(crow14[i] == pattern.COLBSEL for i in range(2 * 8, 9 * 8)))
+        prow3 = pattern.row_of(buf[:0x2000], 3) if buf else None
+        prow14 = pattern.row_of(buf[:0x2000], 14) if buf else None
+        want_p3 = pattern.compose_row(font(ctx), '    F011.TXT')
+        want_p14_0 = pattern.compose_row(font(ctx), '    F055.TXT')
+        want_p14_3 = pattern.compose_row(font(ctx), ' ' * 46 + 'F058.TXT')
+        moved = bool(buf and prow3[16:48] == want_p3[16:48] and
+                     prow14[16:48] == want_p14_0[16:48] and
+                     prow14[23 * 8:27 * 8] == want_p14_3[23 * 8:27 * 8])
+
+        return [
+            Check('S2-29/start-dir',
+                  asciiz(run, 'open', 'BRWPATH') == 'A:\\BIG\\' and
+                  got[:3] == ['..\\', 'F000.TXT', 'F001.TXT'],
+                  'the browser opens where the document is: %r %s'
+                  % (asciiz(run, 'open', 'BRWPATH'), got[:3])),
+            Check('S2-29/capacity',
+                  b1('open', 'BRWCNT') == 64 and b1('open', 'BRWMORE') == 1
+                  and info.rstrip().endswith('64+/64'),
+                  'BRWCNT %s, BRWMORE %s, count %r'
+                  % (b1('open', 'BRWCNT'), b1('open', 'BRWMORE'),
+                     info.rstrip()[-10:])),
+            Check('S2-29/scroll-down',
+                  b1('down', 'BRWSEL') == 56 and b1('down', 'BRWTOP') == 3
+                  and bar_ok,
+                  'BRWSEL %s, BRWTOP %s, bar on screen row 14: %s'
+                  % (b1('down', 'BRWSEL'), b1('down', 'BRWTOP'), bar_ok)),
+            Check('S2-29/scroll-paint', moved,
+                  'after 3 row scrolls grid shows F011 top-left, F055 bottom-left and F058 bottom-right'),
+            Check('S2-29/every-key', b1('right', 'BRWSEL') == 45,
+                  '45 RIGHT from position 0 end on %s: a dialog must not '
+                  'drop the key that wraps the BIOS keyboard buffer'
+                  % b1('right', 'BRWSEL')),
+            Check('S2-29/scroll-up',
+                  b1('up', 'BRWSEL') == 0 and b1('up', 'BRWTOP') == 0,
+                  'back at the top: BRWSEL %s, BRWTOP %s'
+                  % (b1('up', 'BRWSEL'), b1('up', 'BRWTOP'))),
+        ]
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -2659,7 +3010,7 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S219SelLines(), S220UndoSelDel(), S221FindReplace(),
          S222FindCurrentLine(), S223HomePath(),
          S224ShippedDisk(), S225NewDocument(), S226LongPath(),
-         S227DialogKeys()]
+         S227DialogKeys(), S228BrowseOpen(), S229BrowseMany()]
 
 
 def run(ctx, cases=None):

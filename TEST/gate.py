@@ -2815,7 +2815,7 @@ class D8Accents(Case):
     # case is deterministic by construction instead of by luck.  That is
     # harness work and is not done.
     GRAPH_ROW = 'AEIOUNW1/'
-    GRAPH_GAPS = (0.030, 0.040, 0.090)
+    GRAPH_GAPS = (0.031, 0.037, 0.041)
     GRAPH_PASSES = len(GRAPH_GAPS)
 
     def timeline(self, ctx, variant=None):

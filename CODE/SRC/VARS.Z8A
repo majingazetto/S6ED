@@ -414,6 +414,7 @@ WINNR           DEFB    0               ; WINDOW HEIGHT IN ROWS
 WINNC           DEFB    0               ; WINDOW WIDTH IN CELLS
 WINCLIM         DEFB    0               ; WINPUTS: RIGHT TEXT CLIP, EXCLUSIVE
                                         ;   CHAR COLUMN (SET BY WINOPEN, 0=64)
+WINNOSV         DEFB    0               ; 1 = NO BACKGROUND SAVE/RESTORE (BROWSER)
                 ENDIF
 
 
