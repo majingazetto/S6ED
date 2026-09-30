@@ -127,3 +127,34 @@ WSVMAX          EQU     1536            ; SAVE BUFFER CAPACITY IN BYTES
 WSVBUF          EQU     #C600           ; WINDOW BACKUP IN PAGE 3 UNBANKED RAM (AFTER PREVBUF)
 WSVTOP          EQU     WSVBUF + WSVMAX ; #CC00
 P3BASE          EQU     WSVTOP          ; FIRST FREE PAGE 3 BYTE PAST WSVBUF
+
+
+; --- FILE BROWSER (SCREEN 2)   ----------------------------------------
+
+
+                DEFINE  BROWSER 1       ; THIS TARGET HAS THE FILE BROWSER
+BRWMAX          EQU     64              ; FILE BROWSER ENTRY CAPACITY
+BRWCOLS         EQU     4               ; FILE BROWSER GRID: COLUMNS...
+BRWROWS         EQU     12              ; ...AND ROWS ON SCREEN
+BRWSLOT         EQU     14              ; CHARACTERS PER GRID SLOT (7 CELLS)
+BRWRLST         EQU     3               ; FIRST GRID ROW ON SCREEN (ROWS 3..14)
+BRWSEPR         EQU     15              ; SEPARATOR SCREEN ROW
+BRWINFR         EQU     16              ; INFORMATION LINE SCREEN ROW
+BRWFLDR         EQU     17              ; NAME FIELD SCREEN ROW
+BRWBTNR         EQU     18              ; BUTTONS SCREEN ROW
+
+                ; INFORMATION LINE COLUMNS (56 CHARACTERS ON S2ED)
+BICSIZE         EQU     14              ; SIZE, RIGHT-ALIGNED IN BICSZW
+BICSZW          EQU     7
+BICDATE         EQU     23              ; DATE, AS DIR PRINTS IT
+BICTIME         EQU     32              ; TIME, AS DIR PRINTS IT
+BICATTR         EQU     41              ; RHSA
+BICCNTE         EQU     56              ; COUNT, RIGHT-ALIGNED, ENDS HERE
+BICLEN          EQU     56              ; LINE LENGTH
+
+                ; THE LISTING LIVES IN WSVBUF IN PAGE 3 UNBANKED RAM:
+                ; WSVBUF IS IDLE WHILE DOBRW RUNS UNDER WINNOSV (NO BACKGROUND
+                ; SAVE), SO IT COSTS NO EXTRA PAGE 3 RAM.
+BRWIDX          EQU     WSVBUF          ; SORTED ORDER
+BRWENT          EQU     BRWIDX + BRWMAX ; ENTRIES, BRWESZ BYTES EACH
+                ASSERT  BRWENT + BRWMAX * BRWESZ <= WSVTOP
