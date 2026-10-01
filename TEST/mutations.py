@@ -126,6 +126,18 @@ MUTATIONS = [
         'expect': ['S2-28/nav/drawn'],
     },
     {
+        'name': 's2-f3-btn-color',
+        'why': 'unfocused buttons in the file browser are drawn with color 0 instead of VCOLWIN on S2ED',
+        'target': 'S2ED',
+        'file': 'BROWSER.Z8A',
+        'old': """                LD      A, (VCOLWIN)
+                JR      NZ, .B1COL""",
+        'new': """                XOR     A               ; MUTATION: COLOR 0 (BLACK ON BLACK)
+                JR      NZ, .B1COL""",
+        'filter': 'S2-28',
+        'expect': ['S2-28/nav/drawn'],
+    },
+    {
         'name': 'f2-date-env',
         'why': 'the date format ignores the DATE environment item',
         'file': 'BROWSE.Z8A',
