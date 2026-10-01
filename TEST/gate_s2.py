@@ -2856,10 +2856,15 @@ class S228BrowseOpen(S2Case):
                     hi_ok = all(crow_hid[i] == pattern.COLHI
                                 for i in range(cell_hid * 8, (cell_hid + 7) * 8))
 
-                    col_ok = sel_ok and norm_ok and hi_ok
+                    # Buttons on row 18: [ Open ] (cells 19..22) and [Cancel] (cells 24..27) wear COLWIN
+                    crow_btn = pattern.colour_row(dump[0x2000:], 18)
+                    btn1_ok = all(crow_btn[i] == pattern.COLWIN for i in range(19 * 8, 23 * 8))
+                    btn2_ok = all(crow_btn[i] == pattern.COLWIN for i in range(24 * 8, 28 * 8))
+
+                    col_ok = sel_ok and norm_ok and hi_ok and btn1_ok and btn2_ok
 
                 checks.append(Check('%s/drawn' % v, col_ok,
-                                    'slot 0 wears COLBSEL, HID.TXT wears COLHI, DOC.TXT wears COLWIN'
+                                    'slot 0 wears COLBSEL, HID.TXT wears COLHI, DOC.TXT and buttons wear COLWIN'
                                     if col_ok else
                                     'color check failed on row %d' % BRWRLST))
                 path = asciiz(run, 'insub', 'BRWPATH')

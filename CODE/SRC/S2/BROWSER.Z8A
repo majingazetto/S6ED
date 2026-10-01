@@ -855,10 +855,9 @@ DOBRW           LD      A, 1
                 OR      A
                 JR      Z, .BTB1
                 LD      HL, .BTNSAV
-.BTB1           LD      A, (VCOLWIN)
-                LD      DE, BRWFOC
-                LD      A, (DE)
+.BTB1           LD      A, (BRWFOC)
                 CP      BRF_OK
+                LD      A, (VCOLWIN)
                 JR      NZ, .B1COL
                 LD      A, (VCOLBSEL)
 .B1COL          LD      B, BRWBTNR
@@ -867,10 +866,9 @@ DOBRW           LD      A, 1
 
                 ; BUTTON 2: [Cancel] AT CHAR COL 48 (4 CELLS, 24..27)
                 LD      HL, .BTNCAN
-                LD      A, (VCOLWIN)
-                LD      DE, BRWFOC
-                LD      A, (DE)
+                LD      A, (BRWFOC)
                 CP      BRF_CANC
+                LD      A, (VCOLWIN)
                 JR      NZ, .B2COL
                 LD      A, (VCOLBSEL)
 .B2COL          LD      B, BRWBTNR
