@@ -4926,7 +4926,7 @@ class H33LongPath(LongPathCase):
 
 BRWESZ = 19                     # CONST_CORE: bytes per browser entry
 BRW_BYTES = [('BRWCNT', 1), ('BRWSEL', 1), ('BRWTOP', 1), ('BRWFOC', 1),
-             ('BRWMORE', 1), ('BRWIDX', 32), ('BRWENT', 19 * 32),
+             ('BRWMORE', 1), ('BRWMODE', 1), ('BRWIDX', 32), ('BRWENT', 19 * 32),
              ('BRWINF', 71), ('BRWPATH', 64), ('BRWMASK', 13), ('BRWOUT', 64),
              ('INPBUF', 40)]
 
@@ -5305,6 +5305,155 @@ class H35BrowseMany(Case):
                   'back at the top: BRWSEL %s, BRWTOP %s'
                   % (b1('up', 'BRWSEL'), b1('up', 'BRWTOP'))),
         ]
+
+
+# --- H36  SAVE AS & OVERWRITE (PHASE F4) -------------------------------
+
+
+class H36BrowseSaveAs(Case):
+    name = 'H36-browse-saveas'
+    desc = ('File > Save As, Ctrl+Shift+S: saves to new file, saves into '
+            'subdirectory, asks overwrite confirmation with reopen on NO, '
+            'overwrites on YES, and routes Ctrl+S on untitled document')
+    origin = ('F4 of the file browser spec: Save As on both targets with '
+              'overwrite confirmation and reopen on No')
+    variants = ('new', 'sub', 'overwrite-no', 'overwrite-yes', 'untitled', 'menu')
+    TAG = 'H36'
+    FIXTURE = crlf(['LINE 1', 'LINE 2', 'LINE 3'])
+    EXISTING = b'ORIGINAL\r\n'
+    BRW_BYTES = BRW_BYTES
+
+    def fixture(self, ctx, variant=None):
+        return self.FIXTURE
+
+    def disk_files(self, ctx, variant=None):
+        files = Case.disk_files(self, ctx, variant)
+        files['EXIST.TXT'] = self.EXISTING
+        files['SUB\\DUMMY.TXT'] = b'dummy\r\n'
+        return files
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        b = self.BRW_BYTES
+        if variant == 'untitled':
+            t.press('N', mods=['CTRL'])
+            t.wait(0.5)
+            t.text('X')
+            t.wait(0.5)
+            t.press('S', mods=['CTRL', 'SHIFT'])
+            t.wait(0.5)
+            t.snap('open', at='WINPOLL', bytes_=b)
+            t.press('ESC')
+            t.wait(1.0)
+            t.snap('closed', bytes_=b)
+            return t
+        if variant == 'menu':
+            t.press('F1')
+            t.press('DOWN')
+            t.press('DOWN')
+            t.press('DOWN')
+            t.press('RETURN')
+            t.wait(0.5)
+            t.snap('open', at='WINPOLL', bytes_=b)
+            t.press('ESC')
+            t.wait(1.0)
+            t.snap('closed', bytes_=b)
+            return t
+        t.press('S', mods=['CTRL', 'SHIFT'])
+        t.wait(0.5)
+        t.snap('open', at='WINPOLL', bytes_=b)
+        t.press('BS', repeat=12)
+        if variant == 'new':
+            t.text('SAVED1.TXT')
+            t.press('RETURN')
+            t.wait(2.0)
+            t.snap('done', bytes_=b)
+            return t
+        if variant == 'sub':
+            t.text('SUB\\SAVED2.TXT')
+            t.press('RETURN')
+            t.wait(2.0)
+            t.snap('done', bytes_=b)
+            return t
+        t.text('EXIST.TXT')
+        t.press('RETURN')
+        t.wait(0.5)
+        t.snap('asked', at='WINPOLL', bytes_=b)
+        if variant == 'overwrite-no':
+            t.press('N')
+            t.wait(0.5)
+            t.snap('reopen', at='WINPOLL', bytes_=b)
+            t.press('BS', repeat=12)
+            t.text('EXIS2.TXT')
+            t.press('RETURN')
+            t.wait(2.0)
+            t.snap('done', bytes_=b)
+            return t
+        t.press('Y')
+        t.wait(2.0)
+        t.snap('done', bytes_=b)
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        def b1(run, label, name):
+            val = run.var(label, name)
+            if isinstance(val, (list, tuple)):
+                return val[0] if val else None
+            return val
+
+        for variant, run in sorted(runs.items()):
+            v = '%s/%s' % (self.TAG, variant)
+            if variant in ('untitled', 'menu'):
+                checks.append(Check('%s/open' % v,
+                                    b1(run, 'open', 'BRWMODE') == 1 and
+                                    run.var('open', 'WINACTV') == 1 and
+                                    run.var('closed', 'WINACTV') == 0,
+                                    'Save As browser opened (BRWMODE %s) and closed cleanly'
+                                    % b1(run, 'open', 'BRWMODE')))
+                continue
+            if variant == 'new':
+                got = run.session.extract(run.dsk, 'SAVED1.TXT')
+                fn = asciiz(run, 'done', 'FILENAME') or ''
+                checks.append(Check('%s/saved' % v,
+                                    run.var('done', 'WINACTV') == 0 and
+                                    fn.endswith('SAVED1.TXT') and
+                                    got == self.FIXTURE,
+                                    'saved to SAVED1.TXT on disk: %s' % (got == self.FIXTURE)))
+                continue
+            if variant == 'sub':
+                got = run.session.extract_path(run.dsk, 'SUB\\SAVED2.TXT')
+                fn = asciiz(run, 'done', 'FILENAME') or ''
+                checks.append(Check('%s/saved' % v,
+                                    run.var('done', 'WINACTV') == 0 and
+                                    fn.endswith('SUB\\SAVED2.TXT') and
+                                    got == self.FIXTURE,
+                                    'saved into SUB\\SAVED2.TXT on disk: %s' % (got == self.FIXTURE)))
+                continue
+            if variant == 'overwrite-no':
+                orig = run.session.extract(run.dsk, 'EXIST.TXT')
+                newf = run.session.extract(run.dsk, 'EXIS2.TXT')
+                inp = asciiz(run, 'reopen', 'INPBUF')
+                checks.append(Check('%s/asked' % v,
+                                    run.var('asked', 'WINACTV') == 1,
+                                    'Overwrite prompt shown (WINACTV %s)' % run.var('asked', 'WINACTV')))
+                checks.append(Check('%s/reopened' % v,
+                                    run.var('reopen', 'WINACTV') == 1 and
+                                    b1(run, 'reopen', 'BRWMODE') == 1 and
+                                    inp == 'EXIST.TXT',
+                                    'browser reopened with field intact: %r' % inp))
+                checks.append(Check('%s/preserved' % v,
+                                    orig == self.EXISTING and newf == self.FIXTURE,
+                                    'EXIST.TXT unchanged on NO, EXIS2.TXT saved'))
+                continue
+            if variant == 'overwrite-yes':
+                got = run.session.extract(run.dsk, 'EXIST.TXT')
+                checks.append(Check('%s/overwritten' % v,
+                                    run.var('asked', 'WINACTV') == 1 and
+                                    got == self.FIXTURE,
+                                    'EXIST.TXT overwritten on YES: %s' % (got == self.FIXTURE)))
+        return checks
 
 
 # --- H28  PARAMETRIC TEXTWIDTH (PHASE C2) -----------------------------
@@ -6015,7 +6164,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H24GoToLine(), H25FindReplace(), H26FindCurrentLine(), H27ViEx(),
          H28TextWidth(), H29HomePath(), H30NewDocument(), H31EditOpen(),
          H32SaveNoName(), H33LongPath(), H34BrowseOpen(),
-         H35BrowseMany(),
+         H35BrowseMany(), H36BrowseSaveAs(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),

@@ -354,8 +354,8 @@ mutation.
 | **F1** | **Done 2026-09-29**: `FNAMLEN` 64, `HOMEPTH` / `LINBUF` / `FILENAME` moved to a page-3 scratch block (`P3BASE`..`P3TOP`, `TP3MIN` derived from it), `CHKFILE` bounded, `FNBASE` for the menu bar, `CURDIR` extracted from `HOMEINIT`. `ED_FILE` moved to F2, its first user — shipped alone it would be code no case can reach | `H33-long-path` / `S2-26-long-path`: a 48-character path loaded, saved back (read off the disk with `dskfat get`), row 0 showing only the last item |
 | **F2a** | **Done 2026-09-29**: what `DIR` prints, measured on four machines (§3.4) | the F2 case compares against these strings |
 | **F2** | **Done 2026-09-29 (S6ED)**: `CORE/BROWSE.Z8A` (scan, binary-insertion sort, mask match, paths, information line, `ED_FILE` class `BRWCHR`), `S6/BROWSER.Z8A` (`DOBRW`), Open wired to File > Open, Ctrl+O and Vi `:e` with no name; S2ED gets a cancelling `DOBRW` stub until F3. Changes measured on the way are in §11 | `H34-browse-open` (6 variants), `H35-browse-many` (170 files, scroll, capacity, 85 keys through one dialog), `S2-27-dialog-keys`, 16 mutations |
-| **F3** | S2: `WINNOSV`, S2 `DOBRW` on the 4 × 12 grid | the same cases on S2, plus the `VCOLBSEL` bar owning whole cells (computed pattern table) |
-| **F4** | Save As on both targets: overwrite confirmation, reopen on No | save into a subdirectory; overwrite No and then Yes; the file is read back off the disk with `dskfat get` |
+| **F3** | **Done 2026-10-01**: S2: `WINNOSV`, S2 `DOBRW` on the 4 × 12 grid, cursor arrows | `S2-28-browse-open` (7 variants), `S2-29-browse-many` (64 capacity, scroll), 5 mutations |
+| **F4** | **Done 2026-10-02**: Save As on both targets: overwrite confirmation (`DOOVR`), reopen on No (`DOBRWR`) with zero rescan/RAM preservation, subdirectory saves (`dskfat get`) | `H36-browse-saveas` (6 variants), `S2-30-browse-saveas` (6 variants), 5 mutations caught |
 
 The harness gains **subdirectory fixtures**: `Case.disk_files` accepts
 `DIR\NAME` keys and `Session.build_disk` writes them with `dskfat.py`. That

@@ -295,7 +295,8 @@ ACFPRV          EQU     62              ; CTRL + R / SHIFT + F3 (FIND PREV)
 ACEXMOD         EQU     63              ; VI ':' COMMAND LINE CONSOLE
 ACNEW           EQU     64              ; CTRL + N / FILE > NEW
 ACOPEN          EQU     65              ; CTRL + O / FILE > OPEN / VI :e
-ACMAX           EQU     66
+ACSAVAS         EQU     66              ; CTRL + SHIFT + S / FILE > SAVE AS
+ACMAX           EQU     67
 
 SRCHMAX         EQU     18              ; MAX SEARCH / REPLACE PATTERN LENGTH
 SRCH_FND        EQU     0               ; ACTION: FIND NEXT

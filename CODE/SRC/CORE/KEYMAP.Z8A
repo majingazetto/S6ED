@@ -62,6 +62,7 @@ KMAPSTD         ; UNMODIFIED CURSORS
                 DEFB    CTRL_L,  MODCTRL, ACFNXT
                 DEFB    CTRL_R,  MODCTRL, ACFPRV
                 DEFB    CTRL_S,  MODCTRL, ACSAVE
+                DEFB    CTRL_S,  MODSHFT | MODCTRL, ACSAVAS
                 DEFB    CTRL_N,  MODCTRL, ACNEW
                 DEFB    CTRL_O,  MODCTRL, ACOPEN
                 DEFB    CTRL_W,  MODCTRL, ACTGLWR
@@ -177,6 +178,7 @@ KMAPEMAC        ; EMACS NAVIGATION & EDITING
                 DEFB    CTRL_Z,  MODSHFT | MODCTRL, ACREDO
                 DEFB    CTRL_K,  MODCTRL, ACCYCKM
                 DEFB    CTRL_S,  MODCTRL, ACSAVE
+                DEFB    CTRL_S,  MODSHFT | MODCTRL, ACSAVAS
 
                 ; UNMODIFIED CURSORS
                 DEFB    CLEFT,   MODNONE, ACMVL

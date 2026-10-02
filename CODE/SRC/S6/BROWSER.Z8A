@@ -44,7 +44,11 @@ BRWIW           EQU     BRWW - 8        ; WIDTH OF A FULL INNER LINE
 ; - IT IS THE FILE -- RELATIVE TO BRWPATH UNLESS IT STARTS WITH "D:".
 ; -
 
-DOBRW           LD      HL, BRWX
+DOBRWR          LD      A, 1
+                JR      DOBRW.INIT
+DOBRW           XOR     A
+.INIT           PUSH    AF
+                LD      HL, BRWX
                 LD      (WINX), HL
                 LD      HL, BRWY
                 LD      (WINY), HL
@@ -58,6 +62,10 @@ DOBRW           LD      HL, BRWX
                 LD      (EDCOL), A
                 LD      A, 38
                 LD      (EDWID), A
+
+                POP     AF
+                OR      A
+                JR      NZ, .REOPEN
 
                 CALL    .INITP
                 LD      HL, .MASKD
@@ -78,7 +86,7 @@ DOBRW           LD      HL, BRWX
 
                 CALL    BRWDTEN
                 CALL    BRWSCAN
-                CALL    .TITLE
+.REOPEN         CALL    .TITLE
                 LD      HL, BRWTTL
                 CALL    WINOPEN
                 CALL    .PAINT

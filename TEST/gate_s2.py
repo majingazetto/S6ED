@@ -18,7 +18,7 @@ is also the video shadow, so on the default machine there is nothing spare
 
 import os
 import pattern
-from gate import H30NewDocument, asciiz
+from gate import H30NewDocument, H36BrowseSaveAs, asciiz
 from cases import Case, HomePathCase, LongPathCase, ShippedDiskCase, crlf, numbered
 from harness import MACH_MSX1
 from keys import Timeline
@@ -2655,7 +2655,7 @@ class S227DialogKeys(S2Case):
 BRWESZ = 19                     # CONST_CORE: bytes per browser entry
 BRWRLST = 3                     # CONST_S2: first grid row on screen
 BRW_BYTES = [('BRWCNT', 1), ('BRWSEL', 1), ('BRWTOP', 1), ('BRWFOC', 1),
-             ('BRWMORE', 1), ('BRWIDX', 64), ('BRWENT', 19 * 64),
+             ('BRWMORE', 1), ('BRWMODE', 1), ('BRWIDX', 64), ('BRWENT', 19 * 64),
              ('BRWINF', 72), ('BRWPATH', 64), ('BRWMASK', 13), ('BRWOUT', 64),
              ('INPBUF', 40)]
 
@@ -3050,6 +3050,21 @@ class S229BrowseMany(S2Case):
         ]
 
 
+# --- S2-30  SAVE AS & OVERWRITE (PHASE F4) -----------------------------
+
+
+class S230BrowseSaveAs(H36BrowseSaveAs):
+    name = 'S2-30-browse-saveas'
+    desc = ('File > Save As on S2ED: saves to new file, saves into subdirectory, '
+            'asks overwrite confirmation with reopen on NO, overwrites on YES, '
+            'and routes Ctrl+S on untitled document')
+    origin = 'F4 of the file browser spec: Save As on S2ED target'
+    machine = MACH_MSX1
+    cfg = S2_CFG
+    TAG = 'S2-30'
+    BRW_BYTES = BRW_BYTES
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -3058,7 +3073,8 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S219SelLines(), S220UndoSelDel(), S221FindReplace(),
          S222FindCurrentLine(), S223HomePath(),
          S224ShippedDisk(), S225NewDocument(), S226LongPath(),
-         S227DialogKeys(), S228BrowseOpen(), S229BrowseMany()]
+         S227DialogKeys(), S228BrowseOpen(), S229BrowseMany(),
+         S230BrowseSaveAs()]
 
 
 def run(ctx, cases=None):

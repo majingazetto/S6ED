@@ -2864,6 +2864,71 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'filter': 'H28',
         'expect': ['H28/longtail/content'],
     },
+    {
+        'name': 'f4-ovr-bypass',
+        'why': 'ACTSAVAS skips checking if destination file exists and overwrites without confirmation',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      C, _FFIRST
+                CALL    BDOS
+                JR      C, .SAVEIT      ; DOES NOT EXIST: SAVE DIRECTLY""",
+        'new': """                LD      C, _FFIRST
+                CALL    BDOS
+                JR      .SAVEIT         ; MUTATION: ALWAYS SAVE DIRECTLY""",
+        'filter': 'H36',
+        'expect_any': ['H36/overwrite-no/asked', 'H36-browse-saveas'],
+    },
+    {
+        'name': 'f4-ovr-no-reopen',
+        'why': 'ACTSAVAS cancels instead of reopening browser when user answers No to overwrite prompt',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      A, (WINRES)
+                OR      A
+                JR      Z, .REOPEN      ; NO: REOPEN BROWSER""",
+        'new': """                LD      A, (WINRES)
+                OR      A
+                JR      Z, .CANCEL      ; MUTATION: CANCEL INSTEAD OF REOPEN""",
+        'filter': 'H36',
+        'expect_any': ['H36/overwrite-no/reopened', 'H36-browse-saveas'],
+    },
+    {
+        'name': 'f4-menu-saveas',
+        'why': 'File > Save As dispatches normal Save instead of ACTSAVAS',
+        'file': 'ACTION.Z8A',
+        'old': """                CP      3
+                JP      Z, ACTSAVAS""",
+        'new': """                CP      3
+                JP      Z, .FSAVE       ; MUTATION: DISPATCH NORMAL SAVE""",
+        'filter': 'H36',
+        'expect_any': ['H36/menu/open', 'H36-browse-saveas'],
+    },
+    {
+        'name': 's2-f4-ovr-bypass',
+        'why': 'ACTSAVAS skips checking if destination file exists on S2ED',
+        'target': 'S2ED',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      C, _FFIRST
+                CALL    BDOS
+                JR      C, .SAVEIT      ; DOES NOT EXIST: SAVE DIRECTLY""",
+        'new': """                LD      C, _FFIRST
+                CALL    BDOS
+                JR      .SAVEIT         ; MUTATION: ALWAYS SAVE DIRECTLY""",
+        'filter': 'S2-30',
+        'expect_any': ['S2-30/overwrite-no/asked', 'S2-30-browse-saveas'],
+    },
+    {
+        'name': 's2-f4-ovr-no-reopen',
+        'why': 'ACTSAVAS cancels instead of reopening browser on No on S2ED',
+        'target': 'S2ED',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      A, (WINRES)
+                OR      A
+                JR      Z, .REOPEN      ; NO: REOPEN BROWSER""",
+        'new': """                LD      A, (WINRES)
+                OR      A
+                JR      Z, .CANCEL      ; MUTATION: CANCEL INSTEAD OF REOPEN""",
+        'filter': 'S2-30',
+        'expect_any': ['S2-30/overwrite-no/reopened', 'S2-30-browse-saveas'],
+    },
 ]
 
 
