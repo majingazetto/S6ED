@@ -2021,7 +2021,9 @@ DOSETT          LD      A, 6
                 LD      A, (SETTFOC)
                 CP      E
                 CALL    .ROLEL
+                PUSH    IX
                 CALL    WINPUTS
+                POP     IX
 
                 ; DRAW VALUE AT COL 32
                 LD      A, (IY+0)       ; VALUE (0..N)
@@ -2044,7 +2046,9 @@ DOSETT          LD      A, 6
                 LD      A, (SETTFOC)
                 CP      E
                 CALL    .ROLEV
+                PUSH    IX
                 CALL    WINPUTS
+                POP     IX
 
                 INC     IY
                 INC     IX

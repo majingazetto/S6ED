@@ -3092,6 +3092,12 @@ class S231Settings(S2Case):
     def config(self, ctx, variant=None):
         return self.cfg.replace('CLOCK=0', 'CLOCK=1')
 
+    def text_cells(self, fnt, text):
+        high, low = fnt
+        return [bytes(high[ord(text[i]) * 8 + y] | low[ord(text[i + 1]) * 8 + y]
+                      for y in range(8))
+                for i in range(0, len(text), 2)]
+
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot', vram='patcol')
@@ -3100,7 +3106,7 @@ class S231Settings(S2Case):
         t.press('F3')
         t.snap('menu', at='WINPOLL')
         t.press('RETURN')
-        t.snap('open', at='WINPOLL')
+        t.snap('open', vram='patcol', at='WINPOLL')
 
         if variant == 'cancel':
             # Cycle Profile forward (STD -> WS)
@@ -3163,6 +3169,37 @@ class S231Settings(S2Case):
                                     run.var('closed', 'WINACTV') == 0 and
                                     run.var('closed', 'KMAPID') == 0,
                                     'ESC discards changes: WINACTV=0, live KMAPID remains 0'))
+
+                # VRAM pattern verification of rendered setting rows
+                dlg = run.blob('open', 'patcol')
+                if dlg is None:
+                    checks.append(Check('%s/rendered-labels' % v, False, 'missing open VRAM dump'))
+                else:
+                    fnt = font(ctx)
+                    # Verify row 7: "Profile:    " (cols 20..31 -> cells 10..15) and "STD " (cols 32..35 -> cells 16..17)
+                    r7 = pattern.row_of(dlg[:0x2000], 7)
+                    bad_lbl = [10 + i for i, want in enumerate(self.text_cells(fnt, "Profile:    "))
+                               if r7[(10 + i) * 8:(11 + i) * 8] != want]
+                    bad_val = [16 + i for i, want in enumerate(self.text_cells(fnt, "STD "))
+                               if r7[(16 + i) * 8:(17 + i) * 8] != want]
+                    # Verify row 8: "Wrap:       " and "TXT "
+                    r8 = pattern.row_of(dlg[:0x2000], 8)
+                    bad_wlbl = [10 + i for i, want in enumerate(self.text_cells(fnt, "Wrap:       "))
+                                if r8[(10 + i) * 8:(11 + i) * 8] != want]
+                    bad_wval = [16 + i for i, want in enumerate(self.text_cells(fnt, "TXT "))
+                                if r8[(16 + i) * 8:(17 + i) * 8] != want]
+                    # Verify row 14: "Theme:      " and "DARK  "
+                    r14 = pattern.row_of(dlg[:0x2000], 14)
+                    bad_tlbl = [10 + i for i, want in enumerate(self.text_cells(fnt, "Theme:      "))
+                                if r14[(10 + i) * 8:(11 + i) * 8] != want]
+                    bad_tval = [16 + i for i, want in enumerate(self.text_cells(fnt, "DARK  "))
+                                if r14[(16 + i) * 8:(17 + i) * 8] != want]
+                    rendered_ok = not (bad_lbl or bad_val or bad_wlbl or bad_wval or bad_tlbl or bad_tval)
+                    checks.append(Check('%s/rendered-labels' % v, rendered_ok,
+                                        'Profile, Wrap and Theme labels and values rendered correctly'
+                                        if rendered_ok else
+                                        'bad cells: lbl=%s val=%s wlbl=%s wval=%s tlbl=%s tval=%s'
+                                        % (bad_lbl, bad_val, bad_wlbl, bad_wval, bad_tlbl, bad_tval)))
 
             if variant == 'save':
                 checks.append(Check('%s/clk-toggle' % v,
