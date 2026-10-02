@@ -377,7 +377,7 @@ DRWMENU         LD      HL, 0
                 CALL    DRWFNAM
                 JP      UPDMCLK
 
-MNUTEXT         DEFM    "S6ED | File  Edit  View  Options  Help", 0
+MNUTEXT         DEFM    "S6ED | File  Edit  Help", 0
 
 
 ; --- DRWFNAM                   ----------------------------------------

@@ -781,22 +781,7 @@ PARSTHM         LD      A, (HL)
                 LD      A, (DE)
                 CP      #FF
                 RET     Z
-                ADD     A, A
-                LD      E, A
-                LD      D, #00
-                LD      HL, S2TPTR
-                ADD     HL, DE
-                LD      E, (HL)
-                INC     HL
-                LD      D, (HL)
-                EX      DE, HL
-                ; FALL THROUGH TO .CPYTHM
-.CPYTHM         LD      DE, VCOLTXT
-                LD      BC, VCOLNUM
-                LDIR
-                LD      A, #FF
-                LD      (PALDIRT), A
-                RET
+                JP      APPLYTHM
                 ELSE
                 CP      #0D             ; 13 ENTRIES
                 RET     NC
@@ -818,22 +803,252 @@ PARSTHM         LD      A, (HL)
                 LD      A, #05          ; MONO
                 JR      Z, .LOADPTR
                 LD      A, #04          ; MSX
-.LOADPTR        ADD     A, A
+.LOADPTR        JP      APPLYTHM
+                ENDIF
+
+
+; --- APPLYTHM                  ----------------------------------------
+
+
+; - APPLYTHM ---------------------------
+; - APPLY THEME BY NUMERIC ID (0..3 FOR S2ED, 0..5 FOR S6ED)
+; - IN:  A = THEME ID
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+APPLYTHM        LD      (THEMEID), A
+                IFDEF   S2ED
+                CP      4
+                RET     NC
+                ADD     A, A
                 LD      E, A
-                LD      D, #00
+                LD      D, 0
+                LD      HL, S2TPTR
+                ADD     HL, DE
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)
+                EX      DE, HL
+                LD      DE, VCOLTXT
+                LD      BC, VCOLNUM
+                LDIR
+                LD      A, #FF
+                LD      (PALDIRT), A
+                JP      SETPAL
+                ELSE
+                CP      6
+                RET     NC
+                ADD     A, A
+                LD      E, A
+                LD      D, 0
                 LD      HL, THMPTR
                 ADD     HL, DE
                 LD      E, (HL)
                 INC     HL
                 LD      D, (HL)
                 EX      DE, HL
-                ; FALL THROUGH TO .CPYTHM
-.CPYTHM         LD      DE, PALDATA
+                LD      DE, PALDATA
                 LD      BC, 8
                 LDIR
                 LD      A, #FF
                 LD      (PALDIRT), A
+                LD      HL, PALDATA
+                JP      SETPAL
+                ENDIF
+
+
+; --- CFGSAVE                   ----------------------------------------
+
+
+; - CFGSAVE ----------------------------
+; - SERIALIZE ACTIVE SETTINGS TO LOADED .CFG FILE
+; - IN:  NONE (USES CFGLOC, HOMEFN, ACTIVE SETTING VARIABLES)
+; - OUT: CY = 0: SUCCESS, CY = 1: DISK ERROR
+; - CLOBBERS: ALL
+; -
+
+CFGSAVE         LD      A, (CFGLOC)
+                OR      A
+                JR      NZ, .LOCAL
+                LD      HL, CFGNAME
+                CALL    HOMEFN
+                JR      .DOWR
+.LOCAL          LD      HL, CFGNAME
+.DOWR           CALL    DSKCREAT
+                RET     C
+                LD      (CFGHAND), A
+
+                ; 1. PROFILE
+                LD      DE, KEYPROF
+                LD      A, (KMAPID)
+                AND     3
+                LD      HL, .PRFV
+                CALL    .WRLIST
+
+                ; 2. WRAP
+                LD      DE, KEYWRAP
+                LD      A, (WRAPMODE)
+                AND     1
+                LD      HL, .WRPV
+                CALL    .WRLIST
+
+                ; 3. AUTOALIGN
+                LD      DE, KEYALN
+                LD      A, (AUTOALGN)
+                CP      3
+                JR      C, .ALNOK
+                XOR     A
+.ALNOK          LD      HL, .ALNV
+                CALL    .WRLIST
+
+                ; 4. CLOCK
+                LD      DE, KEYCLK
+                LD      A, (SHOWCLK)
+                AND     1
+                LD      HL, .CLKV
+                CALL    .WRLIST
+
+                ; 5. TABWIDTH
+                LD      DE, KEYTAB
+                LD      A, (TABWIDTH)
+                SRL     A
+                SRL     A               ; 2->0, 4->1, 8->2
+                LD      HL, .TABV
+                CALL    .WRLIST
+
+                ; 6. EOL
+                LD      DE, KEYEOL
+                XOR     A
+                LD      HL, AUTOLOD
+                OR      (HL)
+                JR      NZ, .ELOK       ; A = 0 (AUTO)
+                LD      A, (SAVEEOL)
+                INC     A               ; DOS(0)->1, UNIX(1)->2
+.ELOK           LD      HL, .EOLV
+                CALL    .WRLIST
+
+                ; 7. MARKUP
+                LD      DE, KEYMKUP
+                LD      A, (MKUPMD)
+                CP      3
+                JR      C, .MKPOK
+                XOR     A
+.MKPOK          LD      HL, .MKPV
+                CALL    .WRLIST
+
+                ; 8. THEME
+                LD      DE, KEYTHM
+                LD      A, (THEMEID)
+                IFDEF   S2ED
+                AND     3
+                LD      HL, .S2THMV
+                ELSE
+                CP      6
+                JR      C, .THMOK
+                XOR     A
+.THMOK          LD      HL, .S6THMV
+                ENDIF
+                CALL    .WRLIST
+
+                ; CLOSE FILE
+                LD      A, (CFGHAND)
+                CALL    DSKCLOSE
+                OR      A
                 RET
+
+.WRLIST         ; IN: DE = KEY STRING, HL = VALUE TABLE, A = INDEX
+                ADD     A, A
+                PUSH    DE
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)         ; DE = VALUE STRING
+                POP     HL              ; HL = KEY STRING
+                ; FALL THROUGH TO .WRPAR
+
+.WRPAR          ; IN: HL = KEY STRING, DE = VALUE STRING
+                PUSH    DE
+                CALL    .WRS            ; WRITE KEY
+                LD      HL, 1
+                LD      DE, .STREQ
+                LD      A, (CFGHAND)
+                CALL    DSKWRITE        ; WRITE '='
+                POP     HL
+                CALL    .WRS            ; WRITE VALUE
+                LD      HL, 2
+                LD      DE, .CRLF
+                LD      A, (CFGHAND)
+                JP      DSKWRITE        ; WRITE CRLF
+
+.WRS            ; IN: HL = ASCIIZ STRING
+                PUSH    HL
+                LD      BC, 0
+.SLEN           LD      A, (HL)
+                OR      A
+                JR      Z, .SOK
+                INC     HL
+                INC     BC
+                JR      .SLEN
+.SOK            LD      H, B
+                LD      L, C
+                POP     DE              ; DE = STRING, HL = LEN
+                LD      A, (CFGHAND)
+                JP      DSKWRITE
+
+.STREQ          DEFM    "="
+.CRLF           DEFB    13, 10
+
+.PRFV           DEFW    .SVP0, .SVP1, .SVP2, .SVP3
+.SVP0           DEFM    "STD", 0
+.SVP1           DEFM    "WS", 0
+.SVP2           DEFM    "EMC", 0
+.SVP3           DEFM    "VI", 0
+
+.WRPV           DEFW    .SVW0, .SVW1
+.SVW0           DEFM    "DEV", 0
+.SVW1           DEFM    "TXT", 0
+
+.ALNV           DEFW    .SVA0, .SVA1, .SVA2
+.SVA0           DEFM    "OFF", 0
+.SVA1           DEFM    "ON", 0
+.SVA2           DEFM    "DEV", 0
+
+.CLKV           DEFW    .SVC0, .SVC1
+.SVC0           DEFM    "0", 0
+.SVC1           DEFM    "1", 0
+
+.TABV           DEFW    .SVT0, .SVT1, .SVT2
+.SVT0           DEFM    "2", 0
+.SVT1           DEFM    "4", 0
+.SVT2           DEFM    "8", 0
+
+.EOLV           DEFW    .SVE0, .SVE1, .SVE2
+.SVE0           DEFM    "AUTO", 0
+.SVE1           DEFM    "DOS", 0
+.SVE2           DEFM    "UNIX", 0
+
+.MKPV           DEFW    .SVM0, .SVM1, .SVM2
+.SVM0           DEFM    "OFF", 0
+.SVM1           DEFM    "MD", 0
+.SVM2           DEFM    "LIT", 0
+
+                IFDEF   S2ED
+.S2THMV         DEFW    .S2TD, .S2TA, .S2TG, .S2TM
+.S2TD           DEFM    "DARK", 0
+.S2TA           DEFM    "AMBER", 0
+.S2TG           DEFM    "GREEN", 0
+.S2TM           DEFM    "MSX", 0
+                ELSE
+.S6THMV         DEFW    .S6TD, .S6TA, .S6TG, .S6TL, .S6TM, .S6TO
+.S6TD           DEFM    "DEFAULT", 0
+.S6TA           DEFM    "AMBER", 0
+.S6TG           DEFM    "GREEN", 0
+.S6TL           DEFM    "LIGHT", 0
+.S6TM           DEFM    "MSX", 0
+.S6TO           DEFM    "MONO", 0
                 ENDIF
 
 

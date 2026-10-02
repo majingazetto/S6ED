@@ -1974,10 +1974,10 @@ class H22FileMenu(Case):
 
 class H23MenuNav(Case):
     name = 'H23-menu-nav'
-    desc = ('Horizontal menu navigation across all 5 menus (RIGHT/LEFT wrapping), '
-            'direct function key jumps (F1..F5), item navigation with separator '
+    desc = ('Horizontal menu navigation across all 3 menus (RIGHT/LEFT wrapping), '
+            'direct function key jumps (F1..F3), item navigation with separator '
             'skipping in Edit menu, and clean screen/title restoration on cancel')
-    origin = ('5-menu horizontal navigation engine with table-driven dimensions, '
+    origin = ('3-menu horizontal navigation engine with table-driven dimensions, '
               'dynamic background save/restore, and title XOR highlighting')
 
     def fixture(self, ctx, variant=None):
@@ -1993,34 +1993,26 @@ class H23MenuNav(Case):
         t.snap('open_file', at='WINPOLL')
 
         # 2. RIGHT navigates across all menus:
-        # File (0) -> Edit (1) -> View (2) -> Options (3) -> Help (4) -> wrap File (0)
+        # File (0) -> Edit (1) -> Help (2) -> wrap File (0)
         t.press('RIGHT')
         t.snap('nav_edit', vram='menu', at='WINPOLL')
-        t.press('RIGHT')
-        t.snap('nav_view', at='WINPOLL')
-        t.press('RIGHT')
-        t.snap('nav_opts', at='WINPOLL')
         t.press('RIGHT')
         t.snap('nav_help', at='WINPOLL')
         t.press('RIGHT')
         t.snap('nav_wrap_file', at='WINPOLL')
 
         # 3. LEFT wraps backwards:
-        # File (0) -> wrap Help (4) -> Options (3)
+        # File (0) -> wrap Help (2) -> Edit (1)
         t.press('LEFT')
         t.snap('nav_wrap_help', at='WINPOLL')
         t.press('LEFT')
-        t.snap('nav_left_opts', at='WINPOLL')
+        t.snap('nav_left_edit', at='WINPOLL')
 
         # 4. Direct function keys jump across menus:
         t.press('F2')
         t.snap('f2_jump_edit', at='WINPOLL')
-        t.press('F4')
-        t.snap('f4_jump_opts', at='WINPOLL')
-        t.press('F5')
-        t.snap('f5_jump_help', at='WINPOLL')
         t.press('F3')
-        t.snap('f3_jump_view', at='WINPOLL')
+        t.snap('f3_jump_help', at='WINPOLL')
         t.press('F1')
         t.snap('f1_jump_file', at='WINPOLL')
 
@@ -2038,11 +2030,13 @@ class H23MenuNav(Case):
         t.press('UP')
         t.snap('edit_item3_up', at='WINPOLL')
 
-        # 6. Action Keymap Profile via Options menu (Item 0)
-        t.press('F4')
-        t.snap('opts_menu_prof', at='WINPOLL')
+        # 6. Action Settings modal via Help menu (Item 0)
+        t.press('F3')
+        t.snap('help_menu_sett', at='WINPOLL')
         t.press('RETURN')
-        t.snap('after_prof_exec')
+        t.snap('after_sett_open', at='WINPOLL')
+        t.press('ESC')
+        t.snap('after_sett_close')
 
         # 6b. An EDIT menu action.  Nothing had ever pressed one, which is how
         # five of the six shipped calling the action ID instead of the routine
@@ -2090,18 +2084,14 @@ class H23MenuNav(Case):
         # 2. Horizontal RIGHT navigation + wrap
         right_ok = (
             run.var('nav_edit', 'WINACTV') == 1 and run.var('nav_edit', 'MNUID') == 1 and
-            run.var('nav_view', 'WINACTV') == 1 and run.var('nav_view', 'MNUID') == 2 and
-            run.var('nav_opts', 'WINACTV') == 1 and run.var('nav_opts', 'MNUID') == 3 and
-            run.var('nav_help', 'WINACTV') == 1 and run.var('nav_help', 'MNUID') == 4 and
+            run.var('nav_help', 'WINACTV') == 1 and run.var('nav_help', 'MNUID') == 2 and
             run.var('nav_wrap_file', 'WINACTV') == 1 and run.var('nav_wrap_file', 'MNUID') == 0
         )
         checks.append(Check(
             'H23/nav-right-wrap',
             right_ok,
-            'RIGHT cycles 0->1->2->3->4->0 (Edit=%s, View=%s, Opts=%s, Help=%s, WrapFile=%s)'
+            'RIGHT cycles 0->1->2->0 (Edit=%s, Help=%s, WrapFile=%s)'
             % (run.var('nav_edit', 'MNUID'),
-               run.var('nav_view', 'MNUID'),
-               run.var('nav_opts', 'MNUID'),
                run.var('nav_help', 'MNUID'),
                run.var('nav_wrap_file', 'MNUID'))))
 
@@ -2131,32 +2121,28 @@ class H23MenuNav(Case):
 
         # 4. Horizontal LEFT navigation + wrap
         left_ok = (
-            run.var('nav_wrap_help', 'WINACTV') == 1 and run.var('nav_wrap_help', 'MNUID') == 4 and
-            run.var('nav_left_opts', 'WINACTV') == 1 and run.var('nav_left_opts', 'MNUID') == 3
+            run.var('nav_wrap_help', 'WINACTV') == 1 and run.var('nav_wrap_help', 'MNUID') == 2 and
+            run.var('nav_left_edit', 'WINACTV') == 1 and run.var('nav_left_edit', 'MNUID') == 1
         )
         checks.append(Check(
             'H23/nav-left-wrap',
             left_ok,
-            'LEFT wraps 0->4->3 (WrapHelp=%s, Opts=%s)'
+            'LEFT wraps 0->2->1 (WrapHelp=%s, Edit=%s)'
             % (run.var('nav_wrap_help', 'MNUID'),
-               run.var('nav_left_opts', 'MNUID'))))
+               run.var('nav_left_edit', 'MNUID'))))
 
-        # 5. Direct F1..F5 key jumps
+        # 5. Direct F1..F3 key jumps
         fkeys_ok = (
             run.var('f2_jump_edit', 'MNUID') == 1 and
-            run.var('f4_jump_opts', 'MNUID') == 3 and
-            run.var('f5_jump_help', 'MNUID') == 4 and
-            run.var('f3_jump_view', 'MNUID') == 2 and
+            run.var('f3_jump_help', 'MNUID') == 2 and
             run.var('f1_jump_file', 'MNUID') == 0
         )
         checks.append(Check(
             'H23/direct-fkeys',
             fkeys_ok,
-            'F1..F5 keys jump directly to corresponding menus (F2=%s, F4=%s, F5=%s, F3=%s, F1=%s)'
+            'F1..F3 keys jump directly to corresponding menus (F2=%s, F3=%s, F1=%s)'
             % (run.var('f2_jump_edit', 'MNUID'),
-               run.var('f4_jump_opts', 'MNUID'),
-               run.var('f5_jump_help', 'MNUID'),
-               run.var('f3_jump_view', 'MNUID'),
+               run.var('f3_jump_help', 'MNUID'),
                run.var('f1_jump_file', 'MNUID'))))
 
         # 6. Item navigation and separator skip in Edit menu
@@ -2175,26 +2161,36 @@ class H23MenuNav(Case):
                run.var('edit_item5', 'MNUSEL'),
                run.var('edit_item3_up', 'MNUSEL'))))
 
-        # 7. Action Keymap Profile execution via Options menu (Item 0)
+        # 7. Action Settings modal dialog execution via Help menu (Item 0)
+        sett_ok = (
+            run.var('help_menu_sett', 'MNUID') == 2 and
+            run.var('help_menu_sett', 'MNUSEL') == 0 and
+            run.var('after_sett_open', 'WINACTV') == 1 and
+            run.var('after_sett_open', 'WINX') == 120 and
+            run.var('after_sett_open', 'WINW') == 272 and
+            run.var('after_sett_open', 'SETTFOC') == 0 and
+            run.var('after_sett_close', 'WINACTV') == 0
+        )
+        checks.append(Check(
+            'H23/action-settings',
+            sett_ok,
+            'Help item 0 opens Settings dialog and ESC closes it'
+            if sett_ok else
+            'Settings dialog failed: MNUID=%s, MNUSEL=%s, open=%s, WINX=%s, WINW=%s, SETTFOC=%s, close=%s'
+            % (run.var('help_menu_sett', 'MNUID'),
+               run.var('help_menu_sett', 'MNUSEL'),
+               run.var('after_sett_open', 'WINACTV'),
+               run.var('after_sett_open', 'WINX'),
+               run.var('after_sett_open', 'WINW'),
+               run.var('after_sett_open', 'SETTFOC'),
+               run.var('after_sett_close', 'WINACTV'))))
+
+        # 7b. An EDIT menu action
         checks.append(Check(
             'H23/edit-action',
             run.var('after_selall', 'SELACT') == 1,
             'Edit > Select All reaches the routine and not the action ID '
             '(SELACT=%s)' % run.var('after_selall', 'SELACT')))
-
-        checks.append(Check(
-            'H23/action-keymap-prof',
-            run.var('opts_menu_prof', 'MNUID') == 3 and
-            run.var('opts_menu_prof', 'MNUSEL') == 0 and
-            run.var('after_prof_exec', 'KMAPID') == 1,
-            'Options item 0 cycles Keymap Profile (KMAPID 0 -> 1)'
-            if (run.var('opts_menu_prof', 'MNUID') == 3 and
-                run.var('opts_menu_prof', 'MNUSEL') == 0 and
-                run.var('after_prof_exec', 'KMAPID') == 1) else
-            'Keymap profile failed: MNUID=%s, MNUSEL=%s, KMAPID=%s'
-            % (run.var('opts_menu_prof', 'MNUID'),
-               run.var('opts_menu_prof', 'MNUSEL'),
-               run.var('after_prof_exec', 'KMAPID'))))
 
         # 8. Clean cancellation and restoration
         cursor = [(run.var('boot', 'CURX') or 0, run.var('boot', 'CURY') or 0)]
@@ -2815,7 +2811,7 @@ class D8Accents(Case):
     # case is deterministic by construction instead of by luck.  That is
     # harness work and is not done.
     GRAPH_ROW = 'AEIOUNW1/'
-    GRAPH_GAPS = (0.031, 0.037, 0.041)
+    GRAPH_GAPS = (0.029, 0.031, 0.037)
     GRAPH_PASSES = len(GRAPH_GAPS)
 
     def timeline(self, ctx, variant=None):
@@ -5456,6 +5452,126 @@ class H36BrowseSaveAs(Case):
         return checks
 
 
+# --- H37  SETTINGS MODAL DIALOG (SCREEN 6) ----------------------------
+
+
+class H37Settings(Case):
+    name = 'H37-settings'
+    desc = ('Settings modal dialog: open via Help > Settings (Item 0), 2D navigation '
+            '(UP/DOWN across rows, RIGHT/LEFT/SPACE to cycle values), toggle buttons, '
+            'ESC cancels cleanly without modifying state, OK commits to live variables '
+            'and serializes to loaded .CFG on disk')
+    origin = ('Universal Settings screen (Phase 2026-10-02): replaces View and Options '
+              'menus with unified modal dialog and on-disk CFG serialization.')
+    variants = ('cancel', 'save')
+
+    FIXTURE = '1234567890\n' * 5
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.FIXTURE)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram=True)
+
+        # Open Help menu (F3), Item 0 is Settings...
+        t.press('F3')
+        t.snap('menu', at='WINPOLL')
+        t.press('RETURN')
+        t.snap('open', at='WINPOLL')
+
+        if variant == 'cancel':
+            # Cycle Profile forward (STD -> WS)
+            t.press('RIGHT')
+            t.snap('cycled', at='WINPOLL')
+            # ESC cancels without saving
+            t.press('ESC')
+            t.snap('closed')
+            return t
+
+        if variant == 'save':
+            # 1. DOWN x 3 -> Clock (Row 3)
+            t.press('DOWN')
+            t.press('DOWN')
+            t.press('DOWN')
+            t.snap('foc_clk', at='WINPOLL')
+            # SPACE toggles Clock (OFF -> ON)
+            t.press('SPACE')
+            t.snap('clk_toggled', at='WINPOLL')
+
+            # 2. DOWN x 4 -> Theme (Row 7)
+            t.press('DOWN')
+            t.press('DOWN')
+            t.press('DOWN')
+            t.press('DOWN')
+            t.snap('foc_thm', at='WINPOLL')
+            # RIGHT cycles Theme (0 -> 1: AMBER)
+            t.press('RIGHT')
+            t.snap('thm_cycled', at='WINPOLL')
+
+            # 3. DOWN to [ OK ] button (Row 8)
+            t.press('DOWN')
+            t.snap('foc_ok', at='WINPOLL')
+            # RETURN commits and saves to disk
+            t.press('RETURN')
+            t.wait(2.0)
+            t.snap('saved')
+            return t
+
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            v = '%s/%s' % (self.name, variant)
+
+            if variant == 'cancel':
+                checks.append(Check('%s/geometry' % v,
+                                    run.var('open', 'WINACTV') == 1 and
+                                    run.var('open', 'WINX') == 120 and
+                                    run.var('open', 'WINY') == 48 and
+                                    run.var('open', 'WINW') == 272 and
+                                    run.var('open', 'WINH') == 116,
+                                    'Settings dialog opened with correct geometry (120,48,272,116)'))
+                checks.append(Check('%s/cycled' % v,
+                                    run.var('open', 'SETTFOC') == 0 and
+                                    run.var('open', 'STTPRF') == 0 and
+                                    run.var('cycled', 'STTPRF') == 1,
+                                    'RIGHT cycles STTPRF from 0 (STD) to 1 (WS)'))
+                checks.append(Check('%s/discarded' % v,
+                                    run.var('closed', 'WINACTV') == 0 and
+                                    run.var('closed', 'KMAPID') == 0,
+                                    'ESC discards changes: WINACTV=0, live KMAPID remains 0'))
+
+            if variant == 'save':
+                checks.append(Check('%s/clk-toggle' % v,
+                                    run.var('foc_clk', 'SETTFOC') == 3 and
+                                    run.var('open', 'STTCLK') == 1 and
+                                    run.var('clk_toggled', 'STTCLK') == 0,
+                                    'SPACE toggles Clock from ON (1) to OFF (0)'))
+                checks.append(Check('%s/thm-cycle' % v,
+                                    run.var('foc_thm', 'SETTFOC') == 7 and
+                                    run.var('open', 'STTTHM') == 0 and
+                                    run.var('thm_cycled', 'STTTHM') == 1,
+                                    'RIGHT cycles Theme from 0 to 1 (AMBER)'))
+                checks.append(Check('%s/live-commit' % v,
+                                    run.var('foc_ok', 'SETTFOC') == 8 and
+                                    run.var('saved', 'WINACTV') == 0 and
+                                    run.var('saved', 'SHOWCLK') == 0 and
+                                    run.var('saved', 'THEMEID') == 1 and
+                                    run.var('saved', 'PALDIRT') != 0,
+                                    'OK commits: SHOWCLK=0, THEMEID=1, PALDIRT set, WINACTV=0'))
+                # Verify serialized CFG on disk
+                cfg_bytes = (run.session.extract_path(run.dsk, 'DEV\\S6ED.CFG') or
+                             run.session.extract(run.dsk, 'S6ED.CFG'))
+                cfg_text = cfg_bytes.decode('ascii', errors='replace') if cfg_bytes else ''
+                checks.append(Check('%s/cfg-on-disk' % v,
+                                    'CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text,
+                                    'Saved .CFG contains CLOCK=0 and THEME=AMBER: %s'
+                                    % ('CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text)))
+        return checks
+
+
 # --- H28  PARAMETRIC TEXTWIDTH (PHASE C2) -----------------------------
 
 
@@ -6164,7 +6280,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H24GoToLine(), H25FindReplace(), H26FindCurrentLine(), H27ViEx(),
          H28TextWidth(), H29HomePath(), H30NewDocument(), H31EditOpen(),
          H32SaveNoName(), H33LongPath(), H34BrowseOpen(),
-         H35BrowseMany(), H36BrowseSaveAs(),
+         H35BrowseMany(), H36BrowseSaveAs(), H37Settings(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),

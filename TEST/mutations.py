@@ -1131,7 +1131,7 @@ MUTATIONS = [
         'target': 'S2ED',
         'file': 'MENU.Z8A',
         'old': """                JR      C, .RGHTOK
-                XOR     A               ; WRAP 4 -> 0""",
+                XOR     A               ; WRAP 2 -> 0""",
         'new': """                JR      C, .RGHTOK
                 DEC     A               ; MUTATION: RIGHT DOES NOT WRAP""",
         'filter': 'S2-17',
@@ -1148,7 +1148,7 @@ MUTATIONS = [
         'new': """                CP      CR
                 JP      Z, .CANCEL      ; MUTATION: RETURN CANCELS""",
         'filter': 'S2-17',
-        'expect': ['S2-17/action'],
+        'expect_any': ['S2-17/action-settings', 'S2-17-menu-nav'],
     },
     {
         'name': 's2-menu-swtitl',
@@ -2363,19 +2363,19 @@ SELTMPXB        EQU     SELTMPXB2""")],
     },
     {
         'name': 'menu-nav-wrap',
-        'why': 'RIGHT navigation fails to wrap from Help (4) to File (0)',
+        'why': 'RIGHT navigation fails to wrap from Help (2) to File (0)',
         'file': 'MENU.Z8A',
         'old': """.RIGHT          LD      A, (MNUID)
                 INC     A
-                CP      MNUCOUNT        ; 5
+                CP      MNUCOUNT        ; 3
                 JR      C, .RGHTOK
-                XOR     A               ; WRAP 4 -> 0
+                XOR     A               ; WRAP 2 -> 0
 .RGHTOK         JP      MNUSWCH""",
         'new': """.RIGHT          LD      A, (MNUID)
                 INC     A
-                CP      MNUCOUNT        ; 5
+                CP      MNUCOUNT        ; 3
                 JR      C, .RGHTOK
-                LD      A, 4            ; MUTATION: CLAMP TO 4 INSTEAD OF WRAPPING TO 0
+                LD      A, 2            ; MUTATION: CLAMP TO 2 INSTEAD OF WRAPPING TO 0
 .RGHTOK         JP      MNUSWCH""",
         'filter': 'H23',
         'expect': ['H23/nav-right-wrap'],
@@ -2396,15 +2396,15 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['H23/title-switch-xor'],
     },
     {
-        'name': 'menu-opt-prof',
-        'why': 'Options menu item 0 calls ACTCYCMK instead of ACTCYCKM',
+        'name': 'menu-hlp-sett',
+        'why': 'Help menu item 0 calls ACTHELP instead of ACTSETT',
         'file': 'ACTION.Z8A',
-        'old': """.OPROF          CALL    ACTCYCKM
+        'old': """.HSETT          CALL    ACTSETT
                 JP      DRWSTAT""",
-        'new': """.OPROF          CALL    ACTCYCMK        ; MUTATION: WRONG DISPATCH
+        'new': """.HSETT          CALL    ACTHELP         ; MUTATION: WRONG DISPATCH
                 JP      DRWSTAT""",
         'filter': 'H23',
-        'expect': ['H23/action-keymap-prof'],
+        'expect': ['H23/action-settings'],
     },
     {
         'name': 'undo-dispatch',

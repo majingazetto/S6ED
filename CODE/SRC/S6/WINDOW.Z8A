@@ -2109,3 +2109,401 @@ DOFIND          LD      HL, 110
 .BTNRPL         DEFM    "[ Repl ]", 0
 .BTNALL         DEFM    "[ All  ]", 0
 .BTNCAN         DEFM    "[Cancel]", 0
+
+
+; --- DOSETT                    ----------------------------------------
+
+
+; - DOSETT -----------------------------
+; - SETTINGS DIALOG (SCREEN 6 / V9938)
+; - IN:  NONE
+; - OUT: CY = 0: ACCEPTED (SETTINGS SAVED)
+; -      CY = 1: CANCELLED
+; - CLOBBERS: ALL
+; -
+
+DOSETT          LD      HL, 120
+                LD      (WINX), HL
+                LD      HL, 48
+                LD      (WINY), HL
+                LD      HL, 272
+                LD      (WINW), HL
+                LD      HL, 116
+                LD      (WINH), HL
+                LD      HL, .TITSET
+                CALL    WINOPEN
+
+                ; INITIALIZE TEMPORARY VALUES FROM ACTIVE SETTINGS
+                LD      A, (KMAPID)
+                AND     3
+                LD      (STTPRF), A
+
+                LD      A, (WRAPMODE)
+                AND     1
+                LD      (STTWRP), A
+
+                LD      A, (AUTOALGN)
+                CP      3
+                JR      C, .ALNOK
+                XOR     A
+.ALNOK          LD      (STTALN), A
+
+                LD      A, (SHOWCLK)
+                AND     1
+                LD      (STTCLK), A
+
+                LD      A, (TABWIDTH)
+                SRL     A
+                SRL     A
+                LD      (STTTAB), A
+
+                XOR     A
+                LD      HL, AUTOLOD
+                OR      (HL)
+                JR      NZ, .ELSET      ; A = 0 (AUTO)
+                LD      A, (SAVEEOL)
+                INC     A               ; DOS->1, UNIX->2
+.ELSET          LD      (STTEOL), A
+
+                LD      A, (MKUPMD)
+                CP      3
+                JR      C, .MKPOK
+                XOR     A
+.MKPOK          LD      (STTMKP), A
+
+                LD      A, (THEMEID)
+                CP      6
+                JR      C, .THMOK
+                XOR     A
+.THMOK          LD      (STTTHM), A
+
+                XOR     A
+                LD      (SETTFOC), A
+                CALL    .DRWUI
+                CALL    WINSHOW
+
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+
+                CP      ESC
+                JP      Z, .CANCEL
+                CP      TAB
+                JR      Z, .NEXT
+                CP      CDOWN
+                JR      Z, .NEXT
+                CP      CUP
+                JR      Z, .PREV
+                CP      CRIGHT
+                JR      Z, .RIGHT
+                CP      CLEFT
+                JR      Z, .LEFT
+                CP      ' '
+                JR      Z, .SPACE
+                CP      CR
+                JR      Z, .ENTER
+                JR      .KEYLP
+
+.NEXT           LD      A, (SETTFOC)
+                INC     A
+                CP      10
+                JR      C, .FOCSET
+                XOR     A
+                JR      .FOCSET
+
+.PREV           LD      A, (SETTFOC)
+                OR      A
+                JR      NZ, .PDEC
+                LD      A, 10
+.PDEC           DEC     A
+.FOCSET         LD      (SETTFOC), A
+                CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.RIGHT          LD      A, (SETTFOC)
+                CP      8
+                JR      NC, .TOGBTN
+                CALL    .CYCFOR
+                CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.LEFT           LD      A, (SETTFOC)
+                CP      8
+                JR      NC, .TOGBTN
+                CALL    .CYCBAC
+                CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.TOGBTN         LD      A, (SETTFOC)
+                XOR     1
+                LD      (SETTFOC), A
+                CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.SPACE          LD      A, (SETTFOC)
+                CP      8
+                JP      Z, .OK
+                CP      9
+                JP      Z, .CANCEL
+                CALL    .CYCFOR
+                CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.ENTER          LD      A, (SETTFOC)
+                CP      9
+                JP      Z, .CANCEL
+                JP      .OK
+
+.CYCFOR         LD      A, (SETTFOC)
+                CP      8
+                RET     NC              ; ONLY SETTINGS 0..7
+                LD      E, A
+                LD      D, 0
+                LD      HL, STTPRF
+                ADD     HL, DE          ; HL = POINTER TO VAR
+                LD      A, (HL)
+                INC     A
+                PUSH    HL
+                LD      HL, .MAXTBL
+                ADD     HL, DE
+                CP      (HL)
+                POP     HL
+                JR      C, .CFOK
+                XOR     A
+.CFOK           LD      (HL), A
+                RET
+
+.CYCBAC         LD      A, (SETTFOC)
+                CP      8
+                RET     NC
+                LD      E, A
+                LD      D, 0
+                LD      HL, STTPRF
+                ADD     HL, DE          ; HL = POINTER TO VAR
+                LD      A, (HL)
+                OR      A
+                JR      NZ, .CBDEC
+                PUSH    HL
+                LD      HL, .MAXTBL
+                ADD     HL, DE
+                LD      A, (HL)
+                POP     HL
+.CBDEC          DEC     A
+                LD      (HL), A
+                RET
+
+.MAXTBL         DEFB    4, 2, 3, 2, 3, 3, 3, 6
+
+.DRWUI          ; CLEAR WINDOW BODY
+                LD      HL, (WINH)
+                LD      DE, 13
+                OR      A
+                SBC     HL, DE
+                LD      DE, 12
+                LD      A, CLR_BG
+                CALL    WINBAND
+
+                ; DRAW 8 SETTING ROWS
+                LD      IX, .SETTBL
+                LD      IY, STTPRF
+                LD      B, 0            ; ROW INDEX 0..7
+.RWLP           PUSH    BC
+                ; DRAW LABEL AT COL 2
+                LD      L, (IX+0)
+                LD      H, (IX+1)
+                LD      C, 2
+                LD      A, (SETTFOC)
+                CP      B
+                JR      Z, .LBLHI
+                XOR     A               ; VARIANT 0 (NORMAL)
+                CALL    WINPRN
+                JR      .VALDRW
+.LBLHI          LD      A, 1            ; VARIANT 1 (BOLD)
+                CALL    WINPRN3
+
+.VALDRW         POP     BC
+                PUSH    BC
+                LD      A, (IY+0)       ; VALUE (0..N)
+                ADD     A, A
+                LD      E, A
+                LD      D, 0
+                LD      L, (IX+2)
+                LD      H, (IX+3)
+                ADD     HL, DE
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)
+                EX      DE, HL          ; HL = VALUE STRING
+                LD      C, 16
+                LD      A, (SETTFOC)
+                CP      B
+                JR      Z, .VALHI
+                XOR     A               ; VARIANT 0 (NORMAL)
+                CALL    WINPRN
+                JR      .RWNXT
+.VALHI          LD      A, 1            ; VARIANT 1 (BOLD)
+                CALL    WINPRN3
+
+.RWNXT          INC     IY
+                INC     IX
+                INC     IX
+                INC     IX
+                INC     IX
+                POP     BC
+                INC     B
+                LD      A, B
+                CP      8
+                JR      C, .RWLP
+
+                ; DRAW BUTTONS AT RELATIVE Y = 94
+                LD      HL, .BTNOK
+                LD      DE, 56
+                LD      BC, 94
+                LD      A, (SETTFOC)
+                CP      8
+                LD      A, 0
+                JR      NZ, .B0SEL
+                INC     A
+.B0SEL          CALL    WINBTS
+
+                LD      HL, .BTNCAN
+                LD      DE, 160
+                LD      BC, 94
+                LD      A, (SETTFOC)
+                CP      9
+                LD      A, 0
+                JR      NZ, .B1SEL
+                INC     A
+.B1SEL          JP      WINBTS
+
+.OK             ; COMMIT SETTINGS TO LIVE VARIABLES
+                LD      A, (STTPRF)
+                LD      (KMAPID), A
+                CALL    KMAPSW
+
+                LD      A, (STTWRP)
+                LD      (WRAPMODE), A
+                OR      A
+                JR      NZ, .WRP1
+                XOR     A
+                LD      (TXTWIDTH), A
+                JR      .WRPDN
+.WRP1           LD      A, (TXTWIDTH)
+                OR      A
+                JR      NZ, .WRPDN
+                LD      A, (SAVETW)
+                OR      A
+                JR      NZ, .HAVTW
+                LD      A, TEXTCOLS
+.HAVTW          LD      (TXTWIDTH), A
+.WRPDN          LD      A, (STTALN)
+                LD      (AUTOALGN), A
+
+                LD      A, (STTCLK)
+                LD      (SHOWCLK), A
+
+                LD      A, (STTTAB)
+                INC     A
+                LD      B, A
+                XOR     A
+                SCF
+.TABLP          RLA
+                DJNZ    .TABLP
+                LD      (TABWIDTH), A
+
+                XOR     A
+                LD      (AUTOLOD), A
+                LD      (SAVEEOL), A
+                LD      A, (STTEOL)
+                OR      A
+                JR      NZ, .NEOL0
+                INC     A
+                LD      (AUTOLOD), A
+                JR      .EOLDN
+.NEOL0          CP      2
+                JR      NZ, .EOLDN
+                LD      A, 1
+                LD      (SAVEEOL), A
+.EOLDN          LD      A, (STTMKP)
+                LD      (MKUPMD), A
+
+                LD      A, (STTTHM)
+                CALL    APPLYTHM
+
+                CALL    CFGSAVE
+                CALL    WINCLOS
+                OR      A
+                RET
+
+.CANCEL         CALL    WINCLOS
+                SCF
+                RET
+
+.TITSET         DEFM    "Settings", 0
+
+.SETTBL         DEFW    .LBLPRF, .VALPRF
+                DEFW    .LBLWRP, .VALWRP
+                DEFW    .LBLALN, .VALALN
+                DEFW    .LBLCLK, .VALCLK
+                DEFW    .LBLTAB, .VALTAB
+                DEFW    .LBLEOL, .VALEOL
+                DEFW    .LBLMKP, .VALMKP
+                DEFW    .LBLTHM, .VALTHM
+
+.LBLPRF         DEFM    "Profile:   ", 0
+.LBLWRP         DEFM    "Wrap:      ", 0
+.LBLALN         DEFM    "Autoalign: ", 0
+.LBLCLK         DEFM    "Clock:     ", 0
+.LBLTAB         DEFM    "Tab width: ", 0
+.LBLEOL         DEFM    "EOL:       ", 0
+.LBLMKP         DEFM    "Markup:    ", 0
+.LBLTHM         DEFM    "Theme:     ", 0
+
+.VALPRF         DEFW    .VP0, .VP1, .VP2, .VP3
+.VP0            DEFM    "STD", 0
+.VP1            DEFM    "WS", 0
+.VP2            DEFM    "EMC", 0
+.VP3            DEFM    "VI", 0
+
+.VALWRP         DEFW    .VW0, .VW1
+.VW0            DEFM    "DEV", 0
+.VW1            DEFM    "TXT", 0
+
+.VALALN         DEFW    .VA0, .VA1, .VA2
+.VA0            DEFM    "OFF", 0
+.VA1            DEFM    "ON", 0
+.VA2            DEFM    "DEV", 0
+
+.VALCLK         DEFW    .VC0, .VC1
+.VC0            DEFM    "[ ] OFF", 0
+.VC1            DEFM    "[X] ON", 0
+
+.VALTAB         DEFW    .VT0, .VT1, .VT2
+.VT0            DEFM    "2", 0
+.VT1            DEFM    "4", 0
+.VT2            DEFM    "8", 0
+
+.VALEOL         DEFW    .VE0, .VE1, .VE2
+.VE0            DEFM    "AUTO", 0
+.VE1            DEFM    "DOS", 0
+.VE2            DEFM    "UNIX", 0
+
+.VALMKP         DEFW    .VM0, .VM1, .VM2
+.VM0            DEFM    "OFF", 0
+.VM1            DEFM    "MD", 0
+.VM2            DEFM    "LIT", 0
+
+.VALTHM         DEFW    .VTD, .VTA, .VTG, .VTL, .VTM, .VTO
+.VTD            DEFM    "DEFAULT", 0
+.VTA            DEFM    "AMBER", 0
+.VTG            DEFM    "GREEN", 0
+.VTL            DEFM    "LIGHT", 0
+.VTM            DEFM    "MSX", 0
+.VTO            DEFM    "MONO", 0
+
+.BTNOK          DEFM    "[  OK  ]", 0
+.BTNCAN         DEFM    "[Cancel]", 0
