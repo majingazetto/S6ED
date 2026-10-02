@@ -95,11 +95,27 @@ DOBRW           LD      A, 1
                 CP      CR
                 JR      Z, .KBTN
                 CP      ' '
-                JP      NZ, .KEYLP
+                JR      Z, .KBTN
+                CP      CLEFT
+                JR      Z, .BTNLFT
+                CP      CRIGHT
+                JR      Z, .BTNRGT
+                CP      CUP
+                JR      Z, .BTNUP
+                JP      .KEYLP
 .KBTN           LD      A, (BRWFOC)
                 CP      BRF_CANC
                 JP      Z, .CANCEL
                 JP      .ACCEPT
+.BTNLFT         LD      A, BRF_OK
+                JR      .BTNFOC
+.BTNRGT         LD      A, BRF_CANC
+.BTNFOC         LD      HL, BRWFOC
+                CP      (HL)
+                JP      Z, .KEYLP
+                JP      .SETFOC
+.BTNUP          LD      A, BRF_FLD
+                JP      .SETFOC
 
                 ; --- THE GRID HAS THE FOCUS
 .KLIST          LD      A, C
@@ -240,6 +256,10 @@ DOBRW           LD      A, 1
                 JP      Z, .ACCEPT
                 CP      BS
                 JR      Z, .FLDBS
+                CP      CDOWN
+                JR      Z, .FLDDN
+                CP      CUP
+                JR      Z, .FLDUP
                 CALL    BRWCHR
                 JP      C, .KEYLP
                 LD      B, A
@@ -274,13 +294,18 @@ DOBRW           LD      A, 1
                 CALL    WDUMPR
                 JP      .KEYLP
 
+.FLDDN          LD      A, BRF_OK
+                JR      .SETFOC
+.FLDUP          LD      A, BRF_LIST
+                JR      .SETFOC
+
                 ; --- TAB: THE NEXT STOP OF THE FOCUS
 .NEXTF          LD      A, (BRWFOC)
                 INC     A
                 CP      BRFOCN
-                JR      C, .NFSET
+                JR      C, .SETFOC
                 XOR     A
-.NFSET          LD      (BRWFOC), A
+.SETFOC         LD      (BRWFOC), A
                 ; UPDATE FIELD CARET / COLOR
                 CALL    .FIELD
                 LD      A, BRWFLDR
