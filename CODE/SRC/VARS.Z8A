@@ -119,6 +119,7 @@ SAVEEOL         DEFB    0               ; 0=DOS (CRLF), 1=UNIX (LF)
 AUTOLOD         DEFB    1               ; 1=AUTO-DETECT EOL ON LOAD, 0=FIXED BY CFG
 EOLARED         DEFB    0               ; 1=EOL FORMAT ALREADY DETECTED ON LOAD
 PALDIRT         DEFB    0               ; FF = PALETTE MODIFIED BY CFG
+THEMEID         DEFB    0               ; ACTIVE THEME ID (0=DARK/DEFAULT, 1=AMBER, 2=GREEN, 3=MSX)
 CLKHZ           DEFB    60              ; VDP INTERRUPT FREQUENCY (50 OR 60)
 CLKJIF          DEFW    0               ; JIFFY STAMP OF THE LAST COLON TOGGLE
 CLKPH           DEFB    0               ; COLON BLINK PHASE (0=VISIBLE, 1=INVISIBLE)
@@ -255,6 +256,15 @@ FNDACT          DEFB    0               ; FIND DIALOG FIELD ACTIVE (1=YES, 0=NO)
 FNDCOL          DEFB    0               ; FIND DIALOG FIELD COLOR
 FNDBUF          DEFW    0               ; FIND DIALOG BUFFER POINTER
 RPLCNT          DEFW    0               ; REPLACE ALL COUNTER
+SETTFOC         DEFB    0               ; SETTINGS DIALOG ACTIVE FOCUS (0..9)
+STTPRF          DEFB    0               ; SETTINGS PROFILE (0..3)
+STTWRP          DEFB    0               ; SETTINGS WRAP (0..1)
+STTALN          DEFB    0               ; SETTINGS AUTOALIGN (0..2)
+STTCLK          DEFB    0               ; SETTINGS CLOCK (0..1)
+STTTAB          DEFB    0               ; SETTINGS TABWIDTH (0=2, 1=4, 2=8)
+STTEOL          DEFB    0               ; SETTINGS EOL (0=AUTO, 1=DOS, 2=UNIX)
+STTMKP          DEFB    0               ; SETTINGS MARKUP (0=OFF, 1=MD, 2=LIT)
+STTTHM          DEFB    0               ; SETTINGS THEME (0..3 S2, 0..5 S6)
 
 
 ; --- FILE                      ----------------------------------------

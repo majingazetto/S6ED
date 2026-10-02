@@ -3616,13 +3616,13 @@ ACTMNU2         LD      A, 2
 
 
 ; - ACTMNU3 ----------------------------
-; - OPEN DROP-DOWN MENU (OPTIONS MENU)
+; - OPEN DROP-DOWN MENU (HELP MENU)
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-ACTMNU3         LD      A, 3
+ACTMNU3         LD      A, 2
                 LD      (MNUID), A
                 JR      MNUENT
 
@@ -3634,7 +3634,7 @@ ACTMNU3         LD      A, 3
 ; - CLOBBERS: ALL
 ; -
 
-ACTMNU4         LD      A, 4
+ACTMNU4         LD      A, 2
                 LD      (MNUID), A
                 JR      MNUENT
 
@@ -3658,10 +3658,6 @@ MNUENT          ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
                 JR      Z, .FILMNU
                 DEC     A
                 JR      Z, .EDIMNU
-                DEC     A
-                JP      Z, .VIWMNU
-                DEC     A
-                JP      Z, .OPTMNU
                 JP      .HLPMNU
 
 .FILMNU         LD      A, (MNUSEL)
@@ -3730,74 +3726,35 @@ MNUENT          ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
 
 .EFIND          JP      ACTFIND
 
-.VIWMNU         LD      A, (MNUSEL)
-                OR      A
-                JR      Z, .VWRAP
-                CP      1
-                JR      Z, .VMKUP
-                CP      3
-                JR      Z, .VCLK
-                CP      4
-                JR      Z, .VRDRW
-                RET
-
-.VWRAP          CALL    ACTTGLWR
-                JP      DRWSTAT
-
-.VMKUP          CALL    ACTCYCMK
-                JP      DRWSTAT
-
-.VCLK           LD      A, (SHOWCLK)
-                XOR     1
-                LD      (SHOWCLK), A
-                CALL    DRWMENU
-                JP      DRWSTAT
-
-.VRDRW          CALL    REDRAW
-                JP      DRWSTAT
-
-.OPTMNU         LD      A, (MNUSEL)
-                OR      A
-                JR      Z, .OPROF
-                CP      1
-                JR      Z, .OTAB
-                CP      2
-                JR      Z, .OEOL
-                CP      3
-                JR      Z, .OINS
-                RET
-
-.OPROF          CALL    ACTCYCKM
-                JP      DRWSTAT
-
-.OTAB           LD      A, (TABWIDTH)
-                CP      2
-                JR      Z, .TAB4
-                CP      4
-                JR      Z, .TAB8
-                LD      A, 2
-                JR      .TABSET
-.TAB4           LD      A, 4
-                JR      .TABSET
-.TAB8           LD      A, 8
-.TABSET         LD      (TABWIDTH), A
-                JP      DRWSTAT
-
-.OEOL           LD      A, (SAVEEOL)
-                XOR     1
-                LD      (SAVEEOL), A
-                XOR     A
-                LD      (AUTOLOD), A
-                JP      DRWSTAT
-
-.OINS           CALL    ACTTGLIN
-                JP      DRWSTAT
-
 .HLPMNU         LD      A, (MNUSEL)
-                CP      2
+                OR      A
+                JR      Z, .HSETT
+                CP      3
                 JR      Z, .HABT
                 RET
 
+.HSETT          CALL    ACTSETT
+                JP      DRWSTAT
+
 .HABT           JP      ACTHELP
+
+
+; --- ACTSETT                   ----------------------------------------
+
+
+; - ACTSETT ----------------------------
+; - OPEN SETTINGS MODAL DIALOG
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSETT         ; FTR-BUDGET: S6ED 2,447 B FREE, S2ED 154 B (2026-10-02)
+                LD      A, (FTRSEG)
+                LD      HL, DOSETT
+                CALL    FCALL
+                CALL    DRWMENU
+                CALL    DRWSTAT
+                JP      REDRAW
 
 

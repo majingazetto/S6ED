@@ -1672,7 +1672,7 @@ class S216Menu(S2Case):
 
 class S217MenuNav(S2Case):
     name = 'S2-17-menu-nav'
-    desc = ('RIGHT and LEFT walk the five menus and wrap, F1..F5 jump '
+    desc = ('RIGHT and LEFT walk the three menus and wrap, F1..F3 jump '
             'straight to one, and the highlight in row 0 follows exactly one '
             'title at a time')
     origin = ('phase W4.  Switching menus closes one window and opens the '
@@ -1680,7 +1680,7 @@ class S217MenuNav(S2Case):
               'un-highlight and two titles stay inverted, which is invisible '
               'to any check that only looks at the window.')
     LINES = ['%02d MENU NAV TEST LINE ABCDEFGHIJ' % i for i in range(12)]
-    NAMES = ('File', 'Edit', 'View', 'Options', 'Help')
+    NAMES = ('File', 'Edit', 'Help')
 
     def fixture(self, ctx, variant=None):
         return crlf(self.LINES)
@@ -1691,33 +1691,25 @@ class S217MenuNav(S2Case):
         t.press('F1')
         t.snap('file', at='WINPOLL')
 
-        # RIGHT walks 0 -> 1 -> 2 -> 3 -> 4 and wraps back to 0
+        # RIGHT walks 0 -> 1 -> 2 and wraps back to 0
         t.press('RIGHT')
         t.snap('r1', vram='patcol', at='WINPOLL')
         t.press('RIGHT')
-        t.snap('r2', at='WINPOLL')
-        t.press('RIGHT')
-        t.snap('r3', at='WINPOLL')
-        t.press('RIGHT')
-        t.snap('r4', vram='patcol', at='WINPOLL')
+        t.snap('r2', vram='patcol', at='WINPOLL')
         t.press('RIGHT')
         t.snap('rwrap', vram='patcol', at='WINPOLL')
 
-        # LEFT wraps the other way: 0 -> 4 -> 3
+        # LEFT wraps the other way: 0 -> 2 -> 1
         t.press('LEFT')
         t.snap('lwrap', at='WINPOLL')
         t.press('LEFT')
-        t.snap('l3', at='WINPOLL')
+        t.snap('l1', at='WINPOLL')
 
         # The function keys jump straight to a menu
         t.press('F2')
         t.snap('f2', at='WINPOLL')
-        t.press('F4')
-        t.snap('f4', at='WINPOLL')
-        t.press('F5')
-        t.snap('f5', vram='patcol', at='WINPOLL')
         t.press('F3')
-        t.snap('f3', at='WINPOLL')
+        t.snap('f3', vram='patcol', at='WINPOLL')
         t.press('F1')
         t.snap('f1', at='WINPOLL')
 
@@ -1725,12 +1717,13 @@ class S217MenuNav(S2Case):
         t.snap('esc', vram='patcol')
 
         # RETURN accepts, and the action runs in page 1 after DOMNU returns.
-        # Options > Keymap Profile is the cheapest branch of the shared
-        # dispatch to observe: it moves one byte and paints nothing.
-        t.press('F4')
-        t.snap('opts', at='WINPOLL')
+        # Help item 0 opens Settings modal dialog; ESC closes it.
+        t.press('F3')
+        t.snap('help', at='WINPOLL')
         t.press('RETURN')
-        t.snap('profile')
+        t.snap('sett_open', at='WINPOLL')
+        t.press('ESC')
+        t.snap('sett_close')
 
         # An EDIT menu action.  Nothing had ever pressed one, which is how five
         # of the six shipped calling the action ID instead of the routine
@@ -1751,13 +1744,13 @@ class S217MenuNav(S2Case):
         checks = []
 
         # Every step lands on the menu it should.
-        want = [('file', 0), ('r1', 1), ('r2', 2), ('r3', 3), ('r4', 4),
-                ('rwrap', 0), ('lwrap', 4), ('l3', 3),
-                ('f2', 1), ('f4', 3), ('f5', 4), ('f3', 2), ('f1', 0)]
+        want = [('file', 0), ('r1', 1), ('r2', 2),
+                ('rwrap', 0), ('lwrap', 2), ('l1', 1),
+                ('f2', 1), ('f3', 2), ('f1', 0)]
         bad = [(l, run.var(l, 'MNUID')) for l, m in want
                if run.var(l, 'MNUID') != m]
         checks.append(Check('S2-17/walk', not bad,
-                            'RIGHT/LEFT wrap both ways and F1..F5 jump '
+                            'RIGHT/LEFT wrap both ways and F1..F3 jump '
                             'directly' if not bad else
                             'wrong menu at %s' % bad))
 
@@ -1770,7 +1763,7 @@ class S217MenuNav(S2Case):
         # Exactly one title is inverted at any moment, and it is the open
         # menu's.  This is what catches a missing un-highlight.
         r0b = pattern.row_of(boot, pattern.MNUROW)
-        for label, menu in (('r1', 1), ('r4', 4), ('rwrap', 0), ('f5', 4)):
+        for label, menu in (('r1', 1), ('r2', 2), ('rwrap', 0), ('f3', 2)):
             dump = run.blob(label, 'patcol')
             if dump is None:
                 checks.append(Check('S2-17/%s/title' % label, False,
@@ -1806,13 +1799,27 @@ class S217MenuNav(S2Case):
                             'Edit > Select All reaches the routine and not '
                             'the action ID (SELACT=%s)' % sel))
 
-        was, now = run.var('boot', 'KMAPID'), run.var('profile', 'KMAPID')
-        checks.append(Check('S2-17/action',
-                            run.var('opts', 'MNUID') == 3 and
-                            was is not None and now is not None and
-                            now != was,
-                            'RETURN accepts and Options > Keymap Profile runs '
-                            '(KMAPID %s -> %s)' % (was, now)))
+        sett_ok = (
+            run.var('help', 'MNUID') == 2 and
+            run.var('help', 'MNUSEL') == 0 and
+            run.var('sett_open', 'WINACTV') == 1 and
+            run.var('sett_open', 'WINR') == 6 and
+            run.var('sett_open', 'WINNR') == 11 and
+            run.var('sett_open', 'SETTFOC') == 0 and
+            run.var('sett_close', 'WINACTV') == 0
+        )
+        checks.append(Check('S2-17/action-settings',
+                            sett_ok,
+                            'Help item 0 opens Settings dialog and ESC closes it'
+                            if sett_ok else
+                            'Settings open failed: MNUID=%s, MNUSEL=%s, open=%s, WINR=%s, WINNR=%s, SETTFOC=%s, close=%s'
+                            % (run.var('help', 'MNUID'),
+                               run.var('help', 'MNUSEL'),
+                               run.var('sett_open', 'WINACTV'),
+                               run.var('sett_open', 'WINR'),
+                               run.var('sett_open', 'WINNR'),
+                               run.var('sett_open', 'SETTFOC'),
+                               run.var('sett_close', 'WINACTV'))))
         return checks
 
 
@@ -3065,6 +3072,126 @@ class S230BrowseSaveAs(H36BrowseSaveAs):
     BRW_BYTES = BRW_BYTES
 
 
+# --- S2-31  SETTINGS MODAL DIALOG (SCREEN 2) --------------------------
+
+
+class S231Settings(S2Case):
+    name = 'S2-31-settings'
+    desc = ('Settings modal dialog: open via Help > Settings, 2D navigation '
+            '(UP/DOWN across rows, RIGHT/LEFT/SPACE to cycle values), toggle buttons, '
+            'ESC cancels cleanly without modifying state, OK commits to live variables '
+            'and serializes to loaded .CFG on disk')
+    origin = ('Universal Settings screen (Phase 2026-10-02): Screen 2 TMS9918 implementation.')
+    variants = ('cancel', 'save')
+
+    LINES = ['%02d SETTINGS TEST LINE ABCDEFGHIJ' % i for i in range(10)]
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def config(self, ctx, variant=None):
+        return self.cfg.replace('CLOCK=0', 'CLOCK=1')
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram='patcol')
+
+        # Open Help menu (F3), Item 0 is Settings...
+        t.press('F3')
+        t.snap('menu', at='WINPOLL')
+        t.press('RETURN')
+        t.snap('open', at='WINPOLL')
+
+        if variant == 'cancel':
+            # Cycle Profile forward (STD -> WS)
+            t.press('RIGHT')
+            t.snap('cycled', at='WINPOLL')
+            t.press('ESC')
+            t.snap('closed')
+            return t
+
+        if variant == 'save':
+            # 1. DOWN x 3 -> Clock (Row 3)
+            t.press('DOWN')
+            t.press('DOWN')
+            t.press('DOWN')
+            t.snap('foc_clk', at='WINPOLL')
+            # SPACE toggles Clock (OFF -> ON)
+            t.press('SPACE')
+            t.snap('clk_toggled', at='WINPOLL')
+
+            # 2. DOWN x 4 -> Theme (Row 7)
+            t.press('DOWN')
+            t.press('DOWN')
+            t.press('DOWN')
+            t.press('DOWN')
+            t.snap('foc_thm', at='WINPOLL')
+            # RIGHT cycles Theme (0 -> 1: AMBER)
+            t.press('RIGHT')
+            t.snap('thm_cycled', at='WINPOLL')
+
+            # 3. DOWN to [ OK ] button (Row 8)
+            t.press('DOWN')
+            t.snap('foc_ok', at='WINPOLL')
+            # RETURN commits and saves to disk
+            t.press('RETURN')
+            t.wait(2.0)
+            t.snap('saved')
+            return t
+
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            v = '%s/%s' % (self.name, variant)
+
+            if variant == 'cancel':
+                checks.append(Check('%s/geometry' % v,
+                                    run.var('open', 'WINACTV') == 1 and
+                                    run.var('open', 'WINR') == 6 and
+                                    run.var('open', 'WINC') == 9 and
+                                    run.var('open', 'WINNR') == 11 and
+                                    run.var('open', 'WINNC') == 13,
+                                    'Settings dialog opened with correct cell geometry (6,9,11,13)'))
+                checks.append(Check('%s/cycled' % v,
+                                    run.var('open', 'SETTFOC') == 0 and
+                                    run.var('open', 'STTPRF') == 0 and
+                                    run.var('cycled', 'STTPRF') == 1,
+                                    'RIGHT cycles STTPRF from 0 (STD) to 1 (WS)'))
+                checks.append(Check('%s/discarded' % v,
+                                    run.var('closed', 'WINACTV') == 0 and
+                                    run.var('closed', 'KMAPID') == 0,
+                                    'ESC discards changes: WINACTV=0, live KMAPID remains 0'))
+
+            if variant == 'save':
+                checks.append(Check('%s/clk-toggle' % v,
+                                    run.var('foc_clk', 'SETTFOC') == 3 and
+                                    run.var('open', 'STTCLK') == 1 and
+                                    run.var('clk_toggled', 'STTCLK') == 0,
+                                    'SPACE toggles Clock from ON (1) to OFF (0)'))
+                checks.append(Check('%s/thm-cycle' % v,
+                                    run.var('foc_thm', 'SETTFOC') == 7 and
+                                    run.var('open', 'STTTHM') == 0 and
+                                    run.var('thm_cycled', 'STTTHM') == 1,
+                                    'RIGHT cycles Theme from 0 to 1 (AMBER)'))
+                checks.append(Check('%s/live-commit' % v,
+                                    run.var('foc_ok', 'SETTFOC') == 8 and
+                                    run.var('saved', 'WINACTV') == 0 and
+                                    run.var('saved', 'SHOWCLK') == 0 and
+                                    run.var('saved', 'THEMEID') == 1,
+                                    'OK commits: SHOWCLK=0, THEMEID=1, WINACTV=0'))
+                # Verify serialized CFG on disk
+                cfg_bytes = (run.session.extract_path(run.dsk, 'DEV\\S2ED.CFG') or
+                             run.session.extract(run.dsk, 'S2ED.CFG'))
+                cfg_text = cfg_bytes.decode('ascii', errors='replace') if cfg_bytes else ''
+                checks.append(Check('%s/cfg-on-disk' % v,
+                                    'CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text,
+                                    'Saved .CFG contains CLOCK=0 and THEME=AMBER: %s'
+                                    % ('CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text)))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -3074,7 +3201,7 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S222FindCurrentLine(), S223HomePath(),
          S224ShippedDisk(), S225NewDocument(), S226LongPath(),
          S227DialogKeys(), S228BrowseOpen(), S229BrowseMany(),
-         S230BrowseSaveAs()]
+         S230BrowseSaveAs(), S231Settings()]
 
 
 def run(ctx, cases=None):

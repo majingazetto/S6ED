@@ -452,7 +452,7 @@ DRWMENU         CALL    VIDBANK
 
                 JP      TXTBANK
 
-.MNUTXT         DEFM    "S2ED | File  Edit  View  Options  Help                          "
+.MNUTXT         DEFM    "S2ED | File  Edit  Help                                         "
 
 
 

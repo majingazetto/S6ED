@@ -82,13 +82,16 @@ DOMNU           LD      A, (MNUID)
                 CP      F5KEY + 1
                 JR      NC, .ACCEL
                 SUB     F1KEY
-                JP      MNUSWCH
+                CP      MNUCOUNT
+                JR      C, .SWOK
+                LD      A, MNUCOUNT - 1
+.SWOK           JP      MNUSWCH
 
 .RIGHT          LD      A, (MNUID)
                 INC     A
                 CP      MNUCOUNT
                 JR      C, .RGHTOK
-                XOR     A               ; WRAP 4 -> 0
+                XOR     A               ; WRAP 2 -> 0
 .RGHTOK         JP      MNUSWCH
 
 .LEFT           LD      A, (MNUID)
@@ -176,18 +179,15 @@ DOMNU           LD      A, (MNUID)
 
                 ; TITLE SPANS IN ROW 0, AS PAIRS [CHAR COLUMN, WIDTH]. THEY
                 ; MUST MATCH .MNUTXT IN S2/UI.Z8A:
-                ; "S2ED | File  Edit  View  Options  Help"
-.TITX           DEFB    #07, #04, #0D, #04, #13, #04, #19, #07
-                DEFB    #22, #04
+                ; "S2ED | File  Edit  Help"
+.TITX           DEFB    #07, #04, #0D, #04, #13, #04
 
                 ; DROPDOWN TITLES, ONE POINTER PER MENU
-.TITP           DEFW    .T0, .T1, .T2, .T3, .T4
+.TITP           DEFW    .T0, .T1, .T2
 
 .T0             DEFM    "File", 0
 .T1             DEFM    "Edit", 0
-.T2             DEFM    "View", 0
-.T3             DEFM    "Options", 0
-.T4             DEFM    "Help", 0
+.T2             DEFM    "Help", 0
 
                 ; 8 BYTES PER MENU RECORD:
                 ; [WINC(1B), WINNC(1B), WINNR(1B), ITEMCNT(1B),
@@ -207,17 +207,9 @@ DOMNU           LD      A, (MNUID)
                 DEFB    #06, #0C, #0C, #0A
                 DEFW    .STBL1, .ACC1
 
-                ; MENU 2: VIEW
-                DEFB    #09, #0C, #07, #05
+                ; MENU 2: HELP
+                DEFB    #09, #0C, #06, #04
                 DEFW    .STBL2, .ACC2
-
-                ; MENU 3: OPTIONS
-                DEFB    #0C, #0C, #08, #06
-                DEFW    .STBL3, .ACC3
-
-                ; MENU 4: HELP
-                DEFB    #11, #0C, #05, #03
-                DEFW    .STBL4, .ACC4
 
 ; --- MENU 0 (FILE) ---
 .STBL0          DEFW    .S00, .S01, .S02, .S03, 0, .S05
@@ -246,33 +238,13 @@ DOMNU           LD      A, (MNUID)
 .S18            DEFM    "Go to Line...     ^G", 0
 .S19            DEFM    "Find...           ^F", 0
 
-; --- MENU 2 (VIEW) ---
-.STBL2          DEFW    .S20, .S21, 0, .S23, .S24
-.ACC2           DEFB    'W', #00, 'M', #01, 'C', #03, 'R', #04
-                DEFB    #00
+; --- MENU 2 (HELP) ---
+.STBL2          DEFW    .S20, .S21, 0, .S23
+.ACC2           DEFB    'S', #00, 'H', #01, 'A', #03, #00
 
-.S20            DEFM    "Word Wrap         ^W", 0
-.S21            DEFM    "Markup Style      ^T", 0
-.S23            DEFM    "Show Clock", 0
-.S24            DEFM    "Redraw Screen", 0
-
-; --- MENU 3 (OPTIONS) ---
-.STBL3          DEFW    .S30, .S31, .S32, .S33, 0, .S35
-.ACC3           DEFB    'P', #00, 'T', #01, 'E', #02, 'I', #03
-                DEFB    'S', #05, #00
-
-.S30            DEFM    "Keymap Profile    ^K", 0
-.S31            DEFM    "Tab Width", 0
-.S32            DEFM    "Line Endings", 0
-.S33            DEFM    "Insert Mode      Ins", 0
-.S35            DEFM    "Save Settings", 0
-
-; --- MENU 4 (HELP) ---
-.STBL4          DEFW    .S40, 0, .S42
-.ACC4           DEFB    'K', #00, 'A', #02, #00
-
-.S40            DEFM    "Keyboard Help...", 0
-.S42            DEFM    "About S2ED...", 0
+.S20            DEFM    "Settings...", 0
+.S21            DEFM    "Help...", 0
+.S23            DEFM    "About S2ED...", 0
 
 
 ; --- MNUSWCH                   ----------------------------------------

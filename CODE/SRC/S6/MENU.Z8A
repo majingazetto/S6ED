@@ -77,24 +77,20 @@ DOMNU           LD      A, (MNUID)
                 JP      Z, .ACC0
                 DEC     A
                 JP      Z, .ACC1
-                DEC     A
-                JP      Z, .ACC2
-                DEC     A
-                JP      Z, .ACC3
-                JP      .ACC4
+                JP      .ACC2
 
 .RIGHT          LD      A, (MNUID)
                 INC     A
-                CP      MNUCOUNT        ; 5
+                CP      MNUCOUNT        ; 3
                 JR      C, .RGHTOK
-                XOR     A               ; WRAP 4 -> 0
+                XOR     A               ; WRAP 2 -> 0
 .RGHTOK         JP      MNUSWCH
 
 .LEFT           LD      A, (MNUID)
                 OR      A
                 JR      NZ, .LFTOK
-                LD      A, MNUCOUNT     ; 5
-.LFTOK          DEC     A               ; WRAP 0 -> 4
+                LD      A, MNUCOUNT     ; 3
+.LFTOK          DEC     A               ; WRAP 0 -> 2
                 JP      MNUSWCH
 
 .F1             XOR     A
@@ -103,9 +99,9 @@ DOMNU           LD      A, (MNUID)
                 JP      MNUSWCH
 .F3             LD      A, 2
                 JP      MNUSWCH
-.F4             LD      A, 3
+.F4             LD      A, 2
                 JP      MNUSWCH
-.F5             LD      A, 4
+.F5             LD      A, 2
                 JP      MNUSWCH
 
                 ; ACCELERATORS MENU 0 (FILE)
@@ -196,85 +192,27 @@ DOMNU           LD      A, (MNUID)
 .A1F            LD      A, 9            ; ITEM 9 (FIND)
                 JP      .ACCOK
 
-                ; ACCELERATORS MENU 2 (VIEW)
+                ; ACCELERATORS MENU 2 (HELP)
 .ACC2           LD      A, C
-                CP      'w'
-                JR      Z, .A2W
-                CP      'W'
-                JR      Z, .A2W
-                CP      'm'
-                JR      Z, .A2M
-                CP      'M'
-                JR      Z, .A2M
-                CP      'c'
-                JR      Z, .A2C
-                CP      'C'
-                JR      Z, .A2C
-                CP      'r'
-                JR      Z, .A2R
-                CP      'R'
-                JR      Z, .A2R
-                JP      .KEYLP
-
-.A2W            XOR     A               ; ITEM 0 (WORD WRAP)
-                JR      .ACCOK
-.A2M            LD      A, 1            ; ITEM 1 (MARKUP)
-                JR      .ACCOK
-.A2C            LD      A, 3            ; ITEM 3 (SHOW CLOCK)
-                JR      .ACCOK
-.A2R            LD      A, 4            ; ITEM 4 (REDRAW)
-                JR      .ACCOK
-
-                ; ACCELERATORS MENU 3 (OPTIONS)
-.ACC3           LD      A, C
-                CP      'p'
-                JR      Z, .A3P
-                CP      'P'
-                JR      Z, .A3P
-                CP      't'
-                JR      Z, .A3T
-                CP      'T'
-                JR      Z, .A3T
-                CP      'e'
-                JR      Z, .A3E
-                CP      'E'
-                JR      Z, .A3E
-                CP      'i'
-                JR      Z, .A3I
-                CP      'I'
-                JR      Z, .A3I
                 CP      's'
-                JR      Z, .A3S
+                JR      Z, .A2S
                 CP      'S'
-                JR      Z, .A3S
-                JP      .KEYLP
-
-.A3P            XOR     A               ; ITEM 0 (PROFILE)
-                JR      .ACCOK
-.A3T            LD      A, 1            ; ITEM 1 (TAB)
-                JR      .ACCOK
-.A3E            LD      A, 2            ; ITEM 2 (EOL)
-                JR      .ACCOK
-.A3I            LD      A, 3            ; ITEM 3 (INSERT)
-                JR      .ACCOK
-.A3S            LD      A, 5            ; ITEM 5 (SAVE SETTINGS)
-                JR      .ACCOK
-
-                ; ACCELERATORS MENU 4 (HELP)
-.ACC4           LD      A, C
-                CP      'k'
-                JR      Z, .A4K
-                CP      'K'
-                JR      Z, .A4K
+                JR      Z, .A2S
+                CP      'h'
+                JR      Z, .A2H
+                CP      'H'
+                JR      Z, .A2H
                 CP      'a'
-                JR      Z, .A4A
+                JR      Z, .A2A
                 CP      'A'
-                JR      Z, .A4A
+                JR      Z, .A2A
                 JP      .KEYLP
 
-.A4K            XOR     A               ; ITEM 0 (KEYBOARD HELP)
+.A2S            XOR     A               ; ITEM 0 (SETTINGS)
                 JR      .ACCOK
-.A4A            LD      A, 2            ; ITEM 2 (ABOUT)
+.A2H            LD      A, 1            ; ITEM 1 (HELP)
+                JR      .ACCOK
+.A2A            LD      A, 3            ; ITEM 3 (ABOUT)
                 JR      .ACCOK
 
 .ACCOK          LD      (MNUSEL), A
@@ -331,8 +269,8 @@ DOMNU           LD      A, (MNUID)
                 OR      A               ; CY = 0 (SUCCESS)
                 RET
 
-.TITX           DEFW    48, 84, 120, 156, 210
-.TITW           DEFW    24, 24, 24, 42, 24
+.TITX           DEFW    48, 84, 120
+.TITW           DEFW    24, 24, 24
 
 .MNUTBL         ; 16 BYTES PER MENU RECORD:
                 ; [WINX(2B), WINW(2B), WINH(2B), ITEMCNT(1B), DUMMY(1B),
@@ -350,22 +288,10 @@ DOMNU           LD      A, (MNUID)
                 DEFW    .YTBL1, .STBL1
                 DEFW    0, 0
 
-                ; MENU 2: VIEW
-                DEFW    120, 144, 44
-                DEFB    5, 0
+                ; MENU 2: HELP
+                DEFW    120, 128, 36
+                DEFB    4, 0
                 DEFW    .YTBL2, .STBL2
-                DEFW    0, 0
-
-                ; MENU 3: OPTIONS
-                DEFW    156, 152, 52
-                DEFB    6, 0
-                DEFW    .YTBL3, .STBL3
-                DEFW    0, 0
-
-                ; MENU 4: HELP
-                DEFW    208, 128, 28
-                DEFB    3, 0
-                DEFW    .YTBL4, .STBL4
                 DEFW    0, 0
 
 ; --- MENU 0 (FILE) ---
@@ -393,31 +319,13 @@ DOMNU           LD      A, (MNUID)
 .S18            DEFM    "Go to Line...   Ctrl+G", 0
 .S19            DEFM    "Find...         Ctrl+F", 0
 
-; --- MENU 2 (VIEW) ---
-.YTBL2          DEFB    #03, #0B, #15, #19, #21
-.STBL2          DEFW    .S20, .S21, 0, .S23, .S24
+; --- MENU 2 (HELP) ---
+.YTBL2          DEFB    #03, #0B, #15, #19
+.STBL2          DEFW    .S20, .S21, 0, .S23
 
-.S20            DEFM    "Word Wrap        Ctrl+W", 0
-.S21            DEFM    "Markup Style     Ctrl+T", 0
-.S23            DEFM    "Show Clock", 0
-.S24            DEFM    "Redraw Screen", 0
-
-; --- MENU 3 (OPTIONS) ---
-.YTBL3          DEFB    #03, #0B, #13, #1B, #25, #29
-.STBL3          DEFW    .S30, .S31, .S32, .S33, 0, .S35
-
-.S30            DEFM    "Keymap Profile   Ctrl+K", 0
-.S31            DEFM    "Tab Width", 0
-.S32            DEFM    "Line Endings", 0
-.S33            DEFM    "Insert Mode         Ins", 0
-.S35            DEFM    "Save Settings", 0
-
-; --- MENU 4 (HELP) ---
-.YTBL4          DEFB    #03, #0D, #11
-.STBL4          DEFW    .S40, 0, .S42
-
-.S40            DEFM    "Keyboard Help...", 0
-.S42            DEFM    "About S6ED...", 0
+.S20            DEFM    "Settings...", 0
+.S21            DEFM    "Help...", 0
+.S23            DEFM    "About S6ED...", 0
 
 
 ; --- MNUSWCH                   ----------------------------------------

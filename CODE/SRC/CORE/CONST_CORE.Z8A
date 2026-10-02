@@ -303,7 +303,7 @@ SRCH_FND        EQU     0               ; ACTION: FIND NEXT
 SRCH_RPL        EQU     1               ; ACTION: REPLACE
 SRCH_ALL        EQU     2               ; ACTION: REPLACE ALL
 
-MNUCOUNT        EQU     5               ; TOTAL TOP-LEVEL MENUS (FILE, EDIT, VIEW, OPT, HELP)
+MNUCOUNT        EQU     3               ; TOTAL TOP-LEVEL MENUS (FILE, EDIT, HELP)
 
 
 ; --- MODAL TEXT INPUT (WINEDIT) ---------------------------------------
