@@ -4965,7 +4965,7 @@ class H34BrowseOpen(Case):
     origin = ('F2 of the file browser spec: File > Open, Ctrl+O and :e with '
               'no name did nothing, and there was no way to reach a file in '
               'another directory from inside the editor')
-    variants = ('nav', 'mask', 'typed', 'dirty', 'vi', 'menu')
+    variants = ('nav', 'mask', 'typed', 'dirty', 'vi', 'menu', 'cursor')
     NOTES = crlf(['N1', 'N2', 'N3'])
 
     def config(self, ctx, variant=None):
@@ -5009,6 +5009,29 @@ class H34BrowseOpen(Case):
         t.wait(0.5)
         t.snap('open', at='WINPOLL', vram='screen', bytes_=b)
         if variant in ('vi', 'menu'):
+            t.press('ESC')
+            t.wait(1.0)
+            t.snap('closed', bytes_=b)
+            return t
+        if variant == 'cursor':
+            t.press('TAB')
+            t.wait(0.5)
+            t.snap('fld', at='WINPOLL', bytes_=b)
+            t.press('DOWN')
+            t.wait(0.5)
+            t.snap('ok', at='WINPOLL', bytes_=b)
+            t.press('RIGHT')
+            t.wait(0.5)
+            t.snap('canc', at='WINPOLL', bytes_=b)
+            t.press('LEFT')
+            t.wait(0.5)
+            t.snap('ok2', at='WINPOLL', bytes_=b)
+            t.press('UP')
+            t.wait(0.5)
+            t.snap('fld2', at='WINPOLL', bytes_=b)
+            t.press('UP')
+            t.wait(0.5)
+            t.snap('list', at='WINPOLL', bytes_=b)
             t.press('ESC')
             t.wait(1.0)
             t.snap('closed', bytes_=b)
@@ -5082,6 +5105,26 @@ class H34BrowseOpen(Case):
                                     'MODIFIED %s)'
                                     % (run.var('kept', 'TOTLINES'),
                                        run.var('kept', 'MODIFIED'))))
+                continue
+            if variant == 'cursor':
+                b1 = lambda label, name: (run.var(label, name) or [None])[0]
+                checks.append(Check('%s/fld-down' % v,
+                                    b1('fld', 'BRWFOC') == 1 and
+                                    b1('ok', 'BRWFOC') == 2,
+                                    'TAB to field (BRWFOC %s), DOWN to OK (%s)'
+                                    % (b1('fld', 'BRWFOC'), b1('ok', 'BRWFOC'))))
+                checks.append(Check('%s/btn-arrows' % v,
+                                    b1('canc', 'BRWFOC') == 3 and
+                                    b1('ok2', 'BRWFOC') == 2,
+                                    'RIGHT to Cancel (BRWFOC %s), LEFT to OK (%s)'
+                                    % (b1('canc', 'BRWFOC'), b1('ok2', 'BRWFOC'))))
+                checks.append(Check('%s/fld-up' % v,
+                                    b1('fld2', 'BRWFOC') == 1 and
+                                    b1('list', 'BRWFOC') == 0 and
+                                    run.var('closed', 'WINACTV') == 0,
+                                    'UP to field (BRWFOC %s), UP to list (%s), ESC closed (%s)'
+                                    % (b1('fld2', 'BRWFOC'), b1('list', 'BRWFOC'),
+                                       run.var('closed', 'WINACTV'))))
                 continue
             got = brw_listing(run, 'open')
             want = self.root_listing(run)

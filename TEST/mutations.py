@@ -138,6 +138,56 @@ MUTATIONS = [
         'expect': ['S2-28/nav/drawn'],
     },
     {
+        'name': 'f2-btn-arrows',
+        'why': 'left and right arrow keys do not switch focus between browser buttons',
+        'file': 'BROWSER.Z8A',
+        'old': """                CP      CRIGHT
+                JR      Z, .BTNRGT""",
+        'new': """                CP      CRIGHT
+                NOP
+                NOP""",
+        'filter': 'H34',
+        'expect': ['H34/cursor/btn-arrows'],
+    },
+    {
+        'name': 'f2-fld-down',
+        'why': 'down arrow in name field does not move focus to the buttons',
+        'file': 'BROWSER.Z8A',
+        'old': """                CP      CDOWN
+                JR      Z, .FLDDN""",
+        'new': """                CP      CDOWN
+                NOP
+                NOP""",
+        'filter': 'H34',
+        'expect': ['H34/cursor/fld-down'],
+    },
+    {
+        'name': 's2-f3-btn-arrows',
+        'why': 'left and right arrow keys do not switch focus between browser buttons on S2ED',
+        'target': 'S2ED',
+        'file': 'BROWSER.Z8A',
+        'old': """                CP      CRIGHT
+                JR      Z, .BTNRGT""",
+        'new': """                CP      CRIGHT
+                NOP
+                NOP""",
+        'filter': 'S2-28',
+        'expect': ['S2-28/cursor/btn-arrows'],
+    },
+    {
+        'name': 's2-f3-fld-down',
+        'why': 'down arrow in name field does not move focus to the buttons on S2ED',
+        'target': 'S2ED',
+        'file': 'BROWSER.Z8A',
+        'old': """                CP      CDOWN
+                JR      Z, .FLDDN""",
+        'new': """                CP      CDOWN
+                NOP
+                NOP""",
+        'filter': 'S2-28',
+        'expect': ['S2-28/cursor/fld-down'],
+    },
+    {
         'name': 'f2-date-env',
         'why': 'the date format ignores the DATE environment item',
         'file': 'BROWSE.Z8A',
