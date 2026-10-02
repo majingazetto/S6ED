@@ -75,6 +75,7 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTEXMOD        ; 63 (VI ':' COMMAND CONSOLE)
                 DEFW    ACTNEW          ; 64 (CTRL + N / FILE > NEW)
                 DEFW    ACTOPEN         ; 65 (CTRL + O / FILE > OPEN)
+                DEFW    ACTSAVAS        ; 66 (CTRL + SHIFT + S / FILE > SAVE AS)
                 ASSERT  ($ - ACTTBL) / 2 == ACMAX
 
 
@@ -1685,6 +1686,62 @@ ACTOPEN         LD      A, (MODIFIED)
                 RET
 .OK             LD      HL, BRWOUT
                 JP      OPENDOC
+
+
+; --- ACTSAVAS                  ----------------------------------------
+
+
+; - ACTSAVAS ---------------------------
+; - FILE > SAVE AS (CTRL + SHIFT + S, VI :w WITH NO NAME): THE FILE BROWSER.
+; - ASKS OVERWRITE CONFIRMATION IF THE FILE EXISTS; REOPENS BROWSER ON NO.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTSAVAS        LD      A, BRW_SAVE
+                LD      (BRWMODE), A
+                ; FTR-BUDGET: S6ED 3,447 B FREE, S2ED 1,251 B (2026-10-02)
+                LD      A, (FTRSEG)
+                LD      HL, DOBRW
+                CALL    FCALL
+                JR      NC, .CHECK
+.CANCEL         CALL    REDRAW
+                CALL    DRWMENU
+                LD      A, #FF
+                LD      (STATPRV), A
+                CALL    DRWSTAT
+                RET
+
+.REOPEN         ; REOPEN BROWSER AFTER "NO" TO OVERWRITE
+                ; FTR-BUDGET: S6ED 3,447 B FREE, S2ED 1,251 B (2026-10-02)
+                LD      A, (FTRSEG)
+                LD      HL, DOBRWR
+                CALL    FCALL
+                JR      C, .CANCEL
+
+.CHECK          ; DOES BRWOUT ALREADY EXIST?
+                LD      DE, BRWOUT
+                LD      B, ATR_ALL
+                LD      IX, BRWFIB
+                LD      C, _FFIRST
+                CALL    BDOS
+                JR      C, .SAVEIT      ; DOES NOT EXIST: SAVE DIRECTLY
+
+                ; FILE EXISTS: ASK CONFIRMATION
+                ; FTR-BUDGET: S6ED 3,447 B FREE, S2ED 1,251 B (2026-10-02)
+                LD      A, (FTRSEG)
+                LD      HL, DOOVR
+                CALL    FCALL
+                LD      A, (WINRES)
+                OR      A
+                JR      Z, .REOPEN      ; NO: REOPEN BROWSER
+
+.SAVEIT         LD      HL, BRWOUT
+                CALL    FNAMSET
+                CALL    REDRAW
+                CALL    DRWMENU
+                JP      FILESAVE
 
 
 ; --- GOTOLN                    ----------------------------------------
@@ -3614,6 +3671,8 @@ MNUENT          ; FTR-BUDGET: S6ED 11,501 B FREE, S2ED 1,688 B (2026-09-22)
                 JP      Z, ACTOPEN
                 CP      2
                 JR      Z, .FSAVE
+                CP      3
+                JP      Z, ACTSAVAS
                 CP      5
                 JR      Z, .FQUIT
                 RET

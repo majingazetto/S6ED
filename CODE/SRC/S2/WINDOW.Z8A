@@ -955,6 +955,13 @@ DOOPN           LD      HL, DOASK.TITOPN
                 LD      DE, DOASK.STRNEW
                 JR      DOASK
 
+DOOVR           LD      A, 1
+                LD      (WINNOSV), A    ; DO NOT CLOBBER WSVBUF
+                LD      HL, DOASK.TITSAV
+                LD      DE, DOASK.STROVR
+                XOR     A               ; DO NOT SHOW UNSAVED WARNING
+                JR      DOASK.ASKGO
+
 DONEW           LD      HL, DOASK.TITNEW
                 LD      DE, DOASK.STRNEW
                 ; FALLS THROUGH INTO DOASK
@@ -976,7 +983,9 @@ DONEW           LD      HL, DOASK.TITNEW
 ; - CLOBBERS: ALL
 ; -
 
-DOASK           PUSH    DE              ; QUESTION, FOR AFTER WINOPEN
+DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
+.ASKGO          PUSH    AF              ; WARN FLAG
+                PUSH    DE              ; QUESTION, FOR AFTER WINOPEN
                 PUSH    HL              ; TITLE
                 LD      A, 8
                 LD      (WINR), A
@@ -1002,7 +1011,10 @@ DOASK           PUSH    DE              ; QUESTION, FOR AFTER WINOPEN
                 LD      A, (VCOLWIN)
                 CALL    WINPUTS
 
-                ; WARNING LINE, ONLY WITH A DIRTY BUFFER
+                ; WARNING LINE, ONLY WITH A DIRTY BUFFER (AND IF WARN FLAG != 0)
+                POP     AF
+                OR      A
+                JR      Z, .NOWRN
                 LD      A, (MODIFIED)
                 OR      A
                 JR      Z, .NOWRN
@@ -1092,7 +1104,9 @@ DOASK           PUSH    DE              ; QUESTION, FOR AFTER WINOPEN
 .STRQIT         DEFM    "Exit to MSX-DOS?", 0
 .TITNEW         DEFM    "New Document", 0
 .TITOPN         DEFM    "Open", 0
+.TITSAV         DEFM    "Save As", 0
 .STRNEW         DEFM    "Discard changes?", 0
+.STROVR         DEFM    "Overwrite file?", 0
 .STRWRN         DEFM    "Unsaved changes!", 0
 .BTNYES         DEFM    "[  YES ]", 0
 .BTNNO          DEFM    "[  NO  ]", 0

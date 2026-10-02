@@ -1045,6 +1045,11 @@ DOOPN           LD      HL, DOASK.TITOPN
                 LD      DE, DOASK.STRNEW
                 JR      DOASK
 
+DOOVR           LD      HL, DOASK.TITSAV
+                LD      DE, DOASK.STROVR
+                XOR     A               ; DO NOT SHOW UNSAVED CHANGES WARNING
+                JR      DOASK.ASKGO
+
 DONEW           LD      HL, DOASK.TITNEW
                 LD      DE, DOASK.STRNEW
                 ; FALLS THROUGH INTO DOASK
@@ -1063,7 +1068,9 @@ DONEW           LD      HL, DOASK.TITNEW
 ; - BUTTONS IN THE COMPOSITION BUFFER AND RE-BLITTS JUST THEIR RECTS
 ; - WITH WINUPD (SYNCED BY ONE WINVSY), SO THE DIALOG NEVER TEARS.
 
-DOASK           PUSH    DE              ; QUESTION, FOR AFTER WINOPEN
+DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
+.ASKGO          PUSH    AF              ; WARN FLAG
+                PUSH    DE              ; QUESTION, FOR AFTER WINOPEN
                 PUSH    HL              ; TITLE
                 LD      HL, 156
                 LD      (WINX), HL
@@ -1091,6 +1098,9 @@ DOASK           PUSH    DE              ; QUESTION, FOR AFTER WINOPEN
                 CALL    WINPRN
 
                 ; WARNING LINE, ONLY WITH A DIRTY BUFFER
+                POP     AF
+                OR      A
+                JR      Z, .NOWRN
                 LD      A, (MODIFIED)
                 OR      A
                 JR      Z, .NOWRN
@@ -1183,7 +1193,9 @@ DOASK           PUSH    DE              ; QUESTION, FOR AFTER WINOPEN
 .STRQIT         DEFM    "Exit to MSX-DOS?", 0
 .TITNEW         DEFM    "New Document", 0
 .TITOPN         DEFM    "Open", 0
+.TITSAV         DEFM    "Save As", 0
 .STRNEW         DEFM    "Discard changes?", 0
+.STROVR         DEFM    "Overwrite file?", 0
 .STRWRN         DEFM    "Unsaved changes!", 0
 .BTNYES         DEFM    "[  YES  ]", 0
 .BTNNO          DEFM    "[  NO  ]", 0

@@ -36,7 +36,11 @@ BRWSLW8         EQU     56              ; SLOT WIDTH IN PATTERN BYTES (7 * 8)
 ; - IT IS THE FILE -- RELATIVE TO BRWPATH UNLESS IT STARTS WITH "D:".
 ; -
 
-DOBRW           LD      A, 1
+DOBRWR          LD      A, 1
+                JR      DOBRW.INIT
+DOBRW           XOR     A
+.INIT           PUSH    AF
+                LD      A, 1
                 LD      (WINNOSV), A    ; NO BACKGROUND SAVE: WINDOW TOO LARGE FOR WSVBUF
                 LD      A, BRWWINR
                 LD      (WINR), A
@@ -52,6 +56,10 @@ DOBRW           LD      A, 1
                 LD      (EDCOL), A
                 LD      A, 38           ; FIELD WIDTH IN CHARACTERS
                 LD      (EDWID), A
+
+                POP     AF
+                OR      A
+                JR      NZ, .REOPEN
 
                 CALL    .INITP
                 LD      HL, .MASKD
@@ -72,7 +80,7 @@ DOBRW           LD      A, 1
 
                 CALL    BRWDTEN
                 CALL    BRWSCAN
-                CALL    .TITLE
+.REOPEN         CALL    .TITLE
                 LD      HL, BRWTTL
                 CALL    WINOPEN         ; DRAWS FRAME, TITLE, SHADOW, AND WDUMP
                 CALL    .PAINT          ; PAINTS ALL CONTENTS AND DUMPS ROWS 3..18
