@@ -5509,7 +5509,14 @@ class H37Settings(Case):
             t.press('RIGHT')
             t.snap('thm_cycled', at='WINPOLL')
 
-            # 3. DOWN to [ OK ] button (Row 8)
+            # 3. DOWN -> Shadow (Row 8)
+            t.press('DOWN')
+            t.snap('foc_shd', at='WINPOLL')
+            # SPACE toggles Shadow
+            t.press('SPACE')
+            t.snap('shd_toggled', at='WINPOLL')
+
+            # 4. DOWN to [ OK ] button (Row 9)
             t.press('DOWN')
             t.snap('foc_ok', at='WINPOLL')
             # RETURN commits and saves to disk
@@ -5554,8 +5561,12 @@ class H37Settings(Case):
                                     run.var('open', 'STTTHM') == 0 and
                                     run.var('thm_cycled', 'STTTHM') == 1,
                                     'RIGHT cycles Theme from 0 to 1 (AMBER)'))
+                checks.append(Check('%s/shd-toggle' % v,
+                                    run.var('foc_shd', 'SETTFOC') == 8 and
+                                    run.var('shd_toggled', 'STTSHD') != run.var('open', 'STTSHD'),
+                                    'SPACE toggles Shadow setting'))
                 checks.append(Check('%s/live-commit' % v,
-                                    run.var('foc_ok', 'SETTFOC') == 8 and
+                                    run.var('foc_ok', 'SETTFOC') == 9 and
                                     run.var('saved', 'WINACTV') == 0 and
                                     run.var('saved', 'SHOWCLK') == 0 and
                                     run.var('saved', 'THEMEID') == 1 and
@@ -5566,9 +5577,9 @@ class H37Settings(Case):
                              run.session.extract(run.dsk, 'S6ED.CFG'))
                 cfg_text = cfg_bytes.decode('ascii', errors='replace') if cfg_bytes else ''
                 checks.append(Check('%s/cfg-on-disk' % v,
-                                    'CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text,
-                                    'Saved .CFG contains CLOCK=0 and THEME=AMBER: %s'
-                                    % ('CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text)))
+                                    'CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text and 'SHADOW=' in cfg_text,
+                                    'Saved .CFG contains CLOCK=0, THEME=AMBER, SHADOW=: %s'
+                                    % ('CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text and 'SHADOW=' in cfg_text)))
         return checks
 
 

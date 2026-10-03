@@ -65,6 +65,7 @@ DEFAULT_VARS = [
     ('FNDFOC', 1), ('SETTFOC', 1), ('THEMEID', 1),
     ('STTPRF', 1), ('STTWRP', 1), ('STTALN', 1), ('STTCLK', 1),
     ('STTTAB', 1), ('STTEOL', 1), ('STTMKP', 1), ('STTTHM', 1),
+    ('STTSHD', 1), ('SHDWOFF', 1), ('SHDWCLR', 1),
     ('SELANCX', 1), ('SELANCL', 2),
     ('WINSEL', 1), ('WINRES', 1), ('WINBST', 1),
     ('MNUID', 1), ('MNUSEL', 1),
