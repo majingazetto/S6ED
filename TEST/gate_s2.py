@@ -1803,8 +1803,8 @@ class S217MenuNav(S2Case):
             run.var('help', 'MNUID') == 2 and
             run.var('help', 'MNUSEL') == 0 and
             run.var('sett_open', 'WINACTV') == 1 and
-            run.var('sett_open', 'WINR') == 6 and
-            run.var('sett_open', 'WINNR') == 11 and
+            run.var('sett_open', 'WINR') == 5 and
+            run.var('sett_open', 'WINNR') == 12 and
             run.var('sett_open', 'SETTFOC') == 0 and
             run.var('sett_close', 'WINACTV') == 0
         )
