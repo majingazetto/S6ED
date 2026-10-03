@@ -265,6 +265,7 @@ STTTAB          DEFB    0               ; SETTINGS TABWIDTH (0=2, 1=4, 2=8)
 STTEOL          DEFB    0               ; SETTINGS EOL (0=AUTO, 1=DOS, 2=UNIX)
 STTMKP          DEFB    0               ; SETTINGS MARKUP (0=OFF, 1=MD, 2=LIT)
 STTTHM          DEFB    0               ; SETTINGS THEME (0..3 S2, 0..5 S6)
+STTSHD          DEFB    0               ; SETTINGS SHADOW (0=OFF, 1=ON)
 
 
 ; --- FILE                      ----------------------------------------

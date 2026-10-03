@@ -3136,7 +3136,14 @@ class S231Settings(S2Case):
             t.press('RIGHT')
             t.snap('thm_cycled', at='WINPOLL')
 
-            # 3. DOWN to [ OK ] button (Row 8)
+            # 3. DOWN -> Shadow (Row 8)
+            t.press('DOWN')
+            t.snap('foc_shd', at='WINPOLL')
+            # SPACE toggles Shadow (ON -> OFF)
+            t.press('SPACE')
+            t.snap('shd_toggled', at='WINPOLL')
+
+            # 4. DOWN to [ OK ] button (Row 9)
             t.press('DOWN')
             t.snap('foc_ok', at='WINPOLL')
             # RETURN commits and saves to disk
@@ -3155,11 +3162,11 @@ class S231Settings(S2Case):
             if variant == 'cancel':
                 checks.append(Check('%s/geometry' % v,
                                     run.var('open', 'WINACTV') == 1 and
-                                    run.var('open', 'WINR') == 6 and
-                                    run.var('open', 'WINC') == 9 and
-                                    run.var('open', 'WINNR') == 11 and
-                                    run.var('open', 'WINNC') == 13,
-                                    'Settings dialog opened with correct cell geometry (6,9,11,13)'))
+                                    run.var('open', 'WINR') == 5 and
+                                    run.var('open', 'WINC') == 10 and
+                                    run.var('open', 'WINNR') == 12 and
+                                    run.var('open', 'WINNC') == 12,
+                                    'Settings dialog opened with correct cell geometry (5,10,12,12)'))
                 checks.append(Check('%s/cycled' % v,
                                     run.var('open', 'SETTFOC') == 0 and
                                     run.var('open', 'STTPRF') == 0 and
@@ -3176,30 +3183,36 @@ class S231Settings(S2Case):
                     checks.append(Check('%s/rendered-labels' % v, False, 'missing open VRAM dump'))
                 else:
                     fnt = font(ctx)
-                    # Verify row 7: "Profile:    " (cols 20..31 -> cells 10..15) and "STD " (cols 32..35 -> cells 16..17)
+                    # Verify row 6: "Profile:    " (cols 22..33 -> cells 11..16) and "STD " (cols 34..37 -> cells 17..18)
+                    r6 = pattern.row_of(dlg[:0x2000], 6)
+                    bad_lbl = [11 + i for i, want in enumerate(self.text_cells(fnt, "Profile:    "))
+                               if r6[(11 + i) * 8:(12 + i) * 8] != want]
+                    bad_val = [17 + i for i, want in enumerate(self.text_cells(fnt, "STD "))
+                               if r6[(17 + i) * 8:(18 + i) * 8] != want]
+                    # Verify row 7: "Wrap:       " and "TXT "
                     r7 = pattern.row_of(dlg[:0x2000], 7)
-                    bad_lbl = [10 + i for i, want in enumerate(self.text_cells(fnt, "Profile:    "))
-                               if r7[(10 + i) * 8:(11 + i) * 8] != want]
-                    bad_val = [16 + i for i, want in enumerate(self.text_cells(fnt, "STD "))
-                               if r7[(16 + i) * 8:(17 + i) * 8] != want]
-                    # Verify row 8: "Wrap:       " and "TXT "
-                    r8 = pattern.row_of(dlg[:0x2000], 8)
-                    bad_wlbl = [10 + i for i, want in enumerate(self.text_cells(fnt, "Wrap:       "))
-                                if r8[(10 + i) * 8:(11 + i) * 8] != want]
-                    bad_wval = [16 + i for i, want in enumerate(self.text_cells(fnt, "TXT "))
-                                if r8[(16 + i) * 8:(17 + i) * 8] != want]
-                    # Verify row 14: "Theme:      " and "DARK  "
+                    bad_wlbl = [11 + i for i, want in enumerate(self.text_cells(fnt, "Wrap:       "))
+                                if r7[(11 + i) * 8:(12 + i) * 8] != want]
+                    bad_wval = [17 + i for i, want in enumerate(self.text_cells(fnt, "TXT "))
+                                if r7[(17 + i) * 8:(18 + i) * 8] != want]
+                    # Verify row 13: "Theme:      " and "DARK  "
+                    r13 = pattern.row_of(dlg[:0x2000], 13)
+                    bad_tlbl = [11 + i for i, want in enumerate(self.text_cells(fnt, "Theme:      "))
+                                if r13[(11 + i) * 8:(12 + i) * 8] != want]
+                    bad_tval = [17 + i for i, want in enumerate(self.text_cells(fnt, "DARK  "))
+                                if r13[(17 + i) * 8:(18 + i) * 8] != want]
+                    # Verify row 14: "Shadow:     " and "ON  "
                     r14 = pattern.row_of(dlg[:0x2000], 14)
-                    bad_tlbl = [10 + i for i, want in enumerate(self.text_cells(fnt, "Theme:      "))
-                                if r14[(10 + i) * 8:(11 + i) * 8] != want]
-                    bad_tval = [16 + i for i, want in enumerate(self.text_cells(fnt, "DARK  "))
-                                if r14[(16 + i) * 8:(17 + i) * 8] != want]
-                    rendered_ok = not (bad_lbl or bad_val or bad_wlbl or bad_wval or bad_tlbl or bad_tval)
+                    bad_slbl = [11 + i for i, want in enumerate(self.text_cells(fnt, "Shadow:     "))
+                                if r14[(11 + i) * 8:(12 + i) * 8] != want]
+                    bad_sval = [17 + i for i, want in enumerate(self.text_cells(fnt, "ON  "))
+                                if r14[(17 + i) * 8:(18 + i) * 8] != want]
+                    rendered_ok = not (bad_lbl or bad_val or bad_wlbl or bad_wval or bad_tlbl or bad_tval or bad_slbl or bad_sval)
                     checks.append(Check('%s/rendered-labels' % v, rendered_ok,
-                                        'Profile, Wrap and Theme labels and values rendered correctly'
+                                        'Profile, Wrap, Theme and Shadow labels and values rendered correctly'
                                         if rendered_ok else
-                                        'bad cells: lbl=%s val=%s wlbl=%s wval=%s tlbl=%s tval=%s'
-                                        % (bad_lbl, bad_val, bad_wlbl, bad_wval, bad_tlbl, bad_tval)))
+                                        'bad cells: lbl=%s val=%s wlbl=%s wval=%s tlbl=%s tval=%s slbl=%s sval=%s'
+                                        % (bad_lbl, bad_val, bad_wlbl, bad_wval, bad_tlbl, bad_tval, bad_slbl, bad_sval)))
 
             if variant == 'save':
                 checks.append(Check('%s/clk-toggle' % v,
@@ -3212,20 +3225,25 @@ class S231Settings(S2Case):
                                     run.var('open', 'STTTHM') == 0 and
                                     run.var('thm_cycled', 'STTTHM') == 1,
                                     'RIGHT cycles Theme from 0 to 1 (AMBER)'))
+                checks.append(Check('%s/shd-toggle' % v,
+                                    run.var('foc_shd', 'SETTFOC') == 8 and
+                                    run.var('shd_toggled', 'STTSHD') != run.var('open', 'STTSHD'),
+                                    'SPACE toggles Shadow setting'))
                 checks.append(Check('%s/live-commit' % v,
-                                    run.var('foc_ok', 'SETTFOC') == 8 and
+                                    run.var('foc_ok', 'SETTFOC') == 9 and
                                     run.var('saved', 'WINACTV') == 0 and
                                     run.var('saved', 'SHOWCLK') == 0 and
-                                    run.var('saved', 'THEMEID') == 1,
-                                    'OK commits: SHOWCLK=0, THEMEID=1, WINACTV=0'))
+                                    run.var('saved', 'THEMEID') == 1 and
+                                    run.var('saved', 'SHDWOFF') != 0,
+                                    'OK commits: SHOWCLK=0, THEMEID=1, SHDWOFF set, WINACTV=0'))
                 # Verify serialized CFG on disk
                 cfg_bytes = (run.session.extract_path(run.dsk, 'DEV\\S2ED.CFG') or
                              run.session.extract(run.dsk, 'S2ED.CFG'))
                 cfg_text = cfg_bytes.decode('ascii', errors='replace') if cfg_bytes else ''
                 checks.append(Check('%s/cfg-on-disk' % v,
-                                    'CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text,
-                                    'Saved .CFG contains CLOCK=0 and THEME=AMBER: %s'
-                                    % ('CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text)))
+                                    'CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text and 'SHADOW=OFF' in cfg_text,
+                                    'Saved .CFG contains CLOCK=0, THEME=AMBER, SHADOW=OFF: %s'
+                                    % ('CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text and 'SHADOW=OFF' in cfg_text)))
         return checks
 
 

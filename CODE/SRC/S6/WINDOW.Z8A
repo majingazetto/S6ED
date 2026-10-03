@@ -2177,6 +2177,14 @@ DOSETT          LD      HL, 120
                 XOR     A
 .THMOK          LD      (STTTHM), A
 
+                ; SHADOW (0=OFF, 1=ON)
+                XOR     A
+                LD      HL, SHDWCLR
+                CP      (HL)
+                JR      Z, .SHDSET
+                INC     A
+.SHDSET         LD      (STTSHD), A
+
                 XOR     A
                 LD      (SETTFOC), A
                 CALL    .DRWUI
@@ -2205,7 +2213,7 @@ DOSETT          LD      HL, 120
 
 .NEXT           LD      A, (SETTFOC)
                 INC     A
-                CP      10
+                CP      11
                 JR      C, .FOCSET
                 XOR     A
                 JR      .FOCSET
@@ -2213,54 +2221,47 @@ DOSETT          LD      HL, 120
 .PREV           LD      A, (SETTFOC)
                 OR      A
                 JR      NZ, .PDEC
-                LD      A, 10
+                LD      A, 11
 .PDEC           DEC     A
 .FOCSET         LD      (SETTFOC), A
-                CALL    .DRWUI
+.REFRESH        CALL    .DRWUI
                 CALL    WINSHOW
                 JP      .KEYLP
 
 .RIGHT          LD      A, (SETTFOC)
-                CP      8
+                CP      9
                 JR      NC, .TOGBTN
                 CALL    .CYCFOR
-                CALL    .DRWUI
-                CALL    WINSHOW
-                JP      .KEYLP
+                JR      .REFRESH
 
 .LEFT           LD      A, (SETTFOC)
-                CP      8
+                CP      9
                 JR      NC, .TOGBTN
                 CALL    .CYCBAC
-                CALL    .DRWUI
-                CALL    WINSHOW
-                JP      .KEYLP
+                JR      .REFRESH
 
-.TOGBTN         LD      A, (SETTFOC)
-                XOR     1
-                LD      (SETTFOC), A
-                CALL    .DRWUI
-                CALL    WINSHOW
-                JP      .KEYLP
+.TOGBTN         LD      A, 19
+                LD      HL, SETTFOC
+                SUB     (HL)
+                LD      (HL), A
+                JR      .REFRESH
 
 .SPACE          LD      A, (SETTFOC)
-                CP      8
-                JP      Z, .OK
                 CP      9
+                JP      Z, .OK
+                CP      10
                 JP      Z, .CANCEL
                 CALL    .CYCFOR
-                CALL    .DRWUI
-                CALL    WINSHOW
-                JP      .KEYLP
+                JR      .REFRESH
 
 .ENTER          LD      A, (SETTFOC)
-                CP      9
+                CP      10
                 JP      Z, .CANCEL
                 JP      .OK
 
 .CYCFOR         LD      A, (SETTFOC)
-                CP      8
-                RET     NC              ; ONLY SETTINGS 0..7
+                CP      9
+                RET     NC              ; ONLY SETTINGS 0..8
                 LD      E, A
                 LD      D, 0
                 LD      HL, STTPRF
@@ -2278,7 +2279,7 @@ DOSETT          LD      HL, 120
                 RET
 
 .CYCBAC         LD      A, (SETTFOC)
-                CP      8
+                CP      9
                 RET     NC
                 LD      E, A
                 LD      D, 0
@@ -2297,6 +2298,7 @@ DOSETT          LD      HL, 120
                 RET
 
 .MAXTBL         DEFB    4, 2, 3, 2, 3, 3, 3, 6
+                DEFB    2
 
 .DRWUI          ; CLEAR WINDOW BODY
                 LD      HL, (WINH)
@@ -2307,27 +2309,68 @@ DOSETT          LD      HL, 120
                 LD      A, CLR_BG
                 CALL    WINBAND
 
-                ; DRAW 8 SETTING ROWS
+                ; DRAW 9 SETTING ROWS
                 LD      IX, .SETTBL
                 LD      IY, STTPRF
-                LD      B, 0            ; ROW INDEX 0..7
+                LD      B, 0            ; ROW INDEX 0..8
 .RWLP           PUSH    BC
+                ; IS THIS ROW SELECTED?
+                LD      A, (SETTFOC)
+                CP      B
+                JR      NZ, .UNSEL
+
+                ; --- SELECTED ROW ---
+                ; DRAW INSET BACKGROUND BAR: DX=WINX+4, DY=WINCOMP_Y+16+B*8, NX=WINW-8, NY=8
+                PUSH    BC
+                LD      HL, (WINX)
+                INC     HL
+                INC     HL
+                INC     HL
+                INC     HL              ; DX = WINX + 4
+                LD      (VDP_DX), HL
+                LD      A, B
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; B * 8
+                ADD     A, 16           ; 16 + B * 8
+                LD      E, A
+                LD      D, 0
+                LD      HL, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                LD      DE, 8
+                OR      A
+                SBC     HL, DE          ; NX = WINW - 8
+                LD      (VDP_NX), HL
+                LD      HL, 8
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      A, CLR_UI
+                LD      (VDP_CLR), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+                POP     BC
+
+                LD      A, 1            ; VARIANT 1 (BOLD)
+                JR      .DOROW
+
+.UNSEL          XOR     A               ; VARIANT 0 (NORMAL)
+
+.DOROW          PUSH    AF              ; SAVE VARIANT
                 ; DRAW LABEL AT COL 2
                 LD      L, (IX+0)
                 LD      H, (IX+1)
                 LD      C, 2
-                LD      A, (SETTFOC)
-                CP      B
-                JR      Z, .LBLHI
-                XOR     A               ; VARIANT 0 (NORMAL)
-                CALL    WINPRN
-                JR      .VALDRW
-.LBLHI          LD      A, 1            ; VARIANT 1 (BOLD)
                 CALL    WINPRN3
 
-.VALDRW         POP     BC
+                ; DRAW VALUE AT COL 16
+                POP     AF              ; RESTORE VARIANT
+                POP     BC              ; RESTORE ROW B
                 PUSH    BC
-                LD      A, (IY+0)       ; VALUE (0..N)
+                PUSH    AF              ; RESAVE VARIANT
+                LD      A, (IY+0)
                 ADD     A, A
                 LD      E, A
                 LD      D, 0
@@ -2339,13 +2382,7 @@ DOSETT          LD      HL, 120
                 LD      D, (HL)
                 EX      DE, HL          ; HL = VALUE STRING
                 LD      C, 16
-                LD      A, (SETTFOC)
-                CP      B
-                JR      Z, .VALHI
-                XOR     A               ; VARIANT 0 (NORMAL)
-                CALL    WINPRN
-                JR      .RWNXT
-.VALHI          LD      A, 1            ; VARIANT 1 (BOLD)
+                POP     AF              ; A = VARIANT
                 CALL    WINPRN3
 
 .RWNXT          INC     IY
@@ -2356,15 +2393,15 @@ DOSETT          LD      HL, 120
                 POP     BC
                 INC     B
                 LD      A, B
-                CP      8
-                JR      C, .RWLP
+                CP      9
+                JP      C, .RWLP
 
                 ; DRAW BUTTONS AT RELATIVE Y = 94
                 LD      HL, .BTNOK
                 LD      DE, 56
                 LD      BC, 94
                 LD      A, (SETTFOC)
-                CP      8
+                CP      9
                 LD      A, 0
                 JR      NZ, .B0SEL
                 INC     A
@@ -2374,7 +2411,7 @@ DOSETT          LD      HL, 120
                 LD      DE, 160
                 LD      BC, 94
                 LD      A, (SETTFOC)
-                CP      9
+                CP      10
                 LD      A, 0
                 JR      NZ, .B1SEL
                 INC     A
@@ -2434,6 +2471,13 @@ DOSETT          LD      HL, 120
                 LD      A, (STTTHM)
                 CALL    APPLYTHM
 
+                LD      A, (STTSHD)
+                OR      A
+                LD      A, CLR_BG
+                JR      Z, .SHDDON
+                LD      A, CLR_UI
+.SHDDON         LD      (SHDWCLR), A
+
                 CALL    CFGSAVE
                 CALL    WINCLOS
                 OR      A
@@ -2448,11 +2492,12 @@ DOSETT          LD      HL, 120
 .SETTBL         DEFW    .LBLPRF, .VALPRF
                 DEFW    .LBLWRP, .VALWRP
                 DEFW    .LBLALN, .VALALN
-                DEFW    .LBLCLK, .VALCLK
+                DEFW    .LBLCLK, .VALALN
                 DEFW    .LBLTAB, .VALTAB
                 DEFW    .LBLEOL, .VALEOL
                 DEFW    .LBLMKP, .VALMKP
                 DEFW    .LBLTHM, .VALTHM
+                DEFW    .LBLSHD, .VALALN
 
 .LBLPRF         DEFM    "Profile:   ", 0
 .LBLWRP         DEFM    "Wrap:      ", 0
@@ -2462,6 +2507,7 @@ DOSETT          LD      HL, 120
 .LBLEOL         DEFM    "EOL:       ", 0
 .LBLMKP         DEFM    "Markup:    ", 0
 .LBLTHM         DEFM    "Theme:     ", 0
+.LBLSHD         DEFM    "Shadow:    ", 0
 
 .VALPRF         DEFW    .VP0, .VP1, .VP2, .VP3
 .VP0            DEFM    "STD", 0
@@ -2469,18 +2515,13 @@ DOSETT          LD      HL, 120
 .VP2            DEFM    "EMC", 0
 .VP3            DEFM    "VI", 0
 
-.VALWRP         DEFW    .VW0, .VW1
-.VW0            DEFM    "DEV", 0
+.VALWRP         DEFW    .VA2, .VW1
 .VW1            DEFM    "TXT", 0
 
 .VALALN         DEFW    .VA0, .VA1, .VA2
 .VA0            DEFM    "OFF", 0
 .VA1            DEFM    "ON", 0
 .VA2            DEFM    "DEV", 0
-
-.VALCLK         DEFW    .VC0, .VC1
-.VC0            DEFM    "[ ] OFF", 0
-.VC1            DEFM    "[X] ON", 0
 
 .VALTAB         DEFW    .VT0, .VT1, .VT2
 .VT0            DEFM    "2", 0
@@ -2492,8 +2533,7 @@ DOSETT          LD      HL, 120
 .VE1            DEFM    "DOS", 0
 .VE2            DEFM    "UNIX", 0
 
-.VALMKP         DEFW    .VM0, .VM1, .VM2
-.VM0            DEFM    "OFF", 0
+.VALMKP         DEFW    .VA0, .VM1, .VM2
 .VM1            DEFM    "MD", 0
 .VM2            DEFM    "LIT", 0
 

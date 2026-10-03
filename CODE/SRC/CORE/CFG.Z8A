@@ -687,9 +687,14 @@ PARSSHD         LD      A, (HL)
                 JR      NZ, .S2COL
                 LD      A, B
                 CP      'F'
-                RET     NZ              ; NOT "OF..." -- LEAVE THE DEFAULT
-                LD      A, #FF
-                LD      (SHDWOFF), A
+                JR      Z, .S2OFF
+                CP      'N'
+                JR      Z, .S2ON
+                RET                     ; NOT "OF..." OR "ON..." -- LEAVE THE DEFAULT
+.S2OFF          LD      A, #FF
+                JR      .S2ST
+.S2ON           XOR     A
+.S2ST           LD      (SHDWOFF), A
                 RET
 
 .S2COL          LD      A, C            ; A HEX DIGIT: 0-9 OR A-F
@@ -742,12 +747,17 @@ PARSSHD         LD      A, (HL)
                 RET     NZ
                 LD      A, CLR_HI
                 JR      .S6SET
-.S6OFF          CP      'O'             ; "OFF" == "BG" ON FOUR COLORS
+.S6OFF          CP      'O'             ; "OFF" / "ON"
                 RET     NZ
                 LD      A, B
                 CP      'F'
-                RET     NZ
-                LD      A, CLR_BG
+                JR      Z, .S6OF1
+                CP      'N'
+                JR      Z, .S6ON1
+                RET
+.S6OF1          LD      A, CLR_BG
+                JR      .S6SET
+.S6ON1          LD      A, CLR_UI
 .S6SET          LD      (SHDWCLR), A
                 RET
                 ENDIF
@@ -951,6 +961,25 @@ CFGSAVE         LD      A, (CFGLOC)
                 ENDIF
                 CALL    .WRLIST
 
+                ; 9. SHADOW
+                LD      DE, KEYSHDW
+                IFDEF   S2ED
+                LD      HL, SHDWOFF
+                LD      A, 1            ; 1 = ON (SHDWOFF == 0)
+                OR      (HL)
+                JR      Z, .S2SHOK
+                XOR     A               ; 0 = OFF (SHDWOFF != 0)
+.S2SHOK         LD      HL, .ALNV
+                ELSE
+                LD      A, (SHDWCLR)
+                CP      CLR_BG
+                LD      A, 0            ; 0 = OFF (SHDWCLR == CLR_BG)
+                JR      Z, .S6SHOK
+                INC     A               ; 1 = UI (SHDWCLR != CLR_BG)
+.S6SHOK         LD      HL, .S6SHDV
+                ENDIF
+                CALL    .WRLIST
+
                 ; CLOSE FILE
                 LD      A, (CFGHAND)
                 CALL    DSKCLOSE
@@ -1049,6 +1078,8 @@ CFGSAVE         LD      A, (CFGLOC)
 .S6TL           DEFM    "LIGHT", 0
 .S6TM           DEFM    "MSX", 0
 .S6TO           DEFM    "MONO", 0
+.S6SHDV         DEFW    .SVA0, .S6SH1
+.S6SH1          DEFM    "UI", 0
                 ENDIF
 
 

@@ -864,44 +864,25 @@ DOABT           LD      A, 6
                 LD      HL, .TITABT
                 CALL    WINOPEN
 
+                LD      HL, .ABTTBL
                 LD      B, 8
+.ABTLP          PUSH    BC
+                PUSH    HL
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)
+                EX      DE, HL
                 LD      C, 20
-                LD      HL, .STRHDR
                 LD      A, (VCOLWIN)
                 CALL    WINPUTS
-
-                LD      B, 9
-                LD      C, 20
-                LD      HL, .STRSUB
-                LD      A, (VCOLWIN)
-                CALL    WINPUTS
-
-                ; VERSION FROM THE ONE PLACE THAT HOLDS IT: CORE/CONST_CORE
-                ; DEFINES VERSION.MAJOR/.MINOR AND S6ED'S ABOUT READS THE SAME
-                ; PAIR, SO THE TWO EDITORS CANNOT DRIFT APART.
-                LD      B, 10
-                LD      C, 20
-                LD      HL, .STRVER
-                LD      A, (VCOLWIN)
-                CALL    WINPUTS
-
-                LD      B, 11
-                LD      C, 20
-                LD      HL, .STRDSP
-                LD      A, (VCOLWIN)
-                CALL    WINPUTS
-
-                LD      B, 12
-                LD      C, 20
-                LD      HL, .STRFNT
-                LD      A, (VCOLWIN)
-                CALL    WINPUTS
-
-                LD      B, 13
-                LD      C, 20
-                LD      HL, .STRMEM
-                LD      A, (VCOLWIN)
-                CALL    WINPUTS
+                POP     HL
+                INC     HL
+                INC     HL
+                POP     BC
+                INC     B
+                LD      A, B
+                CP      14
+                JR      C, .ABTLP
 
                 LD      B, 15
                 LD      C, 27
@@ -926,6 +907,7 @@ DOABT           LD      A, 6
 .DONE           JP      WINCLOS
 
 .TITABT         DEFM    "About S2ED", 0
+.ABTTBL         DEFW    .STRHDR, .STRSUB, .STRVER, .STRDSP, .STRFNT, .STRMEM
 .STRHDR         DEFM    "S2ED - MSX1 64-Col", 0
 .STRSUB         DEFM    "Text Editor", 0
 .STRVER         DEFB    "Version ", VERSION.MAJOR, '.', VERSION.MINOR, 0
@@ -1832,13 +1814,13 @@ DOFIND          LD      A, 8
 ; - CLOBBERS: ALL
 ; -
 
-DOSETT          LD      A, 6
+DOSETT          LD      A, 5
                 LD      (WINR), A
-                LD      A, 9
+                LD      A, 10
                 LD      (WINC), A
-                LD      A, 11
+                LD      A, 12
                 LD      (WINNR), A
-                LD      A, 13
+                LD      A, 12
                 LD      (WINNC), A
                 LD      HL, .TITSET
                 CALL    WINOPEN
@@ -1885,6 +1867,14 @@ DOSETT          LD      A, 6
                 AND     3
                 LD      (STTTHM), A
 
+                ; SHADOW (0=OFF, 1=ON)
+                XOR     A
+                LD      HL, SHDWOFF
+                OR      (HL)
+                JR      NZ, .SHDSET
+                INC     A
+.SHDSET         LD      (STTSHD), A
+
                 XOR     A
                 LD      (SETTFOC), A
                 CALL    .DRWUI
@@ -1913,7 +1903,7 @@ DOSETT          LD      A, 6
 
 .NEXT           LD      A, (SETTFOC)
                 INC     A
-                CP      10
+                CP      11
                 JR      C, .FOCSET
                 XOR     A
                 JR      .FOCSET
@@ -1921,54 +1911,47 @@ DOSETT          LD      A, 6
 .PREV           LD      A, (SETTFOC)
                 OR      A
                 JR      NZ, .PDEC
-                LD      A, 10
+                LD      A, 11
 .PDEC           DEC     A
 .FOCSET         LD      (SETTFOC), A
-                CALL    .DRWUI
+.REFRESH        CALL    .DRWUI
                 CALL    WDUMP
                 JP      .KEYLP
 
 .RIGHT          LD      A, (SETTFOC)
-                CP      8
+                CP      9
                 JR      NC, .TOGBTN
                 CALL    .CYCFOR
-                CALL    .DRWUI
-                CALL    WDUMP
-                JP      .KEYLP
+                JR      .REFRESH
 
 .LEFT           LD      A, (SETTFOC)
-                CP      8
+                CP      9
                 JR      NC, .TOGBTN
                 CALL    .CYCBAC
-                CALL    .DRWUI
-                CALL    WDUMP
-                JP      .KEYLP
+                JR      .REFRESH
 
-.TOGBTN         LD      A, (SETTFOC)
-                XOR     1
-                LD      (SETTFOC), A
-                CALL    .DRWUI
-                CALL    WDUMP
-                JP      .KEYLP
+.TOGBTN         LD      A, 19
+                LD      HL, SETTFOC
+                SUB     (HL)
+                LD      (HL), A
+                JR      .REFRESH
 
 .SPACE          LD      A, (SETTFOC)
-                CP      8
-                JP      Z, .OK
                 CP      9
+                JP      Z, .OK
+                CP      10
                 JP      Z, .CANCEL
                 CALL    .CYCFOR
-                CALL    .DRWUI
-                CALL    WDUMP
-                JP      .KEYLP
+                JR      .REFRESH
 
 .ENTER          LD      A, (SETTFOC)
-                CP      9
+                CP      10
                 JP      Z, .CANCEL
                 JP      .OK
 
 .CYCFOR         LD      A, (SETTFOC)
-                CP      8
-                RET     NC              ; ONLY SETTINGS 0..7
+                CP      9
+                RET     NC              ; ONLY SETTINGS 0..8
                 LD      E, A
                 LD      D, 0
                 LD      HL, STTPRF
@@ -1986,7 +1969,7 @@ DOSETT          LD      A, 6
                 RET
 
 .CYCBAC         LD      A, (SETTFOC)
-                CP      8
+                CP      9
                 RET     NC
                 LD      E, A
                 LD      D, 0
@@ -2005,27 +1988,34 @@ DOSETT          LD      A, 6
                 RET
 
 .MAXTBL         DEFB    4, 2, 3, 2, 3, 3, 3, 4
+                DEFB    2
 
-.DRWUI          ; DRAW 8 SETTING ROWS (ROWS 7..14)
+.DRWUI          ; DRAW 9 SETTING ROWS (ROWS 6..14)
                 LD      IX, .SETTBL
                 LD      IY, STTPRF
-                LD      B, 7            ; SCREEN ROW (7..14)
+                LD      B, 6            ; SCREEN ROW (6..14)
 .RWLP           PUSH    BC
-                ; DRAW LABEL AT COL 20
-                LD      L, (IX+0)
-                LD      H, (IX+1)
-                LD      C, 20
+                ; DETERMINE ROW INDEX (0..8)
                 LD      A, B
-                SUB     7               ; ROW INDEX 0..7
+                SUB     6
                 LD      E, A
                 LD      A, (SETTFOC)
                 CP      E
-                CALL    .ROLEL
+                LD      A, (VCOLWIN)
+                JR      NZ, .NOTFOC
+                LD      A, (VCOLBSEL)
+.NOTFOC         CALL    .BAR            ; FILL ALL INTERIOR CELLS WITH COLOR IN A
+                PUSH    AF              ; SAVE ROW COLOR
+
+                ; DRAW LABEL AT COL 22
                 PUSH    IX
+                LD      L, (IX+0)
+                LD      H, (IX+1)
+                LD      C, 22
                 CALL    WINPUTS
                 POP     IX
 
-                ; DRAW VALUE AT COL 32
+                ; DRAW VALUE AT COL 34
                 LD      A, (IY+0)       ; VALUE (0..N)
                 ADD     A, A
                 LD      E, A
@@ -2037,15 +2027,10 @@ DOSETT          LD      A, 6
                 INC     HL
                 LD      D, (HL)
                 EX      DE, HL          ; HL = VALUE STRING
-                POP     BC
+                POP     AF              ; RESTORE ROW COLOR
+                POP     BC              ; RESTORE ROW IN B
                 PUSH    BC
-                LD      C, 32
-                LD      A, B
-                SUB     7
-                LD      E, A
-                LD      A, (SETTFOC)
-                CP      E
-                CALL    .ROLEV
+                LD      C, 34
                 PUSH    IX
                 CALL    WINPUTS
                 POP     IX
@@ -2063,29 +2048,42 @@ DOSETT          LD      A, 6
 
                 ; DRAW BUTTONS AT ROW 15
                 LD      B, 15
-                LD      C, 21
+                LD      C, 22
                 LD      HL, .BTNOK
                 LD      A, (SETTFOC)
-                CP      8
+                CP      9
                 CALL    .ROLEB
                 CALL    WINPUTS
 
                 LD      B, 15
-                LD      C, 31
+                LD      C, 34
                 LD      HL, .BTNCAN
                 LD      A, (SETTFOC)
-                CP      9
+                CP      10
                 CALL    .ROLEB
                 JP      WINPUTS
 
-.ROLEL          LD      A, (VCOLWIN)
-                RET     NZ
-                LD      A, (VCOLHI)
-                RET
-
-.ROLEV          LD      A, (VCOLWIN)
-                RET     NZ
-                LD      A, (VCOLBSEL)
+.BAR            ; IN: B = SCREEN ROW, A = COLOR BYTE
+                ; OUT: A = COLOR BYTE (PRESERVED)
+                ; CLOBBERS: DE, HL
+                PUSH    BC
+                PUSH    AF
+                LD      A, B
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL          ; HL = ROW * 32
+                LD      DE, COLMAP + 11 ; WINC + 1 = 11
+                ADD     HL, DE          ; HL = COLMAP + ROW * 32 + 11
+                POP     AF
+                LD      B, 10           ; WINNC - 2 = 10 CELLS
+.BARLP          LD      (HL), A
+                INC     HL
+                DJNZ    .BARLP
+                POP     BC
                 RET
 
 .ROLEB          LD      A, (VCOLHI)
@@ -2147,6 +2145,13 @@ DOSETT          LD      A, 6
                 LD      A, (STTTHM)
                 CALL    APPLYTHM
 
+                LD      A, (STTSHD)
+                OR      A
+                LD      A, #FF
+                JR      Z, .SHDDON
+                XOR     A
+.SHDDON         LD      (SHDWOFF), A
+
                 CALL    CFGSAVE
                 CALL    WINCLOS
                 OR      A
@@ -2161,11 +2166,12 @@ DOSETT          LD      A, 6
 .SETTBL         DEFW    .LBLPRF, .VALPRF
                 DEFW    .LBLWRP, .VALWRP
                 DEFW    .LBLALN, .VALALN
-                DEFW    .LBLCLK, .VALCLK
+                DEFW    .LBLCLK, .VALALN
                 DEFW    .LBLTAB, .VALTAB
                 DEFW    .LBLEOL, .VALEOL
                 DEFW    .LBLMKP, .VALMKP
                 DEFW    .LBLTHM, .VALTHM
+                DEFW    .LBLSHD, .VALALN
 
 .LBLPRF         DEFM    "Profile:   ", 0
 .LBLWRP         DEFM    "Wrap:      ", 0
@@ -2175,6 +2181,7 @@ DOSETT          LD      A, 6
 .LBLEOL         DEFM    "EOL:       ", 0
 .LBLMKP         DEFM    "Markup:    ", 0
 .LBLTHM         DEFM    "Theme:     ", 0
+.LBLSHD         DEFM    "Shadow:    ", 0
 
 .VALPRF         DEFW    .VP0, .VP1, .VP2, .VP3
 .VP0            DEFM    "STD ", 0
@@ -2182,18 +2189,13 @@ DOSETT          LD      A, 6
 .VP2            DEFM    "EMC ", 0
 .VP3            DEFM    "VI  ", 0
 
-.VALWRP         DEFW    .VW0, .VW1
-.VW0            DEFM    "DEV ", 0
+.VALWRP         DEFW    .VA2, .VW1
 .VW1            DEFM    "TXT ", 0
 
 .VALALN         DEFW    .VA0, .VA1, .VA2
 .VA0            DEFM    "OFF ", 0
 .VA1            DEFM    "ON  ", 0
 .VA2            DEFM    "DEV ", 0
-
-.VALCLK         DEFW    .VC0, .VC1
-.VC0            DEFM    "[ ] OFF", 0
-.VC1            DEFM    "[X] ON ", 0
 
 .VALTAB         DEFW    .VT0, .VT1, .VT2
 .VT0            DEFM    "2   ", 0
@@ -2205,8 +2207,7 @@ DOSETT          LD      A, 6
 .VE1            DEFM    "DOS ", 0
 .VE2            DEFM    "UNIX", 0
 
-.VALMKP         DEFW    .VM0, .VM1, .VM2
-.VM0            DEFM    "OFF ", 0
+.VALMKP         DEFW    .VA0, .VM1, .VM2
 .VM1            DEFM    "MD  ", 0
 .VM2            DEFM    "LIT ", 0
 
