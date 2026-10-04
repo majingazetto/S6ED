@@ -5136,6 +5136,8 @@ class H34BrowseOpen(Case):
                 font = font_of(ctx)
                 sel_px = (vram.pixel(buf, 126, 30, first_line=0)
                           if buf else None)
+                sel_ink = (vram.pixel(buf, 47, 26, first_line=0)
+                           if buf else None)
                 pos = want.index('HID.TXT')
                 x0 = 40 + 6 + 84 * (pos % 5)
                 y0 = 10 + 16 + 8 * (pos // 5)
@@ -5145,10 +5147,11 @@ class H34BrowseOpen(Case):
                     vram.glyph_mask(font, ch, variant=2, width=6)
                     for i, ch in enumerate('HID.TXT')))
                 checks.append(Check('%s/drawn' % v,
-                                    sel_px == vram.COL_HI and italic,
-                                    'selection bar in COL_HI (%s), hidden '
-                                    'HID.TXT drawn italic (%s)'
-                                    % (sel_px, italic)))
+                                    sel_px == vram.COL_HI and
+                                    sel_ink == vram.COL_UI and italic,
+                                    'selection bar in COL_HI (%s), text in '
+                                    'COL_UI (%s), hidden HID.TXT drawn italic (%s)'
+                                    % (sel_px, sel_ink, italic)))
                 path = asciiz(run, 'insub', 'BRWPATH')
                 checks.append(Check('%s/into' % v,
                                     path == 'A:\\SUB\\' and
@@ -5580,6 +5583,9 @@ class H37Settings(Case):
                                     'CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text and 'SHADOW=' in cfg_text,
                                     'Saved .CFG contains CLOCK=0, THEME=AMBER, SHADOW=: %s'
                                     % ('CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text and 'SHADOW=' in cfg_text)))
+                checks.append(Check('%s/saved-msg' % v,
+                                    asciiz(run, 'saved', 'STATMSG') == '[SAVED]',
+                                    'Status bar displays [SAVED]: %r' % asciiz(run, 'saved', 'STATMSG')))
         return checks
 
 

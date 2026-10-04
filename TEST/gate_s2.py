@@ -3244,6 +3244,9 @@ class S231Settings(S2Case):
                                     'CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text and 'SHADOW=OFF' in cfg_text,
                                     'Saved .CFG contains CLOCK=0, THEME=AMBER, SHADOW=OFF: %s'
                                     % ('CLOCK=0' in cfg_text and 'THEME=AMBER' in cfg_text and 'SHADOW=OFF' in cfg_text)))
+                checks.append(Check('%s/saved-msg' % v,
+                                    asciiz(run, 'saved', 'STATMSG') == '[SAVED]',
+                                    'Status bar displays [SAVED]: %r' % asciiz(run, 'saved', 'STATMSG')))
         return checks
 
 

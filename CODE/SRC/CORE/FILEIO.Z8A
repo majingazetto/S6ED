@@ -429,22 +429,22 @@ FILESAVE        LD      HL, FILENAME
                 ; NO FILENAME: SAY SO INSTEAD OF RETURNING IN SILENCE (A NEW
                 ; DOCUMENT HAS NONE UNTIL SAVE AS EXISTS; :w NAME GIVES ONE)
                 LD      HL, .STRNONM
-                CALL    .SETMSG
+                CALL    SETMSG
                 CALL    DRWSTAT
                 SCF
                 RET
 
 .DOFSAV         ; DISPLAY "Saving..." ON STATUS BAR BEFORE DISK OPERATION
-                LD      HL, .STRSAVG
-                CALL    .SETMSG
+                LD      HL, STRSAVG
+                CALL    SETMSG
                 CALL    DRWSTAT
 
                 LD      HL, FILENAME
                 CALL    DSKCREAT
                 JR      NC, .OPNOK
                 ; ERROR CREATING FILE
-                LD      HL, .STRSERR
-                CALL    .SETMSG
+                LD      HL, STRSERR
+                CALL    SETMSG
                 CALL    DRWSTAT
                 SCF
                 RET
@@ -495,13 +495,27 @@ FILESAVE        LD      HL, FILENAME
                 LD      (MODIFIED), A
 
                 ; DISPLAY "[SAVED]" ON STATUS BAR
-                LD      HL, .STRSAVD
-                CALL    .SETMSG
+                LD      HL, STRSAVD
+                CALL    SETMSG
                 CALL    DRWSTAT
                 OR      A               ; CLEAR CARRY
                 RET
 
-.SETMSG         LD      DE, STATMSG
+.STRNONM        DEFM    "[NO FILE NAME]", 0
+CRLFSTR         DEFB    CR, LF
+
+
+; --- SETMSG                    ----------------------------------------
+
+
+; - SETMSG -----------------------------
+; - COPY ASCIIZ STRING AT HL TO STATMSG
+; - IN:  HL = ASCIIZ STRING POINTER
+; - OUT: NONE
+; - CLOBBERS: AF, DE, HL
+; -
+
+SETMSG          LD      DE, STATMSG
 .SETMLP         LD      A, (HL)
                 LD      (DE), A
                 OR      A
@@ -510,9 +524,6 @@ FILESAVE        LD      HL, FILENAME
                 INC     DE
                 JR      .SETMLP
 
-.STRNONM        DEFM    "[NO FILE NAME]", 0
-.STRSAVG        DEFM    "Saving...", 0
-.STRSAVD        DEFM    "[SAVED]", 0
-.STRSERR        DEFM    "[SAVE ERROR]", 0
-
-CRLFSTR         DEFB    CR, LF
+STRSAVG         DEFM    "Saving...", 0
+STRSAVD         DEFM    "[SAVED]", 0
+STRSERR         DEFM    "[SAVE ERROR]", 0

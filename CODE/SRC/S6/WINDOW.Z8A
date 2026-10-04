@@ -264,6 +264,20 @@ WINSTR3         PUSH    AF
                 JR      WINSTR.DOSTR
 
 
+; - WINSTRX ----------------------------
+; - BLIT ASCIIZ STRING WITH FONT VARIANT (TXOR)
+; - IN:  HL = POINTER TO ASCIIZ STRING, DE = DX, BC = DY, A = FONT VARIANT
+; - OUT: DE = DX ADVANCED PAST LAST CHAR
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINSTRX         PUSH    AF
+                LD      A, VDP_TXOR
+                LD      (WINOP), A
+                POP     AF
+                JR      WINSTR.DOSTR
+
+
 ; - WINSTR -----------------------------
 ; - BLIT ASCIIZ STRING WITH FONT VARIANT (TIMP)
 ; - IN:  HL = POINTER TO ASCIIZ STRING
@@ -2478,7 +2492,14 @@ DOSETT          LD      HL, 120
                 LD      A, CLR_UI
 .SHDDON         LD      (SHDWCLR), A
 
+                LD      HL, STRSAVG
+                CALL    SETMSG
+                CALL    DRWSTAT
                 CALL    CFGSAVE
+                LD      HL, STRSAVD
+                JR      NC, .SAVOK
+                LD      HL, STRSERR
+.SAVOK          CALL    SETMSG
                 CALL    WINCLOS
                 OR      A
                 RET

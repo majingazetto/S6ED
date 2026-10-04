@@ -698,8 +698,10 @@ DOBRW           XOR     A
                 DEC     A
                 CP      C
                 RET     C               ; PAST THE LAST ENTRY: JUST THE BAR
-                PUSH    HL
-                PUSH    DE
+                LD      A, C            ; A = POSITION
+                PUSH    AF              ; SAVE POSITION
+                PUSH    HL              ; SAVE RELATIVE X
+                PUSH    DE              ; SAVE RELATIVE Y
                 LD      A, C
                 CALL    BRWPOS
                 PUSH    HL
@@ -722,7 +724,15 @@ DOBRW           XOR     A
                 ADD     HL, DE
                 EX      DE, HL          ; DE = DX
                 LD      HL, BRWNAME
-                JP      WINSTR
+                LD      (WINVAR), A     ; PRESERVE FONT VARIANT
+                POP     AF              ; A = POSITION
+                PUSH    HL
+                LD      HL, BRWSEL
+                CP      (HL)            ; IS POSITION == (BRWSEL)?
+                POP     HL
+                LD      A, (WINVAR)
+                JP      Z, WINSTRX      ; SELECTED: TRANSPARENT XOR BLIT
+                JP      WINSTR          ; NORMAL: TIMP BLIT
 
                 ; .SLUPD: BLIT THE SLOT OF POSITION A (THE CALLER SYNCS)
 .SLUPD          CALL    .SLOTXY

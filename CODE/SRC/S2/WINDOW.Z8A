@@ -2152,7 +2152,14 @@ DOSETT          LD      A, 5
                 XOR     A
 .SHDDON         LD      (SHDWOFF), A
 
+                LD      HL, STRSAVG
+                CALL    SETMSG
+                CALL    DRWSTAT
                 CALL    CFGSAVE
+                LD      HL, STRSAVD
+                JR      NC, .SAVOK
+                LD      HL, STRSERR
+.SAVOK          CALL    SETMSG
                 CALL    WINCLOS
                 OR      A
                 RET

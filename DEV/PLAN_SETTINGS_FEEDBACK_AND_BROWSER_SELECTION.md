@@ -1,7 +1,7 @@
 # S6ED / S2ED — Settings Feedback & Browser Focus Polish Plan
 
-Date: 2026-10-03  
-Status: **APPROVED BY USER — PENDING IMPLEMENTATION**  
+Date: 2026-10-04  
+Status: **SHIPPED & EMPIRICALLY VERIFIED**  
 Scope: Both targets (MSX2 S6ED & MSX1 S2ED)
 
 ---
