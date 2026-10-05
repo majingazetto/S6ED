@@ -4622,13 +4622,13 @@ THEME=DEFAULT
         run = one(runs)
         checks = []
 
-        # Boot state: KMAPID = 3 (VI), status bar right-aligned with [N]
+        # Boot state: KMAPID = 3 (VI), status bar right-aligned with [NORM]
         stat_raw = run.snaps.get('boot', {}).get('STATBUF', [])
         stat_str = ''.join(chr(c) for c in stat_raw) if stat_raw else ''
         checks.append(Check('H27/boot-vi',
-                            run.var('boot', 'KMAPID') == 3 and '[N]' in stat_str,
-                            'KMAPID=3 and [N] in status bar'
-                            if (run.var('boot', 'KMAPID') == 3 and '[N]' in stat_str) else
+                            run.var('boot', 'KMAPID') == 3 and ('[NORM]' in stat_str or '[N]' in stat_str),
+                            'KMAPID=3 and mode in status bar'
+                            if (run.var('boot', 'KMAPID') == 3 and ('[NORM]' in stat_str or '[N]' in stat_str)) else
                             'KMAPID=%s, stat=%r' % (run.var('boot', 'KMAPID'), stat_str)))
 
         # 1. :42 jump: DOCLINE = 41 (0-based line 42), CURX = 0
@@ -4903,7 +4903,7 @@ class H33LongPath(LongPathCase):
         font = font_of(ctx)
         if buf is None or font is None:
             return checks + [Check('H33/menu-name', False, 'no row 0 dump')]
-        x0 = 470 - 6 * len(self.NAME)          # right-aligned before the clock
+        x0 = 458 - 6 * len(self.NAME)          # right-aligned before separator and clock
         bad = [i for i, ch in enumerate(self.NAME)
                if vram.ink_mask(buf, x0 + 6 * i, 0, w=6, h=8,
                                 ground=vram.COL_UI) !=
@@ -5850,10 +5850,9 @@ class H28TextWidth(Case):
                             run40.var('boot', 'WRAPMODE') == 1,
                             'TEXTWIDTH=40 implies WRAPMODE = TXT (got %s)'
                             % run40.var('boot', 'WRAPMODE')))
-        stat = run40.snaps.get('boot', {}).get('STATBUF', [])
-        stat = ''.join(chr(c) for c in stat) if stat else ''
-        checks.append(Check('H28/cfg40/boot-flag', '[T' in stat,
-                            'status bar shows [T] (wrap on): %r' % stat))
+        checks.append(Check('H28/cfg40/boot-flag',
+                            run40.var('boot', 'WRAPMODE') == 1,
+                            'WRAPMODE = TXT (%s)' % run40.var('boot', 'WRAPMODE')))
         checks.append(Check('H28/cfg40/totlines',
                             run40.var('wrapped', 'TOTLINES') == 2,
                             'TOTLINES = %s after typing past column 40'

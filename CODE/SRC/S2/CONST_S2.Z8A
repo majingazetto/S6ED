@@ -28,6 +28,7 @@ MNUROW          EQU     0               ; MENU BAR ROW
 TXRFIRST        EQU     1               ; FIRST TEXT ROW
 TXRLAST         EQU     22              ; LAST TEXT ROW
 STBROW          EQU     23              ; STATUS BAR ROW
+STATCOLS        EQU     64              ; STATUS BAR COLUMNS (COLS 0..63)
 
 
 ; --- VRAM MAP (SCREEN 2)       ----------------------------------------

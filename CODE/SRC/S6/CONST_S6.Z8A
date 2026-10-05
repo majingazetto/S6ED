@@ -33,8 +33,9 @@ MNUROW          EQU     0               ; MENU BAR ROW
 TXRFIRST        EQU     1               ; FIRST TEXT ROW
 TXRLAST         EQU     24              ; LAST TEXT ROW
 STBROW          EQU     25              ; STATUS BAR ROW
-STBTX_X         EQU     6               ; STATUS BAR TEXT ORIGIN X
+STBTX_X         EQU     8               ; STATUS BAR TEXT ORIGIN X (ENDS AT 506)
 STBTX_Y         EQU     202             ; STATUS BAR TEXT ORIGIN Y (BAR IS 200..211)
+STATCOLS        EQU     83              ; STATUS BAR COLUMNS (COLS 0..82)
 
 
 ; --- VRAM MAP                  ----------------------------------------

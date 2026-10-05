@@ -325,10 +325,10 @@ MUTATIONS = [
         'why': 'the menu bar prints the whole FILENAME, path included, over '
                'the menu titles',
         'file': 'UI.Z8A',
-        'old': """                CALL    FNBASE
-                PUSH    HL              ; FOR BLTSTR""",
+        'old': """                CALL    FNBASE          ; HL = BASENAME, CLOBBERS AF, DE
+                LD      DE, FNAMBUF""",
         'new': """                LD      HL, FILENAME    ; MUTATION: THE WHOLE PATH
-                PUSH    HL              ; FOR BLTSTR""",
+                LD      DE, FNAMBUF""",
         'filter': 'H33',
         'expect': ['H33/menu-name'],
     },
@@ -337,10 +337,10 @@ MUTATIONS = [
         'why': 'S2ED\'s menu bar copies the whole FILENAME, path included',
         'target': 'S2ED',
         'file': 'UI.Z8A',
-        'old': """                CALL    FNBASE
-                PUSH    HL              ; FOR THE COPY BELOW""",
+        'old': """                CALL    FNBASE          ; HL = BASENAME, CLOBBERS AF, DE
+                LD      DE, FNAMBUF""",
         'new': """                LD      HL, FILENAME    ; MUTATION: THE WHOLE PATH
-                PUSH    HL              ; FOR THE COPY BELOW""",
+                LD      DE, FNAMBUF""",
         'filter': 'S2-26',
         'expect': ['S2-26/menu-name'],
     },
@@ -1541,15 +1541,15 @@ MUTATIONS = [
         'expect_any': ['G5/c%d' % i for i in range(7)],
     },
     {
-        # 2026-09-25: with exactly TEXTCOLS bytes the BLDSTAT NUL terminator
+        # 2026-09-25: with exactly STATCOLS bytes the BLDSTAT NUL terminator
         # lands on STATPRV+0, the cell cache reads "never painted" forever and
         # every keystroke full-repaints the bar (HMMV + 80 blits, ~45 ms).
         'name': 'd1-statbuf',
-        'why': 'STATBUF shrinks to TEXTCOLS, so the terminator overwrites '
+        'why': 'STATBUF shrinks to STATCOLS, so the terminator overwrites '
                'STATPRV+0 and the status bar full-repaints on every key',
         'file': 'VARS.Z8A',
-        'old': 'STATBUF         DEFS    TEXTCOLS + 1',
-        'new': 'STATBUF         DEFS    TEXTCOLS      ; MUTATION: TERMINATOR ON STATPRV',
+        'old': 'STATBUF         DEFS    STATCOLS + 1',
+        'new': 'STATBUF         DEFS    STATCOLS      ; MUTATION: TERMINATOR ON STATPRV',
         'filter': 'D1',
         'expect_static': ['statbuf-term'],
     },

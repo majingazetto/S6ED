@@ -20,7 +20,15 @@
 ; - CLOBBERS: ALL
 ; -
 
-DRWSTAT         CALL    BLDSTAT         ; BUILD STRING IN STATBUF
+DRWSTAT         LD      A, (MODIFIED)
+                LD      HL, MODPRV
+                CP      (HL)
+                JR      Z, .MODSAM
+                LD      (HL), A
+                PUSH    AF
+                CALL    DRWMENU
+                POP     AF
+.MODSAM         CALL    BLDSTAT         ; BUILD STRING IN STATBUF
 
                 ; PAD STATBUF WITH SPACES TO 64 CHARACTERS
                 LD      HL, STATBUF
@@ -140,13 +148,13 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 64 SPACES, FOLLOWED BY NULL TERMINATO
                 XOR     A
                 LD      (STATBUF + SCRCOLS), A ; NULL TERMINATOR AT 64
 
-                ; 2. LEFT CHANNEL: COLS 0..27 (MAX 28 CHARACTERS)
+                ; 2. LEFT CHANNEL: COLS 0..34 (MAX 35 CHARACTERS)
                 LD      DE, STATBUF
                 LD      A, (STATMSG)
                 OR      A
                 JR      Z, .NOSTMSG
                 LD      HL, STATMSG
-                LD      B, 28
+                LD      B, 35
                 CALL    .CPYMAX
                 JR      .DOLEFT
 
@@ -154,108 +162,46 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 64 SPACES, FOLLOWED BY NULL TERMINATO
                 OR      A
                 JR      Z, .DOLEFT
                 LD      HL, .STROOM     ; "[FILE TOO LARGE]"
-                LD      B, 28
+                LD      B, 35
                 CALL    .CPYMAX
                 JR      .DOLEFT
 
-.DOLEFT         ; 3. RIGHT CHANNEL AT FIXED OFFSET 28 (COLS 28..63)
-                LD      DE, STATBUF + 28
+.DOLEFT         ; 3. RIGHT CHANNEL AT FIXED OFFSET 35 (COLS 35..62 = 28 CHARS)
+                LD      DE, STATBUF + 35
 
-                ; A. COMPACT FLAGS: [W|A|M|I] (9 CHARS, COLS 28..36)
-                LD      A, '['
-                LD      (DE), A
-                INC     DE
-
-                ; WRAP MODE: 'D' (DEV) OR 'T' (TXT)
-                LD      A, 'D'
-                LD      HL, WRAPMODE
-                BIT     0, (HL)
-                JR      Z, .PUTWRP
-                LD      A, 'T'
-.PUTWRP         LD      (DE), A
-                INC     DE
-                LD      A, '|'
-                LD      (DE), A
-                INC     DE
-
-                ; AUTOALIGN: 'A' (ON/DEV) OR '-' (OFF)
-                LD      A, '-'
-                LD      HL, AUTOALGN
-                LD      C, (HL)
-                DEC     C
-                JP      M, .PUTALN
-                LD      A, 'A'
-.PUTALN         LD      (DE), A
-                INC     DE
-                LD      A, '|'
-                LD      (DE), A
-                INC     DE
-
-                ; MARKUP: 'M' (MD), 'L' (LITE), '-' (OFF)
-                LD      A, (MKUPMD)
-                CP      MKUP_MD
-                LD      A, 'M'
-                JR      Z, .PUTMK
-                LD      A, (MKUPMD)
-                CP      MKUP_LIT
-                LD      A, 'L'
-                JR      Z, .PUTMK
-                LD      A, '-'
-.PUTMK          LD      (DE), A
-                INC     DE
-                LD      A, '|'
-                LD      (DE), A
-                INC     DE
-
-                ; INSERT MODE: 'I' (INSERT) OR 'O' (OVERWRITE)
-                LD      A, (INSMODE)
-                OR      A
-                LD      A, 'O'
-                JR      Z, .PUTINS
-                LD      A, 'I'
-.PUTINS         LD      (DE), A
-                INC     DE
-                LD      A, ']'
-                LD      (DE), A
-                INC     DE
-
-                ; B. MODIFIED INDICATOR: '* ' OR '  ' (2 CHARS, COLS 37..38)
-                LD      A, (MODIFIED)
-                OR      A
-                LD      A, '*'
-                JR      NZ, .PUTMOD
-                LD      A, ' '
-.PUTMOD         LD      (DE), A
-                INC     DE
-                LD      A, ' '
-                LD      (DE), A
-                INC     DE
-
-                ; C. VI MODE / SELECTION: 4 CHARS (COLS 39..42)
+                ; A. MODE INDICATOR: 6 CHARS (COLS 35..40)
                 LD      A, (KMAPID)
                 CP      KMVI
                 JR      NZ, .NOTVI
                 LD      A, (SELACT)
                 OR      A
-                LD      HL, .STRVIV     ; "[V] "
+                LD      HL, .STRVIV     ; "[VIS] "
                 JR      NZ, .PUTVI
                 LD      A, (VIMODE)
                 CP      VIMNORM
-                LD      HL, .STRVIN     ; "[N] "
+                LD      HL, .STRVIN     ; "[NORM]"
                 JR      Z, .PUTVI
-                LD      HL, .STRVII     ; "[I] "
-.PUTVI          CALL    .CPY4
-                JR      .DONEVI
+                LD      HL, .STRVII     ; "[INS] "
+.PUTVI          CALL    .CPY6
+                JR      .DONEMOD
 
 .NOTVI          LD      A, (SELACT)
                 OR      A
-                LD      HL, .STRSEL     ; "[S] "
+                LD      HL, .STRSEL     ; "[SEL] "
                 JR      NZ, .PUTNVI
-                LD      HL, .STRSP4     ; "    "
-.PUTNVI         CALL    .CPY4
-.DONEVI
+                LD      A, (INSMODE)
+                OR      A
+                LD      HL, .STROVR     ; "[OVR] "
+                JR      Z, .PUTNVI
+                LD      HL, .STRVII     ; "[INS] "
+.PUTNVI         CALL    .CPY6
+.DONEMOD
+                ; B. 1 SPACE SEPARATOR (COL 41)
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
 
-                ; D. CURSOR POSITION: 21 CHARS (COLS 43..63)
+                ; C. CURSOR POSITION: 21 CHARS (COLS 42..62)
                 LD      HL, .STRLN      ; "Ln "
                 CALL    .CPY3
                 LD      HL, (DOCLINE)
@@ -278,6 +224,7 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 64 SPACES, FOLLOWED BY NULL TERMINATO
                 CALL    .CPYNUM
                 RET
 
+.CPY6           LDI
 .CPY5           LDI
 .CPY4           LDI
 .CPY3           LDI
@@ -318,14 +265,29 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 64 SPACES, FOLLOWED BY NULL TERMINATO
                 DJNZ    .CPYNUM2
                 RET
 
-.STRVIN         DEFM    "[N] "
-.STRVII         DEFM    "[I] "
-.STRVIV         DEFM    "[V] "
-.STRSEL         DEFM    "[S] "
-.STRSP4         DEFM    "    "
+.STRVIN         DEFM    "[NORM]"
+.STRVII         DEFM    "[INS] "
+.STRVIV         DEFM    "[VIS] "
+.STROVR         DEFM    "[OVR] "
+.STRSEL         DEFM    "[SEL] "
 .STRLN          DEFM    "Ln "
 .STRCOL         DEFM    " Col "
 .STROOM         DEFM    "[FILE TOO LARGE]", 0
+
+
+
+
+; --- DRWFNAM                   ----------------------------------------
+
+
+; - DRWFNAM ----------------------------
+; - DRAW FILENAME REGION IN ROW 0 (ALIAS TO DRWMENU ON S2)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DRWFNAM         JP      DRWMENU
 
 
 
@@ -340,51 +302,109 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 64 SPACES, FOLLOWED BY NULL TERMINATO
 ; - CLOBBERS: ALL
 ; -
 
-DRWMENU         CALL    VIDBANK
-
-                ; 1. COPY BASE MENU BAR TEMPLATE TO STATBUF
+DRWMENU         ; 1. COPY BASE MENU BAR TEMPLATE TO STATBUF
                 LD      HL, .MNUTXT
                 LD      DE, STATBUF
                 LD      BC, SCRCOLS     ; 64
                 LDIR
 
-                ; 2. OVERLAY FILENAME RIGHT-ALIGNED IF PRESENT
+                ; 2. FORMAT CLOCK AT COLS 58..62 IF SHOWCLK ENABLED
+                LD      A, (SHOWCLK)
+                OR      A
+                JR      Z, .NOCLK
+                LD      C, _GTIME       ; #2C
+                CALL    DOS             ; H = HOURS, L = MINUTES, D = SECONDS
+                LD      A, H
+                CALL    DECDIG2
+                LD      A, D
+                LD      (STATBUF + 58), A
+                LD      A, E
+                LD      (STATBUF + 59), A
+                LD      A, (CLKPH)
+                OR      A
+                LD      A, ':'
+                JR      Z, .SETCOL
+                LD      A, ' '
+.SETCOL         LD      (STATBUF + 60), A
+                LD      A, L
+                CALL    DECDIG2
+                LD      A, D
+                LD      (STATBUF + 61), A
+                LD      A, E
+                LD      (STATBUF + 62), A
+
+.NOCLK          ; 3. POPULATE FNAMBUF
                 LD      A, (FILENAME)
                 OR      A
-                JR      Z, .NODRAW
-                ; ONLY THE LAST ITEM: FILENAME IS A FULL PATH SINCE F1
-                CALL    FNBASE
-                PUSH    HL              ; FOR THE COPY BELOW
-                LD      B, 0
-.FNLEN          LD      A, (HL)
+                JR      NZ, .HAVEFN
+                ; NO FILENAME: IF MODIFIED, USE "Untitled"
+                LD      A, (MODIFIED)
                 OR      A
-                JR      Z, .FNDON
+                JR      Z, .CHKEND      ; EMPTY FNAMBUF
+                LD      DE, FNAMBUF
+                LD      HL, .STRUNT     ; "Untitled"
+                CALL    .CPYSTR
+                JR      .CHKMOD
+
+.HAVEFN         ; EXTRACT BASENAME (CAPPED AT 20 CHARS)
+                CALL    FNBASE          ; HL = BASENAME, CLOBBERS AF, DE
+                LD      DE, FNAMBUF
+                LD      B, 20
+.FNBLP          LD      A, (HL)
+                OR      A
+                JR      Z, .CHKMOD
+                LD      (DE), A
                 INC     HL
-                INC     B
-                LD      A, B
-                CP      20
-                JR      NZ, .FNLEN
-.FNDON          ; B = LENGTH (0..20). 0 ONLY IF THE PATH ENDS IN A SEPARATOR,
-                ; AND THEN THE LDIR BELOW WOULD COPY 64 KB WITH BC = 0.
-                LD      A, B
+                INC     DE
+                DJNZ    .FNBLP
+
+.CHKMOD         ; APPEND " *" IF MODIFIED
+                LD      A, (MODIFIED)
                 OR      A
-                JR      NZ, .FNHAS
-                POP     HL
-                JR      .NODRAW
-.FNHAS          ; END AT COL 62, START AT 63 - B
+                JR      Z, .CHKCLK
+                LD      HL, .STRMOD     ; " *"
+                CALL    .CPYSTR
+
+.CHKCLK         ; APPEND " | " IF SHOWCLK
+                LD      A, (SHOWCLK)
+                OR      A
+                JR      Z, .TERMFN
+                LD      HL, .STRCLK     ; " | "
+                CALL    .CPYSTR
+
+.TERMFN         XOR     A
+                LD      (DE), A         ; NULL TERMINATOR
+
+.CHKEND         ; 4. COMPUTE LENGTH OF STRING IN FNAMBUF: DE - FNAMBUF
+                EX      DE, HL
+                LD      DE, FNAMBUF
+                OR      A
+                SBC     HL, DE          ; HL = LENGTH
+                LD      A, L
+                OR      A
+                JR      Z, .NODRAW      ; NOTHING TO DRAW FROM FNAMBUF
+                LD      B, A            ; B = LENGTH (1..35)
+
+                ; END COL: 58 (IF SHOWCLK) OR 63 (IF NO CLK)
                 LD      A, 63
-                SUB     B
+                LD      HL, SHOWCLK
+                BIT     0, (HL)
+                JR      Z, .HAVEND
+                LD      A, 58
+.HAVEND         SUB     B               ; A = START COLUMN IN STATBUF
                 LD      E, A
                 LD      D, 0
                 LD      HL, STATBUF
-                ADD     HL, DE          ; HL = DESTINATION IN STATBUF
-                EX      DE, HL          ; DE = DESTINATION
-                POP     HL
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DESTINATION IN STATBUF
+                LD      HL, FNAMBUF     ; HL = SOURCE
                 LD      C, B
                 LD      B, 0
                 LDIR
 
-.NODRAW         ; 3. FILL ROW 0 PATTERNS AND COLORS FROM STATBUF
+.NODRAW         CALL    VIDBANK
+
+                ; 5. FILL ROW 0 PATTERNS AND COLORS FROM STATBUF
                 LD      HL, STATBUF
                 LD      DE, PATSHAD
                 PUSH    DE
@@ -450,8 +470,22 @@ DRWMENU         CALL    VIDBANK
                 LD      B, MNUROW
                 CALL    COLDUMP
 
+                LD      A, (MODIFIED)
+                LD      (MODPRV), A
+
                 JP      TXTBANK
 
+.CPYSTR         LD      A, (HL)
+                OR      A
+                RET     Z
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                JR      .CPYSTR
+
+.STRUNT         DEFM    "Untitled", 0
+.STRMOD         DEFM    " *", 0
+.STRCLK         DEFM    " | ", 0
 .MNUTXT         DEFM    "S2ED | File  Edit  Help                                         "
 
 
@@ -537,13 +571,64 @@ SELXOR          LD      A, E
 
 
 ; - CHKCLK -----------------------------
-; - POLL REAL-TIME CLOCK (NO-OP FOR BASIC S2 UI)
+; - TEST IF CLOCK / COLON NEEDS REDRAW
 ; - IN:  NONE
 ; - OUT: NONE
-; - CLOBBERS: NONE
+; - CLOBBERS: AF, BC, DE, HL
 ; -
 
-CHKCLK          RET
+CHKCLK          LD      A, (SHOWCLK)
+                OR      A
+                RET     Z
+
+                LD      A, (WINACTV)
+                OR      A
+                RET     NZ
+
+                LD      HL, (JIFFY)
+                LD      DE, (CLKJIF)
+                OR      A
+                SBC     HL, DE          ; HL = FRAMES SINCE THE LAST TOGGLE
+                LD      A, (CLKHZ)
+                LD      E, A
+                LD      D, 0
+                OR      A
+                SBC     HL, DE
+                RET     C               ; LESS THAN ONE SECOND
+
+                ; 1 SECOND ELAPSED: RESTAMP
+                LD      HL, (JIFFY)
+                LD      (CLKJIF), HL
+
+                ; TOGGLE COLON PHASE (0 = ON, 1 = OFF)
+                LD      A, (CLKPH)
+                XOR     1
+                LD      (CLKPH), A
+
+                JP      DRWMENU
+
+
+
+
+; --- DECDIG2                   ----------------------------------------
+
+
+; - DECDIG2 ----------------------------
+; - CONVERT 8-BIT INT (0..59) TO 2 ASCII DIGITS
+; - IN:  A = VALUE (0..59)
+; - OUT: D = TENS ASCII, E = UNITS ASCII
+; - CLOBBERS: A, D, E
+; -
+
+DECDIG2         LD      D, '0'
+.DECLP          CP      10
+                JR      C, .DECDON
+                SUB     10
+                INC     D
+                JR      .DECLP
+.DECDON         ADD     A, '0'
+                LD      E, A
+                RET
 
 
 

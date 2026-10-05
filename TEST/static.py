@@ -628,20 +628,20 @@ def check_build_symmetry(ctx):
 
 
 def check_statbuf_term(ctx):
-    """STATBUF must leave room for its NUL terminator: TEXTCOLS + 1 bytes.
+    """STATBUF must leave room for its NUL terminator: STATCOLS + 1 bytes.
 
-    BLDSTAT writes the terminator at STATBUF + TEXTCOLS and STATPRV follows
-    STATBUF immediately, so with exactly TEXTCOLS bytes that NUL lands on
+    BLDSTAT writes the terminator at STATBUF + STATCOLS and STATPRV follows
+    STATBUF immediately, so with exactly STATCOLS bytes that NUL lands on
     STATPRV+0 -- DRWSTAT then reads "bar never painted" on every call, takes
     the full-repaint path (HMMV + 80 blits, ~45 ms) per keystroke, and the
     cell diff never runs.  Found from the keyboard on 2026-09-25.
     """
     buf, prv = ctx.sym['STATBUF'], ctx.sym['STATPRV']
-    cols = ctx.sym['TEXTCOLS']
+    cols = ctx.sym.get('STATCOLS', ctx.sym['TEXTCOLS'])
     got = prv - buf
     return Check('statbuf-term',
                  got == cols + 1,
-                 'STATPRV - STATBUF = %d (TEXTCOLS + 1 = %d)'
+                 'STATPRV - STATBUF = %d (STATCOLS + 1 = %d)'
                  % (got, cols + 1))
 
 

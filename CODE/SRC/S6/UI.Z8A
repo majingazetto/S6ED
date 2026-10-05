@@ -18,13 +18,21 @@
 ; - CLOBBERS: ALL
 ; -
 
-DRWSTAT         CALL    BLDSTAT         ; STATBUF = THE TEXT THE BAR SHOULD SHOW
+DRWSTAT         LD      A, (MODIFIED)
+                LD      HL, MODPRV
+                CP      (HL)
+                JR      Z, .MODSAM
+                LD      (HL), A
+                PUSH    AF
+                CALL    DRWFNAM
+                POP     AF
+.MODSAM         CALL    BLDSTAT         ; STATBUF = THE TEXT THE BAR SHOULD SHOW
                 LD      A, (STATPRV)
                 OR      A
                 JR      Z, .FULL        ; NEVER PAINTED: FILL AND WRITE IT ALL
 
                 ; DIFF AGAINST STATPRV, CELL BY CELL. DE = NEW TEXT (ASCIIZ),
-                ; HL = OLD CELLS (80, SPACE PADDED), C = COLUMN, B = PAST THE END
+                ; HL = OLD CELLS (83, SPACE PADDED), C = COLUMN, B = PAST THE END
                 LD      DE, STATBUF
                 LD      HL, STATPRV
                 LD      BC, 0
@@ -47,11 +55,12 @@ DRWSTAT         CALL    BLDSTAT         ; STATBUF = THE TEXT THE BAR SHOULD SHOW
                 POP     HL
                 POP     DE
                 POP     BC
+
 .SAME           INC     HL
                 INC     DE
                 INC     C
                 LD      A, C
-                CP      TEXTCOLS
+                CP      STATCOLS
                 JR      NZ, .DLOOP
                 RET
 
@@ -77,10 +86,10 @@ DRWSTAT         CALL    BLDSTAT         ; STATBUF = THE TEXT THE BAR SHOULD SHOW
                 LD      BC, STBTX_Y
                 CALL    BLTSTR
 
-                ; CACHE = STATBUF, SPACE PADDED TO 80 CELLS
+                ; CACHE = STATBUF, SPACE PADDED TO 83 CELLS
                 LD      HL, STATBUF
                 LD      DE, STATPRV
-                LD      BC, TEXTCOLS * 256 ; B = 80, C = 0 (PAST THE END FLAG)
+                LD      BC, STATCOLS * 256 ; B = STATCOLS, C = 0 (PAST THE END FLAG)
 .CLOOP          LD      A, C
                 OR      A
                 LD      A, ' '
@@ -102,7 +111,7 @@ DRWSTAT         CALL    BLDSTAT         ; STATBUF = THE TEXT THE BAR SHOULD SHOW
 ; - COPY (SEE BLTCHTR). THE GLYPH CARRIES ITS COL_UI BACKGROUND, SO THERE
 ; - IS NO ERASE PASS AND NO BLANK CELL BETWEEN COMMANDS -- THE FLASH THE
 ; - OLD ERASE + TIMP PAIR SHOWED ON EVERY KEYPRESS.
-; - IN:  A = CHARACTER, C = COLUMN (0..79)
+; - IN:  A = CHARACTER, C = COLUMN (0..82)
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
@@ -121,30 +130,30 @@ STATCEL         LD      L, C
 
 
 ; - BLDSTAT ----------------------------
-; - BUILD DYNAMIC STATUS BAR TEXT IN STATBUF (80 COLS)
-; - LEFT CHANNEL (COLS 0..42): SYSTEM/VI MESSAGES, ROM FALLBACK, FILENAME
-; - RIGHT CHANNEL (COLS 43..79): COMPACT FLAGS, VI MODE, LN/COL TELEMETRY
+; - BUILD DYNAMIC STATUS BAR TEXT IN STATBUF (83 COLS)
+; - LEFT CHANNEL (COLS 0..52): SYSTEM/VI MESSAGES, ROM FALLBACK
+; - RIGHT CHANNEL (COLS 53..82): MODE, LN/COL TELEMETRY (ENDS AT 506, -1 MARGIN)
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-BLDSTAT         ; 1. PRE-FILL STATBUF WITH 80 SPACES, FOLLOWED BY NULL TERMINATOR
+BLDSTAT         ; 1. PRE-FILL STATBUF WITH 83 SPACES, FOLLOWED BY NULL TERMINATOR
                 LD      HL, STATBUF
                 LD      (HL), ' '
                 LD      DE, STATBUF + 1
-                LD      BC, TEXTCOLS - 1
+                LD      BC, STATCOLS - 1
                 LDIR
                 XOR     A
-                LD      (STATBUF + TEXTCOLS), A ; NULL TERMINATOR AT 80
+                LD      (STATBUF + STATCOLS), A ; NULL TERMINATOR AT 83
 
-                ; 2. LEFT CHANNEL: COLS 0..42 (MAX 43 CHARACTERS)
+                ; 2. LEFT CHANNEL: COLS 0..52 (MAX 53 CHARACTERS)
                 LD      DE, STATBUF
                 LD      A, (STATMSG)
                 OR      A
                 JR      Z, .NOSTMSG
                 LD      HL, STATMSG
-                LD      B, 43
+                LD      B, 53
                 CALL    .CPYMAX
                 JR      .DOLEFT
 
@@ -152,7 +161,7 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 80 SPACES, FOLLOWED BY NULL TERMINATO
                 OR      A
                 JR      Z, .CHKROM
                 LD      HL, .STROOM     ; "[FILE TOO LARGE]"
-                LD      B, 43
+                LD      B, 53
                 CALL    .CPYMAX
                 JR      .DOLEFT
 
@@ -161,7 +170,7 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 80 SPACES, FOLLOWED BY NULL TERMINATO
                 ;   LD HL, .STRROM
                 ;   JR Z, .PUTFNT
                 ;   LD HL, .STRNOFN
-                LD      B, 43
+                LD      B, 53
                 LD      A, (FNTOK)
                 OR      A
                 LD      HL, .STRROM
@@ -169,104 +178,42 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 80 SPACES, FOLLOWED BY NULL TERMINATO
                 LD      HL, .STRNOFN
 .PUTFNT         CALL    .CPYMAX
 
-.DOLEFT         ; 3. RIGHT CHANNEL AT FIXED OFFSET 43 (COLS 43..79)
-                LD      DE, STATBUF + 43
+.DOLEFT         ; 3. RIGHT CHANNEL AT FIXED OFFSET 53 (COLS 53..82 = 30 CHARS)
+                LD      DE, STATBUF + 53
 
-                ; A. COMPACT FLAGS: [W|A|M|I] (9 CHARS, COLS 43..51)
-                LD      A, '['
-                LD      (DE), A
-                INC     DE
-
-                ; WRAP MODE: 'D' (DEV) OR 'T' (TXT)
-                LD      A, 'D'
-                LD      HL, WRAPMODE
-                BIT     0, (HL)
-                JR      Z, .PUTWRP
-                LD      A, 'T'
-.PUTWRP         LD      (DE), A
-                INC     DE
-                LD      A, '|'
-                LD      (DE), A
-                INC     DE
-
-                ; AUTOALIGN: 'A' (ON/DEV) OR '-' (OFF)
-                LD      A, '-'
-                LD      HL, AUTOALGN
-                LD      C, (HL)
-                DEC     C
-                JP      M, .PUTALN
-                LD      A, 'A'
-.PUTALN         LD      (DE), A
-                INC     DE
-                LD      A, '|'
-                LD      (DE), A
-                INC     DE
-
-                ; MARKUP: 'M' (MD), 'L' (LITE), '-' (OFF)
-                LD      A, (MKUPMD)
-                CP      MKUP_MD
-                LD      A, 'M'
-                JR      Z, .PUTMK
-                LD      A, (MKUPMD)
-                CP      MKUP_LIT
-                LD      A, 'L'
-                JR      Z, .PUTMK
-                LD      A, '-'
-.PUTMK          LD      (DE), A
-                INC     DE
-                LD      A, '|'
-                LD      (DE), A
-                INC     DE
-
-                ; INSERT MODE: 'I' (INSERT) OR 'O' (OVERWRITE)
-                LD      A, (INSMODE)
-                OR      A
-                LD      A, 'O'
-                JR      Z, .PUTINS
-                LD      A, 'I'
-.PUTINS         LD      (DE), A
-                INC     DE
-                LD      A, ']'
-                LD      (DE), A
-                INC     DE
-
-                ; B. MODIFIED INDICATOR: '* ' OR '  ' (2 CHARS, COLS 52..53)
-                LD      A, (MODIFIED)
-                OR      A
-                LD      A, '*'
-                JR      NZ, .PUTMOD
-                LD      A, ' '
-.PUTMOD         LD      (DE), A
-                INC     DE
-                LD      A, ' '
-                LD      (DE), A
-                INC     DE
-
-                ; C. VI MODE / SELECTION: 4 CHARS (COLS 54..57)
+                ; A. MODE INDICATOR: 6 CHARS (COLS 53..58)
                 LD      A, (KMAPID)
                 CP      KMVI
                 JR      NZ, .NOTVI
                 LD      A, (SELACT)
                 OR      A
-                LD      HL, .STRVIV     ; "[V] "
+                LD      HL, .STRVIV     ; "[VIS] "
                 JR      NZ, .PUTVI
                 LD      A, (VIMODE)
                 CP      VIMNORM
-                LD      HL, .STRVIN     ; "[N] "
+                LD      HL, .STRVIN     ; "[NORM]"
                 JR      Z, .PUTVI
-                LD      HL, .STRVII     ; "[I] "
-.PUTVI          CALL    .CPY4
-                JR      .DONEVI
+                LD      HL, .STRVII     ; "[INS] "
+.PUTVI          CALL    .CPY6
+                JR      .DONEMOD
 
 .NOTVI          LD      A, (SELACT)
                 OR      A
-                LD      HL, .STRSEL     ; "[S] "
+                LD      HL, .STRSEL     ; "[SEL] "
                 JR      NZ, .PUTNVI
-                LD      HL, .STRSP4     ; "    "
-.PUTNVI         CALL    .CPY4
-.DONEVI
+                LD      A, (INSMODE)
+                OR      A
+                LD      HL, .STROVR     ; "[OVR] "
+                JR      Z, .PUTNVI
+                LD      HL, .STRVII     ; "[INS] "
+.PUTNVI         CALL    .CPY6
+.DONEMOD
+                ; B. 1 SPACE SEPARATOR (COL 59)
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
 
-                ; D. CURSOR POSITION: 22 CHARS (COLS 58..79)
+                ; C. CURSOR POSITION: 23 CHARS (COLS 60..82)
                 LD      HL, .STRLN      ; "Ln "
                 CALL    .CPY3
                 LD      HL, (DOCLINE)
@@ -279,8 +226,8 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 80 SPACES, FOLLOWED BY NULL TERMINATO
                 LD      HL, (TOTLINES)
                 LD      B, 5
                 CALL    .CPYNUM
-                LD      HL, .STRCOL     ; " Col "
-                CALL    .CPY5
+                LD      HL, .STRCOL     ; "  Col "
+                CALL    .CPY6
                 LD      A, (CURX)
                 INC     A
                 LD      L, A
@@ -289,6 +236,7 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 80 SPACES, FOLLOWED BY NULL TERMINATO
                 CALL    .CPYNUM
                 RET
 
+.CPY6           LDI
 .CPY5           LDI
 .CPY4           LDI
 .CPY3           LDI
@@ -333,13 +281,13 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 80 SPACES, FOLLOWED BY NULL TERMINATO
 
 .STRROM         DEFM    "[ROM] ", 0
 .STRNOFN        DEFB    0
-.STRVIN         DEFM    "[N] "
-.STRVII         DEFM    "[I] "
-.STRVIV         DEFM    "[V] "
-.STRSEL         DEFM    "[S] "
-.STRSP4         DEFM    "    "
+.STRVIN         DEFM    "[NORM]"
+.STRVII         DEFM    "[INS] "
+.STRVIV         DEFM    "[VIS] "
+.STROVR         DEFM    "[OVR] "
+.STRSEL         DEFM    "[SEL] "
 .STRLN          DEFM    "Ln "
-.STRCOL         DEFM    " Col "
+.STRCOL         DEFM    "  Col "
 .STROOM         DEFM    "[FILE TOO LARGE]", 0
 
 
@@ -393,12 +341,14 @@ MNUTEXT         DEFM    "S6ED | File  Edit  Help", 0
 ; -
 
 DRWFNAM         ; 1. CLEAR FILENAME REGION IN ROW 0
-                ; DX = 236, DY = 0, NX = 234 (IF SHOWCLK) OR 270 (IF NO CLK), NY = 8
+                ; DX = 236, DY = 0
+                ; IF SHOWCLK: NX = 240 (236 + 240 = 476, REACHING START OF CLOCK)
+                ; IF NO CLK:  NX = 270 (236 + 270 = 506)
                 LD      HL, 236
                 LD      (VDP_DX), HL
                 LD      HL, 0
                 LD      (VDP_DY), HL
-                LD      HL, 234         ; 236 + 234 = 470
+                LD      HL, 240         ; 236 + 240 = 476
                 LD      A, (SHOWCLK)
                 OR      A
                 JR      NZ, .CLRNX
@@ -414,25 +364,64 @@ DRWFNAM         ; 1. CLEAR FILENAME REGION IN ROW 0
                 LD      A, VDP_LMMV | VDP_IMP
                 CALL    LMMV
 
-                ; 2. CHECK IF FILENAME IS PRESENT
+                ; 2. POPULATE FNAMBUF
                 LD      A, (FILENAME)
                 OR      A
-                RET     Z               ; NO FILENAME
-
-                ; 3. COMPUTE LENGTH OF THE NAME PROPER (CAPPED AT 30). ONLY THE
-                ; LAST ITEM IS SHOWN: FILENAME IS A FULL PATH SINCE F1.
-                CALL    FNBASE
-                PUSH    HL              ; FOR BLTSTR
-                LD      B, 0
-.LNLEN          LD      A, (HL)
+                JR      NZ, .HAVEFN
+                ; NO FILENAME: IF MODIFIED, USE "Untitled"
+                LD      A, (MODIFIED)
                 OR      A
-                JR      Z, .LENDON
+                JR      Z, .EXIT        ; NOT MODIFIED & NO NAME: LEAVE CLEARED
+                LD      DE, FNAMBUF
+                LD      HL, .STRUNT     ; "Untitled"
+                LD      B, 8
+                CALL    .CPYSTR
+                JR      .CHKMOD
+
+.HAVEFN         ; EXTRACT BASENAME (CAPPED AT 20 CHARS)
+                CALL    FNBASE          ; HL = BASENAME, CLOBBERS AF, DE
+                LD      DE, FNAMBUF
+                LD      B, 20
+                CALL    .CPYSTR
+
+.CHKMOD         ; APPEND " *" IF MODIFIED
+                LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .CHKCLK
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
+                LD      A, '*'
+                LD      (DE), A
+                INC     DE
+
+.CHKCLK         ; APPEND " | " IF SHOWCLK
+                LD      A, (SHOWCLK)
+                OR      A
+                JR      Z, .TERMFN
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
+                LD      A, '|'
+                LD      (DE), A
+                INC     DE
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
+
+.TERMFN         XOR     A
+                LD      (DE), A         ; NULL TERMINATOR
+
+                ; 3. COMPUTE LENGTH OF STRING IN FNAMBUF
+                LD      HL, FNAMBUF
+                LD      B, 0
+.COUNTL         LD      A, (HL)
+                OR      A
+                JR      Z, .COUNTD
                 INC     HL
                 INC     B
-                LD      A, B
-                CP      30
-                JR      NZ, .LNLEN
-.LENDON         ; B = NUMBER OF CHARS (1..30)
+                JR      .COUNTL
+.COUNTD         ; B = NUMBER OF CHARACTERS
                 ; WIDTH IN PIXELS = B * 6
                 LD      L, B
                 LD      H, 0
@@ -442,8 +431,8 @@ DRWFNAM         ; 1. CLEAR FILENAME REGION IN ROW 0
                 ADD     HL, DE
                 ADD     HL, HL          ; HL = B * 6
 
-                ; END X: 470 (IF SHOWCLK) OR 506 (IF NO CLK)
-                LD      DE, 470
+                ; END X: 476 (IF SHOWCLK) OR 506 (IF NO CLK)
+                LD      DE, 476
                 LD      A, (SHOWCLK)
                 OR      A
                 JR      NZ, .HAVEND
@@ -453,11 +442,26 @@ DRWFNAM         ; 1. CLEAR FILENAME REGION IN ROW 0
                 OR      A
                 SBC     HL, DE          ; HL = START X
 
-                ; PRINT THE NAME AT (DX = HL, DY = 0)
+                ; PRINT AT (DX = HL, DY = 0)
                 EX      DE, HL          ; DE = START X
-                POP     HL
+                LD      HL, FNAMBUF
                 LD      BC, 0           ; DY = 0
-                JP      BLTSTR
+                CALL    BLTSTR
+
+.EXIT           LD      A, (MODIFIED)
+                LD      (MODPRV), A
+                RET
+
+.CPYSTR         LD      A, (HL)
+                OR      A
+                RET     Z
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                DJNZ    .CPYSTR
+                RET
+
+.STRUNT         DEFM    "Untitled"
 
 
 ; --- CHKCLK                    ----------------------------------------
