@@ -70,6 +70,7 @@ DEFAULT_VARS = [
     ('WINSEL', 1), ('WINRES', 1), ('WINBST', 1),
     ('MNUID', 1), ('MNUSEL', 1),
     ('LOADERR', 1),
+    ('DSKERR', 1), ('DSKDRV', 1),
     ('LOADFLG', 1), ('HOMELEN', 1), ('CFGLOC', 1),
     ('UNDOPTR', 2), ('UNDOBOT', 2), ('REDOPTR', 2), ('UNDOTYP', 1),
 ]

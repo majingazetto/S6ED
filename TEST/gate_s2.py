@@ -18,8 +18,9 @@ is also the video shadow, so on the default machine there is nothing spare
 
 import os
 import pattern
-from gate import H30NewDocument, H36BrowseSaveAs, asciiz
-from cases import Case, HomePathCase, LongPathCase, ShippedDiskCase, crlf, numbered
+from gate import BRW_BYTES, H30NewDocument, H36BrowseSaveAs, asciiz
+from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
+                   ShippedDiskCase, crlf, numbered)
 from harness import MACH_MSX1
 from keys import Timeline
 from result import Check
@@ -3250,6 +3251,92 @@ class S231Settings(S2Case):
         return checks
 
 
+# --- S2-32 DISK ERROR HANDLING (_DEFER / _DEFAB / NEXTOR) -------------
+
+
+class S232DiskError(S2Case):
+    name = 'S2-32-disk-error'
+    desc = ('Disk error handling on MSX1 / Nextor: saving to, opening from, or '
+            'browsing invalid/empty drive B: fails gracefully without crash or DOS prompt')
+    origin = '_DEFER / _DEFAB disk error handler implementation (2026-10-05)'
+    variants = ('save', 'load', 'browse')
+    cfg = DEFAULT_CFG.replace('PROFILE=STD', 'PROFILE=VI')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE 1', 'LINE 2', 'LINE 3'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        b = BRW_BYTES
+        if variant == 'save':
+            t.wait(0.5)
+            t.text(r':w B:\OUT.TXT')
+            t.press('RETURN')
+            t.wait(2.0)
+            t.snap('saved')
+            return t
+        if variant == 'load':
+            t.wait(0.5)
+            t.text(r':e B:\NOFILE.TXT')
+            t.press('RETURN')
+            t.wait(2.0)
+            t.snap('loaded')
+            return t
+        if variant == 'browse':
+            t.wait(0.5)
+            t.text(':e')
+            t.press('RETURN')
+            t.wait(0.5)
+            t.snap('open', at='WINPOLL', bytes_=b)
+            t.press('TAB')
+            t.wait(0.2)
+            t.text(r'B:\ ')
+            t.press('RETURN')
+            t.wait(2.0)
+            t.snap('b_done', at='WINPOLL', bytes_=b)
+            t.press('ESC')
+            t.wait(1.0)
+            t.snap('closed', bytes_=b)
+            return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            v = '%s/%s' % (self.name, variant)
+            if variant == 'save':
+                checks.append(Check('%s/saved-err' % v,
+                                    asciiz(run, 'saved', 'STATMSG') == '[SAVE ERROR]',
+                                    'Saving to B: reports [SAVE ERROR]: %r'
+                                    % asciiz(run, 'saved', 'STATMSG')))
+                checks.append(Check('%s/doc-kept' % v,
+                                    run.var('saved', 'TOTLINES') == 3,
+                                    'Document kept intact in memory (TOTLINES %s)'
+                                    % run.var('saved', 'TOTLINES')))
+            elif variant == 'load':
+                checks.append(Check('%s/load-err' % v,
+                                    asciiz(run, 'loaded', 'STATMSG') == '[CANNOT OPEN]',
+                                    'Loading from B: reports [CANNOT OPEN]: %r'
+                                    % asciiz(run, 'loaded', 'STATMSG')))
+                checks.append(Check('%s/doc-kept' % v,
+                                    run.var('loaded', 'TOTLINES') == 3,
+                                    'Document kept intact in memory (TOTLINES %s)'
+                                    % run.var('loaded', 'TOTLINES')))
+            elif variant == 'browse':
+                checks.append(Check('%s/open' % v,
+                                    run.var('open', 'WINACTV') == 1,
+                                    'Browser opened (WINACTV %s)' % run.var('open', 'WINACTV')))
+                checks.append(Check('%s/stay-open' % v,
+                                    run.var('b_done', 'WINACTV') == 1,
+                                    'Invalid drive B: rejected, stays in browser (WINACTV %s)'
+                                    % run.var('b_done', 'WINACTV')))
+                checks.append(Check('%s/closed' % v,
+                                    run.var('closed', 'WINACTV') == 0,
+                                    'ESC closes browser cleanly (WINACTV %s)'
+                                    % run.var('closed', 'WINACTV')))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -3259,7 +3346,7 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S222FindCurrentLine(), S223HomePath(),
          S224ShippedDisk(), S225NewDocument(), S226LongPath(),
          S227DialogKeys(), S228BrowseOpen(), S229BrowseMany(),
-         S230BrowseSaveAs(), S231Settings()]
+         S230BrowseSaveAs(), S231Settings(), S232DiskError()]
 
 
 def run(ctx, cases=None):

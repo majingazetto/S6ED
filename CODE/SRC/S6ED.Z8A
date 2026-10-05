@@ -179,6 +179,7 @@ INIT            DBG     "1: INIT START"
                 DBG     "2: DOSVER"
                 CALL    DOSVER
                 JP      C, .NODOS2      ; CARRY = DOS1 ONLY
+                CALL    DSKINIT         ; INSTALL DISK ERROR & ABORT HANDLERS
 
                 ; CHECK PAGE 3 TPA HEADROOM (FOR BUFFERS AT #C000..#C5FF)
                 DBG     "2a: TP3CHK"

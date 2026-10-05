@@ -37,6 +37,84 @@ DOSVER          XOR     A
                 LD      (DOS2),A
                 RET
 
+
+; --- DISK ERROR & ABORT HANDLERS       ----------------------------------------
+
+
+; - DSKINIT ----------------------------
+; - INSTALL DISK ERROR AND ABORT HANDLERS
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, C, DE
+; -
+
+DSKINIT         LD      A, (DOS2)
+                OR      A
+                RET     Z
+                LD      DE, DSKERRH
+                LD      C, _DEFER
+                CALL    DOS
+                LD      DE, DSKABTH
+                LD      C, _DEFAB
+                CALL    DOS
+                RET
+
+
+; - DSKRST -----------------------------
+; - RESTORE SYSTEM ERROR/ABORT HANDLERS
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, C, DE
+; -
+
+DSKRST          LD      A, (DOS2)
+                OR      A
+                RET     Z
+                LD      DE, 0
+                LD      C, _DEFAB
+                CALL    DOS
+                LD      DE, 0
+                LD      C, _DEFER
+                CALL    DOS
+                RET
+
+
+; - DSKERRH ----------------------------
+; - DISK ERROR HANDLER ROUTINE (_DEFER)
+; - CALLED BY DOS 2 ON SYSTEM STACK
+; - IN:  A = ERROR CODE, B = DRIVE
+; - OUT: A = 1 (ABORT TO USER ABORT HANDLER)
+; - CLOBBERS: AF
+; -
+
+DSKERRH         LD      (DSKERR), A
+                LD      A, B
+                LD      (DSKDRV), A
+                LD      A, 1
+                RET
+
+
+; - DSKABTH ----------------------------
+; - ABORT EXIT ROUTINE (_DEFAB)
+; - CALLED BY DOS 2 ON USER STACK
+; - IN:  A = PRIMARY ERROR, B = SECONDARY
+; - OUT: CY = 1, A = DISK ERROR (ON ABORT)
+; - CLOBBERS: AF, HL
+; -
+
+DSKABTH         CP      ERRABT
+                RET     NZ
+                POP     HL
+                LD      A, B
+                OR      A
+                JR      NZ, .HAVERR
+                LD      A, (DSKERR)
+                OR      A
+                JR      NZ, .HAVERR
+                LD      A, ERRDISK
+.HAVERR         SCF
+                RET
+
                 
 ; --- FILE (OPEN / READ / WRITE)        ----------------------------------------
 
@@ -693,7 +771,8 @@ TERM            ; RESTORE MAPPER SEGMENTS IF INITIALIZED
                 JR      Z, .NOSTKRS
                 LD      SP, HL
 
-.NOSTKRS        LD      A, (DOS2) 
+.NOSTKRS        CALL    DSKRST
+                LD      A, (DOS2) 
                 AND     A
                 JR      Z, .TERM0
                 LD      B, 0

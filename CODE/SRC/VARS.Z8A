@@ -9,6 +9,8 @@ VARS
 
 
 DOS2            DEFB    0               ; FF = DOS2/NEXTOR PRESENT, 00 = DOS1
+DSKERR          DEFB    0               ; LAST DOS DISK ERROR CODE
+DSKDRV          DEFB    0               ; DRIVE OF LAST DISK ERROR
 UNAPISET        DEFB    0               ; BDOS.Z8A UNAPI FLAG (UNUSED IN S6ED)
 MAPRDY          DEFB    0               ; FF = MAPPER MANAGER FOUND
 SCRRDY          DEFB    0               ; FF = SCREEN 6 INITIALIZED

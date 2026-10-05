@@ -175,6 +175,7 @@ INIT            DBG     "1: INIT START (S2ED)"
                 DBG     "2: DOSVER"
                 CALL    DOSVER
                 JP      C, .NODOS2
+                CALL    DSKINIT         ; INSTALL DISK ERROR & ABORT HANDLERS
 
                 ; CHECK PAGE 3 TPA HEADROOM (FOR WSVBUF AT #C000..#C5FF)
                 DBG     "2a: TP3CHK"

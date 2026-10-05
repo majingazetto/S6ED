@@ -467,6 +467,7 @@ FILESAVE        LD      HL, FILENAME
                 LD      DE, WORKBUF + 1
                 LD      A, (SAVHAND)
                 CALL    DSKWRITE
+                JR      C, .WRERR
                 
 .WREOL          ; WRITE CR, LF (DOS) OR LF ONLY (UNIX)
                 LD      HL, 2
@@ -479,6 +480,7 @@ FILESAVE        LD      HL, FILENAME
                 INC     DE
 .WREOL2         LD      A, (SAVHAND)
                 CALL    DSKWRITE
+                JR      C, .WRERR
                 
                 POP     BC
                 INC     BC
@@ -499,6 +501,15 @@ FILESAVE        LD      HL, FILENAME
                 CALL    SETMSG
                 CALL    DRWSTAT
                 OR      A               ; CLEAR CARRY
+                RET
+
+.WRERR          POP     BC
+                LD      A, (SAVHAND)
+                CALL    DSKCLOSE
+                LD      HL, STRSERR
+                CALL    SETMSG
+                CALL    DRWSTAT
+                SCF
                 RET
 
 .STRNONM        DEFM    "[NO FILE NAME]", 0

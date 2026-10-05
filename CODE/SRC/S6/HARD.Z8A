@@ -228,6 +228,10 @@ _GETCD          EQU     #59
 _PARSE          EQU     #5B
 _GENV           EQU     #6B
 ENOFIL          EQU     #D7             ; DOS 2 ERROR .NOFIL: FILE NOT FOUND
+ERRABT          EQU     #9D             ; DOS 2 ERROR .ABORT: DISK OP ABORTED
+ERRNRDY         EQU     #FC             ; DOS 2 ERROR .NRDY: NOT READY (NO DISK)
+ERRWPRT         EQU     #F8             ; DOS 2 ERROR .WPROT: WRITE PROTECTED
+ERRDISK         EQU     #FD             ; DOS 2 ERROR .DISK: GENERAL DISK ERROR
 _TERM           EQU     #62
 
 
