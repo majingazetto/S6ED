@@ -94,7 +94,8 @@ def menubar(ctx, fname=None):
     m = re.search(r'\.MNUTXT\s+DEFM\s+"(.*)"', src)
     if not m:
         raise RuntimeError('.MNUTXT not found in S2/UI.Z8A')
-    txt = m.group(1)
+    # The template carries only the titles; DRWMENU blanks the rest of the bar.
+    txt = m.group(1).ljust(64)
     if fname:
         start = 63 - len(fname)
         txt = txt[:start] + fname + txt[start + len(fname):]
@@ -741,7 +742,7 @@ class S210Theme(S2Case):
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
-        t.snap('boot', vram='patcol', vars_=[('RG7SAV', 1)])
+        t.snap('boot', vram='patcol', vars_=[('RG7SAV', 1), ('THEMEID', 1)])
         return t
 
     def verify(self, ctx, runs):
