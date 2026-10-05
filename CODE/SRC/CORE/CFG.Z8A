@@ -411,7 +411,7 @@ UPCASE          CP      #61             ; 'a'
 
 
 ; - PARSPRF ----------------------------
-; - PARSE PROFILE VALUE (STD, WS, EMC, VI)
+; - PARSE PROFILE VALUE (STD, TED, EMC, VI)
 ; - IN:  HL = POINTER TO VALUE
 ; - OUT: NONE
 ; - CLOBBERS: AF, DE
@@ -1032,7 +1032,7 @@ CFGSAVE         LD      A, (CFGLOC)
 
 .PRFV           DEFW    .SVP0, .SVP1, .SVP2, .SVP3
 .SVP0           DEFM    "STD", 0
-.SVP1           DEFM    "WS", 0
+.SVP1           DEFM    "TED", 0
 .SVP2           DEFM    "EMC", 0
 .SVP3           DEFM    "VI", 0
 
@@ -1087,8 +1087,8 @@ CFGSAVE         LD      A, (CFGLOC)
 
 
 PRFTBL          DEFB    #02, #FF, #FF, #FF, #FF, #FF, #FF, #FF
-                DEFB    #FF, #FF, #FF, #FF, #FF, #FF, #00, #FF
-                DEFB    #FF, #03, #01
+                DEFB    #FF, #FF, #FF, #FF, #FF, #FF, #00, #01
+                DEFB    #FF, #03, #FF
 
 MKPTBL          DEFB    #02, #01, #FF, #00
 

@@ -124,7 +124,7 @@ class HomePathCase(Case):
     variants = ('root', 'path', 'global-only', 'fallback')
     fixture_name = 'DOC.TXT'
     LINES = 5
-    GENERAL = 'TABWIDTH=8\r\nPROFILE=WS\r\nCLOCK=0\r\n'
+    GENERAL = 'TABWIDTH=8\r\nPROFILE=TED\r\nCLOCK=0\r\n'
     LOCAL = 'TABWIDTH=2\r\nPROFILE=VI\r\n'
 
     def config(self, ctx, variant=None):

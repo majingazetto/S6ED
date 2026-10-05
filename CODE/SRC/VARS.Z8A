@@ -134,7 +134,7 @@ RNDHOLD         DEFB    0               ; FF = DEFER ALL PAINTING
 BLNKPH          DEFB    0               ; CURSOR BLINK PHASE (POLLED FROM JIFFY)
 BLNKCNT         DEFB    0               ; BLINK TICK COUNTER
 
-KMAPID          DEFB    0               ; 0=STD, 1=WS, 2=EMACS, 3=VI
+KMAPID          DEFB    0               ; 0=STD, 1=TED, 2=EMACS, 3=VI
 KMAPPTR         DEFW    0               ; POINTER TO ACTIVE KEYMAP TABLE
 VIMODE          DEFB    0               ; 0=NORMAL, 1=INSERT
 VILEAD          DEFB    0               ; VI LEADER KEY PENDING

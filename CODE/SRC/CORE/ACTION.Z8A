@@ -76,6 +76,14 @@ ACTTBL          DEFW    ACTNONE         ; 0
                 DEFW    ACTNEW          ; 64 (CTRL + N / FILE > NEW)
                 DEFW    ACTOPEN         ; 65 (CTRL + O / FILE > OPEN)
                 DEFW    ACTSAVAS        ; 66 (CTRL + SHIFT + S / FILE > SAVE AS)
+                DEFW    ACTVIAPE        ; 67 (VI A / APPEND AT EOL)
+                DEFW    ACTVIINB        ; 68 (VI I / INSERT AT BOL)
+                DEFW    ACTVILEG        ; 69 (VI LEADER 'g')
+                DEFW    ACTVIKIL        ; 70 (VI D / DELETE TO EOL)
+                DEFW    ACTVIVIS        ; 71 (VI v / CHARACTER VISUAL MODE)
+                DEFW    ACTVILIN        ; 72 (VI V / LINE VISUAL MODE)
+                DEFW    ACTVICPY        ; 73 (VI y / YANK VISUAL SELECTION)
+                DEFW    ACTVICUT        ; 74 (VI d/x / CUT VISUAL SELECTION)
                 ASSERT  ($ - ACTTBL) / 2 == ACMAX
 
 
@@ -106,6 +114,9 @@ CHKUNSEL        CALL    UNDOCLS
                 LD      A, (MODKEYS)
                 AND     MODSHFT
                 RET     NZ              ; SHIFT PRESSED: PRESERVE SELECTION
+                LD      A, (KMAPID)
+                CP      KMVI
+                RET     Z               ; IN VI MODE, SELECTION IS MODAL
                 LD      A, (SELACT)
                 OR      A
                 RET     Z               ; NO SELECTION ACTIVE
@@ -860,7 +871,12 @@ ACTNWLIN        LD      A, (SELACT)
 ; - CLOBBERS: ALL
 ; -
 
-ACTOPNBL        CALL    ACTEOL
+ACTOPNBL        LD      HL, (DOCLINE)
+                CALL    LINELEN         ; A = LINE LENGTH
+                CP      MAXCOLS
+                JR      C, .OPNNMC
+                LD      A, MAXCOLS - 1
+.OPNNMC         LD      (CURX), A
                 CALL    EDNWLIN
                 JP      ACTVIINS
 
@@ -1865,9 +1881,18 @@ ACTVIINS        LD      A, VIMINS
 ; - CLOBBERS: ALL
 ; -
 
-ACTVIAPP        LD      A, CRIGHT
-                CALL    EDMOVCHR
-                JP      ACTVIINS
+ACTVIAPP        LD      HL, (DOCLINE)
+                CALL    LINELEN         ; A = LINE LENGTH (0..MAXCOLS)
+                LD      B, A
+                LD      A, (CURX)
+                CP      B
+                JR      NC, .APPOK      ; AT OR PAST END (E.G. EMPTY LINE)
+                INC     A
+                CP      MAXCOLS
+                JR      C, .APPNMC
+                LD      A, MAXCOLS - 1
+.APPNMC         LD      (CURX), A
+.APPOK          JP      ACTVIINS
 
 
 ; --- ACTVINRM                  ----------------------------------------
@@ -1880,16 +1905,22 @@ ACTVIAPP        LD      A, CRIGHT
 ; - CLOBBERS: ALL
 ; -
 
-ACTVINRM        LD      A, VIMNORM
+ACTVINRM        LD      A, (SELACT)
+                OR      A
+                CALL    NZ, ACTDSEL
+                LD      A, (VIMODE)
+                CP      VIMNORM
+                JR      Z, .VINORM0     ; ALREADY NORMAL/VISUAL: DO NOT DEC CURX
+                LD      A, VIMNORM
                 LD      (VIMODE), A
-                LD      HL, KMAPVIN
-                LD      (KMAPPTR), HL
                 LD      A, (CURX)
                 OR      A
                 JR      Z, .VINORM0
                 DEC     A
                 LD      (CURX), A
-.VINORM0        CALL    DRWSTAT
+.VINORM0        LD      HL, KMAPVIN
+                LD      (KMAPPTR), HL
+                CALL    DRWSTAT
                 RET
 
 
@@ -1906,6 +1937,138 @@ ACTVINRM        LD      A, VIMNORM
 ACTVILED        LD      A, 'd'
                 LD      (VILEAD), A
                 RET
+
+
+; --- ACTVIAPE                  ----------------------------------------
+
+
+; - ACTVIAPE ---------------------------
+; - APPEND AT END OF LINE (VI 'A')
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVIAPE        LD      HL, (DOCLINE)
+                CALL    LINELEN         ; A = LINE LENGTH (0..MAXCOLS)
+                CP      MAXCOLS
+                JR      C, .APENMC
+                LD      A, MAXCOLS - 1
+.APENMC         LD      (CURX), A
+                JP      ACTVIINS
+
+
+; --- ACTVIINB                  ----------------------------------------
+
+
+; - ACTVIINB ---------------------------
+; - INSERT AT START OF LINE (VI 'I')
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVIINB        CALL    ACTBOL
+                JP      ACTVIINS
+
+
+; --- ACTVILEG                  ----------------------------------------
+
+
+; - ACTVILEG ---------------------------
+; - SET VI 'g' LEADER PENDING
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF
+; -
+
+ACTVILEG        LD      A, 'g'
+                LD      (VILEAD), A
+                RET
+
+
+; --- ACTVIKIL                  ----------------------------------------
+
+
+; - ACTVIKIL ---------------------------
+; - DELETE TO END OF LINE (VI 'D')
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVIKIL        CALL    EDKILCHR
+                JP      DRWSTAT
+
+
+; --- ACTVIVIS                  ----------------------------------------
+
+
+; - ACTVIVIS ---------------------------
+; - ENTER CHARACTER VISUAL MODE (VI 'v')
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVIVIS        LD      A, (SELACT)
+                OR      A
+                JP      NZ, ACTVINRM
+                LD      HL, KMAPVIV
+                LD      (KMAPPTR), HL
+                CALL    SELBEG
+                CALL    SELPOST
+                JP      DRWSTAT
+
+
+; --- ACTVILIN                  ----------------------------------------
+
+
+; - ACTVILIN ---------------------------
+; - ENTER LINE VISUAL MODE (VI 'V')
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVILIN        LD      A, (SELACT)
+                OR      A
+                JP      NZ, ACTVINRM
+                LD      HL, KMAPVIV
+                LD      (KMAPPTR), HL
+                CALL    ACTBOL
+                CALL    SELBEG
+                CALL    ACTEOL
+                CALL    SELPOST
+                JP      DRWSTAT
+
+
+; --- ACTVICPY                  ----------------------------------------
+
+
+; - ACTVICPY ---------------------------
+; - YANK VISUAL SELECTION AND RETURN TO NORMAL MODE (VI 'y')
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVICPY        CALL    ACTCOPY
+                JP      ACTVINRM
+
+
+; --- ACTVICUT                  ----------------------------------------
+
+
+; - ACTVICUT ---------------------------
+; - CUT VISUAL SELECTION AND RETURN TO NORMAL MODE (VI 'd'/'x')
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+ACTVICUT        CALL    ACTCUT
+                JP      ACTVINRM
 
 
 ; --- SELBEG                    ----------------------------------------
@@ -2033,7 +2196,7 @@ SELNORM         LD      HL, (DOCLINE)
                 LD      (SELENDL), HL
                 LD      A, (CURX)
                 LD      (SELENDX), A
-                RET
+                JR      .CHKVI
 
 .NCURFST        LD      HL, (DOCLINE)
                 LD      (SELSTRL), HL
@@ -2042,6 +2205,18 @@ SELNORM         LD      HL, (DOCLINE)
                 LD      HL, (SELANCL)
                 LD      (SELENDL), HL
                 LD      A, (SELANCX)
+                LD      (SELENDX), A
+
+.CHKVI          LD      HL, (KMAPPTR)
+                LD      DE, KMAPVIV
+                CALL    CMPHLDE
+                RET     NZ
+                ; IN VI VISUAL MODE, SELECTION IS INCLUSIVE:
+                ; INCLUDE THE FINAL CHARACTER IN THE RANGE
+                LD      A, (SELENDX)
+                CP      MAXCOLS
+                RET     NC
+                INC     A
                 LD      (SELENDX), A
                 RET
 

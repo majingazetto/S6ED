@@ -56,11 +56,25 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
                 LD      A, (VILEAD)
                 OR      A
                 JR      Z, .NOLEAD
+                LD      B, A            ; B = PENDING LEADER
                 XOR     A
                 LD      (VILEAD), A
+                LD      A, B
+                CP      'd'
+                JR      NZ, .NOTVD
                 LD      A, C
                 CP      'd'
                 JP      Z, ACTDELLN
+                JR      .NOLEAD
+.NOTVD          CP      'g'
+                JR      NZ, .NOLEAD
+                LD      A, C
+                CP      'g'
+                JR      NZ, .NOLEAD
+                LD      A, (SELACT)
+                OR      A
+                JP      NZ, ACTSLTOP
+                JP      ACTTOP
 
 .NOLEAD         ; SCAN ACTIVE KEYMAP TABLE
                 LD      HL, (KMAPPTR)
@@ -177,13 +191,13 @@ KMAPSW          LD      A, (KMAPID)
                 LD      (KMAPPTR), HL
                 RET
 
-.NOTSTD         CP      KMWS
-                JR      NZ, .NOTWS
-                LD      HL, KMAPWS
+.NOTSTD         CP      KMTED
+                JR      NZ, .NOTTED
+                LD      HL, KMAPTED
                 LD      (KMAPPTR), HL
                 RET
 
-.NOTWS          CP      KMEMACS
+.NOTTED         CP      KMEMACS
                 JR      NZ, .NOTEMAC
                 LD      HL, KMAPEMAC
                 LD      (KMAPPTR), HL

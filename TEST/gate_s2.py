@@ -3109,7 +3109,7 @@ class S231Settings(S2Case):
         t.snap('open', vram='patcol', at='WINPOLL')
 
         if variant == 'cancel':
-            # Cycle Profile forward (STD -> WS)
+            # Cycle Profile forward (STD -> TED)
             t.press('RIGHT')
             t.snap('cycled', at='WINPOLL')
             t.press('ESC')
@@ -3171,7 +3171,7 @@ class S231Settings(S2Case):
                                     run.var('open', 'SETTFOC') == 0 and
                                     run.var('open', 'STTPRF') == 0 and
                                     run.var('cycled', 'STTPRF') == 1,
-                                    'RIGHT cycles STTPRF from 0 (STD) to 1 (WS)'))
+                                    'RIGHT cycles STTPRF from 0 (STD) to 1 (TED)'))
                 checks.append(Check('%s/discarded' % v,
                                     run.var('closed', 'WINACTV') == 0 and
                                     run.var('closed', 'KMAPID') == 0,

@@ -296,7 +296,15 @@ ACEXMOD         EQU     63              ; VI ':' COMMAND LINE CONSOLE
 ACNEW           EQU     64              ; CTRL + N / FILE > NEW
 ACOPEN          EQU     65              ; CTRL + O / FILE > OPEN / VI :e
 ACSAVAS         EQU     66              ; CTRL + SHIFT + S / FILE > SAVE AS
-ACMAX           EQU     67
+ACVIAPE         EQU     67              ; VI A (APPEND AT EOL)
+ACVIINB         EQU     68              ; VI I (INSERT AT BOL)
+ACVILEG         EQU     69              ; VI LEADER 'g'
+ACVIKIL         EQU     70              ; VI D (DELETE TO EOL)
+ACVIVIS         EQU     71              ; VI v (CHARACTER VISUAL MODE)
+ACVILIN         EQU     72              ; VI V (LINE VISUAL MODE)
+ACVICPY         EQU     73              ; VI y IN VISUAL MODE (YANK AND EXIT)
+ACVICUT         EQU     74              ; VI d/x IN VISUAL MODE (CUT AND EXIT)
+ACMAX           EQU     75
 
 SRCHMAX         EQU     18              ; MAX SEARCH / REPLACE PATTERN LENGTH
 SRCH_FND        EQU     0               ; ACTION: FIND NEXT
@@ -327,7 +335,7 @@ ED_FCAN         EQU     2               ; FOCUS: THE CANCEL BUTTON
 
 
 KMSTD           EQU     0               ; STANDARD / CUA (DEFAULT)
-KMWS            EQU     1               ; WORDSTAR / TURBO PASCAL
+KMTED           EQU     1               ; TED 2.6 (HISOFT / RIES VRIEND)
 KMEMACS         EQU     2               ; EMACS
 KMVI            EQU     3               ; VI MODAL
 

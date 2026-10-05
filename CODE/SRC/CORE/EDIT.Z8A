@@ -1498,6 +1498,69 @@ EDDELCHR        LD      HL, (DOCLINE)
                 JP      REDRAW          ; TAIL CALL
 
 
+; --- EDKILCHR                  ----------------------------------------
+
+
+; - EDKILCHR ---------------------------
+; - DELETE FROM CURSOR TO END OF LINE
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+EDKILCHR        LD      HL, (DOCLINE)
+                CALL    LINEREAD
+                LD      A, (WORKBUF)
+                LD      B, A            ; B = OLD LENGTH
+                LD      A, (CURX)
+                CP      B
+                RET     NC              ; CURX >= LENGTH: NOTHING TO DELETE
+                CALL    UNDOBGN
+                LD      A, B
+                LD      HL, CURX
+                SUB     (HL)            ; A = COUNT
+                LD      C, A
+                LD      B, 0            ; BC = COUNT
+                LD      A, (CURX)
+                LD      E, A
+                LD      D, 0
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE          ; HL = START OF DELETED TEXT
+                PUSH    HL
+                PUSH    BC
+.KILP           LD      (HL), ' '
+                INC     HL
+                DEC     BC
+                LD      A, B
+                OR      C
+                JR      NZ, .KILP
+                POP     BC
+                POP     HL
+                LD      DE, WORKATTR
+                ADD     HL, DE
+.KIAP           LD      (HL), 0
+                INC     HL
+                DEC     BC
+                LD      A, B
+                OR      C
+                JR      NZ, .KIAP
+                LD      A, (CURX)
+                LD      (WORKBUF), A
+                OR      A
+                JR      Z, .KIWRT
+                DEC     A
+                LD      (CURX), A
+.KIWRT          LD      HL, (DOCLINE)
+                CALL    LINEWRT
+                LD      A, (CURY)
+                INC     A
+                LD      B, A
+                CALL    RENDIFF
+                LD      A, #FF
+                LD      (MODIFIED), A
+                RET
+
+
 ; --- CALCALN                   ----------------------------------------
 
 
@@ -1914,7 +1977,7 @@ GETMAXC         LD      B, A            ; B = LINE LENGTH
                 RET
 .GMCDEV         ; DEV MODE OR LINE LENGTH != TXTWIDTH:
                 LD      A, (KMAPID)
-                CP      3               ; 3 = VI PROFILE
+                CP      KMVI            ; KMVI = VI PROFILE
                 JR      NZ, .NOTVI
                 LD      A, (VIMODE)
                 OR      A

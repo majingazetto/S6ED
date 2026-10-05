@@ -375,6 +375,8 @@ DRWMENU         LD      HL, 0
                 LD      BC, 0           ; DY = 0
                 CALL    BLTSTR
                 CALL    DRWFNAM
+                LD      A, #FF
+                LD      (CLKMIN), A
                 JP      UPDMCLK
 
 MNUTEXT         DEFM    "S6ED | File  Edit  Help", 0

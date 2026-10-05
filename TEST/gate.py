@@ -579,7 +579,7 @@ class B4CfgStream(Case):
            "TABWIDTH = 8\r\n" +
            ' ' * 130 + "TABWIDTH = 2\r\n" +
            "THEME = AMBER\r\n" +
-           "PROFILE=WS")
+           "PROFILE=TED")
 
     def fixture(self, ctx, variant=None):
         return crlf(numbered(5))
@@ -598,7 +598,7 @@ class B4CfgStream(Case):
                             'sibling dropped)' % run.var('boot', 'TABWIDTH')))
         checks.append(Check('B4/no-final-eol',
                             run.var('boot', 'KMAPID') == 1,
-                            'KMAPID=%s (PROFILE=WS, no trailing EOL)'
+                            'KMAPID=%s (PROFILE=TED, no trailing EOL)'
                             % run.var('boot', 'KMAPID')))
         pal = run.snaps.get('boot', {}).get('PALDATA')
         checks.append(Check('B4/theme', pal == self.AMBER,
@@ -904,7 +904,7 @@ class G13FeatureResidency(Case):
     origin = ('Fase 1b inter-segment architecture: feature code lives in FTRSEG, '
               'is copied at boot, and retains residency across execution')
     cfg = ("; spaced form, trailing comments, CRLF\r\n"
-           "PROFILE = WS\r\n"
+           "PROFILE = TED\r\n"
            "WRAP = TXT\r\n"
            "TABWIDTH = 4\r\n")
 
@@ -1409,7 +1409,7 @@ class H17DatPadded(Case):
     origin = ('Fase C1: the loader seeks to DATAOFF per block, so on-disk '
               'order and gaps between table and payload no longer matter')
     cfg = ("; padded container still applies the CFG\r\n"
-           "PROFILE = WS\r\n"
+           "PROFILE = TED\r\n"
            "WRAP = TXT\r\n"
            "TABWIDTH = 4\r\n")
     with_dat = False
@@ -5484,7 +5484,7 @@ class H37Settings(Case):
         t.snap('open', at='WINPOLL')
 
         if variant == 'cancel':
-            # Cycle Profile forward (STD -> WS)
+            # Cycle Profile forward (STD -> TED)
             t.press('RIGHT')
             t.snap('cycled', at='WINPOLL')
             # ESC cancels without saving
@@ -5547,7 +5547,7 @@ class H37Settings(Case):
                                     run.var('open', 'SETTFOC') == 0 and
                                     run.var('open', 'STTPRF') == 0 and
                                     run.var('cycled', 'STTPRF') == 1,
-                                    'RIGHT cycles STTPRF from 0 (STD) to 1 (WS)'))
+                                    'RIGHT cycles STTPRF from 0 (STD) to 1 (TED)'))
                 checks.append(Check('%s/discarded' % v,
                                     run.var('closed', 'WINACTV') == 0 and
                                     run.var('closed', 'KMAPID') == 0,

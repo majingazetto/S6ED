@@ -2460,9 +2460,8 @@ DOSETT          LD      HL, 120
                 LD      A, (STTTAB)
                 INC     A
                 LD      B, A
-                XOR     A
-                SCF
-.TABLP          RLA
+                LD      A, 1
+.TABLP          ADD     A, A            ; B=1: 2, B=2: 4, B=3: 8
                 DJNZ    .TABLP
                 LD      (TABWIDTH), A
 
@@ -2532,7 +2531,7 @@ DOSETT          LD      HL, 120
 
 .VALPRF         DEFW    .VP0, .VP1, .VP2, .VP3
 .VP0            DEFM    "STD", 0
-.VP1            DEFM    "WS", 0
+.VP1            DEFM    "TED", 0
 .VP2            DEFM    "EMC", 0
 .VP3            DEFM    "VI", 0
 

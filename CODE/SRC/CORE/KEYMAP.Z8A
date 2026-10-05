@@ -84,47 +84,35 @@ KMAPSTD         ; UNMODIFIED CURSORS
                 DEFB    #FF
 
 
-; --- KMAPWS                    ----------------------------------------
+; --- KMAPTED                   ----------------------------------------
 
 
-KMAPWS          ; WORDSTAR DIAMOND
-                DEFB    CTRL_S,  MODCTRL, ACMVL
-                DEFB    CTRL_D,  MODCTRL, ACMVR
-                DEFB    CTRL_E,  MODCTRL, ACMVU
-                DEFB    CTRL_X,  MODCTRL, ACMVD
-                DEFB    CTRL_A,  MODCTRL, ACWLFT
-                DEFB    CTRL_F,  MODCTRL, ACWRGT
-                DEFB    CTRL_R,  MODCTRL, ACPGUP
-                DEFB    CTRL_C,  MODCTRL, ACPGDN
-                DEFB    CTRL_G,  MODCTRL, ACDELFW
-                DEFB    CTRL_Y,  MODCTRL, ACDELLN
-
-                ; UNMODIFIED CURSORS
+KMAPTED         ; UNMODIFIED CURSORS
                 DEFB    CLEFT,   MODNONE, ACMVL
                 DEFB    CRIGHT,  MODNONE, ACMVR
                 DEFB    CUP,     MODNONE, ACMVU
                 DEFB    CDOWN,   MODNONE, ACMVD
 
-                ; CTRL + CURSORS
+                ; SHIFT + CURSORS (TED WORD & PAGE NAVIGATION)
+                DEFB    CLEFT,   MODSHFT, ACWLFT
+                DEFB    CRIGHT,  MODSHFT, ACWRGT
+                DEFB    CUP,     MODSHFT, ACPGUP
+                DEFB    CDOWN,   MODSHFT, ACPGDN
+
+                ; CTRL + CURSORS (TED LINE BOUNDARIES & PAGING)
                 DEFB    CLEFT,   MODCTRL, ACBOL
                 DEFB    CRIGHT,  MODCTRL, ACEOL
-                DEFB    CUP,     MODCTRL, ACTOP
-                DEFB    CDOWN,   MODCTRL, ACBOT
+                DEFB    CUP,     MODCTRL, ACPGUP
+                DEFB    CDOWN,   MODCTRL, ACPGDN
 
-                ; GRAPH + CURSORS
+                ; GRAPH + CURSORS (WORDS & PAGING)
                 DEFB    CLEFT,   MODGRPH, ACWLFT
                 DEFB    CRIGHT,  MODGRPH, ACWRGT
                 DEFB    BS,      MODGRPH, ACDWLFT
                 DEFB    CUP,     MODGRPH, ACPGUP
                 DEFB    CDOWN,   MODGRPH, ACPGDN
 
-                ; SHIFT + CURSORS (TEXT SELECTION)
-                DEFB    CLEFT,   MODSHFT, ACSLML
-                DEFB    CRIGHT,  MODSHFT, ACSLMR
-                DEFB    CUP,     MODSHFT, ACSLMU
-                DEFB    CDOWN,   MODSHFT, ACSLMD
-
-                ; SHIFT + CTRL + CURSORS
+                ; SHIFT + CTRL + CURSORS (TEXT SELECTION)
                 DEFB    CLEFT,   MODSHFT | MODCTRL, ACSLBOL
                 DEFB    CRIGHT,  MODSHFT | MODCTRL, ACSLEOL
                 DEFB    CUP,     MODSHFT | MODCTRL, ACSLTOP
@@ -136,22 +124,38 @@ KMAPWS          ; WORDSTAR DIAMOND
                 DEFB    CUP,     MODSHFT | MODGRPH, ACSLPGU
                 DEFB    CDOWN,   MODSHFT | MODGRPH, ACSLPGD
 
-                ; EDITING & SYSTEM
-                DEFB    CTRL_B,  MODCTRL, ACTGLBD
-                DEFB    CTRL_I,  MODCTRL, ACTGLIT
-                DEFB    TAB,     MODNONE, ACTABS
+                ; BASIC EDITING KEYS
                 DEFB    BS,      MODNONE, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
-                DEFB    CR,      MODANY,  ACNWLIN
+                DEFB    DEL,     MODCTRL, ACDELLN
+                DEFB    TAB,     MODNONE, ACTABS
                 DEFB    INSKEY,  MODNONE, ACTGLIN
-                DEFB    CTRL_K,  MODCTRL, ACCYCKM
-                DEFB    CTRL_L,  MODCTRL, ACFNXT
-                DEFB    CTRL_T,  MODCTRL, ACCYCMK
-                DEFB    CTRL_W,  MODCTRL, ACTGLWR
-                DEFB    CTRL_Z,  MODCTRL, ACUNDO
-                DEFB    CTRL_Z,  MODSHFT | MODCTRL, ACREDO
-                DEFB    CTRL_Q,  MODCTRL, ACQUIT
+                DEFB    CR,      MODANY,  ACNWLIN
                 DEFB    ESC,     MODANY,  ACQUIT
+
+                ; TED CONTROL COMMANDS
+                DEFB    CTRL_B,  MODCTRL, ACSAVE
+                DEFB    CTRL_L,  MODCTRL, ACOPEN
+                DEFB    CTRL_Z,  MODCTRL, ACFIND
+                DEFB    CTRL_N,  MODCTRL, ACFNXT
+                DEFB    CTRL_G,  MODCTRL, ACGOTOL
+                DEFB    CTRL_T,  MODCTRL, ACTOP
+                DEFB    CTRL_O,  MODCTRL, ACBOT
+                DEFB    CTRL_Y,  MODCTRL, ACDELLN
+                DEFB    CTRL_U,  MODCTRL, ACUNDO
+                DEFB    CTRL_U,  MODSHFT | MODCTRL, ACREDO
+                DEFB    CTRL_Q,  MODCTRL, ACQUIT
+                DEFB    CTRL_K,  MODCTRL, ACCYCKM
+
+                ; CLIPBOARD & COMMON ATOMS
+                DEFB    CTRL_A,  MODCTRL, ACSELAL
+                DEFB    CTRL_C,  MODCTRL, ACCOPY
+                DEFB    CTRL_X,  MODCTRL, ACCUT
+                DEFB    CTRL_V,  MODCTRL, ACPAST
+                DEFB    CTRL_S,  MODCTRL, ACSAVE
+                DEFB    CTRL_S,  MODSHFT | MODCTRL, ACSAVAS
+
+                ; SYSTEM ACCELERATORS
                 DEFB    F1KEY,   MODANY,  ACMENU
                 DEFB    F2KEY,   MODANY,  ACMNU1
                 DEFB    F3KEY,   MODANY,  ACMNU2
@@ -231,18 +235,29 @@ KMAPVIN         ; VI NORMAL MOVEMENT
                 DEFB    'w',     MODNONE, ACWRGT
                 DEFB    'b',     MODNONE, ACWLFT
                 DEFB    '0',     MODNONE, ACBOL
+                DEFB    '^',     MODANY,  ACBOL
                 DEFB    '$',     MODANY,  ACEOL
                 DEFB    'x',     MODNONE, ACDELFW
                 DEFB    'X',     MODANY,  ACDELBK
                 DEFB    'i',     MODNONE, ACVIINS
+                DEFB    'I',     MODANY,  ACVIINB
                 DEFB    'a',     MODNONE, ACVIAPP
+                DEFB    'A',     MODANY,  ACVIAPE
                 DEFB    'o',     MODNONE, ACOPNBL
                 DEFB    'O',     MODANY,  ACOPNAB
                 DEFB    'd',     MODNONE, ACVILED
+                DEFB    'D',     MODANY,  ACVIKIL
+                DEFB    'g',     MODNONE, ACVILEG
+                DEFB    'v',     MODNONE, ACVIVIS
+                DEFB    'V',     MODANY,  ACVILIN
                 DEFB    'y',     MODNONE, ACCOPY
                 DEFB    'p',     MODNONE, ACPAST
                 DEFB    'u',     MODNONE, ACUNDO
                 DEFB    CTRL_R,  MODCTRL, ACREDO
+                DEFB    CTRL_F,  MODCTRL, ACPGDN
+                DEFB    CTRL_B,  MODCTRL, ACPGUP
+                DEFB    CTRL_D,  MODCTRL, ACPGDN
+                DEFB    CTRL_U,  MODCTRL, ACPGUP
                 DEFB    'G',     MODANY,  ACBOT
                 DEFB    '/',     MODANY,  ACFIND
                 DEFB    'n',     MODNONE, ACFNXT
@@ -295,6 +310,51 @@ KMAPVII         ; RETURN TO NORMAL MODE
                 DEFB    BS,      MODNONE, ACDELBK
                 DEFB    DEL,     MODNONE, ACDELFW
                 DEFB    CR,      MODANY,  ACNWLIN
+                DEFB    F1KEY,   MODANY,  ACMENU
+                DEFB    F2KEY,   MODANY,  ACMNU1
+                DEFB    F3KEY,   MODANY,  ACMNU2
+                DEFB    F4KEY,   MODANY,  ACMNU3
+                DEFB    F5KEY,   MODANY,  ACMNU4
+                DEFB    SELKEY,  MODNONE, ACMENU
+                DEFB    F10KEY,  MODANY,  ACMENU
+                DEFB    #FF
+
+
+; --- KMAPVIV                   ----------------------------------------
+
+
+KMAPVIV         ; VI VISUAL MODE (SELECTION EXTENSION)
+                DEFB    'h',     MODNONE, ACSLML
+                DEFB    'l',     MODNONE, ACSLMR
+                DEFB    'k',     MODNONE, ACSLMU
+                DEFB    'j',     MODNONE, ACSLMD
+                DEFB    'w',     MODNONE, ACSLWRT
+                DEFB    'b',     MODNONE, ACSLWLF
+                DEFB    '0',     MODNONE, ACSLBOL
+                DEFB    '^',     MODANY,  ACSLBOL
+                DEFB    '$',     MODANY,  ACSLEOL
+                DEFB    'g',     MODNONE, ACVILEG
+                DEFB    'G',     MODANY,  ACSLBOT
+                DEFB    CTRL_F,  MODCTRL, ACSLPGD
+                DEFB    CTRL_B,  MODCTRL, ACSLPGU
+                DEFB    CTRL_D,  MODCTRL, ACSLPGD
+                DEFB    CTRL_U,  MODCTRL, ACSLPGU
+
+                ; CURSORS
+                DEFB    CLEFT,   MODANY,  ACSLML
+                DEFB    CRIGHT,  MODANY,  ACSLMR
+                DEFB    CUP,     MODANY,  ACSLMU
+                DEFB    CDOWN,   MODANY,  ACSLMD
+
+                ; ACTIONS ON VISUAL SELECTION
+                DEFB    'y',     MODNONE, ACVICPY
+                DEFB    'd',     MODNONE, ACVICUT
+                DEFB    'x',     MODNONE, ACVICUT
+                DEFB    'v',     MODNONE, ACVINRM
+                DEFB    'V',     MODANY,  ACVINRM
+                DEFB    ESC,     MODANY,  ACVINRM
+
+                ; SYSTEM ACCELERATORS
                 DEFB    F1KEY,   MODANY,  ACMENU
                 DEFB    F2KEY,   MODANY,  ACMNU1
                 DEFB    F3KEY,   MODANY,  ACMNU2
