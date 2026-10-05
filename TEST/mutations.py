@@ -446,7 +446,7 @@ MUTATIONS = [
                'without a word',
         'file': 'FILEIO.Z8A',
         'old': """                LD      HL, .STRNONM
-                CALL    .SETMSG
+                CALL    SETMSG
                 CALL    DRWSTAT
                 SCF
                 RET""",
