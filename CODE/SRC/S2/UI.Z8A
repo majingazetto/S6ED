@@ -340,15 +340,16 @@ DRWMENU         ; 1. BLANK STATBUF, THEN LAY THE MENU TITLES OVER IT. THE
                 LD      A, E
                 LD      (STATBUF + 62), A
 
-.NOCLK          ; 3. POPULATE FNAMBUF
+.NOCLK          ; 3. POPULATE FNAMBUF. DE MUST HOLD FNAMBUF BEFORE THE
+                ; EMPTY-NAME EXIT: .CHKEND MEASURES THE STRING AS DE - FNAMBUF
+                LD      DE, FNAMBUF
                 LD      A, (FILENAME)
                 OR      A
                 JR      NZ, .HAVEFN
                 ; NO FILENAME: IF MODIFIED, USE "Untitled"
                 LD      A, (MODIFIED)
                 OR      A
-                JR      Z, .CHKEND      ; EMPTY FNAMBUF
-                LD      DE, FNAMBUF
+                JR      Z, .CHKEND      ; EMPTY FNAMBUF, LENGTH 0
                 LD      HL, .STRUNT     ; "Untitled"
                 CALL    .CPYSTR
                 JR      .CHKMOD
