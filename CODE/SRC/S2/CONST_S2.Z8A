@@ -81,6 +81,11 @@ COLBSEL         EQU     #4B             ; FOCUSED BUTTON: DARK BLUE ON LIGHT YEL
                 ; COPY EXACTLY THIS MANY FROM THE TABLE INTO VCOLTXT.
 VCOLNUM         EQU     12
 
+                ; A THEME IS THE ROLE BLOCK: APPLYTHM COPIES THMSIZ BYTES OF
+                ; THE THEME TABLE TO THMDST
+THMDST          EQU     VCOLTXT
+THMSIZ          EQU     VCOLNUM
+
 
 ; --- PAGE 2 VIDEO SHADOW MAP   ----------------------------------------
 

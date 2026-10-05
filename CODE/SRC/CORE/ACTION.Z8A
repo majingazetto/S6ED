@@ -1611,7 +1611,6 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
                 RET
 
 .STRERRC        DEFM    "Not an editor command", 0
-.STRSAVD        DEFM    "[SAVED]", 0
 .STRNOF         DEFM    "No file name", 0
 .STRMOD         DEFM    "No write since last change (! overrides)", 0
 .STRARG         DEFM    "Argument required", 0

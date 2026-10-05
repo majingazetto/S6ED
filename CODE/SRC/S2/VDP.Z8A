@@ -207,14 +207,23 @@ INITCOL         CALL    VIDBANK
                 ; THE DOCUMENT'S PATTERN AND FLATTENS ITS COLOR, SO IT MUST
                 ; DIFFER FROM THE DOCUMENT BACKGROUND OR IT IS INVISIBLE.
                 ; BLACK-ON-BLACK ONLY WORKED ON MSX, WHOSE DOCUMENT IS BLUE.
-S2THDKR         DEFB    #F1, #F4, #B1, #71, #31, #E1, 1, #F4  ; DARK
+THMDARK         DEFB    #F1, #F4, #B1, #71, #31, #E1, 1, #F4  ; DARK
                 DEFB    #F4, #B4, #4B, #44
-S2THGRN         DEFB    #21, #2C, #31, #71, #B1, #E1, 1, #2C  ; GREEN
+THMGRN          DEFB    #21, #2C, #31, #71, #B1, #E1, 1, #2C  ; GREEN
                 DEFB    #2C, #3C, #C3, #CC
-S2THMBR         DEFB    #A1, #A6, #B1, #71, #31, #E1, 1, #A6  ; AMBER
+THMAMBR         DEFB    #A1, #A6, #B1, #71, #31, #E1, 1, #A6  ; AMBER
                 DEFB    #A6, #B6, #6B, #66
-S2THMSX         DEFB    #F4, #F5, #B4, #74, #34, #E4, 4, #F5  ; MSX
+THMMSX          DEFB    #F4, #F5, #B4, #74, #34, #E4, 4, #F5  ; MSX
                 DEFB    #F5, #B5, #5B, #11
+                ; LIGHT: BLACK ON WHITE, GREY CHROME, A BLACK ACCENT (WHITE ON
+                ; BLACK TITLE BAR) AND A BLACK SHADOW, WHICH READS ON WHITE
+THMLGHT         DEFB    #1F, #1E, #4F, #CF, #6F, #EF, #0F, #1E ; LIGHT
+                DEFB    #1E, #F1, #1F, #11
+                ; MONO: WHITE, GREY AND BLACK ONLY. BOLD, ITALIC AND CODE KEEP
+                ; THE TEXT INK, ONLY THE DELIMITERS DIM. THE ACCENT IS THE
+                ; INVERSE OF THE DOCUMENT AND THE SHADOW GREY, NOT BLACK
+THMMONO         DEFB    #F1, #1E, #F1, #F1, #F1, #E1, 1, #1E  ; MONO
+                DEFB    #1E, #1F, #F1, #EE
 
 
 
@@ -230,7 +239,7 @@ S2THMSX         DEFB    #F4, #F5, #B4, #74, #34, #E4, 4, #F5  ; MSX
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
 
-THMLOAD         LD      HL, S2THDKR     ; DEFAULT THEME
+THMLOAD         LD      HL, THMDARK     ; DEFAULT THEME
                 LD      DE, VCOLTXT
                 LD      BC, VCOLNUM
                 LDIR

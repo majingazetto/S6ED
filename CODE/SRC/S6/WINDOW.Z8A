@@ -2186,7 +2186,7 @@ DOSETT          LD      HL, 120
 .MKPOK          LD      (STTMKP), A
 
                 LD      A, (THEMEID)
-                CP      6
+                CP      THMCNT
                 JR      C, .THMOK
                 XOR     A
 .THMOK          LD      (STTTHM), A
@@ -2311,7 +2311,7 @@ DOSETT          LD      HL, 120
                 LD      (HL), A
                 RET
 
-.MAXTBL         DEFB    4, 2, 3, 2, 3, 3, 3, 6
+.MAXTBL         DEFB    4, 2, 3, 2, 3, 3, 3, THMCNT
                 DEFB    2
 
 .DRWUI          ; CLEAR WINDOW BODY
@@ -2516,7 +2516,7 @@ DOSETT          LD      HL, 120
                 DEFW    .LBLTAB, .VALTAB
                 DEFW    .LBLEOL, .VALEOL
                 DEFW    .LBLMKP, .VALMKP
-                DEFW    .LBLTHM, .VALTHM
+                DEFW    .LBLTHM, THMNAMV
                 DEFW    .LBLSHD, .VALALN
 
 .LBLPRF         DEFM    "Profile:   ", 0
@@ -2556,14 +2556,6 @@ DOSETT          LD      HL, 120
 .VALMKP         DEFW    .VA0, .VM1, .VM2
 .VM1            DEFM    "MD", 0
 .VM2            DEFM    "LIT", 0
-
-.VALTHM         DEFW    .VTD, .VTA, .VTG, .VTL, .VTM, .VTO
-.VTD            DEFM    "DEFAULT", 0
-.VTA            DEFM    "AMBER", 0
-.VTG            DEFM    "GREEN", 0
-.VTL            DEFM    "LIGHT", 0
-.VTM            DEFM    "MSX", 0
-.VTO            DEFM    "MONO", 0
 
 .BTNOK          DEFM    "[  OK  ]", 0
 .BTNCAN         DEFM    "[Cancel]", 0

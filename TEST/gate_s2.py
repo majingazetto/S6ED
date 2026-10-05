@@ -719,11 +719,18 @@ class S210Theme(S2Case):
     # TXT, UI, BOLD, ITAL, UNDR, MARK, BORDER, STAT, WIN, HI, BSEL, SHDW
     THEMES = {
         'amber': [0xA1, 0xA6, 0xB1, 0x71, 0x31, 0xE1, 1,
-                  0xA6, 0xA6, 0xB6, 0x6B, 0x66],      # S2THMBR
+                  0xA6, 0xA6, 0xB6, 0x6B, 0x66],      # THMAMBR
+        'light': [0x1F, 0x1E, 0x4F, 0xCF, 0x6F, 0xEF, 15,
+                  0x1E, 0x1E, 0xF1, 0x1F, 0x11],      # THMLGHT
         'msx':   [0xF4, 0xF5, 0xB4, 0x74, 0x34, 0xE4, 4,
-                  0xF5, 0xF5, 0xB5, 0x5B, 0x11],      # S2THMSX
+                  0xF5, 0xF5, 0xB5, 0x5B, 0x11],      # THMMSX
+        'mono':  [0xF1, 0x1E, 0xF1, 0xF1, 0xF1, 0xE1, 1,
+                  0x1E, 0x1E, 0x1F, 0xF1, 0xEE],      # THMMONO
     }
-    variants = ('amber', 'msx')
+    # THEMEID, the same on both targets.  MSX and MONO share the initial, so
+    # PARSTHM reads the second letter -- only these two variants see it.
+    IDS = {'amber': 1, 'light': 3, 'msx': 4, 'mono': 5}
+    variants = ('amber', 'light', 'msx', 'mono')
     LINES = ['THEME ON THIS LINE', 'SECOND LINE']
 
     def fixture(self, ctx, variant=None):
@@ -752,6 +759,10 @@ class S210Theme(S2Case):
                                 if got == want else
                                 'roles = %s (expected %s)'
                                 % (got, ['#%02X' % b for b in want])))
+            tid = run.var('boot', 'THEMEID')
+            checks.append(Check(tag + '/id', tid == self.IDS[variant],
+                                'THEMEID = %s (expected %d)'
+                                % (tid, self.IDS[variant])))
             border = run.var('boot', 'RG7SAV')
             checks.append(Check(tag + '/border', border == want[6],
                                 'R#7 border = %s (expected %d)'

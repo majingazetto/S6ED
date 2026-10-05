@@ -788,13 +788,13 @@ MUTATIONS = [
     },
     {
         'name': 's2-theme-default',
-        'why': 'S2THMBR carries the DARK data, so THEME=AMBER loads the '
+        'why': 'THMAMBR carries the DARK data, so THEME=AMBER loads the '
                'default theme: the vars say white-on-black and the VRAM '
                'colour table agrees, while the config claims amber',
         'target': 'S2ED',
         'file': 'VDP.Z8A',
-        'old': "S2THMBR         DEFB    #A1, #A6, #B1, #71, #31, #E1, 1, #A6  ; AMBER",
-        'new': "S2THMBR         DEFB    #F1, #F4, #B1, #71, #31, #E1, 1, #F4  ; MUTATION: DARK DATA",
+        'old': "THMAMBR         DEFB    #A1, #A6, #B1, #71, #31, #E1, 1, #A6  ; AMBER",
+        'new': "THMAMBR         DEFB    #F1, #F4, #B1, #71, #31, #E1, 1, #F4  ; MUTATION: DARK DATA",
         'filter': 'S2-10',
         'expect': ['S2-10/amber/vars', 'S2-10/amber/text',
                    'S2-10/amber/menu', 'S2-10/amber/status'],
@@ -933,10 +933,23 @@ MUTATIONS = [
                'rejected in silence and the default theme stays',
         'target': 'S2ED',
         'file': 'CFG.Z8A',
-        'old': '                CP      #0D             ; 13 ENTRIES (A-M): MSX IS INDEX 12',
+        'old': '                CP      #0D             ; 13 ENTRIES (A-M): M IS INDEX 12',
         'new': '                CP      #08             ; MUTATION: A-H ONLY',
         'filter': 'S2-10',
         'expect': ['S2-10/msx/vars'],
+    },
+    {
+        # MSX and MONO share the initial, so PARSTHM reads the second letter.
+        # The parser is shared CORE: this is the one place either target
+        # tells the two apart, and only the S2 gate asserts the role bytes.
+        'name': 's2-theme-mono',
+        'why': 'the second-letter test is gone, so THEME=MONO loads MSX',
+        'target': 'S2ED',
+        'file': 'CFG.Z8A',
+        'old': '                LD      A, THMMONI',
+        'new': '                LD      A, THMMSXI      ; MUTATION: MONO IS MSX',
+        'filter': 'S2-10',
+        'expect': ['S2-10/mono/vars', 'S2-10/mono/id'],
     },
     {
         # The last hardcoded colour in the target.  A shadow cell keeps the

@@ -302,10 +302,17 @@ DRWFNAM         JP      DRWMENU
 ; - CLOBBERS: ALL
 ; -
 
-DRWMENU         ; 1. COPY BASE MENU BAR TEMPLATE TO STATBUF
+DRWMENU         ; 1. BLANK STATBUF, THEN LAY THE MENU TITLES OVER IT. THE
+                ; TEMPLATE CARRIES ONLY THE TITLES: ITS 41 TRAILING SPACES COST
+                ; MORE BYTES AS DATA THAN THE FILL COSTS AS CODE.
+                LD      HL, STATBUF
+                LD      (HL), ' '
+                LD      DE, STATBUF + 1
+                LD      BC, SCRCOLS - 1
+                LDIR
                 LD      HL, .MNUTXT
                 LD      DE, STATBUF
-                LD      BC, SCRCOLS     ; 64
+                LD      BC, .MNUEND - .MNUTXT
                 LDIR
 
                 ; 2. FORMAT CLOCK AT COLS 58..62 IF SHOWCLK ENABLED
@@ -486,7 +493,8 @@ DRWMENU         ; 1. COPY BASE MENU BAR TEMPLATE TO STATBUF
 .STRUNT         DEFM    "Untitled", 0
 .STRMOD         DEFM    " *", 0
 .STRCLK         DEFM    " | ", 0
-.MNUTXT         DEFM    "S2ED | File  Edit  Help                                         "
+.MNUTXT         DEFM    "S2ED | File  Edit  Help"
+.MNUEND
 
 
 

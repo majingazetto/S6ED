@@ -352,6 +352,20 @@ MKUP_LIT        EQU     2               ; LITE / CHAT (*BOLD*, _ITALIC_)
 MKUP_MAX        EQU     3
 
 
+; --- THEMES                    ----------------------------------------
+
+
+                ; THE SAME IDS ON BOTH TARGETS: THEMEID, THMPTR, THMNAMV AND
+                ; THE SETTINGS DIALOG ALL INDEX BY THEM. APPEND, NEVER INSERT.
+THMDARKI        EQU     0               ; DARK (DEFAULT)
+THMAMBRI        EQU     1               ; AMBER
+THMGRNI         EQU     2               ; GREEN
+THMLGHTI        EQU     3               ; LIGHT
+THMMSXI         EQU     4               ; MSX
+THMMONI         EQU     5               ; MONO
+THMCNT          EQU     6
+
+
 ; --- DEAD KEY STATES           ----------------------------------------
 
 

@@ -498,9 +498,16 @@ SEGRESV         CALL    SEGGET          ; 1: DIRECTORY SEGMENT
                 JR      NZ, .APPB
                 RET
 
+                ; THE TITLE NAMES THE TARGET: THIS FILE IS SHARED CORE
+                IFDEF   S2ED
+TXTVTIT         DEFM    "S2ED v"
+                DEFB    VERSION.MAJOR, '.', VERSION.MINOR
+                DEFM    " - Screen 2 text editor for MSX1", 13, 10
+                ELSE
 TXTVTIT         DEFM    "S6ED v"
                 DEFB    VERSION.MAJOR, '.', VERSION.MINOR
                 DEFM    " - Screen 6 text editor for MSX2", 13, 10
+                ENDIF
                 DEFM    "(c) 2024-2026 Armando Perez Abad", 13, 10, 13, 10, "$"
 TXTVTOT         DEFM    "Total mapper:   ", 0
 TXTVAVL         DEFM    "Available:      ", 0

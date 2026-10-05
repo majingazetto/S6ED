@@ -4556,7 +4556,7 @@ CLOCK=0
 TABWIDTH=4
 EOL=AUTO
 AUTOALIGN=OFF
-THEME=DEFAULT
+THEME=DARK
 """
     LINES = ['LINE %04d TEST' % (i + 1) for i in range(50)]
 
@@ -5608,7 +5608,7 @@ CLOCK=0
 TABWIDTH=4
 EOL=AUTO
 AUTOALIGN=OFF
-THEME=DEFAULT
+THEME=DARK
 """
     def config(self, ctx, variant=None):
         if variant == 'browse':
@@ -5954,7 +5954,7 @@ CLOCK=0
 TABWIDTH=4
 EOL=AUTO
 AUTOALIGN=OFF
-THEME=DEFAULT
+THEME=DARK
 """
 
 

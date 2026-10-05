@@ -58,7 +58,9 @@ ENOMAP          DEFM    "No mapper manager found.$"
 ENOMEM          DEFM    "Out of mapper memory.$"
 ENOTPA          DEFM    "Insufficient Page 3 memory.$"
 ENO2SEG         DEFM    "S2ED requires 2 free mapper segments.$"
-TXTHLP          DEFM    "S2ED v1.0 - Screen 2 text editor for MSX / TMS9918", 13, 10
+TXTHLP          DEFM    "S2ED v"
+                DEFB    VERSION.MAJOR, '.', VERSION.MINOR
+                DEFM    " - Screen 2 text editor for MSX1", 13, 10
                 DEFM    "Requires MSX-DOS 2 or Nextor and 2 free mapper "
                 DEFM    "segments.", 13, 10, 13, 10
                 DEFM    "Usage: S2ED [file] [/V] [/H | /?]", 13, 10, 13, 10

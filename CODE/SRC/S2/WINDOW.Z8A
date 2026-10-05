@@ -1864,8 +1864,10 @@ DOSETT          LD      A, 5
 .MKPOK          LD      (STTMKP), A
 
                 LD      A, (THEMEID)
-                AND     3
-                LD      (STTTHM), A
+                CP      THMCNT
+                JR      C, .THMOK
+                XOR     A
+.THMOK          LD      (STTTHM), A
 
                 ; SHADOW (0=OFF, 1=ON)
                 XOR     A
@@ -1987,7 +1989,7 @@ DOSETT          LD      A, 5
                 LD      (HL), A
                 RET
 
-.MAXTBL         DEFB    4, 2, 3, 2, 3, 3, 3, 4
+.MAXTBL         DEFB    4, 2, 3, 2, 3, 3, 3, THMCNT
                 DEFB    2
 
 .DRWUI          ; DRAW 9 SETTING ROWS (ROWS 6..14)
@@ -2012,6 +2014,20 @@ DOSETT          LD      A, 5
                 LD      L, (IX+0)
                 LD      H, (IX+1)
                 LD      C, 22
+                CALL    WINPUTS
+                POP     IX
+
+                ; CLEAR THE VALUE FIELD (COLS 34..38) FIRST: .BAR ONLY RECOLORS,
+                ; SO A SHORT VALUE WOULD KEEP THE TAIL OF A LONGER ONE. THAT IS
+                ; WHAT LETS THE NAMES BE UNPADDED -- THE THEMES ARE THE CFG'S
+                ; OWN THMNAMV, SHARED WITH CFGSAVE AND THE S6ED DIALOG.
+                POP     AF              ; ROW COLOR
+                POP     BC              ; ROW IN B
+                PUSH    BC
+                PUSH    AF
+                LD      C, 34
+                LD      HL, .VALCLR
+                PUSH    IX
                 CALL    WINPUTS
                 POP     IX
 
@@ -2176,7 +2192,7 @@ DOSETT          LD      A, 5
                 DEFW    .LBLTAB, .VALTAB
                 DEFW    .LBLEOL, .VALEOL
                 DEFW    .LBLMKP, .VALMKP
-                DEFW    .LBLTHM, .VALTHM
+                DEFW    .LBLTHM, THMNAMV
                 DEFW    .LBLSHD, .VALALN
 
 .LBLPRF         DEFM    "Profile:   ", 0
@@ -2190,38 +2206,34 @@ DOSETT          LD      A, 5
 .LBLSHD         DEFM    "Shadow:    ", 0
 
 .VALPRF         DEFW    .VP0, .VP1, .VP2, .VP3
-.VP0            DEFM    "STD ", 0
-.VP1            DEFM    "TED ", 0
-.VP2            DEFM    "EMC ", 0
-.VP3            DEFM    "VI  ", 0
+.VP0            DEFM    "STD", 0
+.VP1            DEFM    "TED", 0
+.VP2            DEFM    "EMC", 0
+.VP3            DEFM    "VI", 0
 
 .VALWRP         DEFW    .VA2, .VW1
-.VW1            DEFM    "TXT ", 0
+.VW1            DEFM    "TXT", 0
 
 .VALALN         DEFW    .VA0, .VA1, .VA2
-.VA0            DEFM    "OFF ", 0
-.VA1            DEFM    "ON  ", 0
-.VA2            DEFM    "DEV ", 0
+.VA0            DEFM    "OFF", 0
+.VA1            DEFM    "ON", 0
+.VA2            DEFM    "DEV", 0
 
 .VALTAB         DEFW    .VT0, .VT1, .VT2
-.VT0            DEFM    "2   ", 0
-.VT1            DEFM    "4   ", 0
-.VT2            DEFM    "8   ", 0
+.VT0            DEFM    "2", 0
+.VT1            DEFM    "4", 0
+.VT2            DEFM    "8", 0
 
 .VALEOL         DEFW    .VE0, .VE1, .VE2
 .VE0            DEFM    "AUTO", 0
-.VE1            DEFM    "DOS ", 0
+.VE1            DEFM    "DOS", 0
 .VE2            DEFM    "UNIX", 0
 
 .VALMKP         DEFW    .VA0, .VM1, .VM2
-.VM1            DEFM    "MD  ", 0
-.VM2            DEFM    "LIT ", 0
+.VM1            DEFM    "MD", 0
+.VM2            DEFM    "LIT", 0
 
-.VALTHM         DEFW    .VTD, .VTA, .VTG, .VTM
-.VTD            DEFM    "DARK ", 0
-.VTA            DEFM    "AMBER", 0
-.VTG            DEFM    "GREEN", 0
-.VTM            DEFM    "MSX  ", 0
+.VALCLR         DEFM    "     ", 0
 
 .BTNOK          DEFM    "[  OK  ]", 0
 .BTNCAN         DEFM    "[CANCEL]", 0

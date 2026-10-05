@@ -779,21 +779,7 @@ PARSTHM         LD      A, (HL)
                 CALL    UPCASE
                 SUB     #41             ; 'A'
                 RET     C
-                IFDEF   S2ED
-                CP      #0D             ; 13 ENTRIES (A-M): MSX IS INDEX 12
-                RET     NC
-                LD      DE, S2TIDX
-                ADD     A, E
-                LD      E, A
-                ADC     A, D
-                SUB     E
-                LD      D, A
-                LD      A, (DE)
-                CP      #FF
-                RET     Z
-                JP      APPLYTHM
-                ELSE
-                CP      #0D             ; 13 ENTRIES
+                CP      #0D             ; 13 ENTRIES (A-M): M IS INDEX 12
                 RET     NC
                 LD      DE, THMIDX
                 ADD     A, E
@@ -804,50 +790,30 @@ PARSTHM         LD      A, (HL)
                 LD      A, (DE)
                 CP      #FF
                 RET     Z
-                CP      #04             ; 'M'?
+                CP      THMMSXI         ; 'M': MSX OR MONO, THE SECOND LETTER DECIDES
                 JR      NZ, .LOADPTR
                 INC     HL
                 LD      A, (HL)
                 CALL    UPCASE
                 CP      #4F             ; 'O'
-                LD      A, #05          ; MONO
+                LD      A, THMMONI
                 JR      Z, .LOADPTR
-                LD      A, #04          ; MSX
+                LD      A, THMMSXI
 .LOADPTR        JP      APPLYTHM
-                ENDIF
 
 
 ; --- APPLYTHM                  ----------------------------------------
 
 
 ; - APPLYTHM ---------------------------
-; - APPLY THEME BY NUMERIC ID (0..3 FOR S2ED, 0..5 FOR S6ED)
+; - APPLY THEME BY NUMERIC ID (0..THMCNT-1, THE SAME ON BOTH TARGETS)
 ; - IN:  A = THEME ID
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
 APPLYTHM        LD      (THEMEID), A
-                IFDEF   S2ED
-                CP      4
-                RET     NC
-                ADD     A, A
-                LD      E, A
-                LD      D, 0
-                LD      HL, S2TPTR
-                ADD     HL, DE
-                LD      E, (HL)
-                INC     HL
-                LD      D, (HL)
-                EX      DE, HL
-                LD      DE, VCOLTXT
-                LD      BC, VCOLNUM
-                LDIR
-                LD      A, #FF
-                LD      (PALDIRT), A
-                JP      SETPAL
-                ELSE
-                CP      6
+                CP      THMCNT
                 RET     NC
                 ADD     A, A
                 LD      E, A
@@ -858,14 +824,16 @@ APPLYTHM        LD      (THEMEID), A
                 INC     HL
                 LD      D, (HL)
                 EX      DE, HL
-                LD      DE, PALDATA
-                LD      BC, 8
+                LD      DE, THMDST      ; S6ED: PALDATA, S2ED: VCOLTXT
+                LD      BC, THMSIZ      ; S6ED: 8, S2ED: VCOLNUM
                 LDIR
                 LD      A, #FF
                 LD      (PALDIRT), A
+                ; S2ED'S SETPAL TAKES NO ARGUMENT (SEE .CFGDON)
+                IFNDEF  S2ED
                 LD      HL, PALDATA
-                JP      SETPAL
                 ENDIF
+                JP      SETPAL
 
 
 ; --- CFGSAVE                   ----------------------------------------
@@ -950,15 +918,10 @@ CFGSAVE         LD      A, (CFGLOC)
                 ; 8. THEME
                 LD      DE, KEYTHM
                 LD      A, (THEMEID)
-                IFDEF   S2ED
-                AND     3
-                LD      HL, .S2THMV
-                ELSE
-                CP      6
+                CP      THMCNT
                 JR      C, .THMOK
                 XOR     A
-.THMOK          LD      HL, .S6THMV
-                ENDIF
+.THMOK          LD      HL, THMNAMV
                 CALL    .WRLIST
 
                 ; 9. SHADOW
@@ -1064,23 +1027,11 @@ CFGSAVE         LD      A, (CFGLOC)
 .SVM1           DEFM    "MD", 0
 .SVM2           DEFM    "LIT", 0
 
-                IFDEF   S2ED
-.S2THMV         DEFW    .S2TD, .S2TA, .S2TG, .S2TM
-.S2TD           DEFM    "DARK", 0
-.S2TA           DEFM    "AMBER", 0
-.S2TG           DEFM    "GREEN", 0
-.S2TM           DEFM    "MSX", 0
-                ELSE
-.S6THMV         DEFW    .S6TD, .S6TA, .S6TG, .S6TL, .S6TM, .S6TO
-.S6TD           DEFM    "DEFAULT", 0
-.S6TA           DEFM    "AMBER", 0
-.S6TG           DEFM    "GREEN", 0
-.S6TL           DEFM    "LIGHT", 0
-.S6TM           DEFM    "MSX", 0
-.S6TO           DEFM    "MONO", 0
+                IFNDEF  S2ED
 .S6SHDV         DEFW    .SVA0, .S6SH1
 .S6SH1          DEFM    "UI", 0
                 ENDIF
+
 
 
 ; --- CFG PARSER TABLES         ----------------------------------------
@@ -1092,19 +1043,25 @@ PRFTBL          DEFB    #02, #FF, #FF, #FF, #FF, #FF, #FF, #FF
 
 MKPTBL          DEFB    #02, #01, #FF, #00
 
-                IFDEF   S2ED
-                ; A=AMBER, B=BLUE, D=DARK, G=GREEN (ELSE #FF = NO THEME)
-                ; ONE ENTRY PER LETTER A..M, SO THE DISPATCH ON THE FIRST
-                ; LETTER REACHES MSX. #FF = NO THEME WITH THAT INITIAL.
-S2TIDX          DEFB    #01, #FF, #FF, #00, #FF, #FF, #02, #FF
-                DEFB    #FF, #FF, #FF, #FF, #03
-S2TPTR          DEFW    S2THDKR, S2THMBR, S2THGRN, S2THMSX
-                ELSE
+                ; THEMES, THE SAME NAMES AND IDS ON BOTH TARGETS. PARSTHM
+                ; DISPATCHES ON THE FIRST LETTER, ONE ENTRY PER LETTER A..M:
+                ; A=AMBER, D=DARK, G=GREEN, L=LIGHT, M=MSX (MONO BY THE SECOND
+                ; LETTER). #FF = NO THEME WITH THAT INITIAL. THE TABLES THMPTR
+                ; POINTS AT ARE THE TARGET'S OWN: V9938 PALETTES IN THIS FILE
+                ; ON S6ED, TMS9918 ROLE BYTES IN S2/VDP.Z8A ON S2ED.
 THMIDX          DEFB    #01, #FF, #FF, #00, #FF, #FF, #02, #FF
                 DEFB    #FF, #FF, #FF, #03, #04
 
-THMPTR          DEFW    THMDEFT, THMAMBR, THMGRN, THMLGHT, THMMSX, THMMONO
-                ENDIF
+THMPTR          DEFW    THMDARK, THMAMBR, THMGRN, THMLGHT, THMMSX, THMMONO
+
+                ; NAMES BY ID, FOR CFGSAVE AND BOTH SETTINGS DIALOGS
+THMNAMV         DEFW    .TND, .TNA, .TNG, .TNL, .TNM, .TNO
+.TND            DEFM    "DARK", 0
+.TNA            DEFM    "AMBER", 0
+.TNG            DEFM    "GREEN", 0
+.TNL            DEFM    "LIGHT", 0
+.TNM            DEFM    "MSX", 0
+.TNO            DEFM    "MONO", 0
 
 CLKTBL          DEFB    #00, #01
 
@@ -1258,10 +1215,10 @@ KEYCHIS         DEFM    "COLOR_HI", 0
                 IFNDEF  S2ED
                 ; 8 BYTES EACH: 4 COLORS * 2 BYTES (V9938 FORMAT)
                 ; BYTE 1: (R << 4) | B,  BYTE 2: G
-THMDEFT         DEFB    #00, #00, #77, #07, #17, #02, #70, #07
+THMDARK         DEFB    #00, #00, #77, #07, #17, #02, #70, #07
 THMAMBR         DEFB    #00, #00, #70, #04, #20, #01, #70, #06
 THMGRN          DEFB    #00, #00, #11, #07, #00, #02, #40, #07
 THMMSX          DEFB    #15, #01, #77, #07, #27, #04, #70, #07
-THMLGHT         DEFB    #77, #07, #00, #00, #55, #05, #06, #02
+THMLGHT         DEFB    #77, #07, #00, #00, #55, #05, #22, #02
 THMMONO         DEFB    #00, #00, #77, #07, #44, #04, #77, #07
                 ENDIF

@@ -144,3 +144,8 @@ CLR_BG          EQU     #00             ; 4 PIXELS OF COLOR 0 (%00000000)
 CLR_FG          EQU     #55             ; 4 PIXELS OF COLOR 1 (%01010101)
 CLR_UI          EQU     #AA             ; 4 PIXELS OF COLOR 2 (%10101010)
 CLR_HI          EQU     #FF             ; 4 PIXELS OF COLOR 3 (%11111111)
+
+                ; A THEME IS THE 4-COLOR V9938 PALETTE: APPLYTHM COPIES THMSIZ
+                ; BYTES OF THE THEME TABLE TO THMDST
+THMDST          EQU     PALDATA
+THMSIZ          EQU     8

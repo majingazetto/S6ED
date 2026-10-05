@@ -279,6 +279,24 @@ def check_defb_width(ctx):
                  'no DEFB line over 8 values')
 
 
+VERLIT_RE = re.compile(r'"[^"]*\b(?:[vV]|[vV]ersion\s*)\d+\.\d+[^"]*"')
+
+
+def check_version_literal(ctx):
+    """No version number typed into a string: every banner, help text and
+    About reads VERSION.MAJOR / .MINOR, or the two targets drift (S2ED's
+    help said v1.0 while the build was 0.1)."""
+    bad = []
+    for fname in _src_files(ctx.src_dir):
+        for n, line in enumerate(open(os.path.join(ctx.src_dir, fname),
+                                      errors='replace'), 1):
+            m = VERLIT_RE.search(_strip_comment(line))
+            if m:
+                bad.append('%s:%d %s' % (fname, n, m.group(0)))
+    return Check('version-literal', not bad, '; '.join(bad[:8]) if bad else
+                 'every version string reads VERSION.MAJOR / .MINOR')
+
+
 def check_page1_hooks(ctx):
     """No interrupt hook may point into page 1.
 
@@ -649,7 +667,8 @@ ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_layout_asserts, check_record_exclusive, check_target_params,
        check_data_placement, check_statbuf_term,
        check_label_style,
-       check_number_notation, check_defb_width, check_page1_hooks,
+       check_number_notation, check_defb_width, check_version_literal,
+       check_page1_hooks,
        check_assets, check_feature_discipline, check_window_discipline,
        check_ftr_budget, check_tpa_chain, check_build_symmetry]
 
