@@ -3349,6 +3349,87 @@ class S232DiskError(S2Case):
         return checks
 
 
+# --- S2-33  A BARE LAUNCH PAINTS THE CHROME ----------------------------
+
+
+class S233BareLaunch(S2Case):
+    name = 'S2-33-bare-launch'
+    desc = ('S2ED started with no document argument comes up with the menu '
+            'bar, a blank document and the status bar')
+    origin = ('DRWMENU took the empty-name exit to .CHKEND with DE '
+              'uninitialised; .CHKEND measures the name as DE - FNAMBUF, so a '
+              'bare S2ED LDIR\'d a garbage length to a garbage address and '
+              'came up black with only the cursor.  Every other case names a '
+              'document, which is why it shipped (8ff65f2, found 2026-10-05)')
+
+    # The colours are checked against a theme named here, never against the
+    # role bytes read back from RAM: the defect's runaway LDIR lands on
+    # VCOLTXT..VCOLSHDW, so "the status row wears VCOLSTAT" stays true while
+    # both have been zeroed (measured: status row #00, roles all #00).
+    THEME = 'msx'
+
+    def fixture(self, ctx, variant=None):
+        return None                     # AUTOEXEC.BAT runs a bare "S2ED"
+
+    def config(self, ctx, variant=None):
+        return self.cfg + 'THEME=%s\n' % self.THEME.upper()
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram='patcol')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        dump = run.blob('boot', 'patcol')
+        if dump is None:
+            return [Check('S2-33/dump', False, 'no VRAM dump')]
+        pat, col = dump[:0x2000], dump[0x2000:]
+        checks = []
+        fname = asciiz(run, 'boot', 'FILENAME')
+        checks.append(Check('S2-33/no-name', fname == '',
+                            'FILENAME is empty' if fname == '' else
+                            'FILENAME = %r' % fname))
+        # No name and a clean buffer: the bar is the titles alone.
+        want_menu = pattern.compose_row(font(ctx), menubar(ctx))
+        dif_menu = pattern.differing_columns(
+            pattern.row_of(pat, pattern.MNUROW), want_menu)
+        checks.append(Check('S2-33/menubar', not dif_menu,
+                            'row 0 matches the menu titles'
+                            if not dif_menu else
+                            'menubar cols differ: %s' % dif_menu[:6]))
+        bad = pattern.mismatched_rows(
+            pat, font(ctx), [''], run.var('boot', 'TOPLINE'),
+            cursor=(pattern.TXRFIRST + run.var('boot', 'CURY'),
+                    run.var('boot', 'CURX')))
+        checks.append(Check('S2-33/blank-doc', not bad,
+                            '%d text rows blank' % pattern.ROWSVIS
+                            if not bad else 'rows differ: %s' % bad[:6]))
+        want = S210Theme.THEMES[self.THEME]
+        _, mcol = pattern.uniform_colour_cells(col, pattern.MNUROW)
+        checks.append(Check('S2-33/menu-colour', mcol == {want[1]},
+                            'row 0 colours %s (expected #%02X)'
+                            % (sorted('#%02X' % c for c in mcol), want[1])))
+        _, colours = pattern.uniform_colour_cells(col, pattern.STBROW)
+        inked = sum(1 for b in pattern.row_of(pat, pattern.STBROW) if b)
+        checks.append(Check('S2-33/status',
+                            colours == {want[7]} and inked > 0,
+                            'status row painted (%d pattern bytes, colours %s, '
+                            'expected #%02X)'
+                            % (inked, sorted('#%02X' % c for c in colours),
+                               want[7])))
+        roles = run.var('boot', 'VCOLTXT')
+        checks.append(Check('S2-33/roles', roles == want,
+                            'the twelve role bytes still hold the theme'
+                            if roles == want else
+                            'roles = %s (expected %s)'
+                            % (roles, ['#%02X' % b for b in want])))
+        checks.append(Check('S2-33/totlines', run.var('boot', 'TOTLINES') == 1,
+                            'TOTLINES = %s (expected 1)'
+                            % run.var('boot', 'TOTLINES')))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -3358,7 +3439,8 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S222FindCurrentLine(), S223HomePath(),
          S224ShippedDisk(), S225NewDocument(), S226LongPath(),
          S227DialogKeys(), S228BrowseOpen(), S229BrowseMany(),
-         S230BrowseSaveAs(), S231Settings(), S232DiskError()]
+         S230BrowseSaveAs(), S231Settings(), S232DiskError(),
+         S233BareLaunch()]
 
 
 def run(ctx, cases=None):

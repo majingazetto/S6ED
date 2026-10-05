@@ -1961,6 +1961,50 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['G12/vdp-palette'],
     },
     {
+        'name': 'g12-r8',
+        'why': 'RSTPAL restores the palette but not R#8, so S6ED leaves DOS '
+               'with sprites off and TP=1 (CHGMOD does not touch R#8)',
+        'file': 'S6ED.Z8A',
+        'old': """                LD      A, (SAVRG8)
+                LD      (RG8SAV), A
+                OUT     (VDPCT), A
+                LD      A, #88          ; REG 8 | #80
+                OUT     (VDPCT), A""",
+        'new': """                ; MUTATION: R#8 LEFT AS SCRINIT SET IT""",
+        'filter': 'G12',
+        'expect': ['G12/restored-r8'],
+    },
+    {
+        'name': 's2-drwmenu-de',
+        'why': 'the defect as it shipped: DE loaded only on the Untitled '
+               'branch, so a bare S2ED measured the name from a garbage DE',
+        'target': 'S2ED',
+        'file': 'UI.Z8A',
+        'old': """                LD      DE, FNAMBUF
+                LD      A, (FILENAME)
+                OR      A
+                JR      NZ, .HAVEFN
+                ; NO FILENAME: IF MODIFIED, USE "Untitled"
+                LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .CHKEND      ; EMPTY FNAMBUF, LENGTH 0""",
+        'new': """                LD      A, (FILENAME)
+                OR      A
+                JR      NZ, .HAVEFN
+                ; NO FILENAME: IF MODIFIED, USE "Untitled"
+                LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .CHKEND      ; MUTATION: DE NOT YET LOADED
+                LD      DE, FNAMBUF""",
+        'filter': 'S2-33',
+        # A garbage LDIR has no single observable.  With CLOCK=0 DE is
+        # STATBUF + 23, so ~248 bytes land from STATBUF + 71 and zero the
+        # colour roles; with the clock on DE is two ASCII digits and the
+        # damage depends on the minute -- the user's black screen.
+        'expect_any': ['S2-33/roles', 'S2-33/status', 'S2-33/menubar',
+                       'S2-33-bare-launch'],
+    },
+    {
         'name': 'h1-help',
         'why': 'the /H switch is missing from SWTTBL: S6ED /H boots instead '
                'of printing help and exiting in text mode',

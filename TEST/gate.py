@@ -817,7 +817,9 @@ class G12ScreenRestore(Case):
     name = 'G12-screen-restore'
     desc = 'screen mode, width, text colors and VDP palette match pre-entry state upon exit'
     origin = ('exit to DOS left Screen 6 palette active, corrupting text colors 0-3, '
-              'and did not formally restore screen mode, line width or text colors')
+              'and did not formally restore screen mode, line width or text colors; '
+              'CHGMOD does not restore R#8 either, so DOS kept SPD=1 (no sprites) '
+              'and TP=1 for whatever ran next')
 
     DEFPLT = [
         0x00, 0x00, 0x00, 0x00, 0x11, 0x06, 0x33, 0x07,
@@ -832,9 +834,9 @@ class G12ScreenRestore(Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         # 1. Capture running state inside S6ED (Screen 6 active, modified palette 0..3)
-        t.snap('boot', palette=True)
+        t.snap('boot', palette=True, vdpregs=True)
         # 2. Arm exit snap at TERM.TERMDON so breakpoint is active when TERM runs
-        t.snap('exit', palette=True, at='TERM.TERMDON')
+        t.snap('exit', palette=True, vdpregs=True, at='TERM.TERMDON')
         # 3. Press Ctrl+Q: ACTQUIT now asks first (DOQIT dialog); 'Y' confirms
         #    and only then does ACTQUIT -> TERM run
         t.press('Q', mods=['CTRL'])
@@ -891,6 +893,25 @@ class G12ScreenRestore(Case):
                             'VDP palette restored to standard MSX2 palette (32 bytes)'
                             if exit_pal == self.DEFPLT else
                             'VDP palette mismatch at exit: %r' % exit_pal[:8]))
+
+        # R#8: SCRINIT ORs in SPD|VR|TP, and CHGMOD leaves R#8 alone on the
+        # way out, so only RSTPAL can hand DOS its own value back.  Read the
+        # VDP itself, not RG8SAV, which is just the BIOS's copy.
+        entry = run.var('exit', 'SAVRG8')
+        boot_vdp = run.blob('boot', 'vdp')
+        exit_vdp = run.blob('exit', 'vdp')
+        boot_r8 = boot_vdp[8] if boot_vdp else None
+        exit_r8 = exit_vdp[8] if exit_vdp else None
+        checks.append(Check('G12/r8-changed',
+                            entry is not None and boot_r8 is not None and
+                            boot_r8 != entry,
+                            'R#8 = #%02X inside the editor, entry value #%02X'
+                            % (boot_r8 or 0, entry or 0)))
+        checks.append(Check('G12/restored-r8',
+                            exit_r8 is not None and exit_r8 == entry and
+                            run.var('exit', 'RG8SAV') == entry,
+                            'R#8 = %s, RG8SAV = %s at exit (entry value %s)'
+                            % (exit_r8, run.var('exit', 'RG8SAV'), entry)))
 
         return checks
 

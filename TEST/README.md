@@ -116,6 +116,7 @@ is caught only by `S2-8/matches-document`. Measured, 2026-09-21.
 | `S2-25-new-document` | `H30-new-document` on S2ED, whose `DONEW` / `DOASK` live in `S2/WINDOW.Z8A` |
 | `S2-26-long-path` | `H33-long-path` on S2ED, row 0 compared with the computed bar |
 | `S2-27-dialog-keys` | 46 keys into the File menu, none dropped: the `WINPOLL` / `CHGET` flag defect on S2ED |
+| `S2-33-bare-launch` | `S2ED` with no argument: menu bar, blank document and status bar, colours against the named theme (not the RAM roles, which the defect zeroes) |
 
 Two traps this suite met while being built, both worth knowing before adding a
 case:
@@ -173,7 +174,7 @@ Every case names the defect it was derived from in its `origin` field.
 | G9 | insert and join round-trip through `DIRBANK` | `DIRBANK` destroying `HL` |
 | G10 | Enter under AUTOALIGN writes no trailing spaces | `.TRUNC` stretching the head |
 | G11 | batch insert and per-character insert agree | `EDINSRUN` rewrite |
-| G12 | screen mode, width, colors and VDP palette restored at exit | palette and text mode corruption in DOS |
+| G12 | screen mode, width, colors, VDP palette and R#8 restored at exit | palette and text mode corruption in DOS; sprites left off for the next program |
 | B2 | four VRAM font tables match `RES/FONTS.BIN` | font loading from `S6ED.FNT` |
 | B3 | fallback to BIOS ROM charset when `S6ED.FNT` missing | missing font asset degradation |
 | F1 | vertical scroll limits and render purity | `YMMM` scroll blit vs `REDRAW` |

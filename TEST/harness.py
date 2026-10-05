@@ -48,7 +48,8 @@ DEFAULT_VARS = [
     ('SHOWCLK', 1), ('CLKMIN', 1), ('KMAPID', 1), ('VIMODE', 1),
     ('FNTOK', 1), ('FNTROMD', 1), ('BLNKPH', 1), ('BLNKCNT', 1),
     ('SAVSCRMD', 1), ('SAVL40', 1), ('SAVLLEN', 1),
-    ('SAVFORC', 1), ('SAVBAKC', 1), ('SAVBDRC', 1),
+    ('SAVFORC', 1), ('SAVBAKC', 1), ('SAVBDRC', 1), ('SAVRG8', 1),
+    ('RG8SAV', 1),
     ('SCRMOD', 1), ('LINLEN', 1), ('LINL40', 1),
     ('FORCLR', 1), ('BAKCLR', 1), ('BDRCLR', 1),
     ('KANAST', 1), ('KANAMOD', 1), ('PALDIRT', 1),
@@ -344,6 +345,10 @@ class Session(object):
         a('    p "KV %s SEGTBL $t"' % label)
         if spec.get('palette'):
             a('    dump "VDP palette" 0 32 %s.pal' % label)
+        if spec.get('vdpregs'):
+            # R#0..R#23 as the VDP holds them -- RG0SAV..RG8SAV are only the
+            # BIOS's copies and say nothing about what was actually written.
+            a('    dump "VDP regs" 0 24 %s.vdp' % label)
         if spec['image']:
             # The whole emitted image: nothing may ever write into it.
             a('    dump memory 256 %d %s.image' % (sym['VARS'] - 0x100, label))
@@ -472,8 +477,8 @@ class Session(object):
                 run.snaps.setdefault(label, {})[name] = [
                     int(v) for v in value.split()]
         for (_, label, spec) in timeline.snaps:
-            for kind in ('vram', 'menu', 'screen', 'dir', 'image', 'pal', 'font',
-                         'text', 'pat', 'col', 'patcol'):
+            for kind in ('vram', 'menu', 'screen', 'dir', 'image', 'pal',
+                         'vdp', 'font', 'text', 'pat', 'col', 'patcol'):
                 path = os.path.join(self.dir, '%s.%s' % (label, kind))
                 if os.path.exists(path):
                     run.files[(label, kind)] = path
