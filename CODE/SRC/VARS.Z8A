@@ -23,6 +23,7 @@ SAVLLEN         DEFB    0               ; ORIGINAL CURRENT WIDTH (LINLEN)
 SAVFORC         DEFB    0               ; ORIGINAL FOREGROUND COLOR (FORCLR)
 SAVBAKC         DEFB    0               ; ORIGINAL BACKGROUND COLOR (BAKCLR)
 SAVBDRC         DEFB    0               ; ORIGINAL BORDER COLOR (BDRCLR)
+SAVRG8          DEFB    0               ; ORIGINAL VDP REG 8 (RG8SAV)
 
 
 ; --- MAPPER JUMP TABLE ENTRIES ----------------------------------------

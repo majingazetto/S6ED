@@ -357,7 +357,7 @@ SETPAL          DI
 
 
 ; - RSTPAL -----------------------------
-; - RESTORE STANDARD 16-COLOR V9938 PALETTE
+; - RESTORE STANDARD 16-COLOR V9938 PALETTE AND THE ENTRY R#8
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: A, BC, HL
@@ -372,6 +372,13 @@ RSTPAL          DI
                 LD      C, VDPPAL       ; PORT #9A
                 LD      HL, DEFPLT
                 OTIR
+                ; R#8: CHGMOD DOES NOT RESTORE IT, SO WITHOUT THIS DOS KEEPS
+                ; SPD=1 (NO SPRITES) AND TP=1 FOR WHATEVER RUNS NEXT
+                LD      A, (SAVRG8)
+                LD      (RG8SAV), A
+                OUT     (VDPCT), A
+                LD      A, #88          ; REG 8 | #80
+                OUT     (VDPCT), A
                 EI
                 RET
 
@@ -400,8 +407,9 @@ SCRINIT         LD      A, 6
                 LD      IX, WRTVDP_B
                 CALL    BIOSCALL
 
-                ; SET MODE REG 2 (R#8): DISABLE SPRITES (SPD=1), TP=1, VR=1 VIA RG8SAV
+                ; PRESERVE ORIGINAL R#8 AND CONFIGURE FOR SCREEN 6
                 LD      A, (RG8SAV)
+                LD      (SAVRG8), A
                 OR      #2A             ; SPD=1, VR=1, TP=1
                 LD      B, A
                 LD      C, 8
