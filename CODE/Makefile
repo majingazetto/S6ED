@@ -114,15 +114,16 @@ dsk: $(DSKFILE)
 # The S6ED disk carries S2ED too.  An MSX2 runs both editors, so one image
 # lets them be compared side by side without swapping disks: boot goes to
 # S6ED through AUTOEXEC.BAT, and `S2ED TEST_S2.TXT` starts the other.
+MANUAL			= ../DOC/SXED.TXT
 DSKTOOLS		= $(OUTPUT) $(DATFILE) $(FNTFILE) S6ED.CFG \
 			  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2)
-DSKCONT			= $(DSKTOOLS) TEST.TXT TEST_S2.TXT LOCAL_S6.CFG LOCAL_S2.CFG AUTOEXEC.BAT
+DSKCONT			= $(DSKTOOLS) $(MANUAL) TEST.TXT TEST_S2.TXT LOCAL_S6.CFG LOCAL_S2.CFG AUTOEXEC.BAT
 
 $(DSKFILE): $(DSKCONT)
 	@cp $(DSKBASE) $(DSKFILE)
 	@$(DSKFAT) $(DSKFILE) add . AUTOEXEC.BAT
 	@$(DSKFAT) $(DSKFILE) add TOOLS $(DSKTOOLS)
-	@$(DSKFAT) $(DSKFILE) add DEV TEST.TXT TEST_S2.TXT LOCAL_S6.CFG=S6ED.CFG LOCAL_S2.CFG=S2ED.CFG
+	@$(DSKFAT) $(DSKFILE) add DEV $(MANUAL)=SXED.TXT TEST.TXT TEST_S2.TXT LOCAL_S6.CFG=S6ED.CFG LOCAL_S2.CFG=S2ED.CFG
 
 # -	 S2 Targets --------------------------------------------------------------
 
@@ -151,11 +152,11 @@ DSKCONT_S2		= $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2)
 # Same layout as the S6ED disk.  The S2 sample document talks about 64 columns
 # and Screen 2, so it goes in as \DEV\TEST.TXT, and the S2 AUTOEXEC as the
 # root AUTOEXEC.BAT: dskfat takes the on-disk name after the '='.
-$(DSKFILE_S2): $(DSKCONT_S2) TEST_S2.TXT AUTOEXEC_S2.BAT LOCAL_S2.CFG
+$(DSKFILE_S2): $(DSKCONT_S2) $(MANUAL) TEST_S2.TXT AUTOEXEC_S2.BAT LOCAL_S2.CFG
 	@cp $(DSKBASE) $(DSKFILE_S2)
 	@$(DSKFAT) $(DSKFILE_S2) add . AUTOEXEC_S2.BAT=AUTOEXEC.BAT
 	@$(DSKFAT) $(DSKFILE_S2) add TOOLS $(DSKCONT_S2)
-	@$(DSKFAT) $(DSKFILE_S2) add DEV TEST_S2.TXT=TEST.TXT LOCAL_S2.CFG=S2ED.CFG
+	@$(DSKFAT) $(DSKFILE_S2) add DEV $(MANUAL)=SXED.TXT TEST_S2.TXT=TEST.TXT LOCAL_S2.CFG=S2ED.CFG
 
 # -	 Build Target ------------------------------------------------------------
 
