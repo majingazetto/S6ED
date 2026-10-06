@@ -59,11 +59,32 @@ UNDOCLS         XOR     A
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL
 ; -
+; - A RECORD HOLDS TEXTCOLS CHARACTERS (UNDOPAK) BUT A LINE REACHES MAXCOLS.
+; - A LINE LONGER THAN THE RECORD CANNOT BE RECORDED, AND THE RING STORES
+; - LINE NUMBERS, SO THE HISTORY IS DROPPED INSTEAD (UNDOINIT) -- AND WITH
+; - IT THE REST OF THAT USER ACTION'S GROUP, OR ITS LATER RECORDS WOULD BE
+; - LEFT CHAINED TO NOTHING. RESTORING A TRUNCATED IMAGE KEPT THE TAIL OF
+; - THE EDITED LINE (OR OF WHATEVER WORKBUF LAST HELD) PAST TEXTCOLS.
+; -
 
 UNDOREC         LD      C, A            ; C = OP_TYPE
                 LD      A, (UNDOHLD)
                 OR      A
                 RET     NZ              ; SUPPRESSED (DURING REDO)
+
+                LD      HL, UNDODRP
+                BIT     7, C            ; UNDOF_CHN
+                JR      NZ, .INGRP
+                LD      (HL), 0         ; A NEW USER ACTION: NOTHING DROPPED YET
+.INGRP          LD      A, (WORKBUF)
+                CP      TEXTCOLS + 1
+                JR      NC, .DROP       ; LONGER THAN A RECORD HOLDS
+                LD      A, (HL)
+                OR      A
+                JR      Z, .KEEP
+.DROP           LD      (HL), 1
+                JP      UNDOINIT
+.KEEP
 
                 ; 0. A NEW EDIT ENDS THE REDO CHAIN HERE: CUT THE HEAD'S LINK
                 ;    NOW, BEFORE EVICTION WALKS IT. LEFT IN PLACE, EVICTING THE
@@ -412,8 +433,15 @@ UNDOSWP         ; 1. SET TARGET DOCLINE
                 LD      HL, (DOCLINE)
                 CALL    LINEWRT
 
-                ; 6. PACK DISPLACED LINE (WORKBUF2) BACK INTO UNDO PAYLOAD (IX + 10)
-                PUSH    IX
+                ; 6. PACK DISPLACED LINE (WORKBUF2) BACK INTO UNDO PAYLOAD (IX + 10).
+                ;    UNDOREC NEVER RECORDS A LINE LONGER THAN TEXTCOLS, BUT THE
+                ;    EDIT MAY HAVE MADE IT LONGER: THEN THE UNDO IS EXACT AND
+                ;    ONLY ITS REDO IS LOST (ACTUNDO DROPS IT AT THE END).
+                LD      A, (WORKBUF2)
+                CP      TEXTCOLS + 1
+                JR      C, .PACK
+                LD      (UNDONRD), A    ; NON-ZERO: NO REDO FOR THIS ACTION
+.PACK           PUSH    IX
                 POP     DE
                 LD      HL, UNDOHDR_SZ
                 ADD     HL, DE
@@ -456,6 +484,8 @@ ACTUNDO         CALL    UNDOCLS
                 LD      A, H
                 OR      L
                 RET     Z               ; NOTHING TO UNDO
+                XOR     A
+                LD      (UNDONRD), A
 
 .UNLOOP         PUSH    HL
                 POP     IX
@@ -463,14 +493,20 @@ ACTUNDO         CALL    UNDOCLS
                 PUSH    AF              ; THE RECORD'S CHAIN FLAG
                 CALL    UNDODSP
                 POP     BC              ; B = OP BYTE; POP KEEPS THE CARRY
-                JP      C, UNDOPNT      ; REFUSED: STOP, PAINT WHAT WAS DONE
+                JR      C, .FINISH      ; REFUSED: STOP, PAINT WHAT WAS DONE
                 LD      A, B
                 AND     UNDOF_CHN
-                JP      Z, UNDOPNT      ; THE GROUP'S FIRST RECORD: DONE
+                JR      Z, .FINISH      ; THE GROUP'S FIRST RECORD: DONE
                 LD      HL, (UNDOPTR)
                 LD      A, H
                 OR      L
                 JR      NZ, .UNLOOP
+
+.FINISH         LD      A, (UNDONRD)    ; A LINE TOO LONG TO KEEP CAME OUT:
+                OR      A               ; THIS ACTION CANNOT BE REDONE
+                JP      Z, UNDOPNT
+                LD      HL, 0
+                LD      (REDOPTR), HL
                 JP      UNDOPNT
 
 

@@ -1323,6 +1323,7 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
                 OR      A
                 JP      Z, .ERNOF
                 CALL    FILESAVE
+                RET     C               ; NOT SAVED: STAY, THE STATUS BAR SAYS WHY
                 JP      TERM
 
 .CMDX           INC     HL

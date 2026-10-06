@@ -276,6 +276,7 @@ STTSHD          DEFB    0               ; SETTINGS SHADOW (0=OFF, 1=ON)
 
 FILEHAND        DEFB    0               ; OPEN FILE HANDLE
 SAVHAND         DEFB    0               ; FILESAVE: HANDLE OF THE FILE BEING WRITTEN
+DSKWERR         DEFB    0               ; NON-ZERO: A DSKWRITE FAILED SINCE DSKCREAT
 WASCR           DEFB    0               ; 1 = LAST CHAR PROCESSED WAS CR
 LOADERR         DEFB    0               ; 1 = FILELOAD FAILED DUE TO CAPACITY/OOM
 
@@ -454,6 +455,8 @@ REDOPTR         DEFW    0               ; POINTER TO REDO TRANSACTION (0 = NONE)
 UNDOTYP         DEFB    0               ; 1 = COALESCING TEXT INPUT IN PROGRESS
 UNDOLIN         DEFW    0               ; DOCLINE OF ACTIVE COALESCED TRANSACTION
 UNDOHLD         DEFB    0               ; NON-ZERO: SUPPRESS UNDO RECORDING (REDO ACTIVE)
+UNDODRP         DEFB    0               ; NON-ZERO: THIS GROUP WAS DROPPED (A LINE TOO LONG)
+UNDONRD         DEFB    0               ; NON-ZERO: THE UNDO JUST DONE CANNOT BE REDONE
 
 
 ; --- VDP COMMAND BLOCK          ----------------------------------------

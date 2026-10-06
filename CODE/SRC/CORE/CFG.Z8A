@@ -28,6 +28,7 @@ CFGLOAD         LD      HL, (CFGFNP)
                 LD      HL, CLIPMAX
                 LD      DE, CLIPBUF
                 CALL    DSKREAD         ; HL = BYTES READ (0 = EOF)
+                JR      C, .EOF         ; .EOF, OR AN ERROR: HL IS NO COUNT
                 LD      A, H
                 OR      L
                 JR      Z, .EOF
@@ -943,11 +944,9 @@ CFGSAVE         LD      A, (CFGLOC)
                 ENDIF
                 CALL    .WRLIST
 
-                ; CLOSE FILE
+                ; CLOSE FILE: CY = 1 IF IT, OR ANY WRITE ABOVE, FAILED
                 LD      A, (CFGHAND)
-                CALL    DSKCLOSE
-                OR      A
-                RET
+                JP      DSKCLSW
 
 .WRLIST         ; IN: DE = KEY STRING, HL = VALUE TABLE, A = INDEX
                 ADD     A, A

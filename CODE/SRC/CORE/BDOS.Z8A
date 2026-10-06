@@ -410,7 +410,9 @@ DCREATE         EX      DE,HL
 ; -     A: FILEHANDLE
 ; -
 
-DSKCREAT       LD      A,(DOS2)
+DSKCREAT       XOR     A
+                LD      (DSKWERR),A     ; NO WRITE TO THIS FILE HAS FAILED YET
+                LD      A,(DOS2)
                 AND     A
                 JP      NZ,DCREATE
 
@@ -513,11 +515,33 @@ DSKSEEK         LD      B,A
 DSKWRITE        LD      B,A
                 LD      A,(DOS2)
                 AND     A
-                JP      NZ,DWRITE
-                PUSH    HL
+                JR      Z,.DOS1
+                CALL    DWRITE
+                RET     NC
+                LD      (DSKWERR),A     ; REMEMBERED UNTIL DSKCLSW
+                RET                     ; CY = 1, A = THE DOS ERROR
+.DOS1           PUSH    HL
                 CALL    SETDMA
                 POP     HL
                 JP      WRBLK
+
+
+; - DSKCLSW ------------
+; - CLOSE A FILE BEING WRITTEN, AND SAY WHETHER ALL OF IT GOT THERE
+; - A: #F
+; - OUTPUT:
+; -     CY = 1: THE CLOSE FAILED, OR SOME DSKWRITE SINCE DSKCREAT DID
+; -
+; - A CALLER WITH MANY SMALL WRITES (CFGSAVE, IN THE FEATURE CONTAINER
+; - WHERE S2ED HAS NO BYTES TO SPARE) NEED NOT TEST EACH ONE: A FULL OR
+; - FAILING DISK IS REPORTED HERE, ONCE, INSTEAD OF AS "[SAVED]".
+; -
+
+DSKCLSW         CALL    DSKCLOSE
+                RET     C
+                LD      A,(DSKWERR)
+                ADD     A,#FF           ; CY = 1 IF A WRITE FAILED
+                RET
 
 
 ; --- PROGRAM HOME DIRECTORY            ----------------------------------------

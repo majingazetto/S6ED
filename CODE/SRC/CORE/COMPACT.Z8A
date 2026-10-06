@@ -15,9 +15,16 @@
 ; - COMPACT A 16KB TEXT SEGMENT IN PLACE
 ; - IN:  A = SEGMENT NUMBER TO COMPACT
 ; - OUT: CY = 0 SUCCESS
-; - CLOBBERS: ALL
+; - CLOBBERS: AF, BC, DE, HL (IX AND IY ARE KEPT)
 ; -
-SEGCOMP         LD      (CMPSEG), A
+; - IX AND IY ARE SAVED BECAUSE THE "Compacting..." MESSAGE GOES THROUGH
+; - DRWSTAT, WHICH ZEROES IX (B2D16) AND ON S2ED COMPOSES WITH IX AND IY,
+; - AND SEGCOMP RUNS INSIDE NEWREC: UNDOSWP / UNDORST HOLD THEIR UNDO
+; - RECORD IN IX ACROSS IT. WITH IX = 0 THEY WROTE THE RECORD OVER PAGE 0.
+; -
+SEGCOMP         PUSH    IX
+                PUSH    IY
+                LD      (CMPSEG), A
 
                 ; DISPLAY "Compacting..." ON STATUS BAR
                 LD      HL, .STRCMP
@@ -129,18 +136,21 @@ SEGCOMP         LD      (CMPSEG), A
                 LD      HL, (CMPDST)
                 LD      (LINEOFF), HL
 
-                ; IF FREE LIST HEAD IS IN THIS SEGMENT, DRAIN IT
-                LD      A, (CMPSEG)
-                LD      HL, FREEHD
-                CP      (HL)
-                JR      NZ, .NOTAPP2
+.NOTAPP2        ; DROP THE FREE LIST. ITS RECORDS ARE TOMBSTONES, SO THIS
+                ; SEGMENT'S HAVE JUST BEEN SQUEEZED OUT, AND AN ENTRY ANYWHERE
+                ; IN THE LIST MAY POINT INTO IT -- DRAINING ONLY A HEAD THAT
+                ; LIVED HERE LEFT DEEPER ENTRIES ON SLID RECORDS. THE LIST IS
+                ; ONLY AN OPTIMISATION: RECORDS IN OTHER SEGMENTS STAY
+                ; TOMBSTONES AND ARE RECLAIMED IF THEIR SEGMENT IS COMPACTED.
                 LD      A, FREENIL
                 LD      (FREEHD), A
 
-.NOTAPP2        ; CLEAR STATUS MESSAGE AND REDRAW
+                ; CLEAR STATUS MESSAGE AND REDRAW
                 XOR     A
                 LD      (STATMSG), A
                 CALL    DRWSTAT
+                POP     IY
+                POP     IX
                 OR      A               ; CY = 0: SUCCESS
                 RET
 

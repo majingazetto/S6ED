@@ -452,32 +452,39 @@ LINEWRT         PUSH    HL              ; SAVE LINE NUMBER
                 JR      C, .INPLAC      ; L < C: FITS IN PLACE
                 JR      Z, .INPLAC      ; L == C: FITS IN PLACE
 
-                ; L > C: CANNOT FIT IN PLACE, MUST RELOCATE!
-                ; 1. TOMBSTONE OLD RECORD: SET RECLEN = TOMBVAL (#FFFF)
-                EX      DE, HL          ; HL = RECORD BASE
-                INC     HL
-                INC     HL              ; HL = RECORD BASE + RECLEN
-                LD      (HL), #FF
-                INC     HL
-                LD      (HL), #FF
-
-                ; 2. ALLOCATE NEW RECORD WITH CAPACITY FOR WORKBUF[0]
+                ; L > C: CANNOT FIT IN PLACE, MUST RELOCATE. THE NEW RECORD IS
+                ; RESERVED AND FILLED FIRST, WHILE THE OLD ONE IS STILL ALIVE:
+                ; IT USED TO BE TOMBSTONED BEFORE NEWREC, SO AN OOM LEFT THE
+                ; DIRECTORY ON A DEAD RECORD (READ BACK AS 255 BYTES OF ITS
+                ; NEIGHBOURS) AND A COMPACTION INSIDE NEWREC SLID ANOTHER LINE'S
+                ; RECORD UNDER IT. NOW AN OOM CHANGES NOTHING.
+                ; 1. ALLOCATE THE NEW RECORD WITH CAPACITY FOR WORKBUF[0]
                 LD      A, (WORKBUF)
                 LD      C, A            ; C = REQUIRED CAPACITY
                 CALL    NEWREC
-                JR      C, .OOM         ; CY = 1: OUT OF MEMORY
+                JR      C, .OOM         ; CY = 1: OUT OF MEMORY, NOTHING CHANGED
 
-                ; NEWREC RETURNED: A = NEW SEG, DE = NEW OFFSET
-                ; 3. WRITE WORKBUF TO NEW RECORD VIA PUTREC
+                ; 2. WRITE WORKBUF TO IT
                 PUSH    AF
-                PUSH    DE
+                PUSH    DE              ; [SP] = NEW OFFSET, NEW SEG, LINE
                 LD      HL, WORKBUF
                 CALL    PUTREC          ; COPIES WORKBUF TEXT + ATTRS TO (A, DE)
+
+                ; 3. RETIRE THE OLD RECORD, LOOKED UP AGAIN: A COMPACTION IN
+                ;    NEWREC MAY HAVE SLID IT DOWN (DIRUPDOF KEPT ITS ENTRY)
+                LD      HL, 4
+                ADD     HL, SP
+                LD      A, (HL)
+                INC     HL
+                LD      H, (HL)
+                LD      L, A            ; HL = LINE NUMBER
+                CALL    DIRREAD         ; A = SEG, DE = OFFSET OF THE OLD RECORD
+                CALL    RECKILL
+
+                ; 4. POINT THE LINE AT THE NEW RECORD
                 POP     DE              ; DE = NEW OFFSET
                 POP     AF              ; A = NEW SEG
-
-                ; 4. UPDATE DIRECTORY ENTRY FOR LINE
-                POP     HL              ; RESTORE LINE NUMBER
+                POP     HL              ; HL = LINE NUMBER
                 CALL    DIRWRITE        ; WRITE (A, DE) AT LINE HL
                 OR      A               ; CY = 0: SUCCESS
                 RET
@@ -593,8 +600,8 @@ FREEPSH         PUSH    AF
                 CALL    RECBANK
                 POP     DE
                 PUSH    DE
-                LD      HL, TXPAGE
-                ADD     HL, DE          ; HL = THE RECORD BEING FREED
+                LD      HL, TXPAGE + RECHDR_SZ
+                ADD     HL, DE          ; HL = THE FREED RECORD'S PAYLOAD
                 LD      A, (FREEHD)
                 LD      (HL), A         ; LINK: SEGMENT
                 INC     HL
@@ -625,8 +632,8 @@ FREEPOP         LD      A, (FREEHD)
 
                 CALL    RECBANK
                 LD      DE, (FREEOF)    ; DE = THE RECORD WE ARE HANDING OUT
-                LD      HL, TXPAGE
-                ADD     HL, DE
+                LD      HL, TXPAGE + RECHDR_SZ
+                ADD     HL, DE          ; HL = ITS PAYLOAD, WHERE THE LINK IS
                 LD      A, (HL)
                 LD      (FREEHD), A     ; LINK: SEGMENT -> NEW HEAD
                 INC     HL
@@ -784,6 +791,45 @@ RECGET          ; 1. CHECK IF RECORD FITS IN APPSEG AT (LINEOFF)
                 RET
 
 
+; --- RECKILL                   ----------------------------------------
+
+; - RECKILL ----------------------------
+; - RETIRE A RECORD: TOMBSTONE IT, AND PUT A DEFAULT-SIZE ONE ON THE FREE LIST
+; - IN:  A = SEGMENT, DE = OFFSET
+; - OUT: NONE (PAGE 2 IS LEFT BANKED ON THAT SEGMENT)
+; - CLOBBERS: AF, BC, DE, HL
+; -
+; - THE HEADER STAYS WHOLE: RECCAP IS WHAT SEGCOMP SIZES THE RECORD BY AND
+; - RECLEN = #FFFF IS WHAT TELLS IT THE RECORD IS DEAD. FREEPSH KEEPS ITS
+; - LINK IN THE PAYLOAD FOR THAT REASON. ONLY A RECORD OF EXACTLY DEF_PAY
+; - (ALL 16 BITS OF RECCAP) GOES ON THE LIST, WHICH NEWREC HANDS OUT AS
+; - 36-BYTE RECORDS.
+; -
+
+RECKILL         PUSH    AF
+                PUSH    DE
+                CALL    RECBANK
+                POP     DE
+                LD      HL, TXPAGE
+                ADD     HL, DE          ; HL = RECORD BASE
+                LD      C, (HL)
+                INC     HL
+                LD      B, (HL)         ; BC = RECCAP
+                INC     HL
+                LD      (HL), #FF
+                INC     HL
+                LD      (HL), #FF       ; RECLEN = TOMBVAL
+                LD      A, B
+                OR      A
+                JR      NZ, .KEEP       ; Z ONLY FOR RECCAP == DEF_PAY
+                LD      A, C
+                CP      DEF_PAY
+.KEEP           POP     BC              ; B = SEGMENT (FLAGS UNTOUCHED)
+                LD      A, B
+                JP      Z, FREEPSH      ; A = SEGMENT, DE = OFFSET
+                RET
+
+
 ; --- LINEINS                   ----------------------------------------
 
 ; - LINEINS ----------
@@ -834,29 +880,9 @@ LINEINS         LD      DE, (TOTLINES)
 ; -
 LINEDEL         PUSH    HL              ; SAVE N
                 CALL    DIRREAD         ; A = SEGMENT, DE = OFFSET OF RECORD
-                CALL    RECBANK         ; BANK RECORD SEGMENT INTO PAGE 2
+                CALL    RECKILL
 
-                ; CHECK RECCAP AT TXPAGE + DE
-                LD      HL, TXPAGE
-                ADD     HL, DE          ; HL = RECORD BASE
-                LD      A, (HL)         ; A = RECCAP LOW
-                LD      C, A            ; C = RECCAP LOW
-
-                ; TOMBSTONE RECORD: SET RECLEN = TOMBVAL (#FFFF)
-                INC     HL
-                INC     HL              ; HL = TXPAGE + DE + RECLEN
-                LD      (HL), #FF
-                INC     HL
-                LD      (HL), #FF
-
-                ; IF RECCAP == DEF_PAY (32), PUSH ONTO FREE LIST FOR REUSE
-                LD      A, C
-                CP      DEF_PAY
-                JR      NZ, .NOFREE
-                LD      A, (TXSEG)      ; A = SEGMENT
-                CALL    FREEPSH
-
-.NOFREE         POP     HL              ; RESTORE N
+                POP     HL              ; RESTORE N
                 PUSH    HL              ; SAVE N
 
                 ; SHIFT DIRECTORY ENTRIES N+1..TOTLINES-1 DOWN ONE SLOT

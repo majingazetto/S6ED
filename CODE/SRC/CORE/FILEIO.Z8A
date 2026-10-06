@@ -198,7 +198,11 @@ LOADDOC         XOR     A
                 LD      HL, IOBSIZ
                 LD      DE, IOBUF
                 CALL    DSKREAD         ; HL = BYTES READ
-                LD      A, H
+                JR      NC, .GOT
+                CP      EEOF            ; THE BDOS WRAPPER SETS CY ON .EOF TOO
+                JP      NZ, .RDERR      ; A REAL ERROR: HL IS NOT A COUNT
+                LD      HL, 0
+.GOT            LD      A, H
                 OR      L
                 JP      Z, .EOF
                 ; NO PAGE 2 STATE IS LIVE BETWEEN BLOCKS: STORLINE BANKS ITS
@@ -321,15 +325,30 @@ LOADDOC         XOR     A
                 POP     HL
                 POP     BC
 .OOMNL          ; ROLLBACK DUE TO CAPACITY EXHAUSTION DURING LOAD
-                LD      A, (FILEHAND)
+                CALL    .ROLLBK
+                LD      A, 1
+                LD      (LOADERR), A    ; SIGNAL LOAD ERROR: TOO LARGE
+                SCF                     ; RETURN ERROR
+                RET
+
+.RDERR          ; A DISK ERROR HALFWAY: WHAT WAS READ IS NOT THE FILE. IT USED
+                ; TO BE KEPT -- THE ABORT HANDLER LEAVES A KERNEL WORD IN HL,
+                ; READ AS A BYTE COUNT -- WITH FILENAME SET, SO CTRL+S WROTE
+                ; THE GARBAGE OVER THE FILE. ROLLED BACK LIKE AN OOM, BUT
+                ; REPORTED AS THE CALLER REPORTS A FAILED OPEN (A = ERROR).
+                POP     DE              ; BALANCE .READBLK'S PUSH
+                PUSH    AF
+                CALL    .ROLLBK
+                POP     AF
+                SCF
+                RET
+
+.ROLLBK         LD      A, (FILEHAND)
                 CALL    DSKCLOSE
                 CALL    SEGTRIM         ; FREE ANY ALLOCATED MAPPER SEGMENTS
                 CALL    BUFRESET        ; RESET BUFFER TO 1 CLEAN EMPTY LINE
                 XOR     A
                 LD      (FILENAME), A   ; PROTECT DISK FILE AGAINST OVERWRITE
-                INC     A
-                LD      (LOADERR), A    ; SIGNAL LOAD ERROR
-                SCF                     ; RETURN ERROR
                 RET
 
 .EOF            POP     DE
@@ -547,7 +566,8 @@ FILESAVE        LD      HL, FILENAME
                 CALL    IOFLUSH         ; WHAT THE LAST BLOCK HOLDS
                 JR      C, .WRFAIL
                 LD      A, (SAVHAND)
-                CALL    DSKCLOSE
+                CALL    DSKCLSW
+                JR      C, .SVERR       ; THE CLOSE FAILED: NOT SAVED
                 
                 XOR     A
                 LD      (MODIFIED), A
@@ -562,7 +582,7 @@ FILESAVE        LD      HL, FILENAME
 .WRERR          POP     BC
 .WRFAIL         LD      A, (SAVHAND)
                 CALL    DSKCLOSE
-                LD      HL, STRSERR
+.SVERR          LD      HL, STRSERR
                 CALL    SETMSG
                 CALL    DRWSTAT
                 SCF
