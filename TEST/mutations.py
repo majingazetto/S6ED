@@ -2147,15 +2147,11 @@ SELTMPXB        EQU     SELTMPXB2""")],
     },
     {
         'name': 'load-progress',
-        'why': 'LOADDOC no longer counts lines into the status bar, so a long '
-               'load shows a frozen "Loading..." again',
+        'why': 'LOADDOC never advances the progress bar, so a long load '
+               'shows a frozen 0% again',
         'file': 'FILEIO.Z8A',
-        'old': """.STORCR         CALL    STORLINE
-                JR      C, .OOM
-                CALL    .PROG""",
-        'new': """.STORCR         CALL    STORLINE
-                JR      C, .OOM
-                NOP                     ; MUTATION: NO LOAD PROGRESS
+        'old': """                CALL    PRGADV          ; NO PAGE 2 STATE IS LIVE BETWEEN""",
+        'new': """                NOP                     ; MUTATION: THE BAR NEVER MOVES
                 NOP
                 NOP""",
         'filter': 'H40',
@@ -2165,12 +2161,8 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 's2-load-progress',
         'why': 'the same, measured on the S2 gate: the counter is CORE',
         'file': 'FILEIO.Z8A',
-        'old': """.STORCR         CALL    STORLINE
-                JR      C, .OOM
-                CALL    .PROG""",
-        'new': """.STORCR         CALL    STORLINE
-                JR      C, .OOM
-                NOP                     ; MUTATION: NO LOAD PROGRESS
+        'old': """                CALL    PRGADV          ; NO PAGE 2 STATE IS LIVE BETWEEN""",
+        'new': """                NOP                     ; MUTATION: THE BAR NEVER MOVES
                 NOP
                 NOP""",
         'filter': 'S2-35',

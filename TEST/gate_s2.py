@@ -3474,7 +3474,8 @@ class S234DatForeign(S2Case):
 
 class S235LoadProgress(S2Case):
     name = 'S2-35-load-progress'
-    desc = 'a load counts its lines on the status bar and leaves it clean'
+    desc = ('a load shows a progress bar over the file size on the status '
+            'bar, full at the end of the read, and leaves it clean')
     origin = '2026-10-06: a long load showed nothing and read as a hang'
     absolute = True
 
@@ -3490,11 +3491,13 @@ class S235LoadProgress(S2Case):
 
     def verify(self, ctx, runs):
         run = one(runs)
-        msg = asciiz(run, 'loaded', 'STATMSG')
+        raw = run.snaps.get('loaded', {}).get('STATMSG')
+        msg = bytes(raw).split(b'\0')[0] if raw is not None else None
+        want = b'Loading... ' + b'\xdb' * 10 + b' 100%'
         after = asciiz(run, 'boot', 'STATMSG')
         return [
-            Check('S2-35/progress', msg == 'Loading... 32',
-                  'STATMSG at the end of the read: %r' % msg),
+            Check('S2-35/progress', msg == want,
+                  'STATMSG at the end of the read: %r (want %r)' % (msg, want)),
             Check('S2-35/cleared', after == '' and
                   run.var('boot', 'TOTLINES') == 40,
                   'STATMSG %r with %s lines once the editor is up'

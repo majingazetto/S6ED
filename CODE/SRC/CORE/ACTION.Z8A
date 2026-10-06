@@ -1699,7 +1699,13 @@ ACTOPEN         LD      A, (MODIFIED)
                 LD      (STATPRV), A
                 CALL    DRWSTAT
                 RET
-.OK             LD      HL, BRWOUT
+.OK             IFDEF   S2ED
+                CALL    REDRAW          ; S2ED CLOSES THE BROWSER WITHOUT A
+                                        ; BACKGROUND SAVE (WINNOSV): REPAINT
+                                        ; BEFORE THE LOAD, OR THE WINDOW STAYS
+                                        ; UP UNDER THE PROGRESS BAR
+                ENDIF
+                LD      HL, BRWOUT
                 JP      OPENDOC
 
 

@@ -276,14 +276,16 @@ DOMNU           LD      A, (MNUID)
                 ; [WINX(2B), WINW(2B), WINH(2B), ITEMCNT(1B), DUMMY(1B),
                 ;  PTR_YTBL(2B), PTR_STBL(2B), DUMMY(2B), DUMMY(2B)]
 
-                ; MENU 0: FILE
-                DEFW    72, 184, 52
+                ; MENU 0: FILE. 176 = 8 + 20 CHARS * 8 + 8: AN ITEM IS A 14-CHAR
+                ; LABEL AND A 6-CHAR SHORTCUT, AND WINCLIPX STOPS A GLYPH THAT
+                ; WOULD END ON THE RIGHT BORDER (22 CHARS LOST THE LAST ONE)
+                DEFW    72, 176, 52
                 DEFB    6, 0
                 DEFW    .YTBL0, .STBL0
                 DEFW    0, 0
 
                 ; MENU 1: EDIT
-                DEFW    120, 184, 82
+                DEFW    120, 176, 82
                 DEFB    10, 0
                 DEFW    .YTBL1, .STBL1
                 DEFW    0, 0
@@ -298,11 +300,11 @@ DOMNU           LD      A, (MNUID)
 .YTBL0          DEFB    #03, #0B, #13, #1B, #25, #29
 .STBL0          DEFW    .S00, .S01, .S02, .S03, 0, .S05
 
-.S00            DEFM    "New             Ctrl+N", 0
-.S01            DEFM    "Open...         Ctrl+O", 0
-.S02            DEFM    "Save            Ctrl+S", 0
+.S00            DEFM    "New           Ctrl+N", 0
+.S01            DEFM    "Open...       Ctrl+O", 0
+.S02            DEFM    "Save          Ctrl+S", 0
 .S03            DEFM    "Save As...", 0
-.S05            DEFM    "Quit            Ctrl+Q", 0
+.S05            DEFM    "Quit          Ctrl+Q", 0
 
 ; --- MENU 1 (EDIT) ---
 .YTBL1          DEFB    #03, #0B, #13, #1B, #25, #29, #31, #3B
@@ -310,14 +312,14 @@ DOMNU           LD      A, (MNUID)
 .STBL1          DEFW    .S10, .S11, .S12, .S13, 0, .S15, .S16, 0
                 DEFW    .S18, .S19
 
-.S10            DEFM    "Cut             Ctrl+X", 0
-.S11            DEFM    "Copy            Ctrl+C", 0
-.S12            DEFM    "Paste           Ctrl+V", 0
-.S13            DEFM    "Delete Line     Ctrl+Y", 0
-.S15            DEFM    "Select All      Ctrl+A", 0
+.S10            DEFM    "Cut           Ctrl+X", 0
+.S11            DEFM    "Copy          Ctrl+C", 0
+.S12            DEFM    "Paste         Ctrl+V", 0
+.S13            DEFM    "Delete Line   Ctrl+Y", 0
+.S15            DEFM    "Select All    Ctrl+A", 0
 .S16            DEFM    "Deselect", 0
-.S18            DEFM    "Go to Line...   Ctrl+G", 0
-.S19            DEFM    "Find...         Ctrl+F", 0
+.S18            DEFM    "Go to Line... Ctrl+G", 0
+.S19            DEFM    "Find...       Ctrl+F", 0
 
 ; --- MENU 2 (HELP) ---
 .YTBL2          DEFB    #03, #0B, #15, #19

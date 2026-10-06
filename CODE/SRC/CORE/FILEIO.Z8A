@@ -84,7 +84,9 @@ CHKFLEN         PUSH    DE              ; [SP+2] = FILE SIZE HIGH
 ; - A LARGE FILE TAKES SECONDS ON A FLOPPY (THE 990-LINE MANUAL, 15 S ON
 ; - THE 2 MB MACHINE) AND THE SCREEN USED TO STAY UNCHANGED THROUGHOUT,
 ; - WHICH READS AS A HANG. "Loading..." GOES UP BEFORE THE OPEN AND
-; - LOADDOC COUNTS THE LINES INTO IT. IT IS CLEARED ON EVERY EXIT SO THE
+; - LOADDOC TURNS IT INTO A BAR OVER THE FILE SIZE (PRGBEG / PRGADV).
+; - THE LINE COUNT IS NOT REPEATED THERE: THE RIGHT CHANNEL ALREADY
+; - SHOWS TOTLINES GROWING. IT IS CLEARED ON EVERY EXIT SO THE
 ; - CALLER'S OWN VERDICT ([CANNOT OPEN], [NEW FILE]) OR LOADERR'S
 ; - [FILE TOO LARGE], WHICH BLDSTAT SHOWS ONLY WITH STATMSG EMPTY, WINS.
 ; - THE CALLER MUST HAVE THE CHROME UP: AT BOOT IT IS DRAWN FIRST.
@@ -128,6 +130,9 @@ LOADDOC         XOR     A
                 CALL    DSKOPEN         ; A=HANDLE, DEHL=SIZE
                 JR      C, .NOOPEN
                 LD      (FILEHAND), A
+                LD      (PRGTOT), HL    ; THE BAR'S 100%: THE FILE SIZE
+                LD      A, E
+                LD      (PRGTOT + 2), A
 
                 ; PRE-CHECK FILE SIZE: REJECT IMMEDIATELY IF FILE CANNOT FIT
                 CALL    CHKFLEN
@@ -167,6 +172,8 @@ LOADDOC         XOR     A
                 LD      (CURLLEN), A
                 LD      (WASCR), A
                 LD      (EOLARED), A
+                LD      HL, STRLDG
+                CALL    PRGBEG
 
 .READBLK        LD      A, (FILEHAND)
                 LD      HL, 256
@@ -175,6 +182,9 @@ LOADDOC         XOR     A
                 LD      A, H
                 OR      L
                 JP      Z, .EOF
+                PUSH    HL
+                CALL    PRGADV          ; NO PAGE 2 STATE IS LIVE BETWEEN
+                POP     HL              ; BLOCKS: STORLINE BANKS ITS OWN
                 
                 LD      B, H
                 LD      C, L            ; BC = BYTES TO PROCESS
@@ -262,7 +272,6 @@ LOADDOC         XOR     A
                 LD      (EOLARED), A
 .STORCR         CALL    STORLINE
                 JR      C, .OOM
-                CALL    .PROG
                 JP      .SKIP
 
 .ISLF           LD      A, (WASCR)
@@ -280,15 +289,10 @@ LOADDOC         XOR     A
                 LD      (EOLARED), A
 .STORLF         CALL    STORLINE
                 JR      C, .OOM
-                CALL    .PROG
                 JP      .SKIP
 .SKIPLF         XOR     A
                 LD      (WASCR), A
                 JP      .SKIP
-
-.PROG           LD      HL, (TOTLINES)  ; NO REGISTER IS LIVE HERE: .PROCLP
-                LD      DE, STRLDG      ; KEEPS ITS STATE ON THE STACK
-                JP      PROGRS
 
 .OOM            POP     HL              ; BALANCE PUSH HL IN .PROCLP
                 POP     BC              ; BALANCE PUSH BC IN .PROCLP
@@ -484,6 +488,12 @@ FILESAVE        LD      HL, FILENAME
                 RET
 
 .OPNOK          LD      (SAVHAND), A
+                LD      HL, (TOTLINES)  ; THE BAR'S 100%: THE LINE COUNT
+                LD      (PRGTOT), HL
+                XOR     A
+                LD      (PRGTOT + 2), A
+                LD      HL, STRSAVG
+                CALL    PRGBEG
                 
                 LD      BC, 0           ; BC = DOCLINE (0..TOTLINES-1)
 .LINELP         PUSH    BC
@@ -519,10 +529,8 @@ FILESAVE        LD      HL, FILENAME
                 POP     BC
                 INC     BC
                 PUSH    BC
-                LD      H, B
-                LD      L, C
-                LD      DE, STRSAVG
-                CALL    PROGRS          ; "Saving... N" EVERY 16 LINES
+                LD      HL, 1
+                CALL    PRGADV          ; ONE MORE LINE OF TOTLINES
                 POP     BC
                 LD      H, B
                 LD      L, C
@@ -576,36 +584,138 @@ SETMSG          LD      DE, STATMSG
                 JR      .SETMLP
 
 
-; - PROGRS -----------------------------
-; - SHOW "<VERB> N" ON THE STATUS BAR, ONCE EVERY 16 LINES
-; - IN:  HL = LINES DONE SO FAR, DE = ASCIIZ VERB ("Loading..." ...)
+; - PRGBEG -----------------------------
+; - START A PROGRESS BAR ON THE STATUS BAR, AT 0%
+; - IN:  HL = ASCIIZ VERB ("Loading..." / "Saving..."), PRGTOT = 100%
 ; - OUT: NONE
-; - CLOBBERS: ALL (IX TOO: B2D16)
+; - CLOBBERS: ALL (IX TOO: B2D8)
 ; -
-; - THE COUNT IS WHAT TELLS A LONG OPERATION FROM A HANG. ONE STATUS
-; - BAR UPDATE REPAINTS ONLY THE CELLS THAT CHANGED (STATCEL), SO ONE IN
-; - 16 LINES COSTS A FEW PERCENT OF THE DISK TIME IT ACCOMPANIES.
+; - THE BAR IS TEN CELLS, ONE PER 10%, IN THE STATUS BAR'S LEFT CHANNEL:
+; - "Loading... " + #DB / #D7 + " NNN%", 26 CHARACTERS, WHICH FITS THE
+; - NARROWEST CHANNEL (S2ED, 28). #DB AND #D7 ARE THE FULL BLOCK AND
+; - THE CHECKER IN ALL THREE FONTS.
 ; -
 
-PROGRS          LD      A, L
-                AND     15
-                RET     NZ
-                PUSH    HL
+PRGBEG          LD      (PRGVRB), HL
+                XOR     A
+                LD      (PRGPCT), A
+                LD      (PRGACC + 2), A
+                LD      H, A
+                LD      L, A
+                LD      (PRGACC), HL
+                JR      PRGSHOW
+
+
+; - PRGADV -----------------------------
+; - ADVANCE THE BAR BY SOME UNITS OF PRGTOT, REPAINT IF THE % CHANGED
+; - IN:  HL = UNITS JUST DONE (0..655: BYTES OF ONE READ, OR ONE LINE)
+; - OUT: NONE
+; - CLOBBERS: ALL (IX TOO: B2D8)
+; -
+; - NO DIVISION: PRGACC COLLECTS UNITS * 100 AND EVERY TIME IT REACHES
+; - PRGTOT ONE PERCENT IS COUNTED AND PRGTOT TAKEN OFF. THE PERCENT
+; - STOPS AT 100, WHICH ALSO ENDS THE LOOP FOR A ZERO-BYTE FILE.
+; -
+
+PRGADV          ADD     HL, HL          ; * 2
+                ADD     HL, HL          ; * 4
+                LD      D, H
+                LD      E, L            ; DE = * 4
+                ADD     HL, HL          ; * 8
+                ADD     HL, HL          ; * 16
+                ADD     HL, HL          ; * 32
+                LD      B, H
+                LD      C, L            ; BC = * 32
+                ADD     HL, HL          ; * 64
+                ADD     HL, BC          ; * 96
+                ADD     HL, DE          ; * 100
                 EX      DE, HL
+                LD      HL, (PRGACC)
+                ADD     HL, DE
+                LD      (PRGACC), HL
+                LD      A, (PRGACC + 2)
+                ADC     A, 0
+                LD      (PRGACC + 2), A
+                LD      A, (PRGPCT)
+                LD      C, A            ; C = PERCENT ON SCREEN
+.LOOP           LD      A, (PRGPCT)
+                CP      100
+                JR      NC, .DONE
+                LD      HL, (PRGACC)    ; PRGACC - PRGTOT, 24 BITS
+                LD      DE, (PRGTOT)
+                OR      A
+                SBC     HL, DE
+                PUSH    HL
+                LD      A, (PRGACC + 2)
+                LD      HL, PRGTOT + 2
+                SBC     A, (HL)
+                POP     HL
+                JR      C, .DONE        ; NOT A WHOLE PERCENT YET
+                LD      (PRGACC), HL
+                LD      (PRGACC + 2), A
+                LD      HL, PRGPCT
+                INC     (HL)
+                JR      .LOOP
+.DONE           LD      A, (PRGPCT)
+                CP      C
+                RET     Z               ; SAME PERCENT: NOTHING TO REPAINT
+
+
+; - PRGSHOW ----------------------------
+; - FORMAT THE BAR INTO STATMSG AND PAINT THE STATUS BAR
+; - IN:  NONE (USES PRGVRB, PRGPCT)
+; - OUT: NONE
+; - CLOBBERS: ALL (IX TOO: B2D8)
+; -
+
+PRGSHOW         LD      HL, (PRGVRB)
                 CALL    SETMSG          ; DE = THE NUL AFTER THE VERB
                 LD      A, ' '
                 LD      (DE), A
                 INC     DE
-                POP     HL
+                LD      A, (PRGPCT)
+                LD      C, 0            ; C = FULL CELLS = PERCENT / 10
+.TENS           SUB     10
+                JR      C, .BAR
+                INC     C
+                JR      .TENS
+.BAR            LD      B, 10
+.CELL           LD      A, C
+                OR      A
+                LD      A, #D7          ; TO DO
+                JR      Z, .PUT
+                DEC     C
+                LD      A, #DB          ; DONE
+.PUT            LD      (DE), A
+                INC     DE
+                DJNZ    .CELL
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
                 PUSH    DE
-                CALL    B2D16           ; HL = FIRST DIGIT, NUL TERMINATED
+                LD      A, (PRGPCT)
+                CALL    B2D8            ; HL = FIRST DIGIT, C = DIGITS
                 POP     DE
-.COPY           LD      A, (HL)
+                LD      A, 3            ; RIGHT-ALIGN IN THREE COLUMNS
+                SUB     C
+                JR      Z, .DIGITS
+                LD      B, A
+                LD      A, ' '
+.PAD            LD      (DE), A
+                INC     DE
+                DJNZ    .PAD
+.DIGITS         LD      A, (HL)
+                OR      A
+                JR      Z, .PCT
                 LD      (DE), A
                 INC     HL
                 INC     DE
-                OR      A
-                JR      NZ, .COPY
+                JR      .DIGITS
+.PCT            LD      A, '%'
+                LD      (DE), A
+                INC     DE
+                XOR     A
+                LD      (DE), A
                 JP      DRWSTAT
 
 

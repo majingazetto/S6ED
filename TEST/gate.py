@@ -6436,8 +6436,8 @@ class U9UndoLineEdits(Case):
 
 class H40LoadProgress(Case):
     name = 'H40-load-progress'
-    desc = ('a load says "Loading..." and counts the lines into the status '
-            'bar, and leaves it clean once the document is up')
+    desc = ('a load shows a progress bar over the file size on the status '
+            'bar, full at the end of the read, and leaves it clean')
     origin = ('2026-10-06: the 990-line manual took 15 s to load with nothing '
               'on screen, which read as a hang')
     absolute = True
@@ -6454,12 +6454,13 @@ class H40LoadProgress(Case):
 
     def verify(self, ctx, runs):
         run = one(runs)
-        msg = asciiz(run, 'loaded', 'STATMSG')
+        raw = run.snaps.get('loaded', {}).get('STATMSG')
+        msg = bytes(raw).split(b'\0')[0] if raw is not None else None
+        want = b'Loading... ' + b'\xdb' * 10 + b' 100%'
         after = asciiz(run, 'boot', 'STATMSG')
         return [
-            Check('H40/progress', msg == 'Loading... 32',
-                  'STATMSG at the end of the read: %r (want the last multiple '
-                  'of 16 of 40 lines)' % msg),
+            Check('H40/progress', msg == want,
+                  'STATMSG at the end of the read: %r (want %r)' % (msg, want)),
             Check('H40/cleared', after == '' and
                   run.var('boot', 'TOTLINES') == 40,
                   'STATMSG %r with %s lines once the editor is up'
