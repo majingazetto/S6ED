@@ -3,7 +3,8 @@
 ;                                       ****************************************
 ;
 ; 64 COLS X 24 ROWS (32 CELLS X 24 ROWS OF 8X8 PATTERNS). A TEXT ROW IS A
-; GUTTER CELL (TXCELL0) AND 62 TEXT COLUMNS IN THE 31 CELLS AFTER IT.
+; GUTTER CELL (TXCELL0) AND 61 TEXT COLUMNS IN THE 31 CELLS AFTER IT, THE
+; RIGHT HALF OF THE LAST ONE A BLANK MARGIN.
 ; EACH CELL HOLDS TWO 4X8 GLYPHS FROM FONT4H, THE RIGHT ONE ROTATED INTO THE
 ; LOW NIBBLE (CELLPAT). COLORS COME FROM THE TMS9918 COLOR TABLE (8 BYTES PER CELL, ONE PER
 ; SCANLINE), BUT THE SHADOW KEEPS ONE BYTE PER CELL IN COLMAP AND COLDUMP
@@ -200,7 +201,8 @@ CLRROW          PUSH    BC
 
 
 ; - COMROW -----------------------------
-; - COMPOSES ONE ROW (GUTTER + 31 CELLS / 62 COLS) INTO PATSHAD AND COLMAP
+; - COMPOSES ONE ROW (GUTTER + 31 CELLS / 61 COLS + MARGIN) INTO PATSHAD
+; - AND COLMAP
 ; - IN:  B = SCREEN ROW (0..23), WORKBUF HOLDS LINE RECORD
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL, IX, IY
@@ -262,8 +264,12 @@ COMROW          LD      A, B
                 PUSH    AF
                 PUSH    DE
 
-                ; GET RIGHT CHARACTER AND ATTRIBUTE (COL = LEFTCOL + 2*B + 1)
+                ; GET RIGHT CHARACTER AND ATTRIBUTE (COL = LEFTCOL + 2*B + 1).
+                ; THE LAST CELL'S RIGHT HALF IS THE MARGIN: BLANK BY POSITION,
+                ; SINCE A LINE LONGER THAN THE VIEWPORT HAS A CHARACTER THERE
                 LD      A, B
+                CP      TXCELLS - 1
+                JR      Z, .RBLNK
                 ADD     A, A
                 INC     A               ; A = 2*B + 1
                 LD      HL, LEFTCOL
@@ -293,14 +299,14 @@ COMROW          LD      A, B
                 POP     BC
                 INC     B
                 LD      A, B
-                CP      TEXTCOLS / 2
+                CP      TXCELLS
                 JR      NZ, .CELLP
                 RET
 
 .TAIL           ; CELLS B..30 ARE ALL PAST THE END OF THE LINE: BLANK PATTERNS
                 ; AND THE TEXT COLOUR, WITHOUT COMPOSING A PAIR OF SPACES PER
                 ; CELL (~1,300 T EACH, MOST OF A REDRAW ON SHORT LINES).
-                LD      A, TEXTCOLS / 2
+                LD      A, TXCELLS
                 SUB     B
                 LD      B, A            ; B = CELLS LEFT (1..31)
                 PUSH    IX

@@ -1,13 +1,13 @@
---------------------------------------------------------------
+-------------------------------------------------------------
 SXED Screen X Text Editor v0.1
 2024 - 2026 Armando Pérez Abad
 
 S6ED  - Screen 6 text editor for MSX2, 80 columns
 S62ED - Screen 6 text editor for MSX2, 62 columns
-S2ED  - Screen 2 text editor for MSX1, 62 columns
+S2ED  - Screen 2 text editor for MSX1, 61 columns
 
 Fonts by Miguel A. Fernandez
---------------------------------------------------------------
+-------------------------------------------------------------
 
 
 
@@ -77,8 +77,8 @@ Fonts by Miguel A. Fernandez
 
  -------- 1.- INTRODUCTION / AIM.
 
-SXED is a family of full screen text editors for MSX computers
-running MSX-DOS 2 or Nextor.
+SXED is a family of full screen text editors for MSX
+computers running MSX-DOS 2 or Nextor.
 
 Why another text editor? Because we wanted a modern editor on
 real MSX hardware: pull-down menus, dialogs, mouse-free fast
@@ -92,7 +92,7 @@ The three editors share the same core: same features, same
 menus, same keymaps, same configuration keys and same file
 formats. Learn one and you know the others.
 
-This manual is 62 columns wide on purpose: you can read it
+This manual is 61 columns wide on purpose: you can read it
 with any of the editors themselves, without horizontal
 scrolling.
 
@@ -127,7 +127,7 @@ The SXED family has three members:
 * S2ED - Screen 2 editor for MSX1/2/2+/turbo-R (TMS9918).
 
     - SCREEN 2 driven as a bitmap: 256x192, 16 fixed colors.
-    - 62 columns x 22 rows of text (plus menu/status bars).
+    - 61 columns x 22 rows of text (plus menu/status bars).
     - Hand-drawn 4x8 font, two characters per 8x8 cell.
     - 6 color themes mapping the 16 TMS9918 colors.
     - Program: S2ED.COM
@@ -241,7 +241,7 @@ The screen has three areas:
                  menus, the current file name and the clock.
     Text area    [S6ED]  24 rows x 80 columns.
                  [S62ED] 24 rows x 62 columns.
-                 [S2ED]  22 rows x 62 columns.
+                 [S2ED]  22 rows x 61 columns.
     Last row     Status bar.
 
 The menu bar shows the base name of the current file (up to
@@ -335,7 +335,7 @@ Two wrap modes, toggled with Ctrl+W or WRAP= in the CFG:
                and deleting pulls words back up (reflow).
 
 The margin is the text width: the screen width by default
-(80 / 62 / 62) or the TEXTWIDTH= value (0 = no margin, i.e.
+(80 / 62 / 61) or the TEXTWIDTH= value (0 = no margin, i.e.
 DEV mode). In Vi mode: ":set wrap", ":set nowrap",
 ":set tw=N".
 
@@ -371,9 +371,9 @@ has no other uppercase accented vowels).
 
 Dead keys: pressing the accent dead key (the acute accent
 key on European keyboards; KANA/CODE on Japanese ones) and
-then a vowel produces the acute vowel; SHIFT+dead key arms the
-diaeresis (ü). Dead key + space types the quote itself. ESC
-or BS cancels a pending dead key.
+then a vowel produces the acute vowel; SHIFT+dead key arms
+the diaeresis (ü). Dead key + space types the quote itself.
+ESC or BS cancels a pending dead key.
 
 On Japanese machines the editor keeps the KANA lock
 permanently suppressed and the KANA LED off, so KANA can
@@ -390,7 +390,7 @@ or re-weights styled spans without modifying the file:
     OFF  Raw text (best for source code).
 
 [S6ED/S62ED] render bold/italic with the font weights;
-[S2ED] renders them with theme colors. Ctrl+T cycles the mode.
+[S2ED] renders them in theme colors. Ctrl+T cycles the mode.
 Ctrl+B / Ctrl+I (STD profile) insert a delimiter pair or wrap
 the current selection.
 
@@ -645,7 +645,7 @@ The undo history lives in a 4 KB ring (about 23 operations on
 S6ED, 30 on S62ED and S2ED); the oldest operations are
 forgotten as it fills. A single operation touching more lines
 than the ring can hold (a huge selection delete, for example)
-cannot be recorded half-way: in that case the whole history is
+cannot be recorded half-way: then the whole history is
 dropped instead of restoring a partial, wrong state.
 
 
@@ -906,9 +906,9 @@ moment you accept.
  -------- 13.- FONTS.
 
 Each editor draws its text with a font file that sits next to
-the program: S6ED.FNT, S62ED.FNT or S2ED.FNT. If it is missing
-or has the wrong size, the MSX ROM charset is used instead
-([S6ED/S62ED] show [ROM] on the status bar).
+the program: S6ED.FNT, S62ED.FNT or S2ED.FNT. If it is
+missing or has the wrong size, the MSX ROM charset is used
+instead ([S6ED/S62ED] show [ROM] on the status bar).
 
 All three keep the glyphs in the MSX international character
 order, 8 bytes per glyph (one per row, bit 7 is the leftmost
@@ -919,10 +919,10 @@ pixel), 256 glyphs:
                bits 7-2. Normal must leave column 5 empty: it
                is the letter spacing. The other three may use
                it.
-    S62ED.FNT  8192 bytes: the same four variants, 8x8 glyphs,
+    S62ED.FNT  8192 bytes: same four variants, 8x8 glyphs,
                all eight columns drawn. Column 7 is the usual
-               letter spacing; box and block characters use it
-               to meet their neighbours.
+               letter spacing; box and block glyphs use it to
+               meet their neighbours.
     S2ED.FNT   2048 bytes: one variant, 4x8 glyphs in bits
                7-4. [S2ED] shows bold and italic with
                colours.
@@ -948,19 +948,20 @@ bold+italic are derived from it for now.
                letters: they are built from its own accent
                marks. Amstrad have kindly given their
                permission for the redistribution of their
-               copyrighted material but retain that copyright.
+               copyrighted material but retain that
+               copyright.
     BIOS.FNT   The MSX BIOS font, with derived weights. It
                is a 6 pixel design, so at 8x8 it looks spaced
                out.
 
 Making a font: the source distribution has RES/mkfont62.py,
 which turns any raw 2048-byte 8x8 font from another machine
-into an S62ED.FNT (mapping each character by meaning, building
-missing accented letters, deriving the weights), and writes an
-editable sheet: a 512x212 indexed PNG with the four variants
-in 32x8 grids, glyph N at ((N AND 31)*8, (N / 32)*8) of its
-block, ink in colour 3. Draw on the sheet with any paint
-program that keeps the palette, then convert it back:
+into an S62ED.FNT (mapping each character by meaning,
+building missing accented letters, deriving the weights), and
+writes an editable sheet: a 512x212 indexed PNG with the four
+variants in 32x8 grids, glyph N at ((N AND 31)*8, (N / 32)*8)
+of its block, ink in colour 3. Draw on the sheet with any
+paint program that keeps the palette, then convert it back:
 
     mkfont62.py sheet MYFONT.PNG --out S62ED.FNT
 
@@ -1010,7 +1011,7 @@ Every save reports on the status bar: a "Saving..." progress
 bar over the lines while it writes, then [SAVED] or [SAVE
 ERROR]. A load shows a "Loading..." bar over the file size: a
 large file on a floppy takes seconds (the 1,100 lines of
-this manual, about 10 s), and the bar tells a slow disk from a
+this manual, about 10 s); the bar tells a slow disk from a
 hung machine. The line count on the right grows meanwhile.
 
 Each editor checks that its .DAT file is its own: a sibling's
