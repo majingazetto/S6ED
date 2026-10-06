@@ -6937,6 +6937,155 @@ class K3SaveCloseError(Case):
                   % (msg, run.var('after', 'MODIFIED'))),
         ]
 
+# --- P1-P3  EDITING DEFECTS FROM THE RC1 REVIEW (2026-10-06) -----------
+
+
+class P1ReflowBoundary(Case):
+    name = 'P1-reflow-boundary'
+    desc = ('WRAP=TXT: joining a line into the one above (Backspace at column '
+            '0, Delete at the end) keeps the blank line between paragraphs')
+    origin = ('2026-10-06 review: REFLOW deleted an empty L+1 on every pass of '
+              'its cascade, not only the first, so the paragraph separator '
+              'went too -- and the history was already dropped')
+    variants = ('bs', 'del')
+    LINES = ['Hello', 'world', '', 'Next', 'more']
+
+    def config(self, ctx, variant=None):
+        return DEFAULT_CFG.replace('WRAP=DEV', 'WRAP=TXT')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        if variant == 'bs':
+            t.press('DOWN')
+            t.press('BS')
+        else:
+            t.press('RIGHT', repeat=5)
+            t.press('DEL')
+        t.wait(1.0)
+        t.snap('joined')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        want = crlf(['Hello world', '', 'Next', 'more'])
+        for variant, run in sorted(runs.items()):
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            checks.append(Check('P1/%s/content' % variant, got == want,
+                                disk_diff(got, want)))
+        return checks
+
+
+class P2DeleteLastRow0(Case):
+    name = 'P2-delete-last-row0'
+    desc = ('deleting the last line while it sits on screen row 0 keeps the '
+            'cursor on screen')
+    origin = ('2026-10-06 review: ACTDELLN left DOCLINE one above TOPLINE and '
+              'SETCURY has no clamp: CURY = #FF, the cursor drawn off screen')
+    LINES = ['LINE %02d' % i for i in range(49)]   # 2 * ROWSVIS + 1
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('DOWN', mods=['GRAPH'])
+        t.press('DOWN', mods=['GRAPH'])
+        t.wait(1.0)
+        t.snap('paged')
+        t.press('Y', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('deleted')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        top, doc = run.var('paged', 'TOPLINE'), run.var('paged', 'DOCLINE')
+        dtop, ddoc = run.var('deleted', 'TOPLINE'), run.var('deleted', 'DOCLINE')
+        cury = run.var('deleted', 'CURY')
+        return [
+            Check('P2/setup', top == 48 and doc == 48,
+                  'TOPLINE %s, DOCLINE %s after two page-downs (want the last '
+                  'line on row 0)' % (top, doc)),
+            Check('P2/on-screen', run.var('deleted', 'TOTLINES') == 48 and
+                  ddoc == 47 and dtop is not None and dtop <= ddoc and
+                  cury == ddoc - dtop and cury < 24,
+                  'TOTLINES %s, DOCLINE %s, TOPLINE %s, CURY %s'
+                  % (run.var('deleted', 'TOTLINES'), ddoc, dtop, cury)),
+        ]
+
+
+class P3ReplaceAllUndo(Case):
+    name = 'P3-replace-all-undo'
+    desc = ('Replace All is one undo group: undone whole when it fits the '
+            'ring, not recorded at all when it does not')
+    origin = ('2026-10-06 review: DORPLAL recorded every occurrence with no '
+              'cap; past UNDOGMAX the ring evicted the head of its own group '
+              'and Ctrl+Z reverted only the last few replacements')
+    variants = ('few', 'many')
+
+    def _lines(self, variant):
+        n = 15 if variant == 'few' else 30     # UNDOGMAX is 22 on S6ED
+        return ['L%02d FOO AND FOO' % i for i in range(n)]
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self._lines(variant))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.wait(1.0)
+        t.press('F', mods=['CTRL'])
+        t.wait(1.0)
+        for ch in 'FOO':
+            t.press(ch)
+        t.press('TAB')
+        t.wait(0.5)
+        for ch in 'BAR':
+            t.press(ch)
+        for _ in range(4):              # case, [Find], [Repl], [All]
+            t.press('TAB')
+        t.wait(0.5)
+        t.press('RETURN')
+        t.wait(3.0)
+        t.snap('replaced')
+        t.press('Z', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('undone')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            lines = self._lines(variant)
+            checks.append(Check('P3/%s/replaced' % variant,
+                                run.var('replaced', 'RPLCNT') == 2 * len(lines),
+                                'RPLCNT %s (want %d)'
+                                % (run.var('replaced', 'RPLCNT'), 2 * len(lines))))
+            if variant == 'few':
+                want = crlf(lines)              # undone whole
+            else:
+                want = crlf([l.replace('FOO', 'bar') for l in lines])
+                checks.append(Check('P3/many/dropped',
+                                    run.var('replaced', 'UNDOPTR') == 0,
+                                    'UNDOPTR %s after a Replace All over %d '
+                                    'lines (want 0: not recorded)'
+                                    % (run.var('replaced', 'UNDOPTR'), len(lines))))
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            checks.append(Check('P3/%s/content' % variant, got == want,
+                                disk_diff(got, want)))
+        return checks
+
 
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
@@ -6952,6 +7101,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H40LoadProgress(), H41BrowseBusy(), H42IoBlocks(),
          R1FreeListCompact(), R2LinewrtOom(), R3UndoCompactIX(), R4UndoLongLine(),
          K1WqSaveFailed(), K2LoadDiskError(), K3SaveCloseError(),
+         P1ReflowBoundary(), P2DeleteLastRow0(), P3ReplaceAllUndo(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),

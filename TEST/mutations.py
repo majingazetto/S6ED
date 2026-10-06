@@ -11,6 +11,49 @@ import shutil
 
 MUTATIONS = [
     {
+        'name': 'p1-reflow-pass',
+        'why': 'REFLOW deletes an empty L+1 on every pass, taking the blank line between paragraphs',
+        'file': 'EDIT.Z8A',
+        'old': """                RET     NZ              ; PARAGRAPH BOUNDARY: DONE""",
+        'new': """                NOP                     ; MUTATION: DELETED ON ANY PASS""",
+        'filter': 'P1',
+        'expect': ['P1/bs/content', 'P1/del/content'],
+    },
+    {
+        'name': 'p2-dlok-setcury',
+        'why': 'ACTDELLN derives CURY without bringing DOCLINE back into the viewport',
+        'file': 'ACTION.Z8A',
+        'old': """.DLOK           LD      HL, (DOCLINE)   ; DELETING THE LAST LINE FROM ROW 0
+                CALL    SHOWLN          ; LEFT DOCLINE ABOVE TOPLINE: CURY #FF""",
+        'new': """.DLOK           CALL    SETCURY         ; MUTATION: NO SHOWLN
+                NOP
+                NOP
+                NOP""",
+        'filter': 'P2',
+        'expect_any': ['P2/on-screen', 'P2-delete-last-row0'],
+    },
+    {
+        'name': 'p3-rpl-nocap',
+        'why': 'Replace All records a group larger than UNDOGMAX, which the ring cannot keep whole',
+        'file': 'SEARCH.Z8A',
+        'old': """                CP      UNDOGMAX
+                JR      C, .GRPOK""",
+        'new': """                CP      UNDOGMAX
+                JR      .GRPOK          ; MUTATION: NO CAP""",
+        'filter': 'P3',
+        'expect': ['P3/many/dropped', 'P3/many/content'],
+    },
+    {
+        'name': 'p3-rpl-peroccur',
+        'why': 'Replace All records every occurrence instead of every line',
+        'file': 'SEARCH.Z8A',
+        'old': """                JR      NZ, .RECD       ; THIS LINE IS ALREADY RECORDED""",
+        'new': """                NOP                     ; MUTATION: ONE RECORD PER HIT
+                NOP""",
+        'filter': 'P3',
+        'expect': ['P3/few/content'],
+    },
+    {
         'name': 'k1-wq-term',
         'why': ':wq jumps to TERM whether or not FILESAVE managed to save',
         'file': 'ACTION.Z8A',
