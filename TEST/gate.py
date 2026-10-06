@@ -6567,6 +6567,376 @@ class H42IoBlocks(Case):
                                 why))
         return checks
 
+# --- R1-R4  RECORD STORE UNDER PRESSURE (RC1 REVIEW, 2026-10-06) ------
+#
+# On the 128 kB machine the text lives in one 16 KB segment. These fixtures
+# fill it to within a few bytes with 36-byte records (lines of 16 characters
+# or fewer), so the next record that does not fit forces SEGCOMP exactly where
+# the defect was.
+
+def short_lines(count, first=0):
+    """Lines of exactly 16 characters: one default 36-byte record each."""
+    return ['R%04d ABCDEFGHIJ' % i for i in range(first, first + count)]
+
+
+SEG_FULL = 455          # 455 * 36 = 16380 of 16384 bytes
+
+
+class R1FreeListCompact(Case):
+    name = 'R1-freelist-compact'
+    desc = ('two short lines deleted, then a line grown past 16 characters '
+            'with the segment full: the compaction walks the freed records')
+    origin = ('2026-10-06 review: FREEPSH wrote its link over RECCAP and the '
+              'low byte of RECLEN, so SEGCOMP sized a freed record by the link '
+              'and took it for a live one -- a slide by garbage, LINEOFF past '
+              '16 KB, records allocated in page 3')
+
+    LINES = short_lines(SEG_FULL)
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('Y', mods=['CTRL'])
+        t.wait(1.0)
+        t.press('Y', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('deleted')
+        t.text('X')                     # 17 characters: a 68-byte record
+        t.wait(15.0)                    # SEGCOMP + DIRUPDOF over 453 lines
+        t.snap('grown')
+        # Two new lines at the end of it. The first takes the one record
+        # on the free list; the second finds the list empty and the segment
+        # full, and is refused. A list that survived the compaction still
+        # names offset 36 -- now a live, slid record -- and hands it out.
+        t.press('RIGHT', repeat=16)
+        t.press('RETURN')
+        t.wait(2.0)
+        t.press('RETURN')
+        t.wait(15.0)
+        t.snap('entered')
+        t.press('S', mods=['CTRL'])
+        t.wait(6.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        want = crlf(['X' + self.LINES[2], ''] + self.LINES[3:])
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        # The two dead records go (72 B), the 453 live ones slide down,
+        # the grown line takes 68 B at the tail, and its old 36-byte record
+        # is retired onto the -- just emptied -- free list.
+        want_off = (SEG_FULL - 2) * 36 + 68
+        off = run.var('grown', 'LINEOFF')
+        return [
+            Check('R1/boot', run.var('boot', 'LINEOFF') == SEG_FULL * 36,
+                  'LINEOFF %s after the load (want %d)'
+                  % (run.var('boot', 'LINEOFF'), SEG_FULL * 36)),
+            Check('R1/compacted', off == want_off and
+                  run.var('grown', 'TOTLINES') == SEG_FULL - 2,
+                  'LINEOFF %s (want %d), TOTLINES %s after the growth'
+                  % (off, want_off, run.var('grown', 'TOTLINES'))),
+            Check('R1/freelist', run.var('grown', 'FREEHD') != 0xFF and
+                  run.var('grown', 'FREEOF') == 0,
+                  'FREEHD %s FREEOF %s: the retired record, slid to offset 0'
+                  % (run.var('grown', 'FREEHD'), run.var('grown', 'FREEOF'))),
+            Check('R1/entered', run.var('entered', 'TOTLINES') == SEG_FULL - 1
+                  and run.var('entered', 'LINEOFF') == want_off,
+                  'TOTLINES %s (want %d), LINEOFF %s: one Return from the '
+                  'free list, the second refused'
+                  % (run.var('entered', 'TOTLINES'), SEG_FULL - 1,
+                     run.var('entered', 'LINEOFF'))),
+            Check('R1/content', got == want, disk_diff(got, want)),
+        ]
+
+
+class R2LinewrtOom(Case):
+    name = 'R2-linewrt-oom'
+    desc = ('a line grown past its record with the segment full and nothing '
+            'to compact: the growth is refused and the document is intact')
+    origin = ('2026-10-06 review: LINEWRT tombstoned the old record before '
+              'NEWREC, so an OOM left the directory on a dead record, read '
+              'back as 255 bytes of its neighbours')
+
+    LINES = short_lines(SEG_FULL)
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.text('X')
+        t.wait(15.0)
+        t.snap('refused')
+        t.press('S', mods=['CTRL'])
+        t.wait(6.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        want = crlf(self.LINES)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        return [
+            Check('R2/alive', run.var('saved', 'SCRRDY') == 0xFF and
+                  run.var('refused', 'TOTLINES') == SEG_FULL,
+                  'SCRRDY %s, TOTLINES %s'
+                  % (run.var('saved', 'SCRRDY'),
+                     run.var('refused', 'TOTLINES'))),
+            Check('R2/content', got == want, disk_diff(got, want)),
+        ]
+
+
+class R3UndoCompactIX(Case):
+    name = 'R3-undo-compact-ix'
+    desc = ('undeleting a long line when the segment is full: UNDORST holds '
+            'its record in IX across a NEWREC that compacts')
+    origin = ('2026-10-06 review: SEGCOMP repaints the status bar, and B2D16 '
+              'zeroes IX; UNDORST / UNDOSWP then wrote their record over '
+              'page 0')
+
+    LONG = 'LONG LINE 0123456'          # 17 characters: a 68-byte record
+    LINES = [LONG] + short_lines(453)   # 68 + 453 * 36 = 16376
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('Y', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('deleted')
+        t.press('Z', mods=['CTRL'])
+        t.wait(15.0)
+        t.snap('undone')
+        t.press('S', mods=['CTRL'])
+        t.wait(6.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        want = crlf(self.LINES)
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        return [
+            Check('R3/deleted', run.var('deleted', 'TOTLINES') == 453,
+                  'TOTLINES %s after Ctrl+Y' % run.var('deleted', 'TOTLINES')),
+            Check('R3/undone', run.var('undone', 'TOTLINES') == 454 and
+                  run.var('saved', 'SCRRDY') == 0xFF,
+                  'TOTLINES %s after Ctrl+Z, SCRRDY %s'
+                  % (run.var('undone', 'TOTLINES'),
+                     run.var('saved', 'SCRRDY'))),
+            Check('R3/content', got == want, disk_diff(got, want)),
+        ]
+
+
+class R4UndoLongLine(Case):
+    name = 'R4-undo-long-line'
+    desc = ('undo of an edit on a line longer than an undo record (TEXTCOLS): '
+            'never a half-restored line')
+    origin = ('2026-10-06 review: UNDOPAK / UNDOUPK keep TEXTCOLS characters '
+              'but the length byte whole, so a restore kept the edited tail '
+              'past TEXTCOLS; and a redo of a line the edit made too long '
+              'brought back a truncated image')
+    variants = ('long', 'redo')
+
+    @staticmethod
+    def _line(n):
+        return ''.join(chr(65 + i % 26) for i in range(n))
+
+    def _first(self, variant):
+        return self._line(90 if variant == 'long' else 80)
+
+    def fixture(self, ctx, variant=None):
+        return crlf([self._first(variant), 'SECOND LINE'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.text('X')
+        t.wait(1.0)
+        t.snap('typed')
+        t.press('Z', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('undone')
+        t.press('Z', mods=['SHIFT', 'CTRL'])
+        t.wait(1.0)
+        t.snap('redone')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            first = self._first(variant)
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            if variant == 'long':
+                # 90 > TEXTCOLS: the edit drops the history, so Ctrl+Z and
+                # Ctrl+Shift+Z do nothing and the typed X stays.
+                want = crlf(['X' + first, 'SECOND LINE'])
+                checks.append(Check(
+                    'R4/long/dropped', run.var('typed', 'UNDOPTR') == 0,
+                    'UNDOPTR %s after typing on a %d-character line (want 0)'
+                    % (run.var('typed', 'UNDOPTR'), len(first))))
+            else:
+                # 80 fits a record, 81 does not: the undo is exact and the
+                # redo is withdrawn rather than replayed from a truncated image.
+                want = crlf([first, 'SECOND LINE'])
+                checks.append(Check(
+                    'R4/redo/withdrawn', run.var('undone', 'REDOPTR') == 0,
+                    'REDOPTR %s after the undo (want 0)'
+                    % run.var('undone', 'REDOPTR')))
+            checks.append(Check('R4/%s/content' % variant, got == want,
+                                disk_diff(got, want)))
+        return checks
+
+
+def disk_diff(got, want):
+    if got == want:
+        return '%d bytes, byte for byte' % len(got)
+    if got is None:
+        return 'no file on disk'
+    at = next((i for i in range(min(len(got), len(want)))
+               if got[i] != want[i]), min(len(got), len(want)))
+    return ('%d bytes, want %d; first difference at %d: %r / %r'
+            % (len(got), len(want), at, got[at:at + 16], want[at:at + 16]))
+
+# --- K1-K3  DISK ERRORS HALFWAY (RC1 REVIEW, 2026-10-06) ---------------
+
+
+def eject_at(ctx, label, nth=1):
+    """Tcl: eject drive A the nth time our code reaches `label`.
+
+    Gated on the label's own opcodes, as every snapshot breakpoint is: with
+    the image below #4000 the address is also DOS 2 kernel code at times.
+    """
+    addr = ctx.sym[label]
+    com = os.path.join(ctx.code_dir, ctx.prefix + '.COM')
+    with open(com, 'rb') as fh:
+        sig = list(fh.read()[addr - 0x100:addr - 0x100 + 4])
+    checks = ' '.join(
+        'if {[rb %d] != %d} return;' % (addr + i, b) for i, b in enumerate(sig))
+    return ('set ::ejn 0; debug set_bp %d {} {%s incr ::ejn; '
+            'if {$::ejn == %d} {diska eject; p "EJECTED"}}' % (addr, checks, nth))
+
+
+class K1WqSaveFailed(Case):
+    name = 'K1-wq-save-failed'
+    desc = ':wq and :x stay in the editor when the save fails'
+    origin = ('2026-10-06 review: .WQDO called FILESAVE and jumped to TERM '
+              'without testing CY -- "[SAVE ERROR]", then the document gone')
+    machine = MACH_2MB                  # two drives: B: is empty
+    variants = ('wq', 'x')
+
+    def config(self, ctx, variant=None):
+        return DEFAULT_CFG.replace('PROFILE=STD', 'PROFILE=VI')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE 1', 'LINE 2'])
+
+    def type_str(self, t, s):
+        for ch in s:
+            k, mods = H27ViEx.key_for(self, ch)
+            t.press(k, mods=mods)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        self.type_str(t, ':w B:\\OUT.TXT')  # names the document B:\OUT.TXT
+        t.press('RETURN')
+        t.wait(4.0)
+        self.type_str(t, ':' + variant)
+        t.press('RETURN')
+        t.wait(4.0)
+        t.snap('after')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            msg = asciiz(run, 'after', 'STATMSG')
+            checks.append(Check(
+                'K1/%s/stayed' % variant,
+                run.var('after', 'SCRRDY') == 0xFF and msg == '[SAVE ERROR]',
+                'after :%s -- SCRRDY %s, STATMSG %r (want the editor up, '
+                'saying [SAVE ERROR])' % (variant, run.var('after', 'SCRRDY'),
+                                          msg)))
+        return checks
+
+
+class K2LoadDiskError(Case):
+    name = 'K2-load-disk-error'
+    desc = ('a disk error halfway through a load rolls it back: no garbage '
+            'lines, no file name left for Ctrl+S to overwrite')
+    origin = ('2026-10-06 review: LOADDOC tested only HL after DSKREAD; on an '
+              'abort DSKABTH leaves a kernel word in HL, read as a byte count')
+    absolute = True
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(90, width=40))     # ~4 KB: four 1 KB reads
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline(start=0.0)
+        t.at(eject_at(ctx, 'LOADDOC.READBLK', nth=2))
+        t.wait(40.0)
+        t.snap('boot')                  # the next MAINLOOP pass after 40 s
+        t.t = 80.0
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        name = asciiz(run, 'boot', 'FILENAME')
+        return [
+            Check('K2/ejected', any(l == 'EJECTED' for l in run.lines),
+                  'drive A ejected during the second read'),
+            Check('K2/rolled-back',
+                  run.var('boot', 'TOTLINES') == 1 and
+                  run.var('boot', 'LOADERR') == 0 and name == '',
+                  'TOTLINES %s, LOADERR %s, FILENAME %r (want 1, 0, empty: '
+                  'a read error, not a load of garbage)'
+                  % (run.var('boot', 'TOTLINES'), run.var('boot', 'LOADERR'),
+                     name)),
+        ]
+
+
+class K3SaveCloseError(Case):
+    name = 'K3-save-close-error'
+    desc = 'a save whose close fails says so and keeps the document modified'
+    origin = ('2026-10-06 review: FILESAVE ignored the DSKCLOSE carry (and '
+              'CFGSAVE every write), so a failed save showed "[SAVED]"')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE 1', 'LINE 2'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.text('X')
+        t.at(eject_at(ctx, 'DSKCLSW'))
+        t.press('S', mods=['CTRL'])
+        t.wait(6.0)
+        t.snap('after')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        msg = asciiz(run, 'after', 'STATMSG')
+        return [
+            Check('K3/ejected', any(l == 'EJECTED' for l in run.lines),
+                  'drive A ejected before the close'),
+            Check('K3/reported', msg == '[SAVE ERROR]' and
+                  run.var('after', 'MODIFIED') != 0,
+                  'STATMSG %r, MODIFIED %s (want [SAVE ERROR], still modified)'
+                  % (msg, run.var('after', 'MODIFIED'))),
+        ]
+
 
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
@@ -6580,6 +6950,8 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H32SaveNoName(), H33LongPath(), H34BrowseOpen(),
          H35BrowseMany(), H36BrowseSaveAs(), H37Settings(), H38DiskError(), H39DatForeign(),
          H40LoadProgress(), H41BrowseBusy(), H42IoBlocks(),
+         R1FreeListCompact(), R2LinewrtOom(), R3UndoCompactIX(), R4UndoLongLine(),
+         K1WqSaveFailed(), K2LoadDiskError(), K3SaveCloseError(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),

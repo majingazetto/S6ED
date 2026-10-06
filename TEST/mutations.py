@@ -11,6 +11,127 @@ import shutil
 
 MUTATIONS = [
     {
+        'name': 'k1-wq-term',
+        'why': ':wq jumps to TERM whether or not FILESAVE managed to save',
+        'file': 'ACTION.Z8A',
+        'old': """                RET     C               ; NOT SAVED: STAY, THE STATUS BAR SAYS WHY""",
+        'new': """                NOP                     ; MUTATION: QUIT ANYWAY""",
+        'filter': 'K1',
+        # TERM leaves the editor, so the snapshot after :wq never comes.
+        'expect_any': ['K1/wq/stayed', 'K1/x/stayed', 'K1-wq-save-failed'],
+    },
+    {
+        'name': 'k2-read-count',
+        'why': 'LOADDOC takes HL as a byte count even when DSKREAD failed',
+        'file': 'FILEIO.Z8A',
+        'old': """                JR      NC, .GOT
+                CP      EEOF            ; THE BDOS WRAPPER SETS CY ON .EOF TOO
+                JP      NZ, .RDERR      ; A REAL ERROR: HL IS NOT A COUNT
+                LD      HL, 0
+.GOT            LD      A, H""",
+        'new': """                JR      .GOT            ; MUTATION: NO CARRY TEST
+                CP      EEOF            ; THE BDOS WRAPPER SETS CY ON .EOF TOO
+                JP      NZ, .RDERR      ; A REAL ERROR: HL IS NOT A COUNT
+                LD      HL, 0
+.GOT            LD      A, H""",
+        'filter': 'K2',
+        'expect_any': ['K2/rolled-back', 'K2-load-disk-error'],
+    },
+    {
+        'name': 'k3-close-ignored',
+        'why': 'FILESAVE reports [SAVED] when the close fails',
+        'file': 'FILEIO.Z8A',
+        'old': """                JR      C, .SVERR       ; THE CLOSE FAILED: NOT SAVED""",
+        'new': """                NOP                     ; MUTATION: THE CLOSE IS TRUSTED
+                NOP""",
+        'filter': 'K3',
+        'expect': ['K3/reported'],
+    },
+    {
+        'name': 'r1-freelist-header',
+        'why': 'FREEPSH writes its link over the record header (RECCAP and RECLEN low) instead of the payload',
+        'file': 'BUFFER.Z8A',
+        'old': """                LD      HL, TXPAGE + RECHDR_SZ
+                ADD     HL, DE          ; HL = THE FREED RECORD'S PAYLOAD""",
+        'new': """                LD      HL, TXPAGE      ; MUTATION: THE LINK OVER THE HEADER
+                ADD     HL, DE          ; HL = THE FREED RECORD'S PAYLOAD""",
+        'filter': 'R1',
+        # The compactor then walks a garbage size: a dead session or a wrong
+        # document, depending on where the slide lands.
+        'expect_any': ['R1/compacted', 'R1/content', 'R1-freelist-compact'],
+    },
+    {
+        'name': 'r1-freelist-stale',
+        'why': 'SEGCOMP keeps the free list, whose entries point at records it has just slid',
+        'file': 'COMPACT.Z8A',
+        'old': """                LD      A, FREENIL
+                LD      (FREEHD), A
+
+                ; CLEAR STATUS MESSAGE AND REDRAW""",
+        'new': """                NOP                     ; MUTATION: THE LIST SURVIVES
+                NOP
+                NOP
+                NOP
+                NOP
+
+                ; CLEAR STATUS MESSAGE AND REDRAW""",
+        'filter': 'R1',
+        'expect_any': ['R1/entered', 'R1/content', 'R1-freelist-compact'],
+    },
+    {
+        'name': 'r2-tomb-first',
+        'why': 'LINEWRT retires the old record before NEWREC, so an OOM leaves the line on a dead record',
+        'file': 'BUFFER.Z8A',
+        'old': """                LD      A, (WORKBUF)
+                LD      C, A            ; C = REQUIRED CAPACITY
+                CALL    NEWREC
+                JR      C, .OOM         ; CY = 1: OUT OF MEMORY, NOTHING CHANGED""",
+        'new': """                POP     HL              ; MUTATION: KILL THE OLD RECORD FIRST
+                PUSH    HL
+                CALL    DIRREAD
+                CALL    RECKILL
+                LD      A, (WORKBUF)
+                LD      C, A            ; C = REQUIRED CAPACITY
+                CALL    NEWREC
+                JR      C, .OOM         ; CY = 1: OUT OF MEMORY, NOTHING CHANGED""",
+        'filter': 'R2',
+        'expect_any': ['R2/content', 'R2/alive', 'R2-linewrt-oom'],
+    },
+    {
+        'name': 'r3-segcomp-ix',
+        'why': 'SEGCOMP does not give IX back, so the undo record UNDORST holds in it is lost to DRWSTAT',
+        'file': 'COMPACT.Z8A',
+        'old': """                POP     IY
+                POP     IX
+                OR      A               ; CY = 0: SUCCESS""",
+        'new': """                POP     IY
+                POP     HL              ; MUTATION: IX STAYS AS DRWSTAT LEFT IT
+                OR      A               ; CY = 0: SUCCESS""",
+        'filter': 'R3',
+        'expect_any': ['R3/undone', 'R3/content', 'R3-undo-compact-ix'],
+    },
+    {
+        'name': 'r4-undo-long',
+        'why': 'UNDOREC records a line longer than TEXTCOLS, which UNDOPAK truncates',
+        'file': 'UNDO.Z8A',
+        'old': """                JR      NC, .DROP       ; LONGER THAN A RECORD HOLDS""",
+        'new': """                NOP                     ; MUTATION: RECORDED ANYWAY
+                NOP""",
+        'filter': 'R4',
+        'expect': ['R4/long/dropped', 'R4/long/content'],
+    },
+    {
+        'name': 'r4-redo-long',
+        'why': 'an undo that displaces a line too long for its record keeps the redo, replayed truncated',
+        'file': 'UNDO.Z8A',
+        'old': """                LD      (UNDONRD), A    ; NON-ZERO: NO REDO FOR THIS ACTION""",
+        'new': """                NOP                     ; MUTATION: THE REDO IS KEPT
+                NOP
+                NOP""",
+        'filter': 'R4',
+        'expect': ['R4/redo/withdrawn', 'R4/redo/content'],
+    },
+    {
         'name': 'f2-winpoll-flags',
         'why': 'the defect as it shipped: WINPOLL returns CHGET\'s flags, which '
                'are Z when the keyboard buffer pointer wraps, so every dialog '
