@@ -1,0 +1,842 @@
+;                                       ****************************************
+;                                       * UI — STATUS BAR / GUTTERS / CURSOR  *
+;                                       ****************************************
+
+
+; --- DRWSTAT                   ----------------------------------------
+
+
+; - DRWSTAT ----------------------------
+; - DRAW / REFRESH THE STATUS BAR (ROW 25)
+; - BUILDS THE TEXT (BLDSTAT) AND REPAINTS ONLY THE CELLS THAT DIFFER FROM
+; - WHAT IS ON SCREEN (STATPRV), ONE OPAQUE LMMM EACH (STATCEL). A CURSOR
+; - MOVE THAT CHANGES ONE DIGIT COSTS WELL UNDER 1 MS AND SHOWS NO BLANK
+; - INTERMEDIATE STATE, WHICH IS WHAT LETS MAINLOOP CALL THIS AFTER EVERY
+; - KEY.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DRWSTAT         LD      A, (MODIFIED)
+                LD      HL, MODPRV
+                CP      (HL)
+                JR      Z, .MODSAM
+                LD      (HL), A
+                PUSH    AF
+                CALL    DRWFNAM
+                POP     AF
+.MODSAM         CALL    BLDSTAT         ; STATBUF = THE TEXT THE BAR SHOULD SHOW
+                LD      A, (STATPRV)
+                OR      A
+                JR      Z, .FULL        ; NEVER PAINTED: FILL AND WRITE IT ALL
+
+                ; DIFF AGAINST STATPRV, CELL BY CELL. DE = NEW TEXT (ASCIIZ),
+                ; HL = OLD CELLS (83, SPACE PADDED), C = COLUMN, B = PAST THE END
+                LD      DE, STATBUF
+                LD      HL, STATPRV
+                LD      BC, 0
+.DLOOP          LD      A, B
+                OR      A
+                LD      A, ' '
+                JR      NZ, .HAVE       ; PAST THE TERMINATOR: SPACES
+                LD      A, (DE)
+                OR      A
+                JR      NZ, .HAVE
+                INC     B               ; THE TERMINATOR: SPACES FROM HERE ON
+                LD      A, ' '
+.HAVE           CP      (HL)
+                JR      Z, .SAME
+                LD      (HL), A         ; THE CACHE FOLLOWS THE SCREEN
+                PUSH    BC
+                PUSH    DE
+                PUSH    HL
+                CALL    STATCEL
+                POP     HL
+                POP     DE
+                POP     BC
+
+.SAME           INC     HL
+                INC     DE
+                INC     C
+                LD      A, C
+                CP      STATCOLS
+                JR      NZ, .DLOOP
+                RET
+
+.FULL           LD      HL, 0
+                LD      (VDP_SX), HL
+                LD      (VDP_SY), HL
+                LD      (VDP_DX), HL
+                LD      HL, STBROW * CELLH ; DY = 200
+                LD      (VDP_DY), HL
+                LD      HL, 512
+                LD      (VDP_NX), HL
+                LD      HL, 12
+                LD      (VDP_NY), HL
+                LD      A, CLR_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+
+                LD      HL, STATBUF
+                LD      DE, STBTX_X
+                LD      BC, STBTX_Y
+                CALL    BLTSTR
+
+                ; CACHE = STATBUF, SPACE PADDED TO 83 CELLS
+                LD      HL, STATBUF
+                LD      DE, STATPRV
+                LD      BC, STATCOLS * 256 ; B = STATCOLS, C = 0 (PAST THE END FLAG)
+.CLOOP          LD      A, C
+                OR      A
+                LD      A, ' '
+                JR      NZ, .CPUT
+                LD      A, (HL)
+                OR      A
+                JR      NZ, .CPUT
+                INC     C
+                LD      A, ' '
+.CPUT           LD      (DE), A
+                INC     HL
+                INC     DE
+                DJNZ    .CLOOP
+                RET
+
+
+; - STATCEL ----------------------------
+; - REPAINT ONE STATUS BAR CELL: ONE OPAQUE LMMM FROM THE UI-PAPER FONT
+; - COPY (SEE BLTCHTR). THE GLYPH CARRIES ITS COL_UI BACKGROUND, SO THERE
+; - IS NO ERASE PASS AND NO BLANK CELL BETWEEN COMMANDS -- THE FLASH THE
+; - OLD ERASE + TIMP PAIR SHOWED ON EVERY KEYPRESS.
+; - IN:  A = CHARACTER, C = COLUMN (0..82)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+STATCEL         LD      L, C
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                ADD     HL, HL          ; * 4
+                ADD     HL, HL          ; * 8
+                LD      DE, STBTX_X
+                ADD     HL, DE          ; HL = DX
+                LD      DE, STBTX_Y
+                JP      BLTCHTR         ; A = CHAR, HL = DX, DE = DY
+
+
+; - BLDSTAT ----------------------------
+; - BUILD DYNAMIC STATUS BAR TEXT IN STATBUF (83 COLS)
+; - LEFT CHANNEL (COLS 0..52): SYSTEM/VI MESSAGES, ROM FALLBACK
+; - RIGHT CHANNEL (COLS 53..82): MODE, LN/COL TELEMETRY (ENDS AT 506, -1 MARGIN)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+BLDSTAT         ; 1. PRE-FILL STATBUF WITH 62 SPACES, FOLLOWED BY NULL TERMINATOR
+                LD      HL, STATBUF
+                LD      (HL), ' '
+                LD      DE, STATBUF + 1
+                LD      BC, STATCOLS - 1
+                LDIR
+                XOR     A
+                LD      (STATBUF + STATCOLS), A ; NULL TERMINATOR AT 62
+
+                ; 2. LEFT CHANNEL: COLS 0..33 (MAX 34 CHARACTERS)
+                LD      DE, STATBUF
+                LD      A, (STATMSG)
+                OR      A
+                JR      Z, .NOSTMSG
+                LD      HL, STATMSG
+                LD      B, 34
+                CALL    .CPYMAX
+                JR      .DOLEFT
+
+.NOSTMSG        LD      A, (LOADERR)
+                OR      A
+                JR      Z, .CHKROM
+                LD      HL, .STROOM     ; "[FILE TOO LARGE]"
+                LD      B, 34
+                CALL    .CPYMAX
+                JR      .DOLEFT
+
+.CHKROM         ; FALLBACK FONT INDICATOR FOR B3 MUTATION TEST
+                ; MUST PRESERVE EXACT PATTERN:
+                ;   LD HL, .STRROM
+                ;   JR Z, .PUTFNT
+                ;   LD HL, .STRNOFN
+                LD      B, 34
+                LD      A, (FNTOK)
+                OR      A
+                LD      HL, .STRROM
+                JR      Z, .PUTFNT
+                LD      HL, .STRNOFN
+.PUTFNT         CALL    .CPYMAX
+
+.DOLEFT         ; 3. RIGHT CHANNEL AT FIXED OFFSET 34 (COLS 34..61 = 28 CHARS)
+                LD      DE, STATBUF + 34
+
+                ; A. MODE INDICATOR: 6 CHARS (COLS 34..39)
+                LD      A, (KMAPID)
+                CP      KMVI
+                JR      NZ, .NOTVI
+                LD      A, (SELACT)
+                OR      A
+                LD      HL, .STRVIV     ; "[VIS] "
+                JR      NZ, .PUTVI
+                LD      A, (VIMODE)
+                CP      VIMNORM
+                LD      HL, .STRVIN     ; "[NORM]"
+                JR      Z, .PUTVI
+                LD      HL, .STRVII     ; "[INS] "
+.PUTVI          CALL    .CPY6
+                JR      .DONEMOD
+
+.NOTVI          LD      A, (SELACT)
+                OR      A
+                LD      HL, .STRSEL     ; "[SEL] "
+                JR      NZ, .PUTNVI
+                LD      A, (INSMODE)
+                OR      A
+                LD      HL, .STROVR     ; "[OVR] "
+                JR      Z, .PUTNVI
+                LD      HL, .STRVII     ; "[INS] "
+.PUTNVI         CALL    .CPY6
+.DONEMOD
+                ; B. 1 SPACE SEPARATOR (COL 40)
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
+
+                ; C. CURSOR POSITION: 21 CHARS (COLS 41..61)
+                LD      HL, .STRLN      ; "Ln "
+                CALL    .CPY3
+                LD      HL, (DOCLINE)
+                INC     HL
+                LD      B, 5
+                CALL    .CPYNUM
+                LD      A, '/'
+                LD      (DE), A
+                INC     DE
+                LD      HL, (TOTLINES)
+                LD      B, 5
+                CALL    .CPYNUM
+                LD      HL, .STRCOL     ; " Col "
+                CALL    .CPY5
+                LD      A, (CURX)
+                INC     A
+                LD      L, A
+                LD      H, 0
+                LD      B, 2
+                CALL    .CPYNUM
+                RET
+
+.CPY6           LDI
+.CPY5           LDI
+.CPY4           LDI
+.CPY3           LDI
+                LDI
+                LDI
+                RET
+
+.CPYMAX         LD      A, B
+                OR      A
+                RET     Z
+                LD      A, (HL)
+                OR      A
+                RET     Z
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                DEC     B
+                JR      .CPYMAX
+
+                ; HL = VALUE, B = WIDTH: APPEND THE LOW B DIGITS, ZERO PADDED.
+                ; B2D16 RIGHT-ALIGNS AT B2DEND WITH SPACES FOR LEADING ZEROS.
+.CPYNUM         PUSH    DE
+                PUSH    BC
+                CALL    B2D16
+                POP     BC
+                POP     DE
+                LD      HL, B2DEND
+                LD      A, L
+                SUB     B
+                LD      L, A
+                JR      NC, .CPYNUM2
+                DEC     H
+.CPYNUM2        LD      A, (HL)
+                CP      ' '
+                JR      NZ, .CPYNUM3
+                LD      A, '0'
+.CPYNUM3        LD      (DE), A
+                INC     HL
+                INC     DE
+                DJNZ    .CPYNUM2
+                RET
+
+.STRROM         DEFM    "[ROM] ", 0
+.STRNOFN        DEFB    0
+.STRVIN         DEFM    "[NORM]"
+.STRVII         DEFM    "[INS] "
+.STRVIV         DEFM    "[VIS] "
+.STROVR         DEFM    "[OVR] "
+.STRSEL         DEFM    "[SEL] "
+.STRLN          DEFM    "Ln "
+.STRCOL         DEFM    "  Col "
+.STROOM         DEFM    "[FILE TOO LARGE]", 0
+
+
+; --- DRWMENU               ----------------------------------------
+
+
+; - DRWMENU ----------------------------
+; - DRAW MENU BAR (ROW 0, ALWAYS VISIBLE)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DRWMENU         LD      HL, 0
+                LD      (VDP_SX), HL
+                LD      (VDP_SY), HL
+                LD      (VDP_DX), HL
+                LD      (VDP_DY), HL    ; DY = 0
+                LD      HL, 512
+                LD      (VDP_NX), HL
+                LD      HL, 8           ; NY = 8
+                LD      (VDP_NY), HL
+                LD      A, CLR_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+
+                ; PRINT MENU TEXT
+                LD      HL, MNUTEXT
+                LD      DE, 8           ; DX = 8
+                LD      BC, 0           ; DY = 0
+                CALL    BLTSTR
+                CALL    DRWFNAM
+                LD      A, #FF
+                LD      (CLKMIN), A
+                JP      UPDMCLK
+
+MNUTEXT         DEFM    "S62ED | File  Edit  Help", 0
+
+
+; --- DRWFNAM                   ----------------------------------------
+
+
+; - DRWFNAM ----------------------------
+; - DRAW CURRENT FILENAME IN ROW 0
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DRWFNAM         ; 1. CLEAR FILENAME REGION IN ROW 0
+                ; DX = 236, DY = 0
+                ; IF SHOWCLK: NX = 228 (236 + 228 = 464, REACHING START OF CLOCK)
+                ; IF NO CLK:  NX = 268 (236 + 268 = 504)
+                LD      HL, 236
+                LD      (VDP_DX), HL
+                LD      HL, 0
+                LD      (VDP_DY), HL
+                LD      HL, 228         ; 236 + 228 = 464
+                LD      A, (SHOWCLK)
+                OR      A
+                JR      NZ, .CLRNX
+                LD      HL, 268         ; 236 + 268 = 504
+.CLRNX          LD      (VDP_NX), HL
+                LD      HL, CELLH
+                LD      (VDP_NY), HL
+                LD      A, COL_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; 2. POPULATE FNAMBUF
+                LD      A, (FILENAME)
+                OR      A
+                JR      NZ, .HAVEFN
+                ; NO FILENAME: IF MODIFIED, USE "Untitled"
+                LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .EXIT        ; NOT MODIFIED & NO NAME: LEAVE CLEARED
+                LD      DE, FNAMBUF
+                LD      HL, .STRUNT     ; "Untitled"
+                LD      B, 8
+                CALL    .CPYSTR
+                JR      .CHKMOD
+
+.HAVEFN         ; EXTRACT BASENAME (CAPPED AT 20 CHARS)
+                CALL    FNBASE          ; HL = BASENAME, CLOBBERS AF, DE
+                LD      DE, FNAMBUF
+                LD      B, 20
+                CALL    .CPYSTR
+
+.CHKMOD         ; APPEND " *" IF MODIFIED
+                LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .CHKCLK
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
+                LD      A, '*'
+                LD      (DE), A
+                INC     DE
+
+.CHKCLK         ; APPEND " | " IF SHOWCLK
+                LD      A, (SHOWCLK)
+                OR      A
+                JR      Z, .TERMFN
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
+                LD      A, '|'
+                LD      (DE), A
+                INC     DE
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
+
+.TERMFN         XOR     A
+                LD      (DE), A         ; NULL TERMINATOR
+
+                ; 3. COMPUTE LENGTH OF STRING IN FNAMBUF
+                LD      HL, FNAMBUF
+                LD      B, 0
+.COUNTL         LD      A, (HL)
+                OR      A
+                JR      Z, .COUNTD
+                INC     HL
+                INC     B
+                JR      .COUNTL
+.COUNTD         ; B = NUMBER OF CHARACTERS
+                ; WIDTH IN PIXELS = B * 8
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                ADD     HL, HL          ; * 4
+                ADD     HL, HL          ; HL = B * 8
+
+                ; END X: 464 (IF SHOWCLK) OR 504 (IF NO CLK)
+                LD      DE, 464
+                LD      A, (SHOWCLK)
+                OR      A
+                JR      NZ, .HAVEND
+                LD      DE, 504
+.HAVEND         ; START X = END X - WIDTH = DE - HL
+                EX      DE, HL
+                OR      A
+                SBC     HL, DE          ; HL = START X
+
+                ; PRINT AT (DX = HL, DY = 0)
+                EX      DE, HL          ; DE = START X
+                LD      HL, FNAMBUF
+                LD      BC, 0           ; DY = 0
+                CALL    BLTSTR
+
+.EXIT           LD      A, (MODIFIED)
+                LD      (MODPRV), A
+                RET
+
+.CPYSTR         LD      A, (HL)
+                OR      A
+                RET     Z
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                DJNZ    .CPYSTR
+                RET
+
+.STRUNT         DEFM    "Untitled"
+
+
+; --- CHKCLK                    ----------------------------------------
+
+
+; - CHKCLK -----------------------------
+; - TEST IF CLOCK / COLON NEEDS REDRAW (CALLED IN MAINLOOP & .DRAWCUR)
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+CHKCLK          LD      A, (SHOWCLK)
+                OR      A
+                RET     Z
+
+                LD      A, (WINACTV)
+                OR      A
+                RET     NZ
+
+                ; JIFFY IS A 16-BIT FRAME COUNTER. SUBTRACTING THE STAMP AS
+                ; A WORD KEEPS THE ELAPSED COUNT EXACT ACROSS ITS WRAP AND
+                ; ACROSS STALLS LONGER THAN 256 FRAMES -- AN 8-BIT DIFFERENCE
+                ; WRAPS DURING A LONG FILE SAVE AND SWALLOWS A TOGGLE.
+                LD      HL, (JIFFY)
+                LD      DE, (CLKJIF)
+                OR      A
+                SBC     HL, DE          ; HL = FRAMES SINCE THE LAST TOGGLE
+                LD      A, (CLKHZ)
+                LD      E, A
+                LD      D, 0
+                OR      A
+                SBC     HL, DE
+                RET     C               ; LESS THAN ONE SECOND
+
+                ; 1 SECOND ELAPSED: RESTAMP
+                LD      HL, (JIFFY)
+                LD      (CLKJIF), HL
+
+                ; TOGGLE COLON PHASE (0 = ON, 1 = OFF)
+                LD      A, (CLKPH)
+                XOR     1
+                LD      (CLKPH), A
+
+                JP      UPDMCLK
+
+
+; --- UPDMCLK                   ----------------------------------------
+
+
+; - UPDMCLK ----------------------------
+; - UPDATE MENU BAR CLOCK IN ROW 0 VIA RTC
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+UPDMCLK         LD      A, (SHOWCLK)
+                OR      A
+                RET     Z               ; CLOCK DISABLED IN CONFIG
+
+                LD      C, _GTIME       ; #2C
+                CALL    DOS             ; H = HOURS (0..23), L = MINUTES (0..59), D = SECONDS (0..59)
+                LD      A, (CLKMIN)
+                CP      L
+                JR      NZ, .MINCHG     ; MINUTE CHANGED (OR FIRST DRAW)
+
+                ; MINUTE IS THE SAME: UPDATE ONLY COLON CELL (DX = 480, DY = 0)
+                ; CLEAR 8X8 BOX AT DX = 480, DY = 0 (COLOR 2: COL_UI).
+                LD      HL, 480
+                LD      (VDP_DX), HL
+                LD      HL, 0
+                LD      (VDP_DY), HL
+                LD      HL, CELLW
+                LD      (VDP_NX), HL
+                LD      HL, CELLH
+                LD      (VDP_NY), HL
+                LD      A, COL_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; CHECK COLON PHASE SET BY CHKCLK (0 = ON, 1 = OFF)
+                LD      A, (CLKPH)
+                OR      A
+                RET     NZ              ; 1: OFF (LEAVE ERASED/BLANK)
+
+                ; 0: ON (DRAW COLON GLYPH)
+                LD      A, ':'
+                LD      HL, 480
+                LD      DE, 0
+                JP      BLTCHTR
+
+.MINCHG         ; MINUTE CHANGED: FULL REDRAW OF "HH:MM"
+                LD      A, L
+                LD      (CLKMIN), A     ; UPDATE CACHED MINUTE
+                PUSH    HL              ; H = HOURS, L = MINUTES
+
+                ; FORMAT "HH:MM", 0 INTO CLKBUF
+                LD      A, H            ; H = HOURS (0..23)
+                CALL    DECDIG2
+                LD      A, D
+                LD      (CLKBUF), A
+                LD      A, E
+                LD      (CLKBUF + 1), A
+
+                LD      A, (CLKPH)
+                OR      A
+                LD      A, ':'
+                JR      Z, .SETCOL
+                LD      A, ' '
+.SETCOL         LD      (CLKBUF + 2), A
+
+                POP     HL              ; RESTORE L = MINUTES
+                LD      A, L
+                CALL    DECDIG2
+                LD      A, D
+                LD      (CLKBUF + 3), A
+                LD      A, E
+                LD      (CLKBUF + 4), A
+                XOR     A
+                LD      (CLKBUF + 5), A
+
+                ; CLEAR 40X8 BOX AT DX = 464, DY = 0 (COLOR 2: COL_UI).
+                LD      HL, 464
+                LD      (VDP_DX), HL
+                LD      HL, 0
+                LD      (VDP_DY), HL
+                LD      HL, 5 * CELLW   ; 5 GLYPHS = 40 PX
+                LD      (VDP_NX), HL
+                LD      HL, CELLH
+                LD      (VDP_NY), HL
+                LD      A, COL_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; BLIT STRING "HH:MM" (OPAQUE UI-PAPER GLYPHS)
+                LD      HL, CLKBUF
+                LD      DE, 464
+                LD      BC, 0
+                JP      BLTSTR
+
+
+; --- DECDIG2                   ----------------------------------------
+
+
+; - DECDIG2 ----------------------------
+; - CONVERT 8-BIT INT (0..59) TO 2 ASCII DIGITS
+; - IN:  A = VALUE (0..59)
+; - OUT: D = TENS ASCII, E = UNITS ASCII
+; - CLOBBERS: A, D, E
+; -
+
+DECDIG2         LD      D, '0'
+.DECLP          CP      10
+                JR      C, .DECDON
+                SUB     10
+                INC     D
+                JR      .DECLP
+.DECDON         ADD     A, '0'
+                LD      E, A
+                RET
+
+
+; --- BLTCHTR                  ----------------------------------------
+
+
+; - BLTCHTR ----------------------------
+; - BLIT ONE UI CHROME CHARACTER, OPAQUE, FROM THE UI-PAPER FONT COPY
+; - IN:  A  = ASCII CHAR
+; -      HL = DX
+; -      DE = DY
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+; - THE GLYPHS COME FROM THE RIGHT HALF OF THE NORMAL TABLE (SX = FUIR_SX
+; - + (CHAR & 31) * 8), WHERE FONTINIT STORES A SECOND COPY EXPANDED ON
+; - COL_UI PAPER (EXPSTAT). EVERY CALLER PAINTS OVER FLAT COL_UI CHROME
+; - (STATUS BAR, MENU BAR, CLOCK, FILENAME), SO THE COPY BLITS WITH PLAIN
+; - IMP: ONE COMMAND PER CELL, NO ERASE PASS, NO TRANSPARENT GAP.
+; -
+
+BLTCHTR         PUSH    AF
+                PUSH    BC
+                PUSH    DE
+                PUSH    HL
+
+                LD      (VDP_DX), HL
+                EX      DE, HL
+                LD      (VDP_DY), HL
+
+                ; CALC FONT SX/SY
+                LD      B, A            ; B = CHAR
+                AND     %00011111       ; CHAR & 31
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                ADD     HL, HL          ; * 4
+                ADD     HL, HL          ; * 8
+                LD      DE, FUIR_SX     ; RIGHT HALF OF THE NORMAL TABLE
+                ADD     HL, DE
+                LD      (VDP_SX), HL
+
+                LD      A, B
+                SRL     A
+                SRL     A
+                SRL     A
+                SRL     A
+                SRL     A               ; CHAR >> 5 (0..7)
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; * 8
+                LD      L, A
+                LD      H, 0
+                LD      DE, FNORM_SY    ; 256
+                ADD     HL, DE
+                LD      (VDP_SY), HL
+
+                LD      HL, CELLW       ; NX = 8
+                LD      (VDP_NX), HL
+                LD      HL, CELLH       ; NY = 8
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMM | VDP_IMP
+                CALL    LMMM
+
+                POP     HL
+                POP     DE
+                POP     BC
+                POP     AF
+                RET
+
+
+; - BLTSTR -----------------------------
+; - BLIT ASCIIZ STRING OF UI CHROME (OPAQUE, SEE BLTCHTR)
+; - IN:  HL = POINTER TO ASCIIZ STRING
+; -      DE = DX
+; -      BC = DY
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+BLTSTR          LD      A, (HL)
+                OR      A
+                RET     Z
+                PUSH    HL
+                PUSH    DE
+                PUSH    BC
+                EX      DE, HL          ; HL = DX
+                LD      D, B
+                LD      E, C            ; DE = DY
+                CALL    BLTCHTR
+                POP     BC
+                POP     DE
+                POP     HL
+                INC     HL
+                LD      A, 8
+                ADD     A, E
+                LD      E, A
+                JR      NC, BLTSTR
+                INC     D
+                JR      BLTSTR
+
+
+; --- DRWCUR                ----------------------------------------
+
+
+; - DRWCUR -----------------------------
+; - TOGGLE CURSOR XOR OVERLAY AT (CURX, CURY)
+; - IN:  NONE (USES CURX, CURY)
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+DRWCUR          PUSH    AF
+                PUSH    BC
+                PUSH    DE
+                PUSH    HL
+
+                LD      A, (CURX)
+                LD      HL, LEFTCOL
+                SUB     (HL)            ; A = CURX - LEFTCOL
+                JR      C, .OFFSCR      ; CURX < LEFTCOL
+                CP      TEXTCOLS
+                JR      NC, .OFFSCR     ; CURX >= LEFTCOL + TEXTCOLS
+
+                ; DX = TXORG_X + SCREEN_X * 8
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                ADD     HL, HL          ; * 4
+                ADD     HL, HL          ; * 8
+                LD      DE, TXORG_X
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+
+                ; DY = (CURY + 1) * 8
+                LD      A, (CURY)
+                INC     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_DY), HL
+
+                LD      HL, 0
+                LD      (VDP_SX), HL
+                LD      (VDP_SY), HL
+
+                LD      HL, CELLW       ; NX = 6
+                LD      (VDP_NX), HL
+                LD      HL, CELLH       ; NY = 8
+                LD      (VDP_NY), HL
+
+                LD      A, COL_FG       ; CLR = 1 (INVERSE VIDEO)
+                LD      (VDP_CLR), A
+
+                XOR     A
+                LD      (VDP_ARG), A
+
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_XOR
+                CALL    LMMV
+
+.OFFSCR         POP     HL
+                POP     DE
+                POP     BC
+                POP     AF
+                RET
+
+
+; --- MODAL DIALOG INPUT        ----------------------------------------
+
+
+; - WINPOLL ----------------------------
+; - POLL KEYBOARD AND CLOCK FOR MODAL DIALOGS
+; - IN:  NONE
+; - OUT: Z  = NO KEY PRESSED
+; -      NZ = KEY PRESSED (A = ASCII CODE)
+; - CLOBBERS: ALL
+; -
+
+WINPOLL         CALL    CHKCLK
+                LD      IX, CHSNS
+                CALL    BIOSCALL
+                RET     Z
+                LD      IX, CHGET
+                CALL    BIOSCALL
+                ; CHGET RETURNS THE KEY IN A AND NO FLAG AT ALL: WHEN ITS
+                ; POINTER WRAPS FROM THE END OF THE 40-BYTE KEYBOARD BUFFER
+                ; ITS LAST COMPARE LEAVES Z SET, AND A CALLER TESTING Z FOR
+                ; "NO KEY" DROPPED ONE KEYSTROKE IN FORTY -- IN EVERY DIALOG.
+                ; MEASURED IN THE FILE BROWSER, 2026-09-29.
+                LD      C, A
+                XOR     A
+                INC     A               ; NZ: A KEY
+                LD      A, C
+                RET
+
+
+; - WINKIL -----------------------------
+; - FLUSH KEYBOARD BUFFER VIA BIOS KILBUF
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINKIL          LD      IX, KILBUF
+                JP      BIOSCALL
+
+

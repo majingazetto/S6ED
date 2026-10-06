@@ -2333,6 +2333,17 @@ SELXOR          LD      A, E
                 LD      C, D            ; C = XA
                 LD      D, H
                 LD      E, L
+                IFDEF   S62ED
+                ADD     HL, HL          ; * 2
+                ADD     HL, HL          ; * 4
+                ADD     HL, HL          ; NX = CELLS * 8
+                LD      (VDP_NX), HL
+                LD      L, C
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                ADD     HL, HL          ; * 4
+                ADD     HL, HL          ; XA * 8
+                ELSE
                 ADD     HL, HL
                 ADD     HL, DE          ; * 3
                 ADD     HL, HL          ; NX = CELLS * 6
@@ -2344,6 +2355,7 @@ SELXOR          LD      A, E
                 ADD     HL, HL
                 ADD     HL, DE
                 ADD     HL, HL          ; XA * 6
+                ENDIF
                 LD      DE, TXORG_X
                 ADD     HL, DE
                 LD      (VDP_DX), HL

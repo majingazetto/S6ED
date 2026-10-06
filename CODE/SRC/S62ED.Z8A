@@ -1,0 +1,528 @@
+; **********************************************
+; * S62ED                                      *
+; * MSX2 SCREEN 6 (62-COL) TEXT EDITOR         *
+; * 62 COLS X 24 ROWS, 8X8 FONT, DOS2/NEXTOR   *
+; * 2026 CODED BY ARMANDO PEREZ                *
+; **********************************************
+
+                OUTPUT  "S62ED.COM"
+
+                DEFINE  S62ED   1
+
+; --- MACROS                    ----------------------------------------
+
+
+                ; INFINITE LOOP / BREAKPOINT
+                MACRO   BRK
+                DI
+                JP      $
+                ENDM
+
+                ; ORG WITH PADDING (DOES NOT DISCARD CODE)
+                MACRO PADORG ADDR
+                IF $ < ADDR
+                BLOCK ADDR-$
+                ENDIF
+                ORG ADDR
+                ENDM
+
+                ; DEBUG LOG TO OPENMSX DEBUGDEVICE (PORTS #2E / #2F)
+                ; BUILD WITH  make DEBUG=1  AND CAPTURE WITH:
+                ;   m2d2 S62ED.DSK -ext debugdevice
+                ; ASSEMBLES TO NOTHING IN A NORMAL BUILD.
+                MACRO   DBG MSG
+                IFDEF   DEBUG
+                CALL    DBGMSG
+                DEFM    MSG, 10, 0
+                ENDIF
+                ENDM
+
+
+; --- CONST / INCLUDES          ----------------------------------------
+
+
+                INCLUDE HARD.Z8A
+                INCLUDE CONST_S62.Z8A
+                INCLUDE CONST_CORE.Z8A
+
+
+; --- DOS PROGRAM               ----------------------------------------
+
+
+                ORG     #100
+                JP      INIT
+
+
+; --- STRINGS                   ----------------------------------------
+
+
+ENODOS2         DEFM    "Requires MSX-DOS 2 or Nextor.$"
+ENOMAP          DEFM    "No mapper manager found.$"
+ENOTPA          DEFM    "Insufficient Page 3 memory.$"
+ENOMEM          DEFM    "Out of mapper memory.$"
+ENO2SEG         DEFM    "S62ED requires 2 free mapper segments.$"
+TXTHLP          DEFM    "S62ED v"
+                DEFB    VERSION.MAJOR, '.', VERSION.MINOR
+                DEFM    " - Screen 6 (62-col) text editor for MSX2", 13, 10
+                DEFM    "Requires MSX-DOS 2 or Nextor and 2 free mapper "
+                DEFM    "segments.", 13, 10, 13, 10
+                DEFM    "Usage: S62ED [file] [/V] [/H | /?]", 13, 10, 13, 10
+                DEFM    "  file    file to open (paths allowed: A:/DIR/FILE.TXT)"
+                DEFM    13, 10
+                DEFM    "  /V      verbose startup info and memory stats", 13, 10
+                DEFM    "  /H, /?  show this help and exit", 13, 10, "$"
+
+
+; --- MODULE INCLUDES           ----------------------------------------
+
+
+                INCLUDE BDOS.Z8A
+                INCLUDE GENERIC.Z8A
+                INCLUDE VDP.Z8A
+                INCLUDE FONT.Z8A
+                INCLUDE MAPPER.Z8A
+                INCLUDE BUFFER.Z8A
+                INCLUDE COMPACT.Z8A
+                INCLUDE RENDER.Z8A
+                INCLUDE SCROLL.Z8A
+                INCLUDE EDIT.Z8A
+                INCLUDE UNDO.Z8A
+                INCLUDE SEARCH.Z8A
+                INCLUDE MARKUP.Z8A
+                INCLUDE ACTION.Z8A
+                INCLUDE KEYMAP.Z8A
+                INCLUDE DISP.Z8A
+                INCLUDE INPUT.Z8A
+                INCLUDE UI.Z8A
+                INCLUDE FILEIO.Z8A
+                INCLUDE PARAMS.Z8A
+                INCLUDE XSEG.Z8A
+
+
+; --- INIT                      ----------------------------------------
+
+
+; - INIT -------------
+; - PROGRAM ENTRY POINT
+; -
+
+INIT            DBG     "1: INIT START"
+
+                ; CLEAR THE VARIABLE BLOCK.
+                ; VARS.Z8A IS INCLUDED AFTER OUTEND, SO NONE OF ITS DEFB / DEFW
+                ; INITIALISERS REACH THE .COM FILE -- THEY ONLY RESERVE
+                ; ADDRESSES. AT RUNTIME THE WHOLE BLOCK HOLDS WHATEVER THE
+                ; PREVIOUS PROGRAM LEFT IN THE TPA, SO EVERY VARIABLE READ
+                ; BEFORE IT IS WRITTEN (SEGCNT, INSMODE, MODIFIED, MAPRDY,
+                ; FILENAME) STARTS OUT AS GARBAGE. ZERO IT, THEN SET THE FEW
+                ; NON-ZERO DEFAULTS BY HAND.
+                LD      HL, VARS
+                LD      DE, VARS + 1
+                LD      BC, ENDVARS - VARS - 1
+                LD      (HL), 0
+                LDIR
+
+                ; CLEAR PAGE 3 BUFFERS (WORKBUF, WORKBUF2, PREVBUF)
+                LD      HL, WORKBUF
+                LD      DE, WORKBUF + 1
+                LD      BC, 3 * WORKSIZ - 1
+                LD      (HL), 0
+                LDIR
+
+                ; CLEAR THE PAGE 3 SCRATCH BLOCK (HOMEPTH, LINBUF, FILENAME)
+                LD      HL, P3BASE
+                LD      DE, P3BASE + 1
+                LD      BC, P3TOP - P3BASE - 1
+                LD      (HL), 0
+                LDIR
+
+                ; LOAD_FLAG IS ZEROED BY EVERY DOS 2 CALL, SO IT HAS TO BE
+                ; READ BEFORE THE FIRST ONE (DOSVER): HOMEINIT TRUSTS THE
+                ; PROGRAM ENVIRONMENT ITEM ONLY WHEN THE SHELL SET IT NOW.
+                LD      A, (LOADFLAG)
+                LD      (LOADFLG), A
+
+                LD      A, INS_MODE
+                LD      (INSMODE), A
+                LD      A, WRAP_DEV
+                LD      (WRAPMODE), A
+                XOR     A
+                LD      (TXTWIDTH), A
+                LD      A, TEXTCOLS
+                LD      (SAVETW), A
+                LD      A, MKUP_MD
+                LD      (MKUPMD), A
+                LD      A, 1
+                LD      (SHOWCLK), A
+                LD      A, 4
+                LD      (TABWIDTH), A
+                LD      A, 1
+                LD      (AUTOLOD), A
+                ; DETECT VDP VERTICAL FREQUENCY (50HZ PAL VS 60HZ NTSC)
+                LD      A, (RG9SAV)     ; #FFE8 (VDP R#9 SHADOW)
+                AND     %00000010       ; BIT 1: 0 = 60HZ, 1 = 50HZ
+                LD      A, 60
+                JR      Z, .ISNTSC
+                LD      A, 50
+.ISNTSC         LD      (CLKHZ), A
+                LD      HL, (JIFFY)
+                LD      (CLKJIF), HL
+                XOR     A
+                LD      (CLKPH), A
+                DEC     A               ; A = #FF
+                LD      (CLKMIN), A
+                XOR     A
+                LD      (KMAPID), A
+                CALL    KMAPSW          ; INITIALIZE KMAPPTR TO KMAPSTD
+                CALL    KANARST         ; ENSURE KANA LED IS OFF AT STARTUP
+
+                LD      (SAVESP), SP    ; PRESERVE ORIGINAL DOS STACK
+
+                ; DETECT DOS VERSION
+                DBG     "2: DOSVER"
+                CALL    DOSVER
+                JP      C, .NODOS2      ; CARRY = DOS1 ONLY
+                CALL    DSKINIT         ; INSTALL DISK ERROR & ABORT HANDLERS
+
+                ; CHECK PAGE 3 TPA HEADROOM (FOR BUFFERS AT #C000..#C5FF)
+                DBG     "2a: TP3CHK"
+                LD      HL, (#0006)
+                LD      DE, TP3MIN
+                OR      A
+                SBC     HL, DE
+                JP      C, .NOTPA
+
+                ; WHERE THE PROGRAM LIVES: S6ED.DAT, .FNT AND THE GENERAL
+                ; CFG ARE READ FROM THERE, THE LOCAL CFG FROM HERE.
+                DBG     "2a2: HOMEINIT"
+                CALL    HOMEINIT
+
+                ; PARSE THE COMMAND LINE WHILE STILL IN TEXT MODE: /H
+                ; PRINTS THE HELP AND EXITS THROUGH TERM WITH NOTHING
+                ; CLAIMED; A FILENAME IS REMEMBERED IN FILENAME AND LOADED
+                ; AFTER CFGLOAD, ONCE THE TEXT BUFFER EXISTS.
+                DBG     "2b: PARAMS"
+                CALL    PARAMS
+
+                ; LOCATE MAPPER MANAGER
+                DBG     "3: MAPINIT"
+                CALL    MAPINIT
+                JP      C, .NOMAP
+
+                ; SAVE ORIGINAL MAPPER SEGMENTS
+                DBG     "4: GETP1/GETP2"
+                CALL    GETP1
+                LD      (DEFSEG1), A
+                CALL    GETP2
+                LD      (DEFSEG2), A
+
+                ; CLAIM THE TWO MANDATORY SEGMENTS (DIRECTORY + FEATURES),
+                ; PROBE THE REST AND REPORT THE TEXT CEILING. FATAL IF THE
+                ; MINIMUM OF 2 FREE SEGMENTS IS NOT THERE. RUNS IN TEXT MODE
+                ; SO ITS MESSAGES ARE VISIBLE.
+                DBG     "4b: SEGRESV"
+                CALL    SEGRESV
+
+                ; VERIFY S6ED.DAT EXISTS BEFORE ENTERING GRAPHICS MODE
+                DBG     "4c: CHKDAT"
+                CALL    CHKDAT
+
+                ; PRESERVE ORIGINAL SCREEN CONFIGURATION
+                LD      A, (SCRMOD)
+                LD      (SAVSCRMD), A
+                LD      A, (LINL40)
+                LD      (SAVL40), A
+                LD      A, (LINLEN)
+                LD      (SAVLLEN), A
+                LD      A, (FORCLR)
+                LD      (SAVFORC), A
+                LD      A, (BAKCLR)
+                LD      (SAVBAKC), A
+                LD      A, (BDRCLR)
+                LD      (SAVBDRC), A
+
+                ; INITIALIZE SCREEN
+                DBG     "5: SCRINIT"
+                CALL    SCRINIT
+
+                ; INITIALIZE FONT TABLES IN VRAM
+                DBG     "6: FONTINIT"
+                CALL    FONTINIT
+
+                ; INITIALIZE EMPTY TEXT BUFFER
+                DBG     "7: BUFINIT"
+                CALL    BUFINIT
+
+                ; LOAD CONFIGURATION FROM S6ED.CFG (IF PRESENT)
+                DBG     "7b: CFGRUN"
+                CALL    CFGRUN
+
+                ; LOAD THE FILE NAMED ON THE COMMAND LINE, IF ANY. PARAMS
+                ; ALREADY RAN BACK IN TEXT MODE; FILENAME IS EMPTY WHEN NO
+                ; FILE WAS GIVEN.
+                DBG     "8: FILELOAD"
+                LD      A, (FILENAME)
+                AND     A
+                JR      Z, .NOARG       ; NO FILENAME GIVEN
+                LD      HL, FILENAME
+                CALL    FILELOAD
+                CALL    REDRAW          ; RENDER LOADED DOCUMENT
+                JR      .READY
+
+.NOARG          ; DRAW INITIAL SCREEN (EMPTY BUFFER)
+                DBG     "9b: REDRAW NOARG"
+                CALL    REDRAW
+
+.READY          ; DRAW CHROME AND INITIAL CURSOR
+                DBG     "10: CHROME"
+                CALL    DRWMENU
+                CALL    DRWSTAT
+                CALL    DRWCUR
+                LD      A, 1
+                LD      (BLNKPH), A
+                LD      A, (JIFFY)
+                LD      (BLNKCNT), A
+
+                ; ENTER MAIN EDITOR LOOP
+                DBG     "11: ENTER MAINLOOP"
+                JP      MAINLOOP
+
+.NODOS2         LD      DE, ENODOS2
+                CALL    STROUT
+                JP      TERM
+
+.NOTPA          LD      DE, ENOTPA
+                CALL    STROUT
+                JP      TERM
+
+.NOMAP          LD      DE, ENOMAP
+                CALL    STROUT
+                JP      TERM
+
+
+; --- ERRMEM                    ----------------------------------------
+
+
+; - ERRMEM / ERRMSG --------------------
+; - ABORT: FATAL BOOT ERROR WITH A MESSAGE
+; - IN:  ERRMSG: DE = '$'-TERMINATED MESSAGE
+; - OUT: DOES NOT RETURN
+; - CLOBBERS: ALL
+; -
+; - ERRMEM IS THE ERRMEM ENTRY (DE = ENOMEM): REACHED FROM SEGRESV WHEN THE
+; - DIRECTORY SEGMENT CANNOT BE CLAIMED -- WITHOUT IT THERE IS NO EDITOR.
+; - ERRMSG IS THE GENERIC ENTRY (SEGRESV USES IT WITH ENO2SEG WHEN THE
+; - FEATURE SEGMENT IS MISSING). DROPS BACK TO TEXT MODE FIRST -- OTHERWISE
+; - THE MESSAGE WOULD BE WRITTEN INTO THE SCREEN 6 BITMAP AND NEVER SEEN.
+; - TERM THEN RETURNS THE SEGMENTS AND THE ORIGINAL STACK TO DOS.
+; -
+
+ERRMEM          LD      DE, ENOMEM
+ERRMSG          LD      A, (SCRRDY)
+                AND     A
+                JR      Z, .SAY
+                PUSH    DE
+                CALL    RSTPAL
+                XOR     A               ; SCREEN 0
+                LD      IX, CHGMOD
+                CALL    BIOSCALL
+                XOR     A
+                LD      (SCRRDY), A     ; TELL TERM THE SCREEN IS ALREADY BACK
+                POP     DE
+
+.SAY            CALL    STROUT
+                JP      TERM
+
+
+; --- SETPAL                    ----------------------------------------
+
+
+; - SETPAL -----------------------------
+; - UPLOAD 4-COLOR PALETTE TO V9938
+; - IN:  HL = POINTER TO 8-BYTE PALETTE TABLE
+; - OUT: NONE
+; - CLOBBERS: A, BC, HL
+; -
+
+SETPAL          DI
+                XOR     A
+                OUT     (VDPCT), A      ; PALETTE 0
+                LD      A, #90          ; REG 16 | #80
+                OUT     (VDPCT), A
+                LD      B, 8            ; 4 COLORS * 2 BYTES
+                LD      C, VDPPAL       ; PORT #9A
+                OTIR
+                EI
+                RET
+
+
+; --- RSTPAL                    ----------------------------------------
+
+
+; - RSTPAL -----------------------------
+; - RESTORE STANDARD 16-COLOR V9938 PALETTE AND THE ENTRY R#8
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: A, BC, HL
+; -
+
+RSTPAL          DI
+                XOR     A
+                OUT     (VDPCT), A      ; PALETTE 0
+                LD      A, #90          ; REG 16 | #80
+                OUT     (VDPCT), A
+                LD      B, 32           ; 16 COLORS * 2 BYTES
+                LD      C, VDPPAL       ; PORT #9A
+                LD      HL, DEFPLT
+                OTIR
+                ; R#8: CHGMOD DOES NOT RESTORE IT, SO WITHOUT THIS DOS KEEPS
+                ; SPD=1 (NO SPRITES) AND TP=1 FOR WHATEVER RUNS NEXT
+                LD      A, (SAVRG8)
+                LD      (RG8SAV), A
+                OUT     (VDPCT), A
+                LD      A, #88          ; REG 8 | #80
+                OUT     (VDPCT), A
+                EI
+                RET
+
+
+; --- SCRINIT                   ----------------------------------------
+
+
+; - SCRINIT ----------------------------
+; - SET SCREEN 6, PALETTE, CLEAR VRAM
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SCRINIT         LD      A, 6
+                LD      IX, CHGMOD
+                CALL    BIOSCALL
+                LD      A, #FF
+                LD      (SCRRDY), A
+
+                ; SET BORDER TO SOLID BLACK (R#7 = 0) VIA RG7SAV
+                LD      A, (RG7SAV)
+                AND     #F0             ; BORDER COLOR 0 (BLACK)
+                LD      B, A
+                LD      C, 7
+                LD      IX, WRTVDP_B
+                CALL    BIOSCALL
+
+                ; PRESERVE ORIGINAL R#8 AND CONFIGURE FOR SCREEN 6
+                LD      A, (RG8SAV)
+                LD      (SAVRG8), A
+                OR      #2A             ; SPD=1, VR=1, TP=1
+                LD      B, A
+                LD      C, 8
+                LD      IX, WRTVDP_B
+                CALL    BIOSCALL
+
+                ; SET PALETTE
+                LD      HL, PALDATA
+                CALL    SETPAL
+
+                ; CLEAR VRAM (HMMV 512x256 = #00000-#07FFF)
+                ; 256 LINES, NOT 212: LINES 212-255 ARE #06A00-#07FFF, WHICH AN
+                ; R#23 HARDWARE SCROLL WOULD PUT ON SCREEN. THEY COME UP HOLDING
+                ; WHATEVER DOS LEFT THERE. THE FONT TABLES START AT LINE 256
+                ; (VR_FNORM = #08000) AND ARE UPLOADED AFTERWARDS BY FONTINIT,
+                ; SO THIS FILL NEVER REACHES THEM.
+                LD      HL, 0
+                LD      (VDP_SX), HL
+                LD      (VDP_SY), HL
+                LD      (VDP_DX), HL
+                LD      (VDP_DY), HL
+                LD      HL, 512
+                LD      (VDP_NX), HL
+                LD      HL, 256
+                LD      (VDP_NY), HL
+                LD      A, CLR_BG
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+                CALL    VDPWAIT
+
+                ; DISABLE KEY CLICK
+                XOR     A
+                LD      (CLIKSW), A
+                
+                ; ERASE FUNCTION KEYS, THEN MAKE THEM DELIVER F1KEY.. TO THE KEYMAP
+                LD      IX, ERAFNK
+                CALL    BIOSCALL
+                CALL    SETFNKY
+
+                ; FLUSH KEYBOARD BUFFER
+                LD      IX, KILBUF
+                JP      BIOSCALL
+
+PALDATA         DEFB    #00, #00, #77, #07, #17, #02, #70, #07  ; 0:BG, 1:FG, 2:UI, 3:HI
+DEFPLT          DEFB    #00, #00, #00, #00, #11, #06, #33, #07  ; 0:TRANSP, 1:BLK, 2:MDGRN, 3:LTGRN
+                DEFB    #17, #01, #27, #03, #51, #01, #27, #06  ; 4:DKBLU, 5:LTBLU, 6:DKRED, 7:CYAN
+                DEFB    #71, #01, #73, #03, #61, #06, #64, #06  ; 8:MDRED, 9:LTRED, 10:DKYEL, 11:LTYEL
+                DEFB    #11, #04, #65, #02, #55, #05, #77, #07  ; 12:DKGRN, 13:MAG, 14:GRAY, 15:WHITE
+
+
+; --- VARS                      ----------------------------------------
+ 
+ 
+                OUTEND
+
+                INCLUDE VARS.Z8A
+
+
+; --- S62ED.DAT                 ----------------------------------------
+
+                ; S62ED.DAT MULTI-SEGMENT FEATURE CONTAINER
+                ; ASSEMBLED AS AN INDEPENDENT BINARY FILE VIA ROTATING OUTPUT.
+                ; CONTAINS 16-BYTE FILE HEADER, 8-BYTE BLOCK DESCRIPTORS,
+                ; AND THE FEATURE PAYLOAD PHASED AT #8000.
+                OUTPUT  "S62ED.DAT"
+
+; --- FILE HEADER (16 BYTES) -------------------------------------------
+
+DATHDRS:
+                DEFM    "S6ED"          ; 0..3: MAGIC ID (4 BYTES)
+                DEFW    1               ; 4..5: FORMAT VERSION 1 (16-BIT LE)
+                DEFB    #1A             ; 6:    DOS EOF MARKER (STOPS TYPE)
+                DEFB    1               ; 7:    NUMBER OF BLOCKS IN TABLE (1)
+                DEFW    16              ; 8..9: OFFSET TO BLOCK TABLE (16)
+                DEFS    6, 0            ; 10..15: RESERVED EXPANSION PADDING
+
+; --- BLOCK DESCRIPTOR TABLE (8 BYTES PER BLOCK) -----------------------
+
+; BLOCK 0: RESIDENT FEATURE SEGMENT (FTRSEG)
+                DEFB    1               ; 0: BLOCK ID (1 = FTRSEG)
+                DEFB    1               ; 1: FLAGS (1 = MANDATORY)
+                DEFW    FTRBASE         ; 2..3: LOAD ADDRESS IN PAGE 2
+                DEFW    BLK0LEN         ; 4..5: PAYLOAD LENGTH IN BYTES
+                DEFW    BLK0OFF         ; 6..7: ABSOLUTE OFFSET IN S62ED.DAT
+
+BLK0OFF         EQU     $ - DATHDRS
+
+; --- BLOCK 0 PAYLOAD (PHASE FTRBASE) ----------------------------------
+
+                PHASE   FTRBASE
+
+BLK0STR:
+                INCLUDE CFG.Z8A
+                INCLUDE WINDOW.Z8A
+                INCLUDE MENU.Z8A
+                INCLUDE BROWSE.Z8A
+                INCLUDE BROWSER.Z8A
+                ; FUTURE PASSENGERS APPENDED HERE SEQUENTIALLY:
+                ; INCLUDE VI.Z8A
+                ; INCLUDE TOKEN.Z8A
+BLK0END:
+
+                DEPHASE
+
+BLK0LEN         EQU     BLK0END - BLK0STR
+FTRBLEN         EQU     BLK0LEN
+FTRFREE         EQU     BRWIDX - BLK0END        ; WHAT IS LEFT BELOW THE LISTING
+                ASSERT  BLK0LEN <= DATBLEN      ; TOTAL FEATURE SEGMENT BUDGET
+                ASSERT  BLK0END <= BRWIDX       ; THE BROWSER'S LISTING ABOVE IT
+                ASSERT  FTRFREE >= 128, "FTRBASE HEADROOM < 128 BYTES"

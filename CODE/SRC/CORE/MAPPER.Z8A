@@ -504,9 +504,15 @@ TXTVTIT         DEFM    "S2ED v"
                 DEFB    VERSION.MAJOR, '.', VERSION.MINOR
                 DEFM    " - Screen 2 text editor for MSX1", 13, 10
                 ELSE
+                IFDEF   S62ED
+TXTVTIT         DEFM    "S62ED v"
+                DEFB    VERSION.MAJOR, '.', VERSION.MINOR
+                DEFM    " - Screen 6 text editor for MSX2", 13, 10
+                ELSE
 TXTVTIT         DEFM    "S6ED v"
                 DEFB    VERSION.MAJOR, '.', VERSION.MINOR
                 DEFM    " - Screen 6 text editor for MSX2", 13, 10
+                ENDIF
                 ENDIF
                 DEFM    "(c) 2024-2026 Armando Perez Abad", 13, 10, 13, 10, "$"
 TXTVTOT         DEFM    "Total mapper:   ", 0

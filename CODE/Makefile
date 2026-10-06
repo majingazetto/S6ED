@@ -3,9 +3,11 @@
 #	* (c) 2024 - 2025 Armando Pérez            						    	*
 #	*************************************************************************
 
-.PHONY: build build-s6 build-s2 dsk dsk-s2 s2 run clean check gate test \
+.PHONY: build build-s6 build-s2 build-s62 dsk dsk-s2 dsk-s62 s6 s2 s62 clean check gate test \
         test-s2 selftest testall \
-        run-s2 run-s2-1mb run-s2-msx2 run-s2-msx2-128
+        run run-s6 run128 run-s6-128 run-nextor debug \
+        run-s2 run-s2-1mb run-s2-msx2 run-s2-msx2-128 \
+        run-s62 run-s62-128
 
 # 	=========================================================================
 # 	CONSTANTS
@@ -72,6 +74,22 @@ INCLUDES_S2 		= -I.	\
 			  -I$(SRC_DIR)/CORE \
 			  -I$(SRC_DIR)/S2 \
 
+# --- S62 (Screen 6 62-col 8x8 font) Targets -----------------------------
+SOURCE_S62		= S62ED.Z8A
+CFGFILE_S62		= S62ED.CFG
+OUTPUT_S62		= S62ED.COM
+FNTFILE_S62		= S62ED.FNT
+DATFILE_S62		= S62ED.DAT
+DSKFILE_S62		= S62ED.DSK
+LSTFILE_S62		= S62ED.lst
+SYMFILE_S62		= S62ED.sym
+
+INCLUDES_S62 		= -I.	\
+			  -I$(RES_DIR) \
+			  -I$(SRC_DIR) \
+			  -I$(SRC_DIR)/CORE \
+			  -I$(SRC_DIR)/S62 \
+
 # -	 All Target --------------------------------------------------------------
 
 all: build dsk
@@ -80,7 +98,8 @@ all: build dsk
 
 clean:
 	@$(RM) -R $(OUTPUT) $(DATFILE) $(LSTFILE) $(SYMFILE) $(DSKFILE) $(FNTFILE) \
-		$(OUTPUT_S2) $(DATFILE_S2) $(LSTFILE_S2) $(SYMFILE_S2) $(DSKFILE_S2) $(FNTFILE_S2)
+		$(OUTPUT_S2) $(DATFILE_S2) $(LSTFILE_S2) $(SYMFILE_S2) $(DSKFILE_S2) $(FNTFILE_S2) \
+		$(OUTPUT_S62) $(DATFILE_S62) $(LSTFILE_S62) $(SYMFILE_S62) $(DSKFILE_S62) $(FNTFILE_S62)
 
 # `build` means the PROJECT, both targets.  It used to mean S6ED alone while
 # `clean` removed the artefacts of both, so `make clean build` left the tree
@@ -127,7 +146,7 @@ $(DSKFILE): $(DSKCONT)
 
 # -	 S2 Targets --------------------------------------------------------------
 
-s2: build-s2 dsk-s2
+s2: run-s2
 
 build-s2: $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2)
 
@@ -158,6 +177,39 @@ $(DSKFILE_S2): $(DSKCONT_S2) $(MANUAL) TEST_S2.TXT AUTOEXEC_S2.BAT LOCAL_S2.CFG
 	@$(DSKFAT) $(DSKFILE_S2) add TOOLS $(DSKCONT_S2)
 	@$(DSKFAT) $(DSKFILE_S2) add DEV $(MANUAL)=SXED.TXT TEST_S2.TXT=TEST.TXT LOCAL_S2.CFG=S2ED.CFG
 
+# -	 S62 Targets -------------------------------------------------------------
+
+s62: run-s62
+
+build-s62: $(OUTPUT_S62) $(DATFILE_S62) $(FNTFILE_S62)
+
+$(DATFILE_S62): $(OUTPUT_S62)
+	@if [ ! -f $(DATFILE_S62) ]; then \
+		$(ASM) --lst=$(LSTFILE_S62) --sym=$(SYMFILE_S62) $(INCLUDES_S62) $(DEFINES) $(SRC_DIR)/$(SOURCE_S62); \
+	fi
+
+$(OUTPUT_S62): $(ALL_SOURCES_GEN)
+	@$(ASM) --lst=$(LSTFILE_S62) --sym=$(SYMFILE_S62) $(INCLUDES_S62) $(DEFINES) $(SRC_DIR)/$(SOURCE_S62)
+
+$(FNTFILE_S62): $(RES_DIR)/FONTS_S62.BIN
+	@cp $< $@
+
+$(RES_DIR)/FONTS_S62.BIN: $(RES_DIR)/FONT_BIOS8X8.BIN
+	cat $< $< $< $< > $@
+
+dsk-s62: $(DSKFILE_S62)
+
+DSKCONT_S62		= $(OUTPUT_S62) $(DATFILE_S62) $(FNTFILE_S62) $(CFGFILE_S62)
+
+$(DSKFILE_S62): $(DSKCONT_S62) $(MANUAL) TEST_S62.TXT AUTOEXEC_S62.BAT LOCAL_S62.CFG
+	@cp $(DSKBASE) $(DSKFILE_S62)
+	@$(DSKFAT) $(DSKFILE_S62) add . AUTOEXEC_S62.BAT=AUTOEXEC.BAT
+	@$(DSKFAT) $(DSKFILE_S62) add TOOLS $(DSKCONT_S62)
+	@$(DSKFAT) $(DSKFILE_S62) add DEV $(MANUAL)=SXED.TXT TEST_S62.TXT=TEST.TXT LOCAL_S62.CFG=S62ED.CFG
+
+run-s62-128: build-s62 dsk-s62
+	m2d2 128k $(DSKFILE_S62)
+
 # -	 Build Target ------------------------------------------------------------
 
 # The asset ships next to the .COM under its run-time name, so anyone with the
@@ -177,13 +229,22 @@ $(OUTPUT): $(ALL_SOURCES_GEN)
 	@$(ASM) --lst=$(LSTFILE) --sym=$(SYMFILE) $(INCLUDES) $(DEFINES) $(MAIN)
 
 # -	 Run Targets -------------------------------------------------------------
+ 
+s6: run-s6
 
-run: build dsk
+run: run-s6
+
+run-s6: build dsk
 	m2d2 $(DSKFILE)
 
 # Minimum-spec check: stock 128 kB Philips NMS 8250
-run128: build dsk
+run128: run-s6-128
+
+run-s6-128: build dsk
 	m2d2 128k $(DSKFILE)
+
+run-s62: build-s62 dsk-s62
+	m2d2 $(DSKFILE_S62)
 
 # S2ED's target is an MSX1, so that is what `run-s2` gives you.  MSX-DOS 2
 # does not run on an MSX1 (the kernel halts at #4005), so m1d2 boots a Nextor

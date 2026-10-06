@@ -1,0 +1,2555 @@
+;                                       ****************************************
+;                                       * WINDOW ENGINE                        *
+;                                       ****************************************
+;
+; WINDOW AND DIALOG SUBSYSTEM FOR SCREEN 6 (512X212, 4 COLORS).
+; RUNS IN RESIDENT FEATURE SEGMENT (PAGE 2, PHASED AT #8000).
+; PROVIDES OFF-SCREEN VRAM COMPOSITION BUFFER (Y = 768..983) AND
+; VRAM BACKGROUND SAVE / RESTORE BUFFER (Y = 512..727) IN BANK 1.
+; POP-UP APPEARANCE AND RESTORE ARE SINGLE HMMM BLITS SYNCED TO VBLANK
+; (COST: NX/4 X NY X ~5 US; A 288X104 DIALOG WITH SHADOW ~ 39 MS).
+
+
+; --- VRAM BUFFER & DISPLAY     ----------------------------------------
+
+
+; - WINVSY -----------------------------
+; - WAIT FOR THE NEXT VBLANK. THE BIOS ISR IS ALIVE (WINPOLL USES CHSNS/
+; - CHGET) AND OWNS S#0 AND ITS F FLAG, SO THE JIFFY FRAME TICK IS THE
+; - SAFE SYNC SOURCE. WORST CASE: ONE FRAME OF LATENCY.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+WINVSY          PUSH    AF
+                PUSH    HL
+                LD      HL, (JIFFY)
+.WAIT           LD      A, (JIFFY)
+                CP      L
+                JR      Z, .WAIT
+                POP     HL
+                POP     AF
+                RET
+
+
+; - WINSAV -----------------------------
+; - SAVE VISIBLE BACKGROUND TO VRAM BANK 1. SAVES (WINW+WINSHDW) X
+; - (WINH+WINSHDW): WINBOX COPIES THE TWO CORNER STRIPS OF THAT MARGIN
+; - INTO THE COMPOSITION BUFFER SO THE SHADOW FRAME BLITS NO STALE DATA.
+; - IN:  NONE (USES WINX, WINY, WINW, WINH)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINSAV          LD      HL, (WINX)
+                LD      (VDP_SX), HL
+                LD      (VDP_DX), HL
+                LD      HL, (WINY)
+                LD      (VDP_SY), HL
+                LD      DE, WINBUF_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                LD      DE, WINSHDW
+                ADD     HL, DE
+                LD      (VDP_NX), HL
+                LD      HL, (WINH)
+                ADD     HL, DE
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                JP      HMMM
+
+
+; - WINSHOW ----------------------------
+; - COPY COMPOSED WINDOW FROM OFF-SCREEN BUFFER (Y=768) TO SCREEN,
+; - SHADOW MARGIN INCLUDED, SYNCED TO VBLANK.
+; - IN:  NONE (USES WINX, WINY, WINW, WINH)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINSHOW         CALL    WINVSY
+                LD      HL, (WINX)
+                LD      (VDP_SX), HL
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y
+                LD      (VDP_SY), HL
+                LD      HL, (WINY)
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                LD      DE, WINSHDW
+                ADD     HL, DE
+                LD      (VDP_NX), HL
+                LD      HL, (WINH)
+                ADD     HL, DE
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMM
+                JP      VDPWAIT
+
+
+; - WINRST -----------------------------
+; - RESTORE BACKGROUND (SHADOW MARGIN INCLUDED) FROM VRAM BANK 1 TO
+; - SCREEN, SYNCED TO VBLANK.
+; - IN:  NONE (USES WINX, WINY, WINW, WINH)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINRST          CALL    WINVSY
+                LD      HL, (WINX)
+                LD      (VDP_SX), HL
+                LD      (VDP_DX), HL
+                LD      HL, (WINY)
+                LD      (VDP_DY), HL
+                LD      DE, WINBUF_Y
+                ADD     HL, DE
+                LD      (VDP_SY), HL
+                LD      HL, (WINW)
+                LD      DE, WINSHDW
+                ADD     HL, DE
+                LD      (VDP_NX), HL
+                LD      HL, (WINH)
+                ADD     HL, DE
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMM
+                JP      VDPWAIT
+
+
+; - WINUPD -----------------------------
+; - BLIT A SUB-RECTANGLE OF THE COMPOSED WINDOW TO THE SCREEN. RAW: THE
+; - CALLER SYNCS ONCE WITH WINVSY BEFORE A BATCH OF WINUPD BLITS.
+; - IN:  HL = REL X (PIXELS, MULTIPLE OF 4)
+; -      DE = REL Y (PIXELS)
+; -      BC = NX  (PIXELS, MULTIPLE OF 4)
+; -      A  = NY  (PIXELS)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINUPD          PUSH    AF              ; NY
+                PUSH    BC              ; NX
+                LD      BC, (WINX)
+                ADD     HL, BC          ; HL = WINX + REL X
+                LD      (VDP_SX), HL
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_SY), HL    ; SY = WINCOMP_Y + REL Y
+                LD      HL, (WINY)
+                ADD     HL, DE
+                LD      (VDP_DY), HL    ; DY = WINY + REL Y
+                POP     HL
+                LD      (VDP_NX), HL
+                POP     AF
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMM
+                JP      VDPWAIT
+
+
+
+; --- GLYPH & STRING BLITTING   ----------------------------------------
+
+
+; - WINCHTR ----------------------------
+; - BLIT SINGLE GLYPH WITH FONT WEIGHT AND LOGOP
+; - IN:  A  = ASCII CHAR
+; -      HL = DX
+; -      DE = DY
+; -      B  = FONT VARIANT (0=NORM, 1=BOLD, 2=ITAL, 3=BI)
+; -      C  = LOGOP (VDP_TIMP OR VDP_TOR)
+; - OUT: NONE
+; - CLOBBERS: NONE
+; -
+
+WINCHTR         PUSH    AF
+                PUSH    BC
+                PUSH    DE
+                PUSH    HL
+
+                LD      (VDP_DX), HL
+                EX      DE, HL
+                LD      (VDP_DY), HL
+
+                ; CALC SX = (CHAR & 31) * 8
+                LD      E, A
+                AND     %00011111
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      (VDP_SX), HL
+
+                ; CALC SY = (CHAR >> 5) * 8 + VARIANT BASE SY
+                LD      A, E
+                SRL     A
+                SRL     A
+                SRL     A
+                SRL     A
+                SRL     A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                LD      L, A
+                LD      H, 0
+
+                ; LOOKUP VARIANT BASE (256, 320, 384, 448)
+                LD      A, B
+                AND     3
+                ADD     A, A
+                LD      E, A
+                LD      D, 0
+                PUSH    HL
+                LD      HL, .SYTBL
+                ADD     HL, DE
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)
+                POP     HL
+                ADD     HL, DE
+                LD      (VDP_SY), HL
+
+                LD      HL, CELLW
+                LD      (VDP_NX), HL
+                LD      HL, CELLH
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      A, VDP_LMMM
+                OR      C
+                LD      (VDP_CMD), A
+                LD      HL, VDPCMBLK
+                CALL    VDPCMD
+
+                POP     HL
+                POP     DE
+                POP     BC
+                POP     AF
+                RET
+
+.SYTBL          DEFW    FNORM_SY        ; 256
+                DEFW    FBOLD_SY        ; 320
+                DEFW    FITAL_SY        ; 384
+                DEFW    FBI_SY          ; 448
+
+
+; - WINSTR3 ----------------------------
+; - BLIT ASCIIZ STRING WITH COLOR 3 HIGHLIGHT (TOR)
+; - IN:  HL = POINTER TO ASCIIZ STRING
+; -      DE = DX
+; -      BC = DY
+; -      A  = FONT VARIANT (0..3)
+; - OUT: DE = DX ADVANCED PAST LAST CHAR
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINSTR3         PUSH    AF
+                LD      A, VDP_TOR
+                LD      (WINOP), A
+                POP     AF
+                JR      WINSTR.DOSTR
+
+
+; - WINSTRX ----------------------------
+; - BLIT ASCIIZ STRING WITH FONT VARIANT (TXOR)
+; - IN:  HL = POINTER TO ASCIIZ STRING, DE = DX, BC = DY, A = FONT VARIANT
+; - OUT: DE = DX ADVANCED PAST LAST CHAR
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINSTRX         PUSH    AF
+                LD      A, VDP_TXOR
+                LD      (WINOP), A
+                POP     AF
+                JR      WINSTR.DOSTR
+
+
+; - WINSTR -----------------------------
+; - BLIT ASCIIZ STRING WITH FONT VARIANT (TIMP)
+; - IN:  HL = POINTER TO ASCIIZ STRING
+; -      DE = DX
+; -      BC = DY
+; -      A  = FONT VARIANT (0..3)
+; - OUT: DE = DX ADVANCED PAST LAST PAINTED CHAR
+; - CLOBBERS: AF, BC, DE, HL
+; -
+; - SPACES ARE NEVER BLITTED: THE SPACE GLYPH IS ALL ZEROS, SO A TIMP/TOR
+; - BLIT TRANSFERS NOTHING — SKIPPING IT IS PIXEL-IDENTICAL AND SAVES ONE
+; - ~550 US COMMAND PER SPACE. WINCLIPX (SET BY WINOPEN, 0 = OFF) STOPS
+; - THE STRING WHEN THE NEXT GLYPH WOULD REACH PAST IT.
+; -
+
+WINSTR          PUSH    AF
+                LD      A, VDP_TIMP
+                LD      (WINOP), A
+                POP     AF
+
+.DOSTR          LD      (WINVAR), A
+.LOOP           LD      A, (HL)
+                OR      A
+                RET     Z
+                CP      ' '
+                JR      Z, .NEXT        ; SPACE: ALL-ZERO GLYPH, TIMP/TOR NO-OP
+
+                ; CLIP: STOP WHEN THE GLYPH WOULD REACH PAST WINCLIPX
+                PUSH    BC
+                PUSH    HL
+                LD      HL, (WINCLIPX)
+                LD      A, H
+                OR      L
+                JR      Z, .NOCLP       ; 0 = NO CLIPPING
+                LD      A, E
+                ADD     A, CELLW
+                LD      C, A
+                LD      A, D
+                ADC     A, 0
+                LD      B, A            ; BC = DX + CELLW
+                LD      A, L
+                SUB     C
+                LD      A, H
+                SBC     A, B
+                JR      C, .CLPD        ; WINCLIPX < DX + CELLW: STOP
+.NOCLP          POP     HL
+                POP     BC
+                LD      A, (HL)
+                PUSH    HL
+                PUSH    BC
+                PUSH    DE
+                EX      DE, HL          ; HL = DX
+                LD      D, B
+                LD      E, C            ; DE = DY
+                PUSH    AF
+                LD      A, (WINVAR)
+                LD      B, A
+                LD      A, (WINOP)
+                LD      C, A
+                POP     AF
+                CALL    WINCHTR
+                POP     DE
+                POP     BC
+                POP     HL
+.NEXT           INC     HL
+                LD      A, CELLW
+                ADD     A, E
+                LD      E, A
+                JR      NC, .LOOP
+                INC     D
+                JR      .LOOP
+.CLPD           POP     HL
+                POP     BC
+                RET
+
+
+; - WINPRN -----------------------------
+; - PRINT TEXT LINE INSIDE WINDOW COMPOSITION BUFFER (TIMP)
+; - IN:  HL = ASCIIZ STRING
+; -      C  = COLUMN (0-BASED CHAR UNITS)
+; -      B  = ROW    (0-BASED ROW UNITS)
+; -      A  = FONT VARIANT (0..3)
+; - OUT: DE = DX ADVANCED PAST LAST CHAR
+; - CLOBBERS: ALL
+; -
+
+WINPRN          PUSH    HL
+                PUSH    AF
+                CALL    WINPCO
+                POP     AF
+                POP     HL
+                JP      WINSTR
+
+
+; - WINPRN3 ----------------------------
+; - PRINT TEXT LINE WITH COLOR 3 HIGHLIGHT (TOR)
+; - IN:  HL = ASCIIZ STRING, C = COL, B = ROW, A = FONT VARIANT
+; - OUT: DE = DX ADVANCED PAST LAST CHAR
+; - CLOBBERS: ALL
+; -
+
+WINPRN3         PUSH    HL
+                PUSH    AF
+                CALL    WINPCO
+                POP     AF
+                POP     HL
+                JP      WINSTR3
+
+
+; - WINPCO -----------------------------
+; - COMPUTE COMPOSITION BUFFER PIXEL COORDINATES FOR CHAR ROW AND COL
+; - IN:  B = ROW, C = COL
+; - OUT: DE = DX, BC = DY
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINPCO          ; DX = WINX + 8 + C * 8
+                LD      L, C
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                ADD     HL, HL          ; * 4
+                ADD     HL, HL          ; * 8
+                LD      DE, 8
+                ADD     HL, DE
+                LD      DE, (WINX)
+                ADD     HL, DE
+                PUSH    HL
+
+                ; DY = WINCOMP_Y + 16 + B * 8
+                LD      L, B
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      DE, 16
+                ADD     HL, DE
+                LD      DE, WINCOMP_Y
+                ADD     HL, DE
+                LD      B, H
+                LD      C, L
+                POP     DE
+                RET
+
+
+; --- WINDOW DRAWING            ----------------------------------------
+
+
+; - WINBAND ----------------------------
+; - PAINT ONE FULL-WIDTH HMMV BAND IN THE COMPOSITION BUFFER. WINX/WINW
+; - ARE MULTIPLES OF 4 (WINOPEN), SO EVERY BAND IS A BYTE FILL.
+; - IN:  DE = REL Y (PIXELS)
+; -      HL = HEIGHT IN PIXELS (NOTHING PAINTED WHEN <= 0: AN NY OF 0
+; -           WOULD BE A 65536-LINE COMMAND)
+; -      A  = BYTE COLOR (CLR_X PATTERN)
+; - OUT: NONE
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+WINBAND         PUSH    AF              ; COLOR
+                LD      A, H
+                AND     A
+                JP      M, .SKIP        ; NEGATIVE HEIGHT
+                OR      L
+                JR      Z, .SKIP        ; ZERO HEIGHT
+                LD      (VDP_NY), HL
+                LD      HL, (WINX)
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                LD      (VDP_NX), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                POP     AF
+                LD      (VDP_CLR), A
+                LD      HL, VDPCMBLK
+                JP      HMMV
+.SKIP           POP     AF
+                RET
+
+
+; - WINBOX -----------------------------
+; - DRAW WINDOW FRAME, SHADOW, FILLS, ACCENTS, AND TITLE INTO THE
+; - COMPOSITION BUFFER. THE FRAME IS PAINTED AS FULL-WIDTH HMMV BANDS
+; - PLUS TWO 1-PX LMMV SLIVERS FOR THE SIDE BORDERS: NO OVERDRAW, ALL
+; - BULK WORK IN BYTE MODE (~2.5X FASTER THAN THE OLD LMMV RECTANGLES).
+; - THE 4-PX SHADOW (SHDWCLR, CLR_BG BY DEFAULT) HUGS THE RIGHT AND BOTTOM
+; - EDGES; THE TWO
+; - CORNER STRIPS OF THE SHADOW MARGIN ARE COPIED FROM THE SAVED
+; - BACKGROUND SO THE EXTENDED SHOW RECT BLITS NO STALE DATA. WINSAV
+; - MUST HAVE RUN FIRST (WINOPEN ORDER).
+; - IN:  HL = ASCIIZ TITLE STRING (0 = NONE)
+; -      USES WINX, WINY, WINW, WINH
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINBOX          PUSH    HL
+
+                ; 1. CORNER STRIPS OF THE SHADOW MARGIN, FROM THE SAVED
+                ;    BACKGROUND: TOP-RIGHT (WINX+WINW, +0) 4 X 4 AND
+                ;    BOTTOM-LEFT (WINX, +WINH) 4 X 4
+                LD      HL, (WINX)
+                LD      DE, (WINW)
+                ADD     HL, DE
+                LD      (VDP_SX), HL
+                LD      (VDP_DX), HL
+                LD      HL, (WINY)
+                LD      DE, WINBUF_Y
+                ADD     HL, DE
+                LD      (VDP_SY), HL    ; SY = WINBUF_Y + WINY
+                LD      HL, WINCOMP_Y
+                LD      (VDP_DY), HL
+                LD      HL, WINSHDW
+                LD      (VDP_NX), HL
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMM
+
+                LD      HL, (WINX)
+                LD      (VDP_SX), HL
+                LD      (VDP_DX), HL
+                LD      HL, (WINY)
+                LD      DE, (WINH)
+                ADD     HL, DE
+                LD      DE, WINBUF_Y
+                ADD     HL, DE
+                LD      (VDP_SY), HL    ; SY = WINBUF_Y + WINY + WINH
+                LD      HL, (WINH)
+                LD      DE, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL    ; DY = WINCOMP_Y + WINH
+                LD      HL, WINSHDW
+                LD      (VDP_NX), HL
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMM
+
+                ; 2. SHADOW RIGHT BAR (WINX+WINW, +WINSHDW) WINSHDW X WINH
+                LD      HL, (WINX)
+                LD      DE, (WINW)
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y + WINSHDW
+                LD      (VDP_DY), HL
+                LD      HL, WINSHDW
+                LD      (VDP_NX), HL
+                LD      HL, (WINH)
+                LD      (VDP_NY), HL
+                LD      A, (SHDWCLR)
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+
+                ; 3. SHADOW BOTTOM BAR (WINX+WINSHDW, +WINH) WINW X WINSHDW
+                LD      HL, (WINX)
+                LD      DE, WINSHDW
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                LD      HL, (WINH)
+                LD      DE, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                LD      (VDP_NX), HL
+                LD      HL, WINSHDW
+                LD      (VDP_NY), HL
+                LD      A, (SHDWCLR)
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+
+                ; 4. TOP ACCENT BAND (COL_HI, 1 PX)
+                LD      DE, 0
+                LD      HL, 1
+                LD      A, CLR_HI
+                CALL    WINBAND
+
+                ; 5. TITLE BANDS OR PLAIN BODY, THEN BOTTOM BORDER
+                POP     HL
+                PUSH    HL
+                LD      A, H
+                OR      L
+                JR      Z, .NOTIT
+                LD      A, (HL)
+                OR      A
+                JR      Z, .NOTIT
+
+                ; TITLE BAND (COL_UI, 10 PX) + SEPARATOR (COL_HI, 1 PX)
+                LD      DE, 1
+                LD      HL, 10
+                LD      A, CLR_UI
+                CALL    WINBAND
+                LD      DE, 11
+                LD      HL, 1
+                LD      A, CLR_HI
+                CALL    WINBAND
+                ; BODY BAND (COL_BG) FROM Y=12, HEIGHT WINH-13
+                LD      HL, (WINH)
+                LD      DE, 13
+                OR      A
+                SBC     HL, DE
+                LD      DE, 12
+                JR      .BODY
+
+.NOTIT          ; BODY BAND (COL_BG) FROM Y=1, HEIGHT WINH-2
+                LD      HL, (WINH)
+                DEC     HL
+                DEC     HL
+                LD      DE, 1
+.BODY           LD      A, CLR_BG
+                CALL    WINBAND         ; WINBAND SKIPS HEIGHTS <= 0
+
+                ; 6. BOTTOM BORDER BAND (COL_UI, 1 PX)
+                LD      HL, (WINH)
+                DEC     HL
+                EX      DE, HL
+                LD      HL, 1
+                LD      A, CLR_UI
+                CALL    WINBAND
+
+                ; 7. SIDE BORDER SLIVERS (LMMV, 1 PX, COL_UI), Y=1..WINH-2
+                CALL    WINSID
+
+                ; 8. TITLE TEXT IN BOLD + COLOR 3 (TOR) AT (WINX+6, +2)
+.TITLE          POP     HL              ; HL = TITLE STRING
+                LD      A, H
+                OR      L
+                RET     Z
+                LD      A, (HL)
+                OR      A
+                RET     Z
+                PUSH    HL
+                LD      HL, (WINX)
+                LD      DE, 6
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DX
+                LD      BC, WINCOMP_Y + 2
+                POP     HL              ; HL = TITLE STRING
+                LD      A, 1            ; BOLD (VARIANT 1)
+                JP      WINSTR3
+
+
+; - WINSID -----------------------------
+; - DRAW THE TWO 1-PX SIDE BORDER SLIVERS IN COMPOSITION BUFFER (COL_UI)
+; - IN:  NONE (USES WINX, WINW, WINH)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINSID          LD      HL, (WINH)
+                DEC     HL
+                DEC     HL
+                LD      A, H
+                AND     A
+                RET     M
+                OR      L
+                RET     Z
+                LD      (VDP_NY), HL
+                LD      HL, (WINX)
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y + 1
+                LD      (VDP_DY), HL
+                LD      HL, 1
+                LD      (VDP_NX), HL
+                LD      A, COL_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                LD      HL, (WINH)
+                DEC     HL
+                DEC     HL
+                LD      (VDP_NY), HL
+                LD      HL, (WINX)
+                LD      DE, (WINW)
+                ADD     HL, DE
+                DEC     HL
+                LD      (VDP_DX), HL    ; WINX + WINW - 1
+                LD      HL, WINCOMP_Y + 1
+                LD      (VDP_DY), HL
+                LD      HL, 1
+                LD      (VDP_NX), HL
+                LD      A, COL_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                JP      LMMV
+
+
+; - WINBTN -----------------------------
+; - DRAW BUTTON, NORMAL STYLE (SEE WINBTS FOR THE STYLE LAYOUT)
+; - IN:  HL = ASCIIZ BUTTON TEXT
+; -      DE = RELATIVE X (PIXELS, MULTIPLE OF 4: THE BODY IS AN HMMV)
+; -      BC = RELATIVE Y (PIXELS)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+; - WINBTS -----------------------------
+; - SAME, WITH EXPLICIT STYLE FOR OPTION SELECTION:
+; - STYLE 0 (NORMAL):   COL_HI BORDER, COL_UI BODY, BOLD TEXT IN TOR
+; - STYLE 1 (SELECTED): COL_HI BORDER, COL_HI BODY, BOLD TEXT IN TIMP
+; - IN:  A  = STYLE (0 = NORMAL, 1 = SELECTED)
+; -      HL, DE, BC AS ABOVE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINBTN          XOR     A               ; STYLE NORMAL
+WINBTS          LD      (WINBST), A
+                PUSH    HL
+                PUSH    DE
+                PUSH    BC
+
+                ; 1. OUTER BORDER (COL_HI) 58 X 14
+                LD      HL, (WINX)
+                ADD     HL, DE
+                DEC     HL
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y
+                ADD     HL, BC
+                DEC     HL
+                LD      (VDP_DY), HL
+                LD      HL, 58
+                LD      (VDP_NX), HL
+                LD      HL, 14
+                LD      (VDP_NY), HL
+                LD      A, COL_HI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; 2. BUTTON BODY 56 X 12: COL_UI NORMAL, COL_HI SELECTED.
+                ;    BYTE FILL: REL X IS A MULTIPLE OF 4 BY CONTRACT
+                POP     BC
+                POP     DE
+                PUSH    DE
+                PUSH    BC
+                LD      HL, (WINX)
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y
+                ADD     HL, BC
+                LD      (VDP_DY), HL
+                LD      HL, 56
+                LD      (VDP_NX), HL
+                LD      HL, 12
+                LD      (VDP_NY), HL
+                LD      A, (WINBST)
+                OR      A
+                JR      Z, .BODYN
+                LD      A, CLR_HI
+                JR      .BODYGO
+.BODYN          LD      A, CLR_UI
+.BODYGO         LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+
+                ; 3. BUTTON TEXT IN BOLD: TOR NORMAL, TIMP SELECTED
+                POP     BC
+                POP     DE
+                LD      HL, (WINX)
+                ADD     HL, DE
+                INC     HL
+                INC     HL
+                INC     HL
+                INC     HL
+                EX      DE, HL          ; DE = DX = WINX + REL X + 4
+                LD      HL, WINCOMP_Y + 2
+                ADD     HL, BC
+                LD      B, H
+                LD      C, L            ; BC = DY = WINCOMP_Y + REL Y + 2
+                POP     HL              ; HL = TEXT
+                LD      A, (WINBST)
+                OR      A
+                JR      NZ, .TXTSEL
+                LD      A, 1            ; BOLD (VARIANT 1)
+                JP      WINSTR3
+.TXTSEL         LD      A, 1            ; BOLD (VARIANT 1)
+                JP      WINSTR
+
+
+; --- WINDOW MANAGEMENT         ----------------------------------------
+
+
+; - WINOPEN ----------------------------
+; - OPEN WINDOW (ALIGN, SAVE BACKGROUND, DRAW BOX INTO COMPOSITION BUFFER)
+; - IN:  HL = ASCIIZ TITLE STRING (0 = NONE)
+; -      USES WINX, WINY, WINW, WINH
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+WINOPEN         PUSH    HL
+
+                ; FLUSH KEYBOARD BUFFER
+                CALL    WINKIL
+
+                ; MARK MODAL WINDOW ACTIVE TO INHIBIT CLOCK BLINK
+                LD      A, 1
+                LD      (WINACTV), A
+
+                ; ERASE CURSOR IF CURRENTLY VISIBLE
+                LD      A, (BLNKPH)
+                AND     A
+                JR      Z, .NOCUR
+                CALL    DRWCUR
+                XOR     A
+                LD      (BLNKPH), A
+
+.NOCUR          ; ALIGN WINX DOWN TO MULTIPLE OF 4
+                LD      HL, (WINX)
+                LD      A, L
+                AND     %11111100
+                LD      L, A
+                LD      (WINX), HL
+
+                ; ALIGN WINW UP TO MULTIPLE OF 4 (PRESERVE CARRY)
+                LD      HL, (WINW)
+                LD      A, L
+                ADD     A, 3
+                LD      L, A
+                JR      NC, .NOWINC
+                INC     H
+.NOWINC         LD      A, L
+                AND     %11111100
+                LD      L, A
+                LD      (WINW), HL
+
+                ; CLAMP WINX <= 504: WINX + WINW + WINSHDW <= 512, WINW >= 4
+                LD      HL, (WINX)
+                LD      DE, 504
+                OR      A
+                SBC     HL, DE
+                JR      C, .XOK
+                LD      HL, 504
+                LD      (WINX), HL
+                JR      .XDON
+.XOK            ADD     HL, DE
+                LD      (WINX), HL
+.XDON           ; CLAMP WINW: MIN 4, WINX + WINW + WINSHDW <= 512
+                LD      HL, (WINW)
+                LD      A, H
+                OR      L
+                JR      NZ, .WNOT0
+                LD      HL, 4
+                LD      (WINW), HL
+.WNOT0          LD      DE, (WINX)
+                LD      HL, 508
+                OR      A
+                SBC     HL, DE          ; HL = 508 - WINX (MULTIPLE OF 4)
+                EX      DE, HL          ; DE = MAXW
+                LD      HL, (WINW)
+                OR      A
+                SBC     HL, DE          ; WINW - MAXW
+                JR      C, .WOK
+                LD      (WINW), DE
+                JR      .WDON
+.WOK            ADD     HL, DE
+                LD      (WINW), HL
+.WDON           ; CLAMP WINY <= 207: WINY + WINH + WINSHDW <= 212, WINH >= 1
+                LD      HL, (WINY)
+                LD      DE, 207
+                OR      A
+                SBC     HL, DE
+                JR      C, .YOK
+                LD      HL, 207
+                LD      (WINY), HL
+                JR      .YDON
+.YOK            ADD     HL, DE
+                LD      (WINY), HL
+.YDON           ; CLAMP WINH: MIN 1, WINY + WINH + WINSHDW <= 212
+                LD      HL, (WINH)
+                LD      A, H
+                OR      L
+                JR      NZ, .HNOT0
+                LD      HL, 1
+                LD      (WINH), HL
+.HNOT0          LD      DE, (WINY)
+                LD      HL, 208
+                OR      A
+                SBC     HL, DE          ; HL = 208 - WINY
+                EX      DE, HL          ; DE = MAXH
+                LD      HL, (WINH)
+                OR      A
+                SBC     HL, DE          ; WINH - MAXH
+                JR      C, .HOK
+                LD      (WINH), DE
+                JR      .HDON
+.HOK            ADD     HL, DE
+                LD      (WINH), HL
+.HDON
+                ; TEXT CLIP LIMIT: GLYPHS MUST END LEFT OF THE RIGHT BORDER
+                LD      HL, (WINX)
+                LD      DE, (WINW)
+                ADD     HL, DE
+                DEC     HL
+                LD      (WINCLIPX), HL
+
+                ; SAVE VISIBLE BACKGROUND TO VRAM BUFFER (Y + 512),
+                ; SHADOW MARGIN INCLUDED
+                CALL    WINSAV
+
+                ; DRAW WINDOW BOX AND TITLE INTO COMPOSITION BUFFER (Y = 768)
+                POP     HL
+                JP      WINBOX
+
+
+; - WINCLOS ----------------------------
+; - CLOSE WINDOW (RESTORE BACKGROUND FROM VRAM BUFFER)
+; - IN:  NONE (USES WINX, WINY, WINW, WINH)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; - NOTE: RESTORES SAVED VRAM BACKGROUND PIXELS. CURSOR IS NOT RE-DRAWN
+; -       HERE; MAINLOOP RE-DRAWS CURSOR UPON EDITING RESUMPTION.
+; -
+
+WINCLOS         XOR     A
+                LD      (WINACTV), A
+                JP      WINRST
+
+
+; --- DIALOGS                   ----------------------------------------
+
+
+; - DOABT ------------------------------
+; - DISPLAY ABOUT S6ED MODAL DIALOG WITH MULTI-WEIGHT FONTS & HIGHLIGHTS
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+DOABT           LD      HL, 76
+                LD      (WINX), HL
+                LD      HL, 44
+                LD      (WINY), HL
+                LD      HL, 360
+                LD      (WINW), HL
+                LD      HL, 116
+                LD      (WINH), HL
+
+                LD      HL, .TITABT
+                CALL    WINOPEN
+
+                ; LINE 0: "S62ED - MSX2 Screen 6 Text Editor"
+                LD      HL, .S6ED
+                LD      C, 6
+                LD      B, 0
+                LD      A, 1            ; BOLD
+                CALL    WINPRN
+                LD      HL, .STRSUB
+                LD      BC, WINCOMP_Y + 16
+                XOR     A               ; NORMAL
+                CALL    WINSTR
+
+                ; LINE 1: "Version 0.1 " (BOLD) + "(Experimental)" (ITALIC)
+                LD      HL, .STRVER
+                LD      C, 10
+                LD      B, 1
+                LD      A, 1            ; BOLD
+                CALL    WINPRN
+                LD      HL, .STREXP
+                LD      BC, WINCOMP_Y + 24
+                LD      A, 2            ; ITALIC
+                CALL    WINSTR
+
+                ; LINE 3: "Display: " (BOLD) + "62x24 Columns (512x212, 4 Colors)" (NORM)
+                LD      HL, .LBDSP
+                LD      C, 2
+                LD      B, 3
+                LD      A, 1            ; BOLD
+                CALL    WINPRN
+                LD      HL, .VALDSP
+                LD      BC, WINCOMP_Y + 40
+                XOR     A               ; NORMAL
+                CALL    WINSTR
+
+                ; LINE 4: "Fonts:   " (BOLD) + "8x8 Native 4 Weights (B, I, BI)" (NORM)
+                LD      HL, .LBFNT
+                LD      C, 2
+                LD      B, 4
+                LD      A, 1            ; BOLD
+                CALL    WINPRN
+                LD      HL, .VALFNT
+                LD      BC, WINCOMP_Y + 48
+                XOR     A               ; NORMAL
+                CALL    WINSTR
+
+                ; LINE 5: "Memory:  " (BOLD) + "DOS 2 / Nextor Mapper Manager" (NORM)
+                LD      HL, .LBMEM
+                LD      C, 2
+                LD      B, 5
+                LD      A, 1            ; BOLD
+                CALL    WINPRN
+                LD      HL, .VALMEM
+                LD      BC, WINCOMP_Y + 56
+                XOR     A               ; NORMAL
+                CALL    WINSTR
+
+                ; LINE 7: "Press ENTER, SPACE or ESC to close"
+                LD      HL, .STRINS
+                LD      C, 5
+                LD      B, 7
+                XOR     A               ; NORMAL
+                CALL    WINPRN
+
+                ; BUTTON [  OK  ] (REL X = 152, REL Y = 94)
+                LD      HL, .BTNOK
+                LD      DE, 152
+                LD      BC, 94
+                CALL    WINBTN
+
+                ; POP-UP THE COMPOSED WINDOW IN ONE VBLANK-SYNCED BLIT
+                CALL    WINSHOW
+
+                ; MODAL KEY LOOP
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+                CP      13              ; ENTER
+                JR      Z, .DONE
+                CP      ' '             ; SPACE
+                JR      Z, .DONE
+                CP      27              ; ESC
+                JR      Z, .DONE
+                JR      .KEYLP
+
+.DONE           JP      WINCLOS
+
+.TITABT         DEFM    "About S62ED", 0
+.S6ED           DEFM    "S62ED", 0
+.STRSUB         DEFM    " - MSX2 Screen 6 Text Editor", 0
+.STRVER         DEFB    "Version ", VERSION.MAJOR, '.', VERSION.MINOR, " ", 0
+.STREXP         DEFM    "(Experimental)", 0
+.LBDSP          DEFM    "Display: ", 0
+.VALDSP         DEFM    "62x24 Columns (512x212, 4 Colors)", 0
+.LBFNT          DEFM    "Fonts:   ", 0
+.VALFNT         DEFM    "8x8 Native 4 Weights (B, I, BI)", 0
+.LBMEM          DEFM    "Memory:  ", 0
+.VALMEM         DEFM    "DOS 2 / Nextor Mapper Manager", 0
+.STRINS         DEFM    "Press ENTER, SPACE or ESC to close", 0
+.BTNOK          DEFM    "[  OK  ]", 0
+
+
+; - DOQIT / DOOPN / DONEW --------------
+; - THE YES / NO QUESTIONS THE EDITOR ASKS TODAY: QUIT TO DOS, AND
+; - DISCARD THE DOCUMENT FOR A NEW ONE OR AN OPENED ONE. ALL ARE DOASK
+; - WITH THEIR TEXT.
+; - IN:  NONE
+; - OUT: AS DOASK
+; - CLOBBERS: ALL
+; -
+
+DOQIT           LD      HL, DOASK.TITQIT
+                LD      DE, DOASK.STRQIT
+                JR      DOASK
+
+DOOPN           LD      HL, DOASK.TITOPN
+                LD      DE, DOASK.STRNEW
+                JR      DOASK
+
+DOOVR           LD      HL, DOASK.TITSAV
+                LD      DE, DOASK.STROVR
+                XOR     A               ; DO NOT SHOW UNSAVED CHANGES WARNING
+                JR      DOASK.ASKGO
+
+DONEW           LD      HL, DOASK.TITNEW
+                LD      DE, DOASK.STRNEW
+                ; FALLS THROUGH INTO DOASK
+
+
+; - DOASK ------------------------------
+; - ASK A YES / NO QUESTION: TWO SELECTABLE OPTIONS, DEFAULT NO
+; - IN:  HL = ASCIIZ TITLE, DE = ASCIIZ QUESTION (FEATURE SEGMENT)
+; -      READS MODIFIED FOR THE UNSAVED-CHANGES WARNING LINE
+; - OUT: WINRES = 1: CONFIRMED, 0: CANCELLED
+; - CLOBBERS: ALL
+; -
+; - LEFT/RIGHT MOVE THE SELECTION, ENTER/SPACE ACTIVATE IT, Y/N ARE
+; - ACCELERATORS AND ESC CANCELS. THE DEFAULT IS NO: AN ACCIDENTAL ESC
+; - NEVER DROPS THE DOCUMENT. A SELECTION CHANGE REPAINTS ONLY THE TWO
+; - BUTTONS IN THE COMPOSITION BUFFER AND RE-BLITTS JUST THEIR RECTS
+; - WITH WINUPD (SYNCED BY ONE WINVSY), SO THE DIALOG NEVER TEARS.
+
+DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
+.ASKGO          PUSH    AF              ; WARN FLAG
+                PUSH    DE              ; QUESTION, FOR AFTER WINOPEN
+                PUSH    HL              ; TITLE
+                LD      HL, 156
+                LD      (WINX), HL
+                LD      HL, 74
+                LD      (WINY), HL
+                LD      HL, 200
+                LD      (WINW), HL
+                LD      HL, 64
+                LD      (WINH), HL
+
+                POP     HL
+                CALL    WINOPEN
+
+                ; DEFAULT: NO SELECTED, RESULT CANCELLED
+                LD      A, 1
+                LD      (WINSEL), A
+                XOR     A
+                LD      (WINRES), A
+
+                ; MESSAGE LINE
+                POP     HL
+                LD      C, 7
+                LD      B, 1
+                XOR     A               ; NORMAL
+                CALL    WINPRN
+
+                ; WARNING LINE, ONLY WITH A DIRTY BUFFER
+                POP     AF
+                OR      A
+                JR      Z, .NOWRN
+                LD      A, (MODIFIED)
+                OR      A
+                JR      Z, .NOWRN
+                LD      HL, .STRWRN
+                LD      C, 7
+                LD      B, 2
+                LD      A, 1            ; BOLD
+                CALL    WINPRN
+
+.NOWRN          CALL    .BTNS
+                CALL    WINSHOW
+
+                ; MODAL KEY LOOP
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+                CP      ESC
+                JR      Z, .DONE        ; CANCEL (WINRES ALREADY 0)
+                CP      CR
+                JR      Z, .ACCEPT
+                CP      ' '
+                JR      Z, .ACCEPT
+                CP      CLEFT
+                JR      Z, .TOYES
+                CP      CRIGHT
+                JR      Z, .TONO
+                CP      'Y'
+                JR      Z, .YES
+                CP      'y'
+                JR      Z, .YES
+                CP      'N'
+                JR      Z, .DONE
+                CP      'n'
+                JR      Z, .DONE
+                JR      .KEYLP
+
+.TOYES          XOR     A
+                JR      .NAV
+.TONO           LD      A, 1
+.NAV            LD      HL, WINSEL
+                CP      (HL)
+                JR      Z, .KEYLP       ; ALREADY THERE: NOTHING TO REPAINT
+                LD      (HL), A
+                CALL    .BTNS
+                CALL    WINVSY          ; ONE SYNC FOR THE WHOLE BATCH
+                LD      HL, 32          ; YES BUTTON RECT: BORDER AT REL 35
+                LD      DE, 43          ; BORDER TOP AT REL 43
+                LD      BC, 64
+                LD      A, 14
+                CALL    WINUPD
+                LD      HL, 104         ; NO BUTTON RECT: BORDER AT REL 107
+                LD      DE, 43
+                LD      BC, 64
+                LD      A, 14
+                CALL    WINUPD
+                JR      .KEYLP
+
+.ACCEPT         LD      A, (WINSEL)
+                XOR     1               ; YES (0) CONFIRMS, NO (1) CANCELS
+                LD      (WINRES), A
+                JR      .DONE
+
+.YES            LD      A, 1
+                LD      (WINRES), A
+
+.DONE           JP      WINCLOS
+
+; .BTNS: PAINT BOTH BUTTONS WITH THE STYLE THEIR SELECTION STATE DICTATES
+.BTNS           LD      A, (WINSEL)
+                OR      A
+                JR      Z, .YSSEL
+                XOR     A               ; YES NORMAL
+                JR      .YSGO
+.YSSEL          LD      A, 1            ; YES SELECTED
+.YSGO           LD      HL, .BTNYES
+                LD      DE, 36
+                LD      BC, 44
+                CALL    WINBTS
+                LD      A, (WINSEL)
+                CP      1
+                JR      Z, .NSSEL
+                XOR     A               ; NO NORMAL
+                JR      .NSGO
+.NSSEL          LD      A, 1            ; NO SELECTED
+.NSGO           LD      HL, .BTNNO
+                LD      DE, 108         ; MULTIPLE OF 4: BUTTON BODY IS HMMV
+                LD      BC, 44
+                JP      WINBTS
+
+.TITQIT         DEFM    "Quit S62ED", 0
+.STRQIT         DEFM    "Exit to MSX-DOS?", 0
+.TITNEW         DEFM    "New Document", 0
+.TITOPN         DEFM    "Open", 0
+.TITSAV         DEFM    "Save As", 0
+.STRNEW         DEFM    "Discard changes?", 0
+.STROVR         DEFM    "Overwrite file?", 0
+.STRWRN         DEFM    "Unsaved changes!", 0
+.BTNYES         DEFM    "[  YES  ]", 0
+.BTNNO          DEFM    "[  NO  ]", 0
+
+
+; --- WINEDIT                   ----------------------------------------
+
+
+; - WINEDIT ----------------------------
+; - MODAL TEXT INPUT FIELD. RUNS ITS OWN KEY LOOP AND RETURNS WHEN THE
+; - USER ACCEPTS OR CANCELS. THE CALLER HAS ALREADY OPENED THE WINDOW.
+; - IN:  B = FIELD RELATIVE Y, C = FIELD RELATIVE X (PIXELS, X MULTIPLE
+; -          OF 4 SO THE BOX AND ITS WINUPD STAY BYTE ALIGNED)
+; -      D = FIELD WIDTH IN CHARACTERS (1..INPMAX)
+; -      E = CHARACTER CLASS (ED_DIGIT ONLY, FOR NOW)
+; - OUT: CY = 1: CANCELLED.  CY = 0: ACCEPTED, (INPBUF) IS ASCIIZ AND
+; -      (INPLEN) ITS LENGTH
+; - CLOBBERS: ALL
+; -
+; - THE FOCUS HAS THREE POSITIONS -- THE FIELD, OK, CANCEL -- BECAUSE
+; - SPACE MAY ONLY ACTIVATE THE FOCUSED CONTROL AND THE FIELD IS ONE. WITH
+; - TWO POSITIONS SPACE WOULD HAVE TO MEAN "ACCEPT" WHILE SOMEBODY IS
+; - TYPING INTO THE FIELD, WHICH IS FINE FOR DIGITS AND WRONG THE DAY A
+; - CLASS ACCEPTS A SPACE.
+; -
+; - THE BUTTONS BELONG TO THE CALLER AND ARE PAINTED BY EDBTNS, WHICH
+; - READS (WINSEL). THERE IS ONE DIALOG WITH A FIELD PER TARGET TODAY; THE
+; - DAY THERE ARE TWO, EDBTNS BECOMES A POINTER PARAMETER.
+; -
+
+WINEDIT         LD      A, B
+                LD      (EDROW), A
+                LD      A, C
+                LD      (EDCOL), A
+                LD      A, D
+                LD      (EDWID), A
+                LD      A, E
+                CP      ED_DIGIT
+                SCF
+                RET     NZ              ; CLASS NOT IMPLEMENTED: REFUSE
+
+                XOR     A
+                LD      (INPLEN), A
+                LD      (INPBUF), A     ; ASCIIZ, EMPTY
+                LD      (WINSEL), A     ; ED_FFLD
+                CALL    EDBOX           ; THE BORDER, ONCE
+                CALL    EDFLD
+                CALL    EDBTNS
+                CALL    WINSHOW
+
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+
+                CP      ESC
+                JP      Z, .CANCEL
+                CP      CR
+                JP      Z, .ACCEPT
+                CP      ' '
+                JP      Z, .SPACE
+                CP      TAB
+                JR      Z, .NEXT
+                CP      CRIGHT
+                JR      Z, .NEXT
+                CP      CLEFT
+                JR      Z, .PREV
+
+                ; FIELD KEYS ONLY REACH THE FIELD WHEN IT HAS THE FOCUS
+                LD      C, A
+                LD      A, (WINSEL)
+                OR      A
+                JR      NZ, .KEYLP
+                LD      A, C
+                CP      BS
+                JR      Z, .BS
+                CP      '0'
+                JR      C, .KEYLP
+                CP      '9' + 1
+                JR      NC, .KEYLP
+
+                ; APPEND, IF THERE IS ROOM
+                LD      B, A            ; B = DIGIT
+                LD      A, (INPLEN)
+                LD      C, A
+                LD      A, (EDWID)
+                CP      C
+                JR      Z, .KEYLP       ; FULL: IGNORED, SILENTLY
+                LD      HL, INPBUF
+                LD      E, C
+                LD      D, 0
+                ADD     HL, DE
+                LD      (HL), B
+                INC     HL
+                LD      (HL), 0
+                LD      A, C
+                INC     A
+                LD      (INPLEN), A
+                JR      .REFLD
+
+.BS             LD      A, (INPLEN)
+                OR      A
+                JR      Z, .KEYLP
+                DEC     A
+                LD      (INPLEN), A
+                LD      E, A
+                LD      D, 0
+                LD      HL, INPBUF
+                ADD     HL, DE
+                LD      (HL), 0
+
+.REFLD          CALL    EDFLD           ; THE FIELD BOX, NOT THE WHOLE WINDOW
+                CALL    EDBLIT
+                JR      .KEYLP
+
+.NEXT           LD      A, (WINSEL)
+                INC     A
+                CP      3
+                JR      C, .SETFOC
+                XOR     A
+                JR      .SETFOC
+.PREV           LD      A, (WINSEL)
+                OR      A
+                JR      NZ, .PREVD
+                LD      A, 3
+.PREVD          DEC     A
+.SETFOC         LD      (WINSEL), A
+                CALL    EDFLD           ; THE CARET COMES AND GOES WITH FOCUS
+                CALL    EDBTNS
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.SPACE          LD      A, (WINSEL)
+                OR      A
+                JP      Z, .KEYLP       ; THE FIELD HAS IT: SPACE IS NOT A KEY
+
+.ACCEPT         LD      A, (WINSEL)
+                CP      ED_FCAN
+                JR      Z, .CANCEL
+                LD      A, (INPLEN)
+                OR      A
+                JR      Z, .CANCEL      ; AN EMPTY FIELD CANCELS
+                RET                     ; CY = 0 FROM THE OR
+
+.CANCEL         SCF
+                RET
+
+
+; - EDGEOM -----------------------------
+; - THE FIELD BOX, DERIVED FROM THE FIELD ITSELF: IT STARTS FOUR PIXELS
+; - LEFT AND TWO ABOVE THE TEXT AND HOLDS EDWID + 1 CHARACTERS, THE EXTRA
+; - ONE BEING WHERE THE CARET STANDS WHEN THE FIELD IS FULL.
+; - IN:  NONE (USES EDROW, EDCOL, EDWID)
+; - OUT: HL = BOX RELATIVE X, DE = BOX RELATIVE Y, BC = BOX WIDTH
+; - CLOBBERS: AF
+; -
+
+EDGEOM          LD      A, (EDWID)
+                INC     A
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                ADD     HL, HL          ; * 4
+                ADD     HL, HL          ; * 8 PIXELS PER CHARACTER
+                LD      DE, 8
+                ADD     HL, DE
+                LD      B, H
+                LD      C, L            ; BC = (EDWID + 1) * 8 + 8
+                LD      A, (EDROW)
+                SUB     2
+                LD      E, A
+                LD      D, 0            ; DE = BOX RELATIVE Y
+                LD      A, (EDCOL)
+                SUB     4
+                LD      L, A
+                LD      H, 0            ; HL = BOX RELATIVE X
+                RET
+
+
+; - EDBOX ------------------------------
+; - DRAW THE FIELD BORDER INTO THE COMPOSITION BUFFER. ONCE PER DIALOG:
+; - EDBLIT RE-SENDS IT WITH EVERY FIELD REPAINT ANYWAY.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+EDBOX           CALL    EDGEOM
+                PUSH    BC
+                PUSH    DE
+                LD      DE, (WINX)
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                POP     DE
+                LD      HL, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                POP     BC
+                LD      H, B
+                LD      L, C
+                LD      (VDP_NX), HL
+                LD      HL, 12
+                LD      (VDP_NY), HL
+                LD      A, COL_UI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                JP      LMMV
+
+
+; - EDFLD ------------------------------
+; - PAINT THE FIELD CONTENTS INTO THE COMPOSITION BUFFER: CLEAR THE
+; - INTERIOR, BLIT WHAT HAS BEEN TYPED, AND PUT THE CARET AT THE INSERTION
+; - POINT WHEN THE FIELD HAS THE FOCUS.
+; - IN:  NONE (USES EDROW, EDCOL, EDWID, INPBUF, INPLEN, WINSEL)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+EDFLD           ; 1. INTERIOR, ONE PIXEL INSIDE THE BORDER
+                CALL    EDGEOM
+                INC     HL
+                PUSH    BC
+                PUSH    DE
+                LD      DE, (WINX)
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                POP     DE
+                INC     DE
+                LD      HL, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                POP     BC
+                LD      H, B
+                LD      L, C
+                DEC     HL
+                DEC     HL
+                LD      (VDP_NX), HL
+                LD      HL, 10
+                LD      (VDP_NY), HL
+                LD      A, COL_BG
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; 2. WHAT HAS BEEN TYPED
+                LD      A, (EDCOL)
+                LD      L, A
+                LD      H, 0
+                LD      DE, (WINX)
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DX
+                LD      A, (EDROW)
+                LD      L, A
+                LD      H, 0
+                LD      BC, WINCOMP_Y
+                ADD     HL, BC
+                LD      B, H
+                LD      C, L            ; BC = DY
+                LD      HL, INPBUF
+                XOR     A               ; VARIANT 0 (NORMAL)
+                CALL    WINSTR
+
+                ; 3. THE CARET, ONLY WHILE THE FIELD HAS THE FOCUS
+                LD      A, (WINSEL)
+                OR      A
+                RET     NZ
+                LD      A, (INPLEN)
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL          ; * 2
+                ADD     HL, HL          ; * 4
+                ADD     HL, HL          ; INPLEN * 8
+                LD      A, (EDCOL)
+                LD      E, A
+                LD      D, 0
+                ADD     HL, DE
+                LD      DE, (WINX)
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                LD      A, (EDROW)
+                LD      L, A
+                LD      H, 0
+                LD      DE, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                LD      HL, 7           ; CARET NX = 7
+                LD      (VDP_NX), HL
+                LD      HL, 8
+                LD      (VDP_NY), HL
+                LD      A, COL_HI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                JP      LMMV
+
+
+; - EDBLIT -----------------------------
+; - SEND THE FIELD BOX TO THE SCREEN. A KEYSTROKE PAYS FOR THE BOX, NOT
+; - FOR THE WINDOW.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+EDBLIT          CALL    WINVSY
+                CALL    EDGEOM
+                LD      A, 12
+                JP      WINUPD
+
+
+; --- DOGOTO                    ----------------------------------------
+
+
+; - DOGOTO -----------------------------
+; - GO TO LINE. COLLECTS A LINE NUMBER; IT DOES NOT JUMP. THE JUMP IS
+; - GOTOLN'S, IN PAGE 1, BECAUSE IT WRITES TOPLINE AND CALLS REDRAW.
+; - IN:  NONE
+; - OUT: CY = 1: CANCELLED.  CY = 0: HL = THE LINE TYPED, 1-BASED AND
+; -      UNCLAMPED -- CLAMPING NEEDS TOTLINES AND BELONGS WITH THE JUMP
+; - CLOBBERS: ALL
+; -
+
+DOGOTO          LD      HL, 156
+                LD      (WINX), HL
+                LD      HL, 70
+                LD      (WINY), HL
+                LD      HL, 200
+                LD      (WINW), HL
+                LD      HL, 72
+                LD      (WINH), HL
+                LD      HL, .TITGO
+                CALL    WINOPEN
+
+                ; "Line number (1-NNNN):" IN THREE PIECES. B2D16 HANDS BACK
+                ; HL AT THE FIRST DIGIT AND C THE COUNT, SO NO PROMPT BUFFER
+                ; IS NEEDED -- ONLY A TERMINATOR WRITTEN INTO ITS OWN BUFFER,
+                ; WHICH IT DOCUMENTS AS FREE TO MODIFY.
+                LD      HL, .STRPR1
+                LD      B, 0
+                LD      C, 0
+                XOR     A
+                CALL    WINPRN
+
+                LD      HL, (TOTLINES)
+                CALL    B2D16
+                LD      B, 0
+                PUSH    HL
+                PUSH    BC
+                ADD     HL, BC
+                LD      (HL), 0
+                POP     BC
+                POP     HL
+                PUSH    BC              ; KEEP THE DIGIT COUNT
+                LD      B, 0
+                LD      C, 15
+                XOR     A
+                CALL    WINPRN
+                POP     BC
+                LD      A, C
+                ADD     A, 15
+                LD      C, A            ; RIGHT AFTER THE DIGITS
+                LD      B, 0
+                LD      HL, .STRPR2
+                XOR     A
+                CALL    WINPRN
+
+                LD      B, 34           ; FIELD RELATIVE Y
+                LD      C, 80           ; FIELD RELATIVE X, MULTIPLE OF 4
+                LD      D, INPMAX
+                LD      E, ED_DIGIT
+                CALL    WINEDIT
+
+                PUSH    AF
+                CALL    WINCLOS
+                POP     AF
+                RET     C               ; CANCELLED
+
+                LD      HL, INPBUF
+                CALL    ATOI16
+                OR      A               ; CY = 0: ACCEPTED
+                RET
+
+.TITGO          DEFM    "Go to Line", 0
+.STRPR1         DEFM    "Line number (1-", 0
+.STRPR2         DEFM    "):", 0
+
+
+; - EDBTNS -----------------------------
+; - PAINT THE TWO BUTTONS IN THE STYLE (WINSEL) ASKS FOR. THE WIDGET CALLS
+; - THIS BY NAME: THERE IS ONE DIALOG WITH A FIELD PER TARGET TODAY.
+; - IN:  NONE (USES WINSEL)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+EDBTNS          LD      HL, .BTNOK
+                LD      DE, 36
+                LD      BC, 50
+                LD      A, (WINSEL)
+                CP      ED_FOK
+                LD      A, 0
+                JR      NZ, .PAINT1
+                INC     A               ; STYLE 1: SELECTED
+.PAINT1         CALL    WINBTS
+
+                LD      HL, .BTNCAN
+                LD      DE, 108
+                LD      BC, 50
+                LD      A, (WINSEL)
+                CP      ED_FCAN
+                LD      A, 0
+                JR      NZ, .PAINT2
+                INC     A
+.PAINT2         JP      WINBTS
+
+.BTNOK          DEFM    "[  OK  ]", 0
+.BTNCAN         DEFM    "[CANCEL]", 0
+
+
+; --- DOFIND                    ----------------------------------------
+
+
+; - DOFIND -----------------------------
+; - FIND & REPLACE DIALOG (PHASED IN FTRBASE VIA FCALL).
+; - COLLECTS SEARCH PATTERN, REPLACE PATTERN, OPTIONS AND ACTION.
+; - IN:  NONE
+; - OUT: CY = 1: CANCELLED
+; -      CY = 0: A = ACTION (SRCH_FND, SRCH_RPL, SRCH_ALL)
+; - CLOBBERS: ALL
+; -
+
+DOFIND          LD      HL, 110
+                LD      (WINX), HL
+                LD      HL, 56
+                LD      (WINY), HL
+                LD      HL, 260
+                LD      (WINW), HL
+                LD      HL, 74
+                LD      (WINH), HL
+                LD      HL, .TITFND
+                CALL    WINOPEN
+
+                XOR     A
+                LD      (FNDFOC), A     ; DEFAULT FOCUS: FIND FIELD
+                CALL    .DRWUI
+                CALL    WINSHOW
+
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+
+                CP      ESC
+                JP      Z, .CANCEL
+                CP      TAB
+                JR      Z, .NEXT
+                CP      CDOWN
+                JR      Z, .NEXT
+                CP      CUP
+                JR      Z, .PREV
+                CP      CRIGHT
+                JR      Z, .RGTKEY
+                CP      CLEFT
+                JR      Z, .LFTKEY
+
+                ; ROUTE KEYS ACCORDING TO FOCUSED CONTROL
+                LD      B, A            ; B = KEY
+                LD      A, (FNDFOC)
+                OR      A
+                JR      Z, .FOCFND      ; 0: FIND FIELD
+                DEC     A
+                JP      Z, .FOCRPL      ; 1: REPLACE FIELD
+                DEC     A
+                JP      Z, .FOCCAS      ; 2: CASE OPTION
+                ; 3..6: BUTTONS
+                JP      .FOCBTN
+
+.NEXT           LD      A, (FNDFOC)
+                INC     A
+                CP      7
+                JR      C, .SETFOC
+                XOR     A
+                JR      .SETFOC
+
+.PREV           LD      A, (FNDFOC)
+                OR      A
+                JR      NZ, .PREVD
+                LD      A, 7
+.PREVD          DEC     A
+.SETFOC         LD      (FNDFOC), A
+                CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.RGTKEY         LD      A, (FNDFOC)
+                CP      3
+                JP      C, .KEYLP       ; ONLY ON BUTTONS
+                INC     A
+                CP      7
+                JR      C, .SETFOC
+                LD      A, 3
+                JR      .SETFOC
+
+.LFTKEY         LD      A, (FNDFOC)
+                CP      3
+                JP      C, .KEYLP       ; ONLY ON BUTTONS
+                DEC     A
+                CP      3
+                JR      NC, .SETFOC
+                LD      A, 6
+                JR      .SETFOC
+
+.FOCFND         ; FIELD 0: FIND FIELD
+                LD      A, B
+                CP      CR
+                JP      Z, .DOACT0      ; ENTER ON FIND: IMMEDIATE FIND NEXT
+                CP      BS
+                JR      Z, .BS0
+                ; PRINTABLE CHAR
+                CP      ' '
+                JP      C, .KEYLP
+                LD      A, (SRCHLEN)
+                CP      SRCHMAX
+                JP      NC, .KEYLP      ; FULL
+                LD      E, A
+                LD      D, 0
+                LD      HL, SRCHPAT
+                ADD     HL, DE
+                LD      (HL), B
+                INC     HL
+                LD      (HL), 0
+                INC     A
+                LD      (SRCHLEN), A
+                CALL    .REFLD0
+                JP      .KEYLP
+
+.BS0            LD      A, (SRCHLEN)
+                OR      A
+                JP      Z, .KEYLP
+                DEC     A
+                LD      (SRCHLEN), A
+                LD      E, A
+                LD      D, 0
+                LD      HL, SRCHPAT
+                ADD     HL, DE
+                LD      (HL), 0
+                CALL    .REFLD0
+                JP      .KEYLP
+
+.FOCRPL         ; FIELD 1: REPLACE FIELD
+                LD      A, B
+                CP      CR
+                JP      Z, .DOACT0      ; ENTER ON REPLACE: FIND NEXT
+                CP      BS
+                JR      Z, .BS1
+                CP      ' '
+                JP      C, .KEYLP
+                LD      A, (RPLCLEN)
+                CP      SRCHMAX
+                JP      NC, .KEYLP
+                LD      E, A
+                LD      D, 0
+                LD      HL, RPLCPAT
+                ADD     HL, DE
+                LD      (HL), B
+                INC     HL
+                LD      (HL), 0
+                INC     A
+                LD      (RPLCLEN), A
+                CALL    .REFLD1
+                JP      .KEYLP
+
+.BS1            LD      A, (RPLCLEN)
+                OR      A
+                JP      Z, .KEYLP
+                DEC     A
+                LD      (RPLCLEN), A
+                LD      E, A
+                LD      D, 0
+                LD      HL, RPLCPAT
+                ADD     HL, DE
+                LD      (HL), 0
+                CALL    .REFLD1
+                JP      .KEYLP
+
+.FOCCAS         ; CONTROL 2: CASE OPTION
+                LD      A, B
+                CP      ' '
+                JR      Z, .TOGCAS
+                CP      CR
+                JP      NZ, .KEYLP
+.TOGCAS         LD      A, (SRCHOPT)
+                XOR     1
+                LD      (SRCHOPT), A
+                CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.FOCBTN         ; CONTROLS 3..6: BUTTONS
+                LD      A, B
+                CP      ' '
+                JR      Z, .ACTBTN
+                CP      CR
+                JP      NZ, .KEYLP
+.ACTBTN         LD      A, (FNDFOC)
+                CP      3
+                JP      Z, .DOACT0      ; [Find]
+                CP      4
+                JP      Z, .DOACT1      ; [Repl]
+                CP      5
+                JP      Z, .DOACT2      ; [All]
+                ; 6: [Cancel]
+.CANCEL         CALL    WINCLOS
+                SCF
+                RET
+
+.DOACT0         ; ACCEPT: FIND NEXT
+                CALL    WINCLOS
+                LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z               ; EMPTY SEARCH PATTERN: CANCEL
+                LD      A, SRCH_FND
+                AND     A               ; CY = 0
+                RET
+
+.DOACT1         ; ACCEPT: REPLACE
+                CALL    WINCLOS
+                LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z
+                LD      A, SRCH_RPL
+                AND     A
+                RET
+
+.DOACT2         ; ACCEPT: REPLACE ALL
+                CALL    WINCLOS
+                LD      A, (SRCHLEN)
+                OR      A
+                SCF
+                RET     Z
+                LD      A, SRCH_ALL
+                AND     A
+                RET
+
+.DRWUI          ; CLEAR BODY BAND
+                LD      HL, (WINH)
+                LD      DE, 13
+                OR      A
+                SBC     HL, DE
+                LD      DE, 12
+                LD      A, CLR_BG
+                CALL    WINBAND
+
+                ; RESTORE SIDE BORDERS OVERWRITTEN BY WINBAND
+                CALL    WINSID
+
+                ; FILL ACTIVE FIELD BOX IF FOCUSED (0 OR 1)
+                LD      A, (FNDFOC)
+                CP      2
+                CALL    C, .FLDBOX
+
+                ; DRAW LABELS
+                LD      HL, .LBLFND
+                LD      B, 0
+                LD      C, 1
+                LD      A, (FNDFOC)
+                OR      A
+                JR      NZ, .FNDNF
+                LD      A, 1            ; BOLD
+                CALL    WINPRN3         ; HIGHLIGHT (COLOR 3 / TOR)
+                JR      .DORPL
+.FNDNF          XOR     A
+                CALL    WINPRN
+
+.DORPL          LD      HL, .LBLRPL
+                LD      B, 1
+                LD      C, 1
+                LD      A, (FNDFOC)
+                DEC     A
+                JR      NZ, .RPLNF
+                LD      A, 1            ; BOLD
+                CALL    WINPRN3         ; HIGHLIGHT (COLOR 3 / TOR)
+                JR      .FLD0
+.RPLNF          XOR     A
+                CALL    WINPRN
+
+                ; DRAW FIELD 0
+.FLD0           LD      HL, SRCHPAT
+                LD      A, (SRCHLEN)
+                LD      D, A
+                LD      B, 0
+                LD      C, 10
+                LD      A, (FNDFOC)
+                OR      A
+                CALL    .DRWFLD
+
+                ; DRAW FIELD 1
+                LD      HL, RPLCPAT
+                LD      A, (RPLCLEN)
+                LD      D, A
+                LD      B, 1
+                LD      C, 10
+                LD      A, (FNDFOC)
+                DEC     A
+                CALL    .DRWFLD
+
+                ; DRAW CASE OPTION
+                LD      HL, .LBLCAS
+                LD      B, 2
+                LD      C, 1
+                LD      A, (FNDFOC)
+                CP      2
+                LD      A, 0
+                JR      NZ, .CASNF
+                INC     A               ; VARIANT 1 (BOLD) WHEN FOCUSED
+.CASNF          CALL    WINPRN
+
+                LD      A, (FNDFOC)
+                CP      2
+                JR      NZ, .CASUNF
+
+                ; FOCUSED: FILL 6X8 CHECKBOX WITH COL_HI (YELLOW)
+                LD      HL, (WINX)
+                LD      DE, 90
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                LD      HL, WINCOMP_Y + 32
+                LD      (VDP_DY), HL
+                LD      HL, 6
+                LD      (VDP_NX), HL
+                LD      HL, 8
+                LD      (VDP_NY), HL
+                LD      A, COL_HI
+                LD      (VDP_CLR), A
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                LD      A, VDP_LMMV | VDP_IMP
+                CALL    LMMV
+
+                ; IF CHECKED, DRAW 'X' IN TXOR OVER YELLOW BLOCK
+                LD      A, (SRCHOPT)
+                BIT     0, A
+                JR      Z, .CASDON
+                LD      HL, (WINX)
+                LD      DE, 90
+                ADD     HL, DE          ; HL = DX
+                LD      DE, WINCOMP_Y + 32 ; DE = DY
+                LD      A, 'X'
+                LD      B, 1            ; BOLD
+                LD      C, VDP_TXOR     ; %11 ^ %01 = %10 (COL_UI)
+                CALL    WINCHTR
+                JR      .CASDON
+
+.CASUNF         ; UNFOCUSED: DRAW 'X' IF CHECKED, NOTHING IF UNCHECKED
+                LD      A, (SRCHOPT)
+                BIT     0, A
+                JR      Z, .CASDON
+                LD      HL, .STRX
+                LD      B, 2
+                LD      C, 14
+                XOR     A               ; VARIANT 0 (NORMAL)
+                CALL    WINPRN
+
+.CASDON         LD      HL, .STRBRK
+                LD      B, 2
+                LD      C, 15
+                LD      A, (FNDFOC)
+                CP      2
+                LD      A, 0
+                JR      NZ, .BRKNF
+                INC     A               ; VARIANT 1 (BOLD) WHEN FOCUSED
+.BRKNF          CALL    WINPRN
+
+                ; DRAW BUTTONS AT RELATIVE Y = 50
+                LD      HL, .BTNFND
+                LD      DE, 12
+                LD      BC, 50
+                LD      A, (FNDFOC)
+                CP      3
+                LD      A, 0
+                JR      NZ, .B0SEL
+                INC     A
+.B0SEL          CALL    WINBTS
+
+                LD      HL, .BTNRPL
+                LD      DE, 72
+                LD      BC, 50
+                LD      A, (FNDFOC)
+                CP      4
+                LD      A, 0
+                JR      NZ, .B1SEL
+                INC     A
+.B1SEL          CALL    WINBTS
+
+                LD      HL, .BTNALL
+                LD      DE, 132
+                LD      BC, 50
+                LD      A, (FNDFOC)
+                CP      5
+                LD      A, 0
+                JR      NZ, .B2SEL
+                INC     A
+.B2SEL          CALL    WINBTS
+
+                LD      HL, .BTNCAN
+                LD      DE, 192
+                LD      BC, 50
+                LD      A, (FNDFOC)
+                CP      6
+                LD      A, 0
+                JR      NZ, .B3SEL
+                INC     A
+.B3SEL          JP      WINBTS
+
+.FLDBOX         ; A = ROW (0 OR 1)
+                LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      DE, WINCOMP_Y + 16
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                LD      HL, (WINX)
+                LD      DE, 64
+                ADD     HL, DE
+                LD      (VDP_DX), HL
+                LD      HL, 116
+                LD      (VDP_NX), HL
+                LD      HL, 8
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      A, CLR_UI
+                LD      (VDP_CLR), A
+                LD      HL, VDPCMBLK
+                JP      HMMV
+
+.DRWFLD         ; DRAW FIELD: B=ROW, C=COL, HL=TEXT, D=LEN, Z FLAG SET IF FOCUSED
+                PUSH    AF
+                PUSH    BC
+                PUSH    DE
+                XOR     A
+                CALL    WINPRN
+                POP     DE
+                POP     BC
+                POP     AF
+                RET     NZ
+                ; PRINT CARET IN COLOR 3 HIGHLIGHT
+                PUSH    BC
+                LD      A, C
+                ADD     A, D
+                LD      C, A
+                LD      HL, .STRCRT
+                XOR     A
+                CALL    WINPRN3
+                POP     BC
+                RET
+
+.REFLD0         XOR     A               ; ROW 0
+                CALL    .FLDBOX
+                LD      HL, SRCHPAT
+                LD      A, (SRCHLEN)
+                LD      D, A
+                LD      B, 0
+                LD      C, 10
+                XOR     A               ; Z FLAG SET (FOCUSED)
+                CALL    .DRWFLD
+                LD      DE, 16          ; REL Y = 16
+                JR      .RFBLIT
+
+.REFLD1         LD      A, 1            ; ROW 1
+                CALL    .FLDBOX
+                LD      HL, RPLCPAT
+                LD      A, (RPLCLEN)
+                LD      D, A
+                LD      B, 1
+                LD      C, 10
+                XOR     A               ; Z FLAG SET (FOCUSED)
+                CALL    .DRWFLD
+                LD      DE, 24          ; REL Y = 24
+
+.RFBLIT         PUSH    DE
+                CALL    WINVSY
+                POP     DE
+                LD      HL, 64          ; REL X = 64
+                LD      BC, 116         ; NX = 116
+                LD      A, 8            ; NY = 8
+                JP      WINUPD
+
+.TITFND         DEFM    "Find & Replace", 0
+.LBLFND         DEFM    "Find:   ", 0
+.LBLRPL         DEFM    "Replace:", 0
+.LBLCAS         DEFM    "Match case: [", 0
+.STRSP          DEFM    " ", 0
+.STRX           DEFM    "X", 0
+.STRBRK         DEFM    "]", 0
+.STRCRT         DEFB    #DB, 0
+.BTNFND         DEFM    "[ Find ]", 0
+.BTNRPL         DEFM    "[ Repl ]", 0
+.BTNALL         DEFM    "[ All  ]", 0
+.BTNCAN         DEFM    "[Cancel]", 0
+
+
+; --- DOSETT                    ----------------------------------------
+
+
+; - DOSETT -----------------------------
+; - SETTINGS DIALOG (SCREEN 6 / V9938)
+; - IN:  NONE
+; - OUT: CY = 0: ACCEPTED (SETTINGS SAVED)
+; -      CY = 1: CANCELLED
+; - CLOBBERS: ALL
+; -
+
+DOSETT          LD      HL, 120
+                LD      (WINX), HL
+                LD      HL, 48
+                LD      (WINY), HL
+                LD      HL, 272
+                LD      (WINW), HL
+                LD      HL, 116
+                LD      (WINH), HL
+                LD      HL, .TITSET
+                CALL    WINOPEN
+
+                ; INITIALIZE TEMPORARY VALUES FROM ACTIVE SETTINGS
+                LD      A, (KMAPID)
+                AND     3
+                LD      (STTPRF), A
+
+                LD      A, (WRAPMODE)
+                AND     1
+                LD      (STTWRP), A
+
+                LD      A, (AUTOALGN)
+                CP      3
+                JR      C, .ALNOK
+                XOR     A
+.ALNOK          LD      (STTALN), A
+
+                LD      A, (SHOWCLK)
+                AND     1
+                LD      (STTCLK), A
+
+                LD      A, (TABWIDTH)
+                SRL     A
+                SRL     A
+                LD      (STTTAB), A
+
+                XOR     A
+                LD      HL, AUTOLOD
+                OR      (HL)
+                JR      NZ, .ELSET      ; A = 0 (AUTO)
+                LD      A, (SAVEEOL)
+                INC     A               ; DOS->1, UNIX->2
+.ELSET          LD      (STTEOL), A
+
+                LD      A, (MKUPMD)
+                CP      3
+                JR      C, .MKPOK
+                XOR     A
+.MKPOK          LD      (STTMKP), A
+
+                LD      A, (THEMEID)
+                CP      THMCNT
+                JR      C, .THMOK
+                XOR     A
+.THMOK          LD      (STTTHM), A
+
+                ; SHADOW (0=OFF, 1=ON)
+                XOR     A
+                LD      HL, SHDWCLR
+                CP      (HL)
+                JR      Z, .SHDSET
+                INC     A
+.SHDSET         LD      (STTSHD), A
+
+                XOR     A
+                LD      (SETTFOC), A
+                CALL    .DRWUI
+                CALL    WINSHOW
+
+.KEYLP          CALL    WINPOLL
+                JR      Z, .KEYLP
+
+                CP      ESC
+                JP      Z, .CANCEL
+                CP      TAB
+                JR      Z, .NEXT
+                CP      CDOWN
+                JR      Z, .NEXT
+                CP      CUP
+                JR      Z, .PREV
+                CP      CRIGHT
+                JR      Z, .RIGHT
+                CP      CLEFT
+                JR      Z, .LEFT
+                CP      ' '
+                JR      Z, .SPACE
+                CP      CR
+                JR      Z, .ENTER
+                JR      .KEYLP
+
+.NEXT           LD      A, (SETTFOC)
+                INC     A
+                CP      11
+                JR      C, .FOCSET
+                XOR     A
+                JR      .FOCSET
+
+.PREV           LD      A, (SETTFOC)
+                OR      A
+                JR      NZ, .PDEC
+                LD      A, 11
+.PDEC           DEC     A
+.FOCSET         LD      (SETTFOC), A
+.REFRESH        CALL    .DRWUI
+                CALL    WINSHOW
+                JP      .KEYLP
+
+.RIGHT          LD      A, (SETTFOC)
+                CP      9
+                JR      NC, .TOGBTN
+                CALL    .CYCFOR
+                JR      .REFRESH
+
+.LEFT           LD      A, (SETTFOC)
+                CP      9
+                JR      NC, .TOGBTN
+                CALL    .CYCBAC
+                JR      .REFRESH
+
+.TOGBTN         LD      A, 19
+                LD      HL, SETTFOC
+                SUB     (HL)
+                LD      (HL), A
+                JR      .REFRESH
+
+.SPACE          LD      A, (SETTFOC)
+                CP      9
+                JP      Z, .OK
+                CP      10
+                JP      Z, .CANCEL
+                CALL    .CYCFOR
+                JR      .REFRESH
+
+.ENTER          LD      A, (SETTFOC)
+                CP      10
+                JP      Z, .CANCEL
+                JP      .OK
+
+.CYCFOR         LD      A, (SETTFOC)
+                CP      9
+                RET     NC              ; ONLY SETTINGS 0..8
+                LD      E, A
+                LD      D, 0
+                LD      HL, STTPRF
+                ADD     HL, DE          ; HL = POINTER TO VAR
+                LD      A, (HL)
+                INC     A
+                PUSH    HL
+                LD      HL, .MAXTBL
+                ADD     HL, DE
+                CP      (HL)
+                POP     HL
+                JR      C, .CFOK
+                XOR     A
+.CFOK           LD      (HL), A
+                RET
+
+.CYCBAC         LD      A, (SETTFOC)
+                CP      9
+                RET     NC
+                LD      E, A
+                LD      D, 0
+                LD      HL, STTPRF
+                ADD     HL, DE          ; HL = POINTER TO VAR
+                LD      A, (HL)
+                OR      A
+                JR      NZ, .CBDEC
+                PUSH    HL
+                LD      HL, .MAXTBL
+                ADD     HL, DE
+                LD      A, (HL)
+                POP     HL
+.CBDEC          DEC     A
+                LD      (HL), A
+                RET
+
+.MAXTBL         DEFB    4, 2, 3, 2, 3, 3, 3, THMCNT
+                DEFB    2
+
+.DRWUI          ; CLEAR WINDOW BODY
+                LD      HL, (WINH)
+                LD      DE, 13
+                OR      A
+                SBC     HL, DE
+                LD      DE, 12
+                LD      A, CLR_BG
+                CALL    WINBAND
+
+                ; DRAW 9 SETTING ROWS
+                LD      IX, .SETTBL
+                LD      IY, STTPRF
+                LD      B, 0            ; ROW INDEX 0..8
+.RWLP           PUSH    BC
+                ; IS THIS ROW SELECTED?
+                LD      A, (SETTFOC)
+                CP      B
+                JR      NZ, .UNSEL
+
+                ; --- SELECTED ROW ---
+                ; DRAW INSET BACKGROUND BAR: DX=WINX+4, DY=WINCOMP_Y+16+B*8, NX=WINW-8, NY=8
+                PUSH    BC
+                LD      HL, (WINX)
+                INC     HL
+                INC     HL
+                INC     HL
+                INC     HL              ; DX = WINX + 4
+                LD      (VDP_DX), HL
+                LD      A, B
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; B * 8
+                ADD     A, 16           ; 16 + B * 8
+                LD      E, A
+                LD      D, 0
+                LD      HL, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                LD      DE, 8
+                OR      A
+                SBC     HL, DE          ; NX = WINW - 8
+                LD      (VDP_NX), HL
+                LD      HL, 8
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      A, CLR_UI
+                LD      (VDP_CLR), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+                POP     BC
+
+                LD      A, 1            ; VARIANT 1 (BOLD)
+                JR      .DOROW
+
+.UNSEL          XOR     A               ; VARIANT 0 (NORMAL)
+
+.DOROW          PUSH    AF              ; SAVE VARIANT
+                ; DRAW LABEL AT COL 2
+                LD      L, (IX+0)
+                LD      H, (IX+1)
+                LD      C, 2
+                CALL    WINPRN3
+
+                ; DRAW VALUE AT COL 16
+                POP     AF              ; RESTORE VARIANT
+                POP     BC              ; RESTORE ROW B
+                PUSH    BC
+                PUSH    AF              ; RESAVE VARIANT
+                LD      A, (IY+0)
+                ADD     A, A
+                LD      E, A
+                LD      D, 0
+                LD      L, (IX+2)
+                LD      H, (IX+3)
+                ADD     HL, DE
+                LD      E, (HL)
+                INC     HL
+                LD      D, (HL)
+                EX      DE, HL          ; HL = VALUE STRING
+                LD      C, 14
+                POP     AF              ; A = VARIANT
+                CALL    WINPRN3
+
+.RWNXT          INC     IY
+                INC     IX
+                INC     IX
+                INC     IX
+                INC     IX
+                POP     BC
+                INC     B
+                LD      A, B
+                CP      9
+                JP      C, .RWLP
+
+                ; DRAW BUTTONS AT RELATIVE Y = 94
+                LD      HL, .BTNOK
+                LD      DE, 56
+                LD      BC, 94
+                LD      A, (SETTFOC)
+                CP      9
+                LD      A, 0
+                JR      NZ, .B0SEL
+                INC     A
+.B0SEL          CALL    WINBTS
+
+                LD      HL, .BTNCAN
+                LD      DE, 160
+                LD      BC, 94
+                LD      A, (SETTFOC)
+                CP      10
+                LD      A, 0
+                JR      NZ, .B1SEL
+                INC     A
+.B1SEL          JP      WINBTS
+
+.OK             ; COMMIT SETTINGS TO LIVE VARIABLES
+                LD      A, (STTPRF)
+                LD      (KMAPID), A
+                CALL    KMAPSW
+
+                LD      A, (STTWRP)
+                LD      (WRAPMODE), A
+                OR      A
+                JR      NZ, .WRP1
+                XOR     A
+                LD      (TXTWIDTH), A
+                JR      .WRPDN
+.WRP1           LD      A, (TXTWIDTH)
+                OR      A
+                JR      NZ, .WRPDN
+                LD      A, (SAVETW)
+                OR      A
+                JR      NZ, .HAVTW
+                LD      A, TEXTCOLS
+.HAVTW          LD      (TXTWIDTH), A
+.WRPDN          LD      A, (STTALN)
+                LD      (AUTOALGN), A
+
+                LD      A, (STTCLK)
+                LD      (SHOWCLK), A
+
+                LD      A, (STTTAB)
+                INC     A
+                LD      B, A
+                LD      A, 1
+.TABLP          ADD     A, A            ; B=1: 2, B=2: 4, B=3: 8
+                DJNZ    .TABLP
+                LD      (TABWIDTH), A
+
+                XOR     A
+                LD      (AUTOLOD), A
+                LD      (SAVEEOL), A
+                LD      A, (STTEOL)
+                OR      A
+                JR      NZ, .NEOL0
+                INC     A
+                LD      (AUTOLOD), A
+                JR      .EOLDN
+.NEOL0          CP      2
+                JR      NZ, .EOLDN
+                LD      A, 1
+                LD      (SAVEEOL), A
+.EOLDN          LD      A, (STTMKP)
+                LD      (MKUPMD), A
+
+                LD      A, (STTTHM)
+                CALL    APPLYTHM
+
+                LD      A, (STTSHD)
+                OR      A
+                LD      A, CLR_BG
+                JR      Z, .SHDDON
+                LD      A, CLR_UI
+.SHDDON         LD      (SHDWCLR), A
+
+                LD      HL, STRSAVG
+                CALL    SETMSG
+                CALL    DRWSTAT
+                CALL    CFGSAVE
+                LD      HL, STRSAVD
+                JR      NC, .SAVOK
+                LD      HL, STRSERR
+.SAVOK          CALL    SETMSG
+                CALL    WINCLOS
+                OR      A
+                RET
+
+.CANCEL         CALL    WINCLOS
+                SCF
+                RET
+
+.TITSET         DEFM    "Settings", 0
+
+.SETTBL         DEFW    .LBLPRF, .VALPRF
+                DEFW    .LBLWRP, .VALWRP
+                DEFW    .LBLALN, .VALALN
+                DEFW    .LBLCLK, .VALALN
+                DEFW    .LBLTAB, .VALTAB
+                DEFW    .LBLEOL, .VALEOL
+                DEFW    .LBLMKP, .VALMKP
+                DEFW    .LBLTHM, THMNAMV
+                DEFW    .LBLSHD, .VALALN
+
+.LBLPRF         DEFM    "Profile:   ", 0
+.LBLWRP         DEFM    "Wrap:      ", 0
+.LBLALN         DEFM    "Autoalign: ", 0
+.LBLCLK         DEFM    "Clock:     ", 0
+.LBLTAB         DEFM    "Tab width: ", 0
+.LBLEOL         DEFM    "EOL:       ", 0
+.LBLMKP         DEFM    "Markup:    ", 0
+.LBLTHM         DEFM    "Theme:     ", 0
+.LBLSHD         DEFM    "Shadow:    ", 0
+
+.VALPRF         DEFW    .VP0, .VP1, .VP2, .VP3
+.VP0            DEFM    "STD", 0
+.VP1            DEFM    "TED", 0
+.VP2            DEFM    "EMC", 0
+.VP3            DEFM    "VI", 0
+
+.VALWRP         DEFW    .VA2, .VW1
+.VW1            DEFM    "TXT", 0
+
+.VALALN         DEFW    .VA0, .VA1, .VA2
+.VA0            DEFM    "OFF", 0
+.VA1            DEFM    "ON", 0
+.VA2            DEFM    "DEV", 0
+
+.VALTAB         DEFW    .VT0, .VT1, .VT2
+.VT0            DEFM    "2", 0
+.VT1            DEFM    "4", 0
+.VT2            DEFM    "8", 0
+
+.VALEOL         DEFW    .VE0, .VE1, .VE2
+.VE0            DEFM    "AUTO", 0
+.VE1            DEFM    "DOS", 0
+.VE2            DEFM    "UNIX", 0
+
+.VALMKP         DEFW    .VA0, .VM1, .VM2
+.VM1            DEFM    "MD", 0
+.VM2            DEFM    "LIT", 0
+
+.BTNOK          DEFM    "[  OK  ]", 0
+.BTNCAN         DEFM    "[Cancel]", 0

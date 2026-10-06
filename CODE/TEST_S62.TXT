@@ -1,0 +1,4 @@
+Hello MSX2 World!
+This is S62ED: Screen 6 (512x212, 4 colors, 2 bpp).
+62 columns x 24 rows with native 8x8 font.
+Byte-aligned HMMM burst transfers with CRT safe margins!

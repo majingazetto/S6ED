@@ -1,0 +1,120 @@
+;                                       ****************************************
+;                                       * SCREEN 62 CONSTANTS (V9938)          *
+;                                       ****************************************
+
+
+; --- SCREEN LAYOUT             ----------------------------------------
+
+
+                ; CHARACTER GRID
+SCRCOLS         EQU     62              ; TEXT AREA COLUMNS
+SCRROWS         EQU     24              ; TEXT AREA ROWS (ROWS 1-24)
+ROWSVIS         EQU     SCRROWS         ; DOCUMENT LINES ON SCREEN AT ONCE
+CELLW           EQU     8               ; CELL WIDTH IN PIXELS
+CELLH           EQU     8               ; CELL HEIGHT IN PIXELS
+TEXTCOLS        EQU     62              ; MAX CHARS PER LINE FOR S62
+LINEREC         EQU     1 + TEXTCOLS + TEXTCOLS ; MAX LINE RECORD: 1 + 62 + 62 = 125
+
+                ; PIXEL LAYOUT. THE 62 X 8 PX TEXT AREA IS CENTRED IN THE
+                ; 512 PX LINE WITH AN 8 PX MARGIN ON EACH SIDE. 8 PX IS 2
+                ; BYTES IN SCREEN 6, SO EVERY COLUMN STARTS ON A BYTE
+                ; BOUNDARY AND THE BYTE COMMANDS (HMMV, HMMM, YMMM) CAN
+                ; ADDRESS IT.
+MARGPX          EQU     8               ; SIDE MARGIN: (512 - 496) / 2
+TXAREAPX        EQU     496             ; TEXT AREA WIDTH (62 X 8PX)
+TXORG_X         EQU     MARGPX          ; TEXT AREA X ORIGIN
+TXORG_Y         EQU     CELLH           ; TEXT AREA Y ORIGIN (SKIP MENU ROW 0)
+SCRTOTY         EQU     212             ; TOTAL SCREEN HEIGHT IN PIXELS
+
+                ; ROWS (IN CHARACTER UNITS)
+MNUROW          EQU     0               ; MENU BAR ROW
+TXRFIRST        EQU     1               ; FIRST TEXT ROW
+TXRLAST         EQU     24              ; LAST TEXT ROW
+STBROW          EQU     25              ; STATUS BAR ROW
+STBTX_X         EQU     8               ; STATUS BAR TEXT ORIGIN X (ENDS AT 503)
+STBTX_Y         EQU     202             ; STATUS BAR TEXT ORIGIN Y (BAR IS 200..211)
+STATCOLS        EQU     62              ; STATUS BAR COLUMNS (COLS 0..61)
+
+
+; --- VRAM MAP                  ----------------------------------------
+
+
+VR_DISP         EQU     #00000          ; DISPLAY BITMAP (128 B/LINE X 212 LINES)
+
+VR_FNORM        EQU     #08000          ; FONT: NORMAL       SY 256
+VR_FBOLD        EQU     #0A000          ; FONT: BOLD         SY 320
+VR_FITAL        EQU     #0C000          ; FONT: ITALIC       SY 384
+VR_FBI          EQU     #0E000          ; FONT: BOLD+ITALIC  SY 448
+VR_WINBF        EQU     #10000          ; WINDOW BACKGROUND BUFFER BASE (SY 512)
+WINBUF_Y        EQU     512             ; OFF-SCREEN VRAM WINDOW BUFFER BASE Y
+WINCOMP_Y       EQU     768             ; OFF-SCREEN VRAM COMPOSITION BUFFER BASE Y
+WINSHDW         EQU     4               ; WINDOW DROP SHADOW OFFSET/WIDTH (PX)
+
+MNUX_FIL        EQU     48              ; FILE MENU X
+MNUY_FIL        EQU     8               ; FILE MENU Y
+MNUW_FIL        EQU     144             ; FILE MENU WIDTH
+MNUH_FIL        EQU     60              ; FILE MENU HEIGHT
+MNUTX_FL        EQU     54              ; FILE MENU TEXT X
+MNUBX_FL        EQU     52              ; FILE MENU BAR X
+MNUBW_FL        EQU     136             ; FILE MENU BAR WIDTH
+MNUCNT_F        EQU     7               ; TOTAL ITEMS IN FILE MENU
+
+FONTSIZ         EQU     2048            ; 256 GLYPHS X 8 BYTES, 1BPP (SOURCE)
+FNTFSIZ         EQU     FONTSIZ * 4     ; S62ED.FNT: THE FOUR VARIANTS, EXACTLY
+
+                ; FONT TABLE GEOMETRY (ALL TABLES IDENTICAL STRUCTURE)
+                ;   32 GLYPHS PER ROW -> 8 ROWS (256 TOTAL)
+                ;   GLYPH N: SX = (N % 32) * 8,  SY = TABLE_SY + (N / 32) * 8
+                ;   TABLE_SY = (VR_FXXX - VR_DISP) / 128
+                ;   ONE TABLE = 64 VRAM LINES X 128 BYTES = 8 KB OF SPAN; THE
+                ;   32 GLYPHS OF A ROW LIVE IN THE LEFT 64 BYTES OF EACH LINE.
+FNORM_SY        EQU     (VR_FNORM - VR_DISP) / 128     ; = 256
+FBOLD_SY        EQU     (VR_FBOLD - VR_DISP) / 128     ; = 320
+FITAL_SY        EQU     (VR_FITAL - VR_DISP) / 128     ; = 384
+FBI_SY          EQU     (VR_FBI   - VR_DISP) / 128     ; = 448
+
+                ; THE RIGHT HALF OF EVERY FONT LINE (BYTES 64-127, SX 256-511)
+                ; STORES THE UI-PAPER EXPANDED COPY (EXPSTAT).
+FUIR_SX         EQU     256             ; UI-PAPER GLYPHS: SX OFFSET IN VR_FNORM
+
+
+; --- FEATURE CONTAINER         ----------------------------------------
+
+
+FTRBASE         EQU     #8000           ; FEATURE CONTAINER BASE
+FTRTOP          EQU     #C000           ; FIRST BYTE PAST THE CONTAINER
+BRWIDX          EQU     FTRTOP - BRWMAX * (BRWESZ + 1) ; SORTED ORDER
+BRWENT          EQU     BRWIDX + BRWMAX ; ENTRIES, BRWESZ BYTES EACH
+P3BASE          EQU     #C600           ; FIRST FREE PAGE 3 BYTE PAST LINE BUFFERS
+                DEFINE  BROWSER 1       ; THIS TARGET HAS THE FILE BROWSER
+BRWMAX          EQU     160             ; FILE BROWSER ENTRY CAPACITY
+BRWCOLS         EQU     4               ; FILE BROWSER GRID: COLUMNS...
+BRWROWS         EQU     12              ; ...AND ROWS ON SCREEN
+BRWSLOT         EQU     14              ; CHARACTERS PER GRID SLOT
+                ; INFORMATION LINE COLUMNS (56 CHARACTERS ON S62ED)
+BICSIZE         EQU     14              ; SIZE, RIGHT-ALIGNED IN BICSZW
+BICSZW          EQU     7
+BICDATE         EQU     23              ; DATE, AS DIR PRINTS IT
+BICTIME         EQU     32              ; TIME, AS DIR PRINTS IT
+BICATTR         EQU     41              ; RHSA
+BICCNTE         EQU     56              ; COUNT, RIGHT-ALIGNED, ENDS HERE
+BICLEN          EQU     56              ; LINE LENGTH
+
+
+; --- PALETTE                   ----------------------------------------
+
+
+                ; COLOR INDICES (SCREEN 6, 4 COLORS)
+COL_BG          EQU     0               ; BACKGROUND
+COL_FG          EQU     1               ; NORMAL TEXT
+COL_UI          EQU     2               ; UI CHROME
+COL_HI          EQU     3               ; HIGHLIGHT / ACCENT / SYNTAX
+
+                ; BYTE PATTERNS (SCREEN 6, 4 PIXELS PER BYTE FOR HMMV)
+CLR_BG          EQU     #00             ; 4 PIXELS OF COLOR 0 (%00000000)
+CLR_FG          EQU     #55             ; 4 PIXELS OF COLOR 1 (%01010101)
+CLR_UI          EQU     #AA             ; 4 PIXELS OF COLOR 2 (%10101010)
+CLR_HI          EQU     #FF             ; 4 PIXELS OF COLOR 3 (%11111111)
+
+THMDST          EQU     PALDATA
+THMSIZ          EQU     8

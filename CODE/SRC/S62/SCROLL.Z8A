@@ -1,0 +1,190 @@
+;                                       ****************************************
+;                                       * SCROLL ENGINE                        *
+;                                       ****************************************
+;
+; THE SCROLL BLIT IS YMMM: IT MOVES WHOLE VRAM LINES FROM DX TO THE RIGHT
+; EDGE, SO IT NEEDS NO NX AND RUNS FASTER THAN THE EQUIVALENT HMMM (MEASURED
+; ON THE NMS 8250: A ONE-ROW STEP 148 MS -> 128 MS). THE 16 PX RIGHT MARGIN
+; TRAVELS WITH THE TEXT; IT IS BLANK, SO NOTHING SHOWS. A HELD CURSOR KEY
+; COALESCES INTO ONE MULTI-ROW BLIT (SEE EDMOVROW), SO THE COST IS PAID ONCE
+; PER BURST.
+;
+; A HARDWARE SCROLL (R#23) WOULD MAKE A STEP ~42 MS, BUT UNDER A GLOBAL
+; OFFSET THE FIXED MENU AND STATUS BARS MOVE TOO, AND KEEPING THEM STILL
+; NEEDS TWO HORIZONTAL LINE INTERRUPTS (DEV/INFORME_OPTIMIZACION_S6ED.MD,
+; PHASE 3, A1),
+; NOT A RE-BLIT: BLITTING THE CHROME INTO ITS NEW PLACE LANDS IT ON THE TEXT
+; RING. THAT IS A SEPARATE PIECE OF WORK.
+
+
+; --- SCROLLDN                  ----------------------------------------
+
+
+; - SCROLLDN ---------------------------
+; - SCROLL TEXT AREA UP ONE ROW (SHOW NEXT LINE)
+; - THE ONE-ROW ENTRY POINT OF SCRLDNN, WHICH FOLLOWS IT.
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SCROLLDN        LD      C, 1
+
+
+; - SCRLDNN ----------------------------
+; - SCROLL TEXT AREA UP BY C ROWS: ROWS C+1..24 MOVE ONTO 1..24-C IN ONE
+; - YMMM, THEN THE C ROWS THAT CAME INTO VIEW ARE RENDERED.
+; - IN:  C = ROWS (1..23); TOPLINE ALREADY ADVANCED
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SCRLDNN         XOR     A
+                LD      (PREVROW), A    ; RENDIFF'S ROW HAS MOVED
+                LD      A, SCRROWS
+                SUB     C
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; NY = (24 - C) * 8
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_NY), HL
+                LD      A, C
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, TXORG_Y      ; SY = TOP OF ROW C + 1
+                LD      L, A
+                LD      (VDP_SY), HL
+                LD      HL, TXORG_Y     ; DY = TOP OF ROW 1
+                LD      (VDP_DY), HL
+                LD      HL, TXORG_X
+                LD      (VDP_DX), HL
+                XOR     A               ; ARG = 0 (TOP-TO-BOTTOM)
+                LD      (VDP_ARG), A
+                PUSH    BC
+                LD      HL, VDPCMBLK
+                CALL    YMMM
+                POP     BC
+
+                ; RENDER ROWS 25-C .. 24
+                LD      A, SCRROWS + 1
+                SUB     C
+                LD      B, A
+.RLOOP          PUSH    BC
+                CALL    RENDEROW
+                POP     BC
+                INC     B
+                LD      A, B
+                CP      TXRLAST + 1
+                JR      NZ, .RLOOP
+                RET
+
+
+; - SCRLUPN ----------------------------
+; - SCROLL TEXT AREA DOWN BY C ROWS: ROWS 1..24-C MOVE ONTO C+1..24 IN ONE
+; - YMMM (DY > SY, SO DIY=1 WITH BOTTOM SCANLINE ANCHORS), THEN ROWS 1..C
+; - ARE RENDERED.
+; - IN:  C = ROWS (1..23); TOPLINE ALREADY MOVED BACK
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SCRLUPN         XOR     A
+                LD      (PREVROW), A
+                LD      A, SCRROWS
+                SUB     C
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; NY = (24 - C) * 8
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_NY), HL
+                ADD     A, 7            ; SY = BOTTOM OF ROW 24 - C
+                LD      L, A
+                LD      (VDP_SY), HL
+                LD      HL, 199         ; DY = BOTTOM OF ROW 24
+                LD      (VDP_DY), HL
+                LD      HL, TXORG_X
+                LD      (VDP_DX), HL
+                LD      A, VDP_DIY      ; #08 (BOTTOM-TO-TOP)
+                LD      (VDP_ARG), A
+                PUSH    BC
+                LD      HL, VDPCMBLK
+                CALL    YMMM
+                POP     BC
+
+                ; RENDER ROWS 1 .. C
+                LD      B, TXRFIRST
+.RLOOP          PUSH    BC
+                CALL    RENDEROW
+                POP     BC
+                INC     B
+                LD      A, C
+                CP      B
+                JR      NC, .RLOOP
+                RET
+
+
+; --- SHIFTDN                   ----------------------------------------
+
+
+; - SHIFTDN ----------------------------
+; - SHIFT SCREEN ROWS BELOW ROW B DOWN ONE ROW
+; - THE ONE-ROW ENTRY POINT OF SHIFTDNN, WHICH FOLLOWS IT.
+; - IN:  B = SCREEN ROW OF NEW LINE (1..23)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SHIFTDN         LD      C, 1
+
+
+; - SHIFTDNN ---------------------------
+; - SHIFT SCREEN ROWS BELOW ROW B DOWN BY C ROWS
+; - ROWS B..(24-C) MOVE TO (B+C)..24, IN ONE YMMM. INSERTING SEVERAL LINES
+; - AT ONCE COSTS THE SAME SINGLE BLIT AS INSERTING ONE.
+; - IN:  B = FIRST ROW THAT MOVES (1..24), C = ROWS TO SHIFT BY (1..23)
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+SHIFTDNN        ; NUMBER OF ROWS TO MOVE = 25 - C - B
+                LD      A, 25
+                SUB     C
+                SUB     B
+                RET     Z               ; NO ROWS BELOW TO SHIFT
+                RET     C
+                LD      E, A
+                XOR     A
+                LD      (PREVROW), A    ; RENDIFF'S ROW HAS MOVED
+                LD      A, E
+
+                ; NY = ROWS * 8 PIXELS
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; * 8
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_NY), HL
+
+                LD      HL, TXORG_X
+                LD      (VDP_DX), HL
+
+                ; SY = BOTTOM OF ROW 24 - C, DY = BOTTOM OF ROW 24
+                LD      A, 25
+                SUB     C
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; (25 - C) * 8
+                DEC     A
+                LD      L, A
+                LD      H, 0
+                LD      (VDP_SY), HL
+                LD      HL, 199         ; BOTTOM OF ROW 24
+                LD      (VDP_DY), HL
+
+                LD      A, VDP_DIY      ; #08 (BOTTOM-TO-TOP)
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                JP      YMMM

@@ -1,0 +1,183 @@
+;                                       ****************************************
+;                                       * VDP COMMAND ENGINE                   *
+;                                       ****************************************
+
+
+; --- VDPWAIT                   ----------------------------------------
+
+; - VDPWAIT ----------
+; - WAIT UNTIL VDP COMMAND ENGINE IDLE
+; - POLLS S#2 BIT 0 (CE)
+; -
+
+VDPWAIT         PUSH    AF
+                LD      A, 2
+                DI
+                OUT     (VDPCT), A
+                LD      A, #8F          ; SELECT STATUS REG S#2 (R#15=2)
+                OUT     (VDPCT), A
+.WAIT           IN      A, (VDPST)
+                RRA                     ; CE INTO CARRY
+                JR      C, .WAIT
+                XOR     A               ; RESTORE S#0 SELECTION
+                DI
+                OUT     (VDPCT), A
+                LD      A, #8F
+                OUT     (VDPCT), A
+                EI
+                POP     AF
+                RET
+
+
+; - SETWRT -----------------------------
+; - SET VDP VRAM WRITE ADDRESS POINTER
+; - IN:  HL = VRAM ADDRESS (0..65535)
+; - OUT: NONE
+; - CLOBBERS: A
+; -
+; - R#14 CARRIES VRAM ADDRESS BITS A16-A14 AND MUST BE WRITTEN FIRST: THE
+; - ADDRESS PORT ONLY LATCHES THE LOW 14 BITS. WITHOUT IT EVERY WRITE ABOVE
+; - #3FFF LANDS AT (R#14 * #4000) + (ADDRESS AND #3FFF) -- I.E. WHEREVER THE
+; - PREVIOUS OWNER OF THE VDP HAPPENED TO LEAVE R#14.
+; -
+
+SETWRT          DI
+                LD      A, H
+                RLCA
+                RLCA
+                AND     %00000011       ; A15-A14 -> R#14 BITS 1-0
+                OUT     (VDPCT), A
+                LD      A, #8E          ; REG 14 | #80
+                OUT     (VDPCT), A
+                LD      A, L
+                OUT     (VDPCT), A
+                LD      A, H
+                AND     #3F
+                OR      #40
+                OUT     (VDPCT), A
+                EI
+                RET
+
+
+; --- COMMAND EXECUTION         ----------------------------------------
+
+
+; - VDPCMD -----------------------------
+; - ISSUE VDP COMMAND BLOCK
+; - IN:  HL = POINTER TO 15-BYTE PARAM BLOCK
+; - OUT: NONE
+; - CLOBBERS: AF, BC, HL
+; -
+
+VDPCMD          CALL    VDPWAIT
+                DI
+                LD      A, 32           ; START AT R#32
+                OUT     (VDPCT), A
+                LD      A, #91          ; R#17 (INDIRECT REGISTER POINTER)
+                OUT     (VDPCT), A
+                
+                LD      C, VDPIND       ; PORT #9B (R#17 AUTO-INCS R#32-46)
+                REPT    15
+                OUTI
+                ENDR
+                EI
+                RET
+
+
+; --- WRAPPER PRIMITIVES        ----------------------------------------
+
+
+; - HMMM -------------------------------
+; - COPY VRAM -> VRAM (BYTE-TRANSFER)
+; - IN:  HL = POINTER TO CMD BLOCK
+; - OUT: NONE
+; - CLOBBERS: BC, DE
+; -
+
+HMMM            PUSH    AF
+                PUSH    HL
+                LD      DE, 14
+                ADD     HL, DE
+                LD      A, VDP_HMMM
+                LD      (HL), A
+                POP     HL
+                CALL    VDPCMD
+                POP     AF
+                RET
+
+
+; - HMMV -------------
+; - FILL VRAM REGION WITH BYTE COLOR
+; - IN:  HL = POINTER TO CMD BLOCK (ONLY R#36-R#46 USED)
+; - OUT: NONE
+; - CLOBBERS: BC, DE
+; -
+
+HMMV            PUSH    AF
+                PUSH    HL
+                LD      DE, 14
+                ADD     HL, DE
+                LD      A, VDP_HMMV
+                LD      (HL), A         ; R#46 = CMD
+                POP     HL
+                CALL    VDPCMD
+                POP     AF
+                RET
+
+
+; - YMMM -------------
+; - COPY VRAM → VRAM, Y DIRECTION ONLY, FROM DX TO THE SCREEN EDGE
+; - IN:  HL = POINTER TO CMD BLOCK (DX, SY, DY, NY, ARG USED; SX AND NX IGNORED)
+; - OUT: NONE
+; - CLOBBERS: BC, DE
+; -
+
+YMMM            PUSH    AF
+                PUSH    HL
+                LD      DE, 14
+                ADD     HL, DE
+                LD      A, VDP_YMMM
+                LD      (HL), A
+                POP     HL
+                CALL    VDPCMD
+                POP     AF
+                RET
+
+
+; - LMMM -------------
+; - COPY VRAM → VRAM (DOT MODE)
+; - IN:  HL = POINTER TO CMD BLOCK
+; -      A  = LOGICAL OP (VDP_IMP, VDP_XOR, ETC)
+; - OUT: NONE
+; - CLOBBERS: BC, DE
+; -
+
+LMMM            PUSH    AF
+                PUSH    HL
+                LD      DE, 14
+                ADD     HL, DE
+                LD      (HL), A         ; SET COMMAND + LOGOP
+                POP     HL
+                CALL    VDPCMD
+                POP     AF
+                RET
+
+
+; - LMMV -------------------------------
+; - FILL VRAM REGION (DOT MODE, LOGOP)
+; - IN:  HL = POINTER TO CMD BLOCK
+; -      A  = COMMAND + LOGOP (E.G. VDP_LMMV | VDP_XOR)
+; - OUT: NONE
+; - CLOBBERS: BC, DE
+; -
+
+LMMV            PUSH    AF
+                PUSH    HL
+                LD      DE, 14
+                ADD     HL, DE
+                LD      (HL), A         ; R#46 = VDP_LMMV | LOGOP
+                POP     HL
+                CALL    VDPCMD
+                POP     AF
+                RET
+
