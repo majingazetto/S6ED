@@ -2,8 +2,9 @@
 SXED Screen X Text Editor v0.1
 2024 - 2026 Armando Pérez Abad
 
-S6ED - Screen 6 text editor for MSX2
-S2ED - Screen 2 text editor for MSX1
+S6ED  - Screen 6 text editor for MSX2, 80 columns
+S62ED - Screen 6 text editor for MSX2, 62 columns
+S2ED  - Screen 2 text editor for MSX1, 64 columns
 
 Font by Miguel A. Fernandez
 --------------------------------------------------------------
@@ -84,10 +85,10 @@ modal Vi), undo/redo, word wrap, themes, accented characters,
 and a file browser. All of it fast enough to be pleasant on a
 stock 3.58 MHz machine.
 
-SXED is one program compiled for two video chips. Both editors
-share the same core: same features, same menus, same keymaps,
-same configuration keys and same file formats. Learn one and
-you know the other.
+SXED is one program built three times, for two video chips.
+The three editors share the same core: same features, same
+menus, same keymaps, same configuration keys and same file
+formats. Learn one and you know the others.
 
 This manual is 62 columns wide on purpose: you can read it
 with any of the editors themselves, without horizontal
@@ -97,7 +98,7 @@ scrolling.
 
  -------- 2.- THE EDITORS.
 
-The SXED family has two members today, and a third planned:
+The SXED family has three members:
 
 * S6ED - Screen 6 editor for MSX2/2+/turbo-R (V9938/V9958).
 
@@ -108,6 +109,19 @@ The SXED family has two members today, and a third planned:
     - 6 color themes plus fully custom colors.
     - Program: S6ED.COM
 
+* S62ED - Screen 6 editor for MSX2/2+/turbo-R, big type.
+
+    - SCREEN 6 bitmap: 512x212 pixels, 4 colors.
+    - 62 columns x 24 rows of text, 8x8 character cells.
+    - For those who prefer big characters over wide lines:
+      every cell is byte aligned, so it is also the fastest
+      of the three at drawing text.
+    - Font: for now the MSX 8x8 charset in all four weights,
+      so bold and italic look like normal text until the
+      hand-drawn 8x8 face arrives.
+    - The same 6 color themes and custom colors as S6ED.
+    - Program: S62ED.COM
+
 * S2ED - Screen 2 editor for MSX1/2/2+/turbo-R (TMS9918).
 
     - SCREEN 2 driven as a bitmap: 256x192, 16 fixed colors.
@@ -116,19 +130,17 @@ The SXED family has two members today, and a third planned:
     - 6 color themes mapping the 16 TMS9918 colors.
     - Program: S2ED.COM
 
-* S62ED - planned Screen 6 sibling: 62 columns x 24 rows
-  with an 8x8 font, for those who prefer big characters
-  over wide lines.
-
-Everything in this manual applies to both editors unless a
-note says otherwise. Differences (screen geometry, themes,
-color configuration) are always marked with [S6ED] or [S2ED].
+Everything in this manual applies to all three editors
+unless a note says otherwise. Differences (screen geometry,
+themes, color configuration) are marked with [S6ED], [S62ED]
+or [S2ED]. S6ED and S62ED share the Screen 6 hardware, so
+most of those notes read [S6ED/S62ED].
 
 
 
  -------- 3.- REQUIREMENTS & FILES.
 
-Minimum requirements (both editors):
+Minimum requirements (all editors):
 
     - MSX-DOS 2 or Nextor (plain MSX-DOS 1 is rejected).
     - A memory mapper with the standard mapper support
@@ -137,27 +149,27 @@ Minimum requirements (both editors):
 
 Notes per editor:
 
-    - [S6ED] needs an MSX2 or higher. On a 128 KB machine it
-      runs under MSX-DOS 2 (101 lines of text capacity) but
-      NOT under Nextor, which reserves one segment more;
-      with Nextor use 256 KB or more. More mapper memory
-      means bigger documents (up to 5461 lines).
+    - [S6ED/S62ED] need an MSX2 or higher. On a 128 KB
+      machine they run under MSX-DOS 2 (101 lines of text
+      capacity on S6ED, 131 on S62ED) but NOT under Nextor,
+      which reserves one segment more; with Nextor use 256 KB
+      or more. More mapper memory means bigger documents (up
+      to 5461 lines).
     - [S2ED] runs on MSX1. MSX-DOS 2 does not run on MSX1,
       so on MSX1 you need Nextor (a 128 KB mapper machine
       with a disk interface works fine).
 
-Each editor is made of these files:
+Each editor is made of four files, named after it (S6ED.*,
+S62ED.* or S2ED.*):
 
-    S6ED.COM / S2ED.COM   The program.
-    S6ED.DAT / S2ED.DAT   Feature container. MANDATORY: the
-                          editor aborts if it is missing or
-                          corrupt.
-    S6ED.FNT / S2ED.FNT   Font file. Optional: if missing or
-                          of the wrong size, the MSX ROM
-                          charset is used instead ([S6ED]
-                          shows [ROM] on the status bar).
-    S6ED.CFG / S2ED.CFG   Configuration. Optional (defaults
-                          are used if absent). See 11.
+    .COM   The program.
+    .DAT   Feature container. MANDATORY: the editor aborts
+           if it is missing or corrupt.
+    .FNT   Font file. Optional: if missing or of the wrong
+           size, the MSX ROM charset is used instead
+           ([S6ED/S62ED] show [ROM] on the status bar).
+    .CFG   Configuration. Optional (defaults are used if
+           absent). See 11.
 
 The editor finds its files "next to the program": when
 COMMAND2.COM runs the editor (even through PATH) it tells it
@@ -166,14 +178,26 @@ the full path it was found at, and .DAT, .FNT and the general
 directory. You can keep the editors in A:\TOOLS and run them
 from anywhere. See 11 for the local .CFG override.
 
+Three disk images are distributed, all laid out the same
+way: the editors in A:\TOOLS, this manual and a sample
+document in A:\DEV, and an AUTOEXEC.BAT that sets the PATH,
+changes to \DEV and starts an editor.
+
+    S6ED.DSK    MSX2. Carries all three editors and starts
+                S6ED. Run the others from \DEV with
+                "S62ED TEST_S62.TXT" or "S2ED TEST_S2.TXT".
+    S62ED.DSK   MSX2. S62ED alone.
+    S2ED.DSK    MSX1 (Nextor) or MSX2. S2ED alone.
+
 
 
  -------- 4.- STARTING THE EDITOR.
 
 Usage:
 
-    S6ED [file] [/V] [/H | /?]
-    S2ED [file] [/V] [/H | /?]
+    S6ED  [file] [/V] [/H | /?]
+    S62ED [file] [/V] [/H | /?]
+    S2ED  [file] [/V] [/H | /?]
 
     file    File to open. Full DOS 2 paths are allowed
             (A:\DIR\FILE.TXT, up to 63 characters). If the
@@ -191,9 +215,11 @@ mode and aborts with a clear message if something is missing:
     Requires MSX-DOS 2 or Nextor.
     No mapper manager found.
     Insufficient Page 3 memory.
-    S6ED requires 2 free mapper segments.   (or S2ED)
+    S6ED requires 2 free mapper segments.
     Out of mapper memory.
     S6ED.DAT not found.   /   S6ED.DAT corrupt.
+
+(with S62ED or S2ED in place of S6ED for the other editors).
 
 While editing, use ESC or Ctrl+Q to leave the editor. If the
 document has unsaved changes a confirmation dialog appears
@@ -208,8 +234,9 @@ The screen has three areas:
 
     Row 0        Menu bar: program name, the File/Edit/Help
                  menus, the current file name and the clock.
-    Text area    [S6ED] 24 rows x 80 columns.
-                 [S2ED] 22 rows x 64 columns.
+    Text area    [S6ED]  24 rows x 80 columns.
+                 [S62ED] 24 rows x 62 columns.
+                 [S2ED]  22 rows x 64 columns.
     Last row     Status bar.
 
 The menu bar shows the base name of the current file (up to
@@ -233,7 +260,8 @@ The status bar has two channels:
         [NORM]  Vi normal mode     [VIS]   Vi visual mode
 
         Ln NNNNN/NNNNN  Col NNN    (S6ED)
-        Ln NNNNN/NNNNN  Col NN     (S2ED)
+        Ln NNNNN/NNNNN Col NNN     (S62ED)
+        Ln NNNNN/NNNNN Col NN      (S2ED)
 
       Line and column numbers are 1-based; the second figure
       is the total line count.
@@ -300,8 +328,9 @@ Two wrap modes, toggled with Ctrl+W or WRAP= in the CFG:
                and deleting pulls words back up (reflow).
 
 The margin is the text width: the screen width by default
-(80 / 64) or the TEXTWIDTH= value (0 = no margin, i.e. DEV
-mode). In Vi mode: ":set wrap", ":set nowrap", ":set tw=N".
+(80 / 62 / 64) or the TEXTWIDTH= value (0 = no margin, i.e.
+DEV mode). In Vi mode: ":set wrap", ":set nowrap",
+":set tw=N".
 
 
  ---- 6.5.- AUTOALIGN.
@@ -333,9 +362,9 @@ regional machine, via the GRAPH key:
 SHIFT only changes N, E and W: Ñ, É and Ü (the MSX charset
 has no other uppercase accented vowels).
 
-Dead keys: pressing the accent dead key (the ´ key on
-European keyboards; KANA/CODE on Japanese ones) and then a
-vowel produces the acute vowel; SHIFT+dead key arms the
+Dead keys: pressing the accent dead key (the acute accent
+key on European keyboards; KANA/CODE on Japanese ones) and
+then a vowel produces the acute vowel; SHIFT+dead key arms the
 diaeresis (ü). Dead key + space types the quote itself. ESC
 or BS cancels a pending dead key.
 
@@ -353,7 +382,8 @@ or re-weights styled spans without modifying the file:
     LIT  Chat style:  *bold*  _italic_
     OFF  Raw text (best for source code).
 
-[S6ED] renders bold/italic with the real font weights; [S2ED]
+[S6ED/S62ED] render bold/italic with the font weights (on
+S62ED they look normal until its own font arrives); [S2ED]
 renders them with theme colors. Ctrl+T cycles the mode.
 Ctrl+B / Ctrl+I (STD profile) insert a delimiter pair or wrap
 the current selection.
@@ -367,8 +397,8 @@ Four keyboard profiles are built in. Ctrl+K cycles them
 and PROFILE= sets it in the CFG. The active profile is
 remembered when you save Settings.
 
-The full tables follow. Unless noted, "the editor" means both
-S6ED and S2ED. In all profiles any unmapped printable key is
+The full tables follow. Unless noted, "the editor" means all
+three editors. In all profiles any unmapped printable key is
 typed into the document (in Vi, only in insert mode).
 
 Common to ALL profiles:
@@ -599,11 +629,11 @@ selection edits and replace: a whole Replace All reverts with
 a single undo. Each undo also restores the cursor position
 and the viewport. A new edit invalidates the redo chain.
 
-The undo history lives in a 4 KB ring (about 23 operations
-on S6ED, 28 on S2ED); the oldest operations are forgotten as
-it fills. A single operation touching more lines than the
-ring can hold (a huge selection delete, for example) cannot
-be recorded half-way: in that case the whole history is
+The undo history lives in a 4 KB ring (about 23 operations on
+S6ED, 30 on S62ED, 29 on S2ED); the oldest operations are
+forgotten as it fills. A single operation touching more lines
+than the ring can hold (a huge selection delete, for example)
+cannot be recorded half-way: in that case the whole history is
 dropped instead of restoring a partial, wrong state.
 
 
@@ -658,15 +688,15 @@ The three menus are File, Edit and Help.
 
  ---- 10.5.- FILE BROWSER (OPEN / SAVE AS).
 
-The browser shows the files of a directory as a grid
-(5x14 slots on S6ED, 4x12 on S2ED), sorted: "..", then
+The browser shows the files of a directory as a grid (5x14
+slots on S6ED, 4x12 on S62ED and S2ED), sorted: "..", then
 directories, then files, then drives, each group in
 alphabetical order. Hidden and system files are shown in a
 different style. The information line under the grid shows
 name, size (or <DIR>), date, time and attributes of the
 selected entry, plus the entry count (N+/MAX if the directory
-has more entries than the browser holds: 160 on S6ED, 64 on
-S2ED).
+has more entries than the browser holds: 160 on S6ED and
+S62ED, 64 on S2ED).
 
 The starting directory is the current file's directory when
 known, or the current directory.
@@ -784,10 +814,11 @@ summary. RETURN, SPACE or ESC close it.
 
  -------- 11.- CONFIGURATION FILE.
 
-S6ED.CFG / S2ED.CFG are plain text files of KEY=VALUE lines,
-one per line. Spaces around "=" are allowed, ";" and "#"
-start comments, blank lines are ignored, and values are case
-insensitive. Unknown keys or values are ignored silently.
+S6ED.CFG, S62ED.CFG and S2ED.CFG are plain text files of
+KEY=VALUE lines, one per line. Spaces around "=" are allowed,
+";" and "#" start comments, blank lines are ignored, and
+values are case insensitive. Unknown keys or values are
+ignored silently.
 
 Two files are read, in this order:
 
@@ -811,18 +842,18 @@ Keys (defaults in brackets):
     AUTOALIGN OFF / ON / DEV                    [OFF]
     THEME     DARK / AMBER / GREEN / LIGHT /
               MSX / MONO                        [DARK]
-    SHADOW    See below                         [S6ED: OFF]
-                                                [S2ED: ON]
+    SHADOW    See below                  [S6ED/S62ED: OFF]
+                                               [S2ED: ON]
 
 SHADOW chooses which color the window drop shadows borrow:
 
-    [S6ED]  OFF or BG (document background), FG, UI, HI.
-            ON means UI.
-    [S2ED]  OFF, ON (the theme's own shadow color) or a
-            single hex digit 0-F (a TMS9918 color).
+    [S6ED/S62ED]  OFF or BG (document background), FG, UI,
+                  HI. ON means UI.
+    [S2ED]        OFF, ON (the theme's own shadow color) or
+                  a single hex digit 0-F (a TMS9918 color).
 
-Extra keys, only on [S6ED] (Screen 6 has a programmable
-palette; they are never written by Settings):
+Extra keys, only on [S6ED/S62ED] (Screen 6 has a
+programmable palette; they are never written by Settings):
 
     COLOR_BG=R,G,B          Background   (color 0)
     COLOR_TEXT=R,G,B        Text ink     (color 1)
@@ -838,8 +869,8 @@ the COLOR_* keys are never written by it.
 
  -------- 12.- THEMES.
 
-THEME= changes the whole look at once. Both editors ship the
-same six themes:
+THEME= changes the whole look at once. All three editors ship
+the same six themes:
 
     DARK     Light text on dark blue (the default)
     AMBER    Amber monochrome look
@@ -848,7 +879,7 @@ same six themes:
     MSX      Classic MSX blue
     MONO     Pure white on black
 
-[S6ED] reprograms the four Screen 6 palette entries per
+[S6ED/S62ED] reprogram the four Screen 6 palette entries per
 theme; COLOR_* keys can then override any of them.
 
 [S2ED] cannot reprogram the fixed TMS9918 palette, so a theme
@@ -899,14 +930,18 @@ writes, then [SAVED] or [SAVE ERROR].
 
  -------- 14.- TROUBLESHOOTING.
 
+(S6ED is used as the example; read S62ED or S2ED for the
+other editors.)
+
 "S6ED.DAT not found." / "S6ED.DAT corrupt."
     The feature container must sit next to the .COM (or in
     the current directory). Copy it again from the
-    distribution disk.
+    distribution disk. Each editor needs its own .DAT: they
+    are not interchangeable.
 
-The text looks wrong / status bar shows [ROM]  [S6ED]
-    S6ED.FNT is missing or has the wrong size; the MSX ROM
-    charset is being used. Restore the .FNT file.
+The text looks wrong / status bar shows [ROM]  [S6ED/S62ED]
+    The .FNT file is missing or has the wrong size; the MSX
+    ROM charset is being used. Restore the .FNT file.
 
 "S6ED requires 2 free mapper segments."
     Not enough free mapper memory. Under Nextor on a 128 KB
@@ -921,7 +956,7 @@ The text looks wrong / status bar shows [ROM]  [S6ED]
     software (TSRs) and try again.
 
 Settings are not being saved
-    Settings writes to the LOCAL S6ED.CFG/S2ED.CFG of the
+    Settings writes to the LOCAL .CFG of the
     current directory when there is one (see 11). Check which
     file you are editing, and that the disk is not
     write-protected ([SAVE ERROR] would tell you).
@@ -930,6 +965,11 @@ Accents type twice or not at all
     They should not: the editor reads the keyboard matrix
     directly and arbitrates against the BIOS. Please report
     the machine model if you see this.
+
+The disk boots to the DOS prompt instead of the editor
+    AUTOEXEC.BAT must have DOS line endings (CR LF). A file
+    edited on a modern computer and saved with bare LF line
+    endings is ignored by COMMAND2.COM. Save it with EOL=DOS.
 
 
 
