@@ -91,7 +91,7 @@ Row 25:     Status Bar (y = 200..211)
 * **Selection / Cursor:** Inverts color via `LMMV | XOR` ($NX = 8, NY = 8, CLR = \text{COL\_HI}$).
 
 ### 4.2 Font Subsystem (`SRC/S62/FONT.Z8A`)
-* **Assets:** `RES/FONTSHEET_S64.PNG` (512×212, 4 blocks of 256×64 px), converted by `RES/mkfont62.py sheet` into `S62ED.FNT` (8,192 bytes). Until the commissioned face arrives the default is the IBM CGA, built by `mkfont62.py import` from `RES/FONTS62/`.
+* **Assets:** `RES/FONTSHEET_S64.PNG` (512×212, 4 blocks of 256×64 px), converted by `RES/mkfont62.py sheet` into `S62ED.FNT` (8,192 bytes). The default is the commissioned face by Miguel A. Fernandez (2026-10-06): only its NORMAL block is drawn so far, so the Makefile runs `mkfont62.py sheet --derive`, which generates BOLD, ITALIC and BOLD+ITALIC from it (graphics kept as drawn, a glyph the italic shear would clip kept upright). The IBM CGA, Amstrad CPC and MSX BIOS fonts ship as alternatives in `A:\TOOLS\FONTS`.
 * **BIOS Fallback:** If `S62ED.FNT` is absent, reads 2,048 bytes from BIOS CGROM (`0x1BBF`) and replicates it across all four weight tables.
 * **`EXPNORM`:** Expands 8 bits of 1bpp row byte to 2 bytes of 2bpp Color 1 (Ink).
 * **`EXPSTAT`:** Expands 8 bits to 2 bytes of 2bpp Color 1 on Color 2 (UI Paper).

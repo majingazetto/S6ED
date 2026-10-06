@@ -217,8 +217,11 @@ $(OUTPUT_S62): $(ALL_SOURCES_GEN)
 # S62ED's fonts are built from other machines' raw 8x8 fonts by mkfont62,
 # which remaps them to the MSX order by meaning, composes the accented
 # letters a source lacks and writes the four weights (RES/FONTS62/README.md
-# has the sources and their credits). The IBM CGA is the default S62ED.FNT
-# until the commissioned face arrives; all three ship in A:\TOOLS\FONTS.
+# has the sources and their credits); all three ship in A:\TOOLS\FONTS.
+# The default S62ED.FNT is the commissioned face by Miguel A. Fernandez,
+# drawn on RES/FONTSHEET_S64.PNG. Only its NORMAL block is his so far:
+# --derive generates BOLD, ITALIC and BOLD+ITALIC from it. Drop --derive
+# when the sheet comes back with the four blocks drawn.
 CGA.FNT: $(FONTS62DIR)/CGA-TH.F08 $(FONTS62DIR)/CGA.F08 $(MKFONT62DEP)
 	@$(MKFONT62) import --src $(FONTS62DIR)/CGA-TH.F08 --bold-src $(FONTS62DIR)/CGA.F08 --cp cp437 --out $@ >/dev/null
 
@@ -228,8 +231,8 @@ CPC.FNT: $(FONTS62DIR)/CPC464.F08 $(MKFONT62DEP)
 BIOS.FNT: $(RES_DIR)/FONT_BIOS8X8.BIN $(MKFONT62DEP)
 	@$(MKFONT62) import --src $< --cp msx --out $@ >/dev/null
 
-$(FNTFILE_S62): CGA.FNT
-	@cp $< $@
+$(FNTFILE_S62): $(RES_DIR)/FONTSHEET_S64.PNG $(MKFONT62DEP)
+	@$(MKFONT62) sheet $< --derive --out $@ >/dev/null
 
 dsk-s62: $(DSKFILE_S62)
 

@@ -4,8 +4,11 @@ Example 8x8 fonts for S62ED, built by `../mkfont62.py` from the raw fonts of
 other machines, and the editable sheets they produce. Each `.FNT` is four
 variants of 2,048 bytes (NORMAL, BOLD, ITALIC, BOLD+ITALIC) in the MSX
 international character order; the Makefile builds them, the disks carry them
-in `A:\TOOLS\FONTS\`, and `CGA.FNT` is S62ED's default `S62ED.FNT` until the
-commissioned face arrives.
+in `A:\TOOLS\FONTS\`. S62ED's default `S62ED.FNT` is not one of them: it is
+the commissioned face by Miguel A. Fernandez, drawn on `../FONTSHEET_S64.PNG`
+(NORMAL block; `mkfont62.py sheet --derive` generates the other three weights
+until he draws them). `S62ED.PNG` here is that font as a full four-block
+sheet, the one to retouch.
 
 | File | Source | Order |
 |---|---|---|
@@ -13,6 +16,7 @@ commissioned face arrives.
 | `CGA.F08` | IBM CGA, standard thick (double-dot) ROM font | CP437 |
 | `CPC464.F08` | Amstrad CPC 464 firmware ROM, bytes #3800-#3FFF | CPC |
 | `*.PNG` | the sheets `mkfont62.py import --sheet` wrote | MSX |
+| `S62ED.PNG` | the default face, `mkfont62.py sheet --derive --sheet` | MSX |
 
 **IBM CGA.** NORMAL is the thin font and BOLD the thick one: the CGA card
 carried both and IBM's own choice of the thick one as the default is what

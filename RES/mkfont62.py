@@ -8,7 +8,7 @@ the letter spacing is whatever the artwork leaves blank (column 7 by custom).
 
     mkfont62.py import --src CGA-TH.F08 --cp cp437 [--bold-src CGA.F08]
                        --out CGA.FNT [--sheet CGA.PNG]
-    mkfont62.py sheet  FONTSHEET.PNG --out S62ED.FNT
+    mkfont62.py sheet  FONTSHEET.PNG --out S62ED.FNT [--derive] [--sheet FULL.PNG]
 
 `import` takes a raw 2,048-byte 8x8 font in its own machine's order (cp437 for
 the IBM PC, cpc for the Amstrad CPC, msx for one already in MSX order) and
@@ -27,7 +27,11 @@ neighbouring cell.
 `sheet` reads a 512x212 sheet in the FONTSHEET_S64 layout (four 256x64 blocks:
 NORMAL at (0,20), BOLD at (256,20), ITALIC at (0,96), BOLD+ITALIC at (256,96),
 glyph N at ((N & 31) * 8, (N >> 5) * 8), ink = palette index 3) -- the sheet
-`import --sheet` writes and the one the artist draws on.
+`import --sheet` writes and the one the artist draws on. With --derive only
+the NORMAL block is read and the other three are generated from it, exactly
+as `import` derives them (the artist's sheet arrives with NORMAL drawn and
+the other blocks still holding the template's pre-fill); --sheet then writes
+the full four-block sheet, ready to retouch.
 """
 
 import argparse
@@ -232,9 +236,24 @@ def remap(font, cp, bios):
     return out, origin
 
 
-def derive(glyphs, fn):
-    return [rows if not MSX.get(code) or is_graphic(MSX[code])
-            else fn(rows) for code, rows in enumerate(glyphs)]
+def derive(glyphs, fn, lossless=False):
+    """Apply a weight to every text glyph; graphics are kept as drawn.
+
+    With `lossless`, a glyph the weight would clip (ink pushed out of the
+    cell -- the italic shear on a symbol drawn to column 7) is kept upright
+    instead of losing pixels.
+    """
+    out = []
+    for code, rows in enumerate(glyphs):
+        new = rows
+        if MSX.get(code) and not is_graphic(MSX[code]):
+            new = fn(rows)
+            if lossless and any(r & ~n for r, n in zip(rows, new)) \
+                    and sum(bin(n).count('1') for n in new) < \
+                    sum(bin(r).count('1') for r in rows):
+                new = rows
+        out.append(new)
+    return out
 
 
 def pack(glyphs):
@@ -277,7 +296,7 @@ def _msx_code(ch):
     return 0x3f
 
 
-def read_sheet(path):
+def read_sheet(path, blocks=4):
     from PIL import Image
     im = Image.open(path)
     if im.mode != 'P' or im.size != (sheetlib.SCREEN_W, sheetlib.SCREEN_H):
@@ -285,7 +304,7 @@ def read_sheet(path):
                  % (path, sheetlib.SCREEN_W, sheetlib.SCREEN_H, im.mode, im.size))
     px = im.load()
     out = bytearray()
-    for _, (qx, qy), _ in sheetlib.VARIANTS:
+    for _, (qx, qy), _ in sheetlib.VARIANTS[:blocks]:
         for code in range(256):
             gx, gy = qx + (code & 31) * 8, qy + (code >> 5) * 8
             for r in range(8):
@@ -314,10 +333,27 @@ def main():
     sh = sub.add_parser('sheet', help='build S62ED.FNT from a PNG sheet')
     sh.add_argument('png')
     sh.add_argument('--out', required=True)
+    sh.add_argument('--derive', action='store_true',
+                    help='read NORMAL only and generate the other three')
+    sh.add_argument('--sheet', help='also write the full four-block sheet')
+    sh.add_argument('--title', default='S62ED 8x8 font')
     a = ap.parse_args()
 
     if a.cmd == 'sheet':
-        data = read_sheet(a.png)
+        if a.derive:
+            raw = read_sheet(a.png, blocks=1)
+            normal = [list(raw[c * 8:c * 8 + 8]) for c in range(256)]
+            bold = derive(normal, sheetlib.bold8, lossless=True)
+            variants = [normal, bold,
+                        derive(normal, sheetlib.italic8, lossless=True),
+                        derive(bold, sheetlib.italic8, lossless=True)]
+            data = b''.join(pack(v) for v in variants)
+        else:
+            data = read_sheet(a.png)
+            variants = [[list(data[v * FONTSIZ + c * 8:v * FONTSIZ + c * 8 + 8])
+                         for c in range(256)] for v in range(4)]
+        if a.sheet:
+            write_sheet(a.sheet, variants, a.title)
     else:
         def load(p):
             data = open(p, 'rb').read()
