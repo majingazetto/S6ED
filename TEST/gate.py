@@ -7086,6 +7086,248 @@ class P3ReplaceAllUndo(Case):
                                 disk_diff(got, want)))
         return checks
 
+# --- Q1-Q6  MEDIUM DEFECTS FROM THE RC1 REVIEW (2026-10-06) ------------
+
+
+def purity(tag, run, a='deselected', b='redrawn'):
+    """The screen after an operation against a full REDRAW at the same state."""
+    sa, sb = run.snaps.get(a, {}), run.snaps.get(b, {})
+    keys = ('TOPLINE', 'DOCLINE', 'CURX', 'CURY', 'TOTLINES')
+    if not sa or any(sa.get(k) != sb.get(k) for k in keys):
+        return Check(tag, False, 'state differs before the diff: %s / %s'
+                     % ([sa.get(k) for k in keys], [sb.get(k) for k in keys]))
+    d = vram.diff(run.blob(a, 'vram'), run.blob(b, 'vram'),
+                  ignore_cells=[(sa.get('CURX', 0), sa.get('CURY', 0))])
+    return Check(tag, not d, 'screen identical to a full REDRAW' if not d
+                 else '%d stray pixels, first %s' % (len(d), d[:3]))
+
+
+class Q1StyleSelection(Case):
+    name = 'Q1-style-selection'
+    desc = 'Ctrl+B on a selection (MARKUP=OFF), then deselect: no inverse residue'
+    origin = ('2026-10-06 review: APPLSEL repainted the rows clean without '
+              'SELPRE, so the deselect XORed the old range onto clean text')
+
+    def fixture(self, ctx, variant=None):
+        # Long enough for page down + page up to come back to the same
+        # state: that pair is the full REDRAW the screen is compared with.
+        return crlf(['ALPHA LINE', 'BRAVO LINE', 'CHARLIE'] +
+                    ['FILLER %02d' % i for i in range(60)])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('DOWN', mods=['SHIFT'])
+        t.press('RIGHT', mods=['SHIFT'], repeat=3)
+        t.press('B', mods=['CTRL'])
+        t.wait(1.0)
+        t.press('RIGHT')                # deselects
+        t.press('LEFT')
+        t.wait(0.5)
+        t.snap('deselected', vram=True)
+        t.press('DOWN', mods=['GRAPH'])
+        t.press('UP', mods=['GRAPH'])
+        t.wait(0.5)
+        t.snap('redrawn', vram=True)
+        return t
+
+    def verify(self, ctx, runs):
+        return [purity('Q1/render-pure', one(runs))]
+
+
+class Q2ShiftWrapScroll(Case):
+    name = 'Q2-shift-wrap-scroll'
+    desc = ('WRAP=TXT: Shift+Right that wraps past the end of the bottom row '
+            'and scrolls keeps the selection painted right, and deselect clean')
+    origin = ('2026-10-06 review: ACTSLMR had no SELPRE guard before a move '
+              'that scrolls; the exposed row, inside the selection before and '
+              'after, was never painted and the deselect left residue')
+
+    def config(self, ctx, variant=None):
+        return DEFAULT_CFG.replace('WRAP=DEV', 'WRAP=TXT')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE %03d' % i for i in range(100)])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('DOWN', repeat=45)                  # anchor line 45
+        t.press('UP', mods=['SHIFT'], repeat=29)    # line 16 on row 0
+        t.press('DOWN', mods=['SHIFT'], repeat=23)  # line 39 on row 23
+        t.press('RIGHT', mods=['SHIFT'], repeat=9)  # 8 to the end, 1 wraps
+        t.wait(1.0)
+        t.snap('wrapped')
+        t.press('RIGHT')
+        t.press('LEFT')
+        t.wait(0.5)
+        t.snap('deselected', vram=True)
+        t.press('DOWN', mods=['GRAPH'])
+        t.press('UP', mods=['GRAPH'])
+        t.wait(0.5)
+        t.snap('redrawn', vram=True)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        return [
+            Check('Q2/setup', run.var('wrapped', 'DOCLINE') == 40 and
+                  run.var('wrapped', 'TOPLINE') == 17,
+                  'DOCLINE %s, TOPLINE %s after the wrap (want 40, 17)'
+                  % (run.var('wrapped', 'DOCLINE'), run.var('wrapped', 'TOPLINE'))),
+            purity('Q2/render-pure', run),
+        ]
+
+
+class Q3FindAdjacent(Case):
+    name = 'Q3-find-adjacent'
+    desc = 'Find Next reaches a match that starts where the previous one ended'
+    origin = ('2026-10-06 review: SRCHFWD restarted at CURX + 1, the end of the '
+              'previous match plus one: "AB" in "ABAB" never reached column 2')
+
+    def fixture(self, ctx, variant=None):
+        # The first search starts one past the cursor (column 1) and finds
+        # AB at 1; the next match starts at 3, where that one ends.
+        return crlf(['XABABQ', 'LAST'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.wait(1.0)
+        t.press('F', mods=['CTRL'])
+        t.wait(1.0)
+        t.press('A')
+        t.press('B')
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('first')
+        t.press('L', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('second')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        cols = []
+        for label in ('first', 'second'):
+            sel = run.snaps.get(label, {}).get('SELSTRL')
+            cols.append(sel[2] if sel else None)
+        return [Check('Q3/adjacent', cols == [1, 3],
+                      'match starts %s (want [1, 3])' % cols)]
+
+
+class Q4SettingsBorders(Case):
+    name = 'Q4-settings-borders'
+    desc = 'the Settings dialog keeps its side borders under the body band'
+    origin = ('2026-10-06 review: DOSETT cleared its body with WINBAND, which '
+              'spans WINW, and never put the sides back (DOFIND does)')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE 1'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('F3')
+        t.snap('menu', at='WINPOLL')
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('open', vram=True, at='WINPOLL')
+        t.press('ESC')
+        t.wait(1.0)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        v = run.blob('open', 'vram')
+        x, y, w, h = (run.var('open', k) for k in ('WINX', 'WINY', 'WINW', 'WINH'))
+        if v is None or None in (x, y, w, h):
+            return [Check('Q4/borders', False, 'no dump or geometry')]
+        bad = [(px, py) for py in range(y + 12, y + h - 1)
+               for px in (x, x + w - 1)
+               if vram.pixel(v, px, py, first_line=vram.TEXT_FIRST_LINE) != vram.COL_UI]
+        return [Check('Q4/borders', not bad,
+                      'both side borders in COL_UI down the body' if not bad
+                      else '%d border pixels lost, first %s' % (len(bad), bad[:3]))]
+
+
+class Q5SettingsShadow(Case):
+    name = 'Q5-settings-shadow'
+    desc = 'OK in Settings keeps SHADOW=HI, in RAM and in the CFG it writes'
+    origin = ('2026-10-06 review: Settings mapped any shadow but BG to "on" and '
+              'committed and saved "on" as UI, so SHADOW=HI or FG became UI')
+
+    def config(self, ctx, variant=None):
+        return DEFAULT_CFG + 'SHADOW=HI\n'
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE 1'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('F3')
+        t.snap('menu', at='WINPOLL')
+        t.press('RETURN')
+        t.wait(1.0)
+        t.press('DOWN', repeat=9)       # rows 0..8, then [ OK ]
+        t.press('RETURN')
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        cfg = run.session.extract(run.dsk, ctx.prefix + '.CFG') or b''
+        line = [l for l in cfg.split(b'\r\n') if l.startswith(b'SHADOW=')]
+        return [
+            Check('Q5/boot', run.var('boot', 'SHDWCLR') == 0xFF,
+                  'SHDWCLR %s at boot (want #FF, HI)' % run.var('boot', 'SHDWCLR')),
+            Check('Q5/kept', run.var('saved', 'SHDWCLR') == 0xFF and
+                  line == [b'SHADOW=HI'],
+                  'SHDWCLR %s after OK, CFG says %s'
+                  % (run.var('saved', 'SHDWCLR'), line)),
+        ]
+
+
+class Q6VdpWaitJiffy(Case):
+    name = 'Q6-vdpwait-jiffy'
+    desc = ('scrolling keeps the VBLANK interrupt served: JIFFY advances at the '
+            'frame rate while YMMM scrolls run')
+    origin = ('2026-10-06 review: VDPWAIT polled the command engine with '
+              'interrupts off, so the command after a 128 ms YMMM held the '
+              'VBLANK off for all of it and JIFFY lost ~6 ticks per scroll')
+    VARS = [('JIFFY', 2), ('TOPLINE', 2), ('CLKHZ', 1), ('SCRRDY', 1)]
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE %03d' % i for i in range(200)])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('DOWN', repeat=23)      # the bottom row
+        t.wait(1.0)
+        t.snap('s0', vars_=self.VARS)
+        t.press('DOWN', repeat=30)      # thirty one-row YMMM scrolls
+        t.snap('s1', vars_=self.VARS)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        j0, j1 = run.var('s0', 'JIFFY'), run.var('s1', 'JIFFY')
+        t0, t1 = run.var('s0', 'EMUTUS'), run.var('s1', 'EMUTUS')
+        hz = run.var('s0', 'CLKHZ')
+        if None in (j0, j1, t0, t1, hz):
+            return [Check('Q6/rate', False, 'missing samples')]
+        ticks = (j1 - j0) & 0xFFFF
+        want = (t1 - t0) / 1e6 * hz
+        return [
+            Check('Q6/scrolled', run.var('s1', 'TOPLINE') == 30,
+                  'TOPLINE %s after 30 scrolls' % run.var('s1', 'TOPLINE')),
+            Check('Q6/rate', ticks >= 0.97 * want,
+                  'JIFFY %d ticks in %.2f s (%d expected at %d Hz)'
+                  % (ticks, (t1 - t0) / 1e6, want, hz)),
+        ]
+
 
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
@@ -7102,6 +7344,8 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          R1FreeListCompact(), R2LinewrtOom(), R3UndoCompactIX(), R4UndoLongLine(),
          K1WqSaveFailed(), K2LoadDiskError(), K3SaveCloseError(),
          P1ReflowBoundary(), P2DeleteLastRow0(), P3ReplaceAllUndo(),
+         Q1StyleSelection(), Q2ShiftWrapScroll(), Q3FindAdjacent(),
+         Q4SettingsBorders(), Q5SettingsShadow(), Q6VdpWaitJiffy(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),

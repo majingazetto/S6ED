@@ -11,6 +11,111 @@ import shutil
 
 MUTATIONS = [
     {
+        'name': 'q1-applsel-selpre',
+        'why': 'APPLSEL repaints the selected rows without taking the overlay off first',
+        'file': 'ACTION.Z8A',
+        'old': """.APLINIT        CALL    SELPRE          ; THE ROWS ARE REPAINTED CLEAN BELOW: TAKE""",
+        'new': """.APLINIT        NOP                     ; MUTATION: NO SELPRE
+                NOP
+                NOP""",
+        'filter': 'Q1',
+        'expect': ['Q1/render-pure'],
+    },
+    {
+        'name': 'q2-slmr-guard',
+        'why': 'Shift+Right that wraps and scrolls does not take the overlay off first',
+        'file': 'ACTION.Z8A',
+        'old': """.PRE            CALL    SELPRE          ; A WRAP (WRAP_TXT) SCROLLS: UN-XOR FIRST""",
+        'new': """.PRE            NOP                     ; MUTATION: NO SELPRE
+                NOP
+                NOP""",
+        'filter': 'Q2',
+        'expect': ['Q2/render-pure'],
+    },
+    {
+        'name': 'q3-find-cursor',
+        'why': 'Find Next always restarts one past the cursor, the end of the previous match',
+        'file': 'SEARCH.Z8A',
+        'old': """                OR      A
+                JR      Z, .CUR
+                PUSH    HL""",
+        'new': """                OR      A
+                JR      .CUR            ; MUTATION: NEVER THE SELECTION
+                PUSH    HL""",
+        'filter': 'Q3',
+        'expect': ['Q3/adjacent'],
+    },
+    {
+        'name': 'q4-settings-winsid',
+        'why': 'Settings clears its body with a band as wide as the window and leaves the sides erased',
+        'file': 'WINDOW.Z8A',
+        'old': """                CALL    WINSID          ; THE BAND SPANS WINW: PUT THE SIDES BACK""",
+        'new': """                NOP                     ; MUTATION: NO SIDES
+                NOP
+                NOP""",
+        'filter': 'Q4',
+        'expect': ['Q4/borders'],
+    },
+    {
+        'name': 'q5-shadow-ui',
+        'why': 'Settings OK turns any shadow that stays on into UI',
+        'file': 'WINDOW.Z8A',
+        'old': """                CP      CLR_BG          ; SET IT. IT WAS ALWAYS REWRITTEN AS UI
+                JR      NZ, .SHDDON""",
+        'new': """                CP      CLR_BG          ; SET IT. IT WAS ALWAYS REWRITTEN AS UI
+                NOP                     ; MUTATION: ALWAYS UI
+                NOP""",
+        'filter': 'Q5',
+        'expect': ['Q5/kept'],
+    },
+    {
+        'name': 'q6-vdpwait-di',
+        'why': 'VDPWAIT polls the command engine with interrupts off for the whole command',
+        'file': 'VDP.Z8A',
+        'old': """                EI                      ; ONE POLL PER DI: THE VBLANK IS SERVED
+                JR      C, .WAIT        ; BETWEEN POLLS, NOT HELD OFF FOR THE
+                POP     AF              ; WHOLE COMMAND (A 128 MS YMMM LOST ~6)""",
+        'new': """                NOP                     ; MUTATION: NO EI BETWEEN POLLS
+                JR      C, .WAIT        ; BETWEEN POLLS, NOT HELD OFF FOR THE
+                EI
+                POP     AF              ; WHOLE COMMAND (A 128 MS YMMM LOST ~6)""",
+        'filter': 'Q6',
+        'expect': ['Q6/rate'],
+    },
+    {
+        'name': 's2-reflow-attr-off',
+        'target': 'S2ED',
+        'why': 'REFLOW copies the remainder attributes from the byte count, not the source offset',
+        'file': 'EDIT.Z8A',
+        'old': """                POP     DE              ; DE = SOURCE OFFSET""",
+        'new': """                POP     DE              ; DE = SOURCE OFFSET
+                LD      E, C            ; MUTATION: THE COUNT AS THE OFFSET""",
+        'filter': 'S2-38',
+        'expect': ['S2-38/bold'],
+    },
+    {
+        'name': 's2-browse-title',
+        'target': 'S2ED',
+        'why': 'the S2ED browser repaint starts below the title row a rescan rebuilt',
+        'file': 'BROWSER.Z8A',
+        'old': """                LD      A, BRWWINR
+                LD      B, BRWBTNR - BRWWINR + 1 ; 17 ROWS""",
+        'new': """                LD      A, BRWRLST      ; MUTATION: NOT THE TITLE
+                LD      B, BRWBTNR - BRWRLST + 1""",
+        'filter': 'S2-39',
+        'expect': ['S2-39/title'],
+    },
+    {
+        'name': 's62-name-label',
+        'target': 'S62ED',
+        'why': 'the S62ED name field box starts at 40 and paints over the label colon',
+        'file': 'BROWSER.Z8A',
+        'old': """                LD      A, 60           ; THE BOX STARTS AT 56, CLEAR OF "Name:" (8..47)""",
+        'new': """                LD      A, 44           ; MUTATION: S6 GEOMETRY""",
+        'filter': 'S62-6',
+        'expect': ['S62-6/name-label'],
+    },
+    {
         'name': 'p1-reflow-pass',
         'why': 'REFLOW deletes an empty L+1 on every pass, taking the blank line between paragraphs',
         'file': 'EDIT.Z8A',

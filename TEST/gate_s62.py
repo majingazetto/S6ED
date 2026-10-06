@@ -360,6 +360,13 @@ class S626Browse(S62Case):
                             'information line reads back whole (%d chars)'
                             % len(want) if got == want else
                             'screen %r, BRWINF %r' % (got, want)))
+        # The name field's box used to start at x 40 (EDCOL 44, kept from S6)
+        # and paint over the ':' of the label, which ends at 47 at 8 px.
+        y = run.var('brw', 'WINY') + 16 + 15 * 8      # BRWLSTY + BRWFLDR * 8
+        lab = screen62.cell_text(dump, fnt, run.var('brw', 'WINX') + 8, y, 5,
+                                 screen62.COL_FG, screen62.COL_BG)
+        checks.append(Check('S62-6/name-label', lab == 'Name:',
+                            'label reads %r (want \'Name:\')' % lab))
         return checks
 
 

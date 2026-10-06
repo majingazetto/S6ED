@@ -3603,6 +3603,84 @@ class S237IoBlocks(S2Case):
         return checks
 
 
+class S238ReflowAttrs(S2Case):
+    name = 'S2-38-reflow-attrs'
+    desc = ('a reflow that pulls part of a line up keeps the rest of it with '
+            'its own attributes (bold stays on the bold characters)')
+    origin = ('2026-10-06 review: REFLOW copied the remainder\'s attributes from '
+              'the byte count instead of the source offset (LD C, B)')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['A' * 55, 'xx yy '])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('DOWN')
+        t.press('RIGHT', repeat=6)              # end of 'xx yy '
+        t.press('B', mods=['CTRL'])             # typing in bold
+        t.text('BBBB')
+        t.press('B', mods=['CTRL'])
+        t.press('LEFT', repeat=10)              # column 0 of line 1
+        t.press('BS')                           # pulls 'xx yy' up
+        t.wait(1.0)
+        t.snap('reflowed', vram='patcol')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        dump = run.blob('reflowed', 'patcol')
+        roles = run.snaps.get('reflowed', {}).get('VCOLTXT')
+        if dump is None or roles is None:
+            return [Check('S2-38/bold', False, 'no dump')]
+        bold = roles[2]                         # VCOLBOLD
+        row = pattern.colour_row(dump[0x2000:], 2)      # line 1 on row 2
+        cells = [row[c * 8] for c in (1, 2)]    # text columns 0..3: 'BBBB'
+        return [Check('S2-38/bold', cells == [bold, bold] and
+                      run.var('reflowed', 'TOTLINES') == 2,
+                      'cells %s (want VCOLBOLD #%02X twice), TOTLINES %s'
+                      % (['#%02X' % c for c in cells], bold,
+                         run.var('reflowed', 'TOTLINES')))]
+
+
+class S239BrowseTitle(S2Case):
+    name = 'S2-39-browse-title'
+    desc = 'entering a subdirectory repaints the browser title with its path'
+    origin = ('2026-10-06 review: a rescan rebuilt the title row in the shadow '
+              'and .PAINT dumped rows 3..18 only, so it kept the old path')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def disk_files(self, ctx, variant=None):
+        files = S2Case.disk_files(self, ctx, variant)
+        files['SUB\\NOTE.TXT'] = crlf(['NOTE'])
+        return files
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('O', mods=['CTRL'])
+        t.wait(2.0)
+        t.snap('open', vram='patcol', at='WINPOLL')
+        t.press('RETURN')                       # SUB\ sorts first
+        t.wait(2.0)
+        t.snap('sub', vram='patcol', at='WINPOLL')
+        t.press('ESC')
+        t.wait(1.0)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        a, b = run.blob('open', 'patcol'), run.blob('sub', 'patcol')
+        if a is None or b is None:
+            return [Check('S2-39/title', False, 'no dump')]
+        return [Check('S2-39/title', pattern.row_of(a, 2) != pattern.row_of(b, 2),
+                      'the title row changed with the path'
+                      if pattern.row_of(a, 2) != pattern.row_of(b, 2)
+                      else 'the title row still shows the old path')]
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -3614,7 +3692,8 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S227DialogKeys(), S228BrowseOpen(), S229BrowseMany(),
          S230BrowseSaveAs(), S231Settings(), S232DiskError(),
          S233BareLaunch(), S234DatForeign(),
-         S235LoadProgress(), S236BrowseBusy(), S237IoBlocks()]
+         S235LoadProgress(), S236BrowseBusy(), S237IoBlocks(),
+         S238ReflowAttrs(), S239BrowseTitle()]
 
 
 def run(ctx, cases=None):
