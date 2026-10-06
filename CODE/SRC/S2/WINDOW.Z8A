@@ -32,7 +32,12 @@
 ; - CLOBBERS: ALL
 ; -
 
-WINOPEN         PUSH    HL              ; TITLE
+WINOPEN         CALL    WINOPN0
+                JP      WDUMP
+
+                ; WINOPN0: ALL OF WINOPEN BUT THE DUMP, FOR A CALLER THAT PAINTS
+                ; ITS CONTENTS AND THEN DUMPS THE WINDOW ONCE (THE BROWSER)
+WINOPN0         PUSH    HL              ; TITLE
 
                 ; FLUSH KEYBOARD BUFFER
                 CALL    WINKIL
@@ -146,7 +151,7 @@ WINOPEN         PUSH    HL              ; TITLE
                 CALL    WSHDW
 
                 ; PUSH THE REGION TO VRAM
-                JP      WDUMP
+                RET
 
 
 ; --- WINCLOS                   ----------------------------------------
@@ -1504,9 +1509,8 @@ DOFIND          LD      A, 8
                 LD      (HL), 0
                 INC     A
                 LD      (SRCHLEN), A
-                CALL    .DRWUI
-                CALL    WDUMP
-                JP      .KEYLP
+                LD      A, 9            ; THE FIND FIELD'S ROW
+                JR      .RFROW
 
 .BS0            LD      A, (SRCHLEN)
                 OR      A
@@ -1518,9 +1522,8 @@ DOFIND          LD      A, 8
                 LD      HL, SRCHPAT
                 ADD     HL, DE
                 LD      (HL), 0
-                CALL    .DRWUI
-                CALL    WDUMP
-                JP      .KEYLP
+                LD      A, 9
+                JR      .RFROW
 
 .FOCRPL         ; FIELD 1: REPLACE FIELD
                 LD      A, B
@@ -1542,9 +1545,8 @@ DOFIND          LD      A, 8
                 LD      (HL), 0
                 INC     A
                 LD      (RPLCLEN), A
-                CALL    .DRWUI
-                CALL    WDUMP
-                JP      .KEYLP
+                LD      A, 10           ; THE REPLACE FIELD'S ROW
+                JR      .RFROW
 
 .BS1            LD      A, (RPLCLEN)
                 OR      A
@@ -1556,8 +1558,16 @@ DOFIND          LD      A, 8
                 LD      HL, RPLCPAT
                 ADD     HL, DE
                 LD      (HL), 0
+                LD      A, 10
+                JR      .RFROW
+
+                ; A KEYSTROKE IN A FIELD RECOMPOSES THE DIALOG IN THE SHADOWS
+                ; BUT SENDS ONLY THE FIELD'S ROW (A = ROW) TO VRAM, NOT ALL
+                ; NINE ROWS OF THE WINDOW (~20 MS PER KEY)
+.RFROW          PUSH    AF
                 CALL    .DRWUI
-                CALL    WDUMP
+                POP     AF
+                CALL    WDUMPR
                 JP      .KEYLP
 
 .FOCCAS         ; CONTROL 2: CASE OPTION

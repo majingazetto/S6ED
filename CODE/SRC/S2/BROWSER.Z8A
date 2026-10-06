@@ -82,8 +82,8 @@ DOBRW           XOR     A
                 CALL    BRWSCNM         ; "Reading directory..." MEANWHILE
 .REOPEN         CALL    .TITLE
                 LD      HL, BRWTTL
-                CALL    WINOPEN         ; DRAWS FRAME, TITLE, SHADOW, AND WDUMP
-                CALL    .PAINT          ; PAINTS ALL CONTENTS AND DUMPS ROWS 3..18
+                CALL    WINOPN0         ; DRAWS FRAME, TITLE, SHADOW: NO DUMP YET
+                CALL    .PAINT          ; PAINTS ALL CONTENTS, THEN ONE WDUMP
 
                 ; --- THE KEY LOOP
 .KEYLP          CALL    WINPOLL
@@ -770,18 +770,10 @@ DOBRW           XOR     A
                 ; 5. BUTTONS (ROW 18)
                 CALL    .BTNS
 
-                ; 6. DUMP ROWS 2..18: THE TITLE TOO, WHICH A RESCAN REBUILDS
-                ;    (NEW PATH OR MASK) AND NOTHING ELSE SENT TO VRAM
-                LD      A, BRWWINR
-                LD      B, BRWBTNR - BRWWINR + 1 ; 17 ROWS
-.PTDUMP         PUSH    AF
-                PUSH    BC
-                CALL    WDUMPR
-                POP     BC
-                POP     AF
-                INC     A
-                DJNZ    .PTDUMP
-                RET
+                ; 6. DUMP THE WHOLE WINDOW ONCE: THE TITLE TOO, WHICH A RESCAN
+                ;    REBUILDS (NEW PATH OR MASK). ON OPEN, WINOPN0 LEFT THE DUMP
+                ;    TO THIS ONE -- IT USED TO SEND THE ROWS TWICE (~85 MS)
+                JP      WDUMP
 
                 ; .INFO: FORMAT AND DRAW THE INFORMATION LINE AT ROW 16;
                 ; .INFOD: DRAW WHAT BRWINF ALREADY HOLDS (BRWBUSY PADS IT TO
@@ -829,21 +821,22 @@ DOBRW           XOR     A
 .FLDNOR         LD      A, (VCOLWIN)
 .FLDSET         PUSH    AF
 
-                ; CLEAR PATTERNS OF CELLS 5..23 (19 * 8 = 152 BYTES)
+                ; CLEAR PATTERNS OF CELLS 5..24 (20 * 8 = 160 BYTES): THE CARET
+                ; REACHES COLUMN 10 + 38 = 48, THE LEFT HALF OF CELL 24
                 LD      A, #80 + BRWFLDR
                 LD      H, A
                 LD      L, 5 * 8        ; 40
-                LD      B, 19 * 8       ; 152
+                LD      B, 20 * 8       ; 160
                 XOR     A
 .FLDPAT         LD      (HL), A
                 INC     HL
                 DJNZ    .FLDPAT
 
-                ; FILL COLOR OF CELLS 5..23
+                ; FILL COLOR OF CELLS 5..24
                 POP     AF
                 PUSH    AF
                 LD      HL, COLMAP + BRWFLDR * 32 + 5
-                LD      B, 19
+                LD      B, 20
 .FLDCOL         LD      (HL), A
                 INC     HL
                 DJNZ    .FLDCOL

@@ -2237,9 +2237,36 @@ DOSETT          LD      HL, 120
                 JR      NZ, .PDEC
                 LD      A, 11
 .PDEC           DEC     A
-.FOCSET         LD      (SETTFOC), A
-.REFRESH        CALL    .DRWUI
-                CALL    WINSHOW
+
+                ; A FOCUS MOVE REPAINTS THE TWO PLACES IT TOUCHES -- THE ROW (OR
+                ; THE BUTTON PAIR) IT LEAVES AND THE ONE IT REACHES -- AND BLITS
+                ; THOSE TWO STRIPS. IT USED TO RECOMPOSE THE WHOLE DIALOG AND
+                ; WINSHOW IT: ~100 MS PER ARROW KEY.
+.FOCSET         LD      HL, SETTFOC
+                LD      C, (HL)         ; C = THE FOCUS IT LEAVES
+                LD      (HL), A
+                LD      B, C
+                PUSH    BC
+                CALL    .DRWFOC         ; RECOMPOSE THE OLD PLACE
+                LD      A, (SETTFOC)
+                LD      B, A
+                CALL    .DRWFOC         ; AND THE NEW ONE
+                CALL    WINVSY          ; ONE SYNC FOR BOTH BLITS
+                POP     BC
+                CALL    .UPDFOC
+                LD      A, (SETTFOC)
+                LD      B, A
+                CALL    .UPDFOC
+                JP      .KEYLP
+
+                ; A VALUE CHANGE REPAINTS ITS OWN ROW
+.REFRESH        LD      A, (SETTFOC)
+                LD      B, A
+                PUSH    BC
+                CALL    .DRWFOC
+                CALL    WINVSY
+                POP     BC
+                CALL    .UPDFOC
                 JP      .KEYLP
 
 .RIGHT          LD      A, (SETTFOC)
@@ -2257,8 +2284,7 @@ DOSETT          LD      HL, 120
 .TOGBTN         LD      A, 19
                 LD      HL, SETTFOC
                 SUB     (HL)
-                LD      (HL), A
-                JR      .REFRESH
+                JR      .FOCSET
 
 .SPACE          LD      A, (SETTFOC)
                 CP      9
@@ -2324,56 +2350,47 @@ DOSETT          LD      HL, 120
                 CALL    WINBAND
                 CALL    WINSID          ; THE BAND SPANS WINW: PUT THE SIDES BACK
 
-                ; DRAW 9 SETTING ROWS
-                LD      IX, .SETTBL
-                LD      IY, STTPRF
+                ; DRAW 9 SETTING ROWS, THEN THE BUTTONS
                 LD      B, 0            ; ROW INDEX 0..8
 .RWLP           PUSH    BC
-                ; IS THIS ROW SELECTED?
-                LD      A, (SETTFOC)
-                CP      B
-                JR      NZ, .UNSEL
-
-                ; --- SELECTED ROW ---
-                ; DRAW INSET BACKGROUND BAR: DX=WINX+4, DY=WINCOMP_Y+16+B*8, NX=WINW-8, NY=8
-                PUSH    BC
-                LD      HL, (WINX)
-                INC     HL
-                INC     HL
-                INC     HL
-                INC     HL              ; DX = WINX + 4
-                LD      (VDP_DX), HL
+                CALL    .DRWROW
+                POP     BC
+                INC     B
                 LD      A, B
+                CP      9
+                JR      C, .RWLP
+                JP      .DRWBTN
+
+
+                ; .DRWFOC: RECOMPOSE FOCUS PLACE B (0..8 A ROW, 9..10 THE
+                ; BUTTON PAIR) IN THE COMPOSITION BUFFER. .UPDFOC: BLIT IT.
+.DRWFOC         LD      A, B
+                CP      9
+                JP      NC, .DRWBTN
+
+                ; .DRWROW: ROW B, CLEARED, BARRED WHEN FOCUSED, LABEL AND VALUE
+.DRWROW         LD      A, B
                 ADD     A, A
                 ADD     A, A
-                ADD     A, A            ; B * 8
-                ADD     A, 16           ; 16 + B * 8
                 LD      E, A
                 LD      D, 0
-                LD      HL, WINCOMP_Y
-                ADD     HL, DE
-                LD      (VDP_DY), HL
-                LD      HL, (WINW)
-                LD      DE, 8
-                OR      A
-                SBC     HL, DE          ; NX = WINW - 8
-                LD      (VDP_NX), HL
-                LD      HL, 8
-                LD      (VDP_NY), HL
-                XOR     A
-                LD      (VDP_ARG), A
-                LD      A, CLR_UI
-                LD      (VDP_CLR), A
-                LD      HL, VDPCMBLK
-                CALL    HMMV
-                POP     BC
-
+                LD      IX, .SETTBL
+                ADD     IX, DE          ; IX = .SETTBL + 4 * B
+                LD      E, B
+                LD      IY, STTPRF
+                ADD     IY, DE          ; IY = THE ROW'S SETTING
+                LD      A, CLR_BG       ; CLEAR THE ROW: A PARTIAL REPAINT HAS
+                CALL    .ROWBAR         ; NO BAND UNDER IT
+                LD      A, (SETTFOC)
+                CP      B
+                LD      A, 0            ; VARIANT 0 (NORMAL)
+                JR      NZ, .DOROW
+                LD      A, CLR_UI       ; FOCUSED: THE INSET BAR
+                CALL    .ROWBAR
                 LD      A, 1            ; VARIANT 1 (BOLD)
-                JR      .DOROW
 
-.UNSEL          XOR     A               ; VARIANT 0 (NORMAL)
-
-.DOROW          PUSH    AF              ; SAVE VARIANT
+.DOROW          PUSH    BC              ; [SP] = ROW
+                PUSH    AF              ; [SP] = VARIANT
                 ; DRAW LABEL AT COL 2
                 LD      L, (IX+0)
                 LD      H, (IX+1)
@@ -2399,20 +2416,67 @@ DOSETT          LD      HL, 120
                 LD      C, 16
                 POP     AF              ; A = VARIANT
                 CALL    WINPRN3
-
-.RWNXT          INC     IY
-                INC     IX
-                INC     IX
-                INC     IX
-                INC     IX
                 POP     BC
-                INC     B
+                RET
+
+                ; .ROWBAR: FILL ROW B'S INSET STRIP (DX WINX+4, DY 16+B*8,
+                ; WINW-8 X 8) WITH THE PACKED COLOUR IN A. KEEPS BC.
+.ROWBAR         PUSH    BC
+                LD      (VDP_CLR), A
+                LD      HL, (WINX)
+                INC     HL
+                INC     HL
+                INC     HL
+                INC     HL              ; DX = WINX + 4
+                LD      (VDP_DX), HL
                 LD      A, B
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; B * 8
+                ADD     A, 16           ; 16 + B * 8
+                LD      E, A
+                LD      D, 0
+                LD      HL, WINCOMP_Y
+                ADD     HL, DE
+                LD      (VDP_DY), HL
+                LD      HL, (WINW)
+                LD      DE, 8
+                OR      A
+                SBC     HL, DE          ; NX = WINW - 8
+                LD      (VDP_NX), HL
+                LD      HL, 8
+                LD      (VDP_NY), HL
+                XOR     A
+                LD      (VDP_ARG), A
+                LD      HL, VDPCMBLK
+                CALL    HMMV
+                POP     BC
+                RET
+
+.UPDFOC         LD      A, B            ; BLIT FOCUS PLACE B'S STRIP
                 CP      9
-                JP      C, .RWLP
+                JR      NC, .UPDBTN
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A
+                ADD     A, 16
+                LD      E, A            ; REL Y = 16 + B * 8
+                LD      A, 8
+                JR      .UPDSTR
+.UPDBTN         LD      E, 92           ; THE BUTTONS: Y 94, 14 HIGH, BORDERS
+                LD      A, 16
+.UPDSTR         LD      D, 0
+                LD      HL, (WINW)
+                LD      BC, 8
+                OR      A
+                SBC     HL, BC
+                LD      B, H
+                LD      C, L            ; BC = WINW - 8
+                LD      HL, 4
+                JP      WINUPD
 
                 ; DRAW BUTTONS AT RELATIVE Y = 94
-                LD      HL, .BTNOK
+.DRWBTN         LD      HL, .BTNOK
                 LD      DE, 56
                 LD      BC, 94
                 LD      A, (SETTFOC)

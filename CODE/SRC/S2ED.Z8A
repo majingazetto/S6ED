@@ -154,9 +154,23 @@ INIT            DBG     "1: INIT START (S2ED)"
                 LD      A, 1
                 LD      (AUTOLOD), A
 
-                ; VDP FREQUENCY (DEFAULT 50HZ PAL)
-                LD      A, (RG9SAV)
-                AND     %00000010
+                ; VDP FREQUENCY. AN MSX2 KEEPS ITS VDP MODE IN RG9SAV (#FFE8,
+                ; BIT 1 OF R#9 = 50 HZ); AN MSX1 HAS NO R#9, AND #FFE8 HOLDS
+                ; WHATEVER WAS LEFT THERE. ITS FREQUENCY IS THE ROM'S ID BYTE
+                ; IDBYT0 (#002B) BIT 7, 1 = 50 HZ; IDBYT2 (#002D) IS THE MSX
+                ; VERSION, 0 = MSX1. BOTH READ FROM THE MAIN ROM: UNDER DOS
+                ; PAGE 0 IS NOT THE BIOS.
+                LD      HL, #002D
+                CALL    RDBIOS
+                OR      A
+                JR      NZ, .FRQV2
+                LD      HL, #002B
+                CALL    RDBIOS
+                RLCA                    ; BIT 7 -> BIT 0
+                JR      .FRQSET
+.FRQV2          LD      A, (RG9SAV)
+                RRCA                    ; BIT 1 -> BIT 0
+.FRQSET         AND     1
                 LD      A, 60
                 JR      Z, .ISNTSC
                 LD      A, 50

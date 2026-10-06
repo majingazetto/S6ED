@@ -217,6 +217,17 @@ ACTEOL          CALL    CHKUNSEL
                 LD      A, (WORKBUF)
                 CALL    GETMAXC
                 LD      (CURX), A
+                ; VI VISUAL: $ GOES PAST THE LAST CHARACTER, ONTO THE LINE
+                ; BREAK, AS IN VIM. THE (INCLUSIVE) SELECTION THEN COVERS THE
+                ; BREAK AND COPY / CUT TAKE IT (SELEOL); V USES THIS TOO.
+                LD      HL, (KMAPPTR)
+                LD      DE, KMAPVIV
+                CALL    CMPHLDE
+                RET     NZ
+                LD      A, (WORKBUF)
+                CP      MAXCOLS
+                RET     NC
+                LD      (CURX), A
                 RET
 
 
@@ -457,106 +468,12 @@ ACTDWLFT        LD      A, (CURX)
                 LD      A, UNDOT_MOD
                 CALL    UNDOREC
 
-                ; 1. SHIFT TEXT (WORKBUF + 1)
-                ; DEST = WORKBUF + 1 + DWTO
-                ; SRC  = WORKBUF + 1 + DWFROM
-                ; COUNT = MAXCOLS - DWFROM
+                ; DELETE COLUMNS DWTO..DWFROM-1 OF THE RECORD
                 LD      A, (DWTO)
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1
-                ADD     HL, DE
-                EX      DE, HL          ; DE = DEST
-
-                LD      A, (DWFROM)
-                LD      L, A
-                LD      H, 0
-                LD      BC, WORKBUF + 1
-                ADD     HL, BC          ; HL = SRC
-
+                LD      B, A
                 LD      A, (DWFROM)
                 LD      C, A
-                LD      A, MAXCOLS
-                SUB     C               ; A = MAXCOLS - DWFROM
-                JR      Z, .NOSHFTT
-                LD      C, A
-                LD      B, 0            ; BC = COUNT
-                LDIR
-
-.NOSHFTT        ; 2. SHIFT ATTRIBUTES (ATTRIBUTE HALF OF THE RECORD)
-                LD      A, (DWTO)
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                EX      DE, HL          ; DE = DEST
-
-                LD      A, (DWFROM)
-                LD      L, A
-                LD      H, 0
-                LD      BC, WORKBUF + 1 + WORKATTR
-                ADD     HL, BC          ; HL = SRC
-
-                LD      A, (DWFROM)
-                LD      C, A
-                LD      A, MAXCOLS
-                SUB     C
-                JR      Z, .NOSHFTA
-                LD      C, A
-                LD      B, 0
-                LDIR
-
-.NOSHFTA        ; 3. CLEAR VACATED TAIL IN TEXT (K BYTES AT THE END)
-                LD      A, (DWK)
-                LD      C, A
-                LD      A, MAXCOLS
-                SUB     C               ; A = MAXCOLS - K
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1
-                ADD     HL, DE
-                LD      B, C            ; B = K
-.BLKTXT         LD      (HL), ' '
-                INC     HL
-                DJNZ    .BLKTXT
-
-                ; 4. CLEAR VACATED TAIL IN ATTRS (K BYTES AT THE END)
-                LD      A, (DWK)
-                LD      C, A
-                LD      A, MAXCOLS
-                SUB     C
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                LD      B, C
-.BLKATR         LD      (HL), 0
-                INC     HL
-                DJNZ    .BLKATR
-
-                ; 5. UPDATE LINE LENGTH
-                LD      HL, WORKBUF
-                LD      E, (HL)         ; E = CURRENT LENGTH
-                LD      A, (DWTO)
-                LD      B, A            ; B = DWTO
-                LD      A, (DWFROM)
-                LD      C, A            ; C = DWFROM
-                LD      A, E
-                CP      B
-                JR      C, .DONELEN     ; LEN < DWTO: UNCHANGED
-                JR      Z, .DONELEN     ; LEN == DWTO: UNCHANGED
-                CP      C
-                JR      C, .SETTO       ; LEN < DWFROM: NEW LEN = DWTO
-                JR      Z, .SETTO       ; LEN == DWFROM: NEW LEN = DWTO
-                ; LEN > DWFROM: NEW LEN = LEN - K
-                LD      A, (DWK)
-                LD      D, A
-                LD      A, E
-                SUB     D               ; A = LEN - K
-                LD      (HL), A
-                JR      .DONELEN
-
-.SETTO          LD      (HL), B
+                CALL    WBDELN
 
 .DONELEN        ; 6. SET CURX TO DWTO
                 LD      A, (DWTO)
@@ -858,8 +775,7 @@ ACTNWLIN        LD      A, (SELACT)
                 LD      (CURX), A       ;   EXACTLY WHERE IT WAS
                 RET
 
-.PLAIN          CALL    EDNWLIN
-                RET
+.PLAIN          JP      EDNWLIN
 
 
 ; --- ACTOPNBL                  ----------------------------------------
@@ -1094,8 +1010,7 @@ ACTFNXT         LD      A, (SRCHLEN)
 
 .NOTFND         LD      E, BEL
                 LD      C, _CONOUT
-                CALL    BDOS
-                RET
+                JP      BDOS
 
 
 ; --- ACTFPRV                   ----------------------------------------
@@ -1117,8 +1032,7 @@ ACTFPRV         LD      A, (SRCHLEN)
 
 .NOTFND         LD      E, BEL
                 LD      C, _CONOUT
-                CALL    BDOS
-                RET
+                JP      BDOS
 
 
 ; --- ACTEXMOD                  ----------------------------------------
@@ -1255,28 +1169,8 @@ ACTEXMOD        CALL    CHKUNSEL        ; CANCEL SELECTION IF ACTIVE
                 CALL    .SETMSG
                 JP      DRWSTAT
 
-.DONUM          ; PARSE DECIMAL NUMBER FROM HL INTO DE
-                LD      DE, 0
-.NUMLP          LD      A, (HL)
-                SUB     '0'
-                JR      C, .NUMFIN
-                CP      10
-                JR      NC, .NUMFIN
-                PUSH    HL
-                LD      H, D
-                LD      L, E
-                ADD     HL, HL          ; * 2
-                ADD     HL, HL          ; * 4
-                ADD     HL, DE          ; * 5
-                ADD     HL, HL          ; * 10
-                LD      E, A
-                LD      D, 0
-                ADD     HL, DE
-                EX      DE, HL
-                POP     HL
-                INC     HL
-                JR      .NUMLP
-.NUMFIN         EX      DE, HL          ; HL = TARGET LINE (1-BASED)
+.DONUM          CALL    ATOI16          ; HL = TARGET LINE (1-BASED), SATURATED:
+                                        ; THE OWN PARSER WRAPPED (:65537 -> LINE 1)
                 XOR     A
                 LD      (STATMSG), A
                 CALL    GOTOLN
@@ -1857,8 +1751,7 @@ SHOWLN          ; ALREADY ON SCREEN? TOPLINE <= DOCLINE < TOPLINE + ROWSVIS
 ; - CLOBBERS: ALL
 ; -
 
-ACTCYCKM        CALL    KMAPCYC
-                RET
+ACTCYCKM        JP      KMAPCYC
 
 
 ; --- ACTVIINS                  ----------------------------------------
@@ -2224,6 +2117,146 @@ SELNORM         LD      HL, (DOCLINE)
                 CP      MAXCOLS
                 RET     NC
                 INC     A
+                LD      (SELENDX), A
+                RET
+
+
+; - WBDELN -----------------------------
+; - DELETE COLUMNS B..C-1 OF THE RECORD IN WORKBUF: TEXT AND ATTRIBUTES
+; - SHIFTED LEFT, THE VACATED TAIL BLANKED, THE LENGTH FIXED
+; - IN:  B = FIRST COLUMN, C = ONE PAST THE LAST (C > B)
+; - OUT: WORKBUF; DWK = C - B
+; - CLOBBERS: AF, BC, DE, HL
+; -
+; - ACTDWLFT (DELETE WORD LEFT) AND ACTDLS (A ONE-LINE SELECTION) CARRIED
+; - TWO COPIES OF THIS.
+; -
+
+WBDELN          LD      A, C
+                SUB     B
+                LD      (DWK), A
+                PUSH    BC
+                LD      HL, WORKBUF + 1
+                CALL    .SHIFT          ; THE TEXT
+                POP     BC
+                PUSH    BC
+                LD      HL, WORKBUF + 1 + WORKATTR
+                CALL    .SHIFT          ; THE ATTRIBUTES
+
+                LD      A, (DWK)        ; BLANK THE LAST K COLUMNS OF BOTH
+                LD      C, A
+                LD      A, MAXCOLS
+                SUB     C
+                LD      E, A
+                LD      D, 0            ; DE = MAXCOLS - K
+                LD      HL, WORKBUF + 1
+                ADD     HL, DE
+                LD      B, C
+.BLKTXT         LD      (HL), ' '
+                INC     HL
+                DJNZ    .BLKTXT
+                LD      HL, WORKBUF + 1 + WORKATTR
+                ADD     HL, DE
+                LD      B, C
+.BLKATR         LD      (HL), 0
+                INC     HL
+                DJNZ    .BLKATR
+
+                POP     BC              ; B = FIRST, C = ONE PAST THE LAST
+                LD      HL, WORKBUF
+                LD      A, (HL)         ; A = LENGTH
+                CP      B
+                RET     C
+                RET     Z               ; ENDS BEFORE THE RANGE: UNCHANGED
+                CP      C
+                JR      C, .TOFIRST
+                JR      Z, .TOFIRST     ; ENDS INSIDE IT: CUT AT THE FIRST
+                SUB     C
+                ADD     A, B            ; ENDS PAST IT: LENGTH - K
+                LD      (HL), A
+                RET
+.TOFIRST        LD      (HL), B
+                RET
+
+                ; MOVE HL + C .. HL + MAXCOLS - 1 DOWN TO HL + B
+.SHIFT          LD      E, B
+                LD      D, 0
+                PUSH    HL
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DESTINATION
+                POP     HL
+                PUSH    BC
+                LD      B, 0
+                ADD     HL, BC          ; HL = SOURCE
+                POP     BC
+                LD      A, MAXCOLS
+                SUB     C
+                RET     Z
+                LD      C, A
+                LD      B, 0
+                LDIR
+                RET
+
+
+; - LNEXT ------------------------------
+; - THE COLUMNS OF ONE LINE A SELECTION COVERS
+; - IN:  HL = LINE, WORKBUF = ITS RECORD, SELSTRL..SELENDX NORMALIZED
+; - OUT: D = XA, E = XB (CLAMPED TO THE LENGTH), CY = 1 IF XA >= XB
+; - CLOBBERS: AF, BC, DE
+; -
+; - ACTCOPY AND APPLSEL CARRIED TWO COPIES OF THIS.
+; -
+
+LNEXT           LD      C, 0            ; XA: 0 ON EVERY LINE BUT THE FIRST
+                LD      DE, (SELSTRL)
+                CALL    CMPHLDE
+                JR      NZ, .MID
+                LD      A, (SELSTRX)
+                LD      C, A
+.MID            LD      A, (WORKBUF)
+                LD      B, A            ; XB: THE LENGTH, BUT ON THE LAST LINE
+                LD      DE, (SELENDL)
+                CALL    CMPHLDE
+                JR      NZ, .HAVEB
+                LD      A, (SELENDX)    ; ITS END, CLAMPED TO THE LENGTH
+                CP      B
+                JR      NC, .HAVEB
+                LD      B, A
+.HAVEB          LD      D, C
+                LD      E, B
+                LD      A, C
+                CP      B               ; CY: XA < XB
+                CCF
+                RET
+
+
+; - SELEOL -----------------------------
+; - A SELECTION THAT ENDS PAST THE LAST CHARACTER OF ITS END LINE COVERS
+; - THE LINE BREAK: MAKE IT END AT COLUMN 0 OF THE NEXT LINE INSTEAD, WHICH
+; - COPY AND DELETE ALREADY HANDLE (A CR LF COPIED, THE LINES JOINED).
+; - IT PAINTED THE BREAK AS SELECTED AND THEN LEFT IT OUT. ONLY VI VISUAL
+; - GETS PAST THE END (SELECTION INCLUSIVE, $ ONTO THE BREAK): SHIFT+END
+; - ENDS AT THE LENGTH. NOTHING CHANGES ON THE LAST LINE.
+; - IN:  SELSTRL..SELENDX NORMALIZED
+; - OUT: SELENDL / SELENDX
+; - CLOBBERS: AF, BC, DE, HL
+; -
+
+SELEOL          LD      HL, (SELENDL)
+                PUSH    HL
+                CALL    LINELEN         ; A = LENGTH OF THE END LINE
+                POP     HL
+                LD      C, A
+                LD      A, (SELENDX)
+                CP      C
+                RET     Z
+                RET     C               ; ENDS AT OR BEFORE THE LENGTH
+                INC     HL
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                RET     NC              ; THE LAST LINE: NO BREAK TO TAKE
+                LD      (SELENDL), HL
+                XOR     A
                 LD      (SELENDX), A
                 RET
 
@@ -2791,6 +2824,7 @@ ACTDLS          LD      A, (SELACT)
                 RET     Z               ; NOTHING SELECTED
                 CALL    SELPRE          ; UN-XOR VISIBLE OVERLAY
                 CALL    SELNORM         ; NORMALIZE RANGE
+                CALL    SELEOL          ; A COVERED LINE BREAK GOES TOO
                 LD      HL, (SELSTRL)
                 LD      DE, (SELENDL)
                 CALL    CMPHLDE
@@ -2822,100 +2856,12 @@ ACTDLS          LD      A, (SELACT)
                 JP      Z, .DLSCLR
                 LD      (DWK), A        ; DWK = K
 
-                ; 1. SHIFT TEXT
-                LD      A, B
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1
-                ADD     HL, DE
-                EX      DE, HL          ; DE = DEST
-
-                LD      A, C
-                LD      L, A
-                LD      H, 0
-                LD      BC, WORKBUF + 1
-                ADD     HL, BC          ; HL = SRC
-
-                LD      A, (SELENDX)
-                LD      C, A
-                LD      A, MAXCOLS
-                SUB     C               ; A = MAXCOLS - ENDX
-                JR      Z, .NOSHFT
-                LD      C, A
-                LD      B, 0
-                LDIR
-
-.NOSHFT         ; 2. SHIFT ATTRS
+                ; DELETE COLUMNS STARTX..ENDX-1 OF THE RECORD
                 LD      A, (SELSTRX)
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                EX      DE, HL
-
-                LD      A, (SELENDX)
-                LD      L, A
-                LD      H, 0
-                LD      BC, WORKBUF + 1 + WORKATTR
-                ADD     HL, BC
-
+                LD      B, A
                 LD      A, (SELENDX)
                 LD      C, A
-                LD      A, MAXCOLS
-                SUB     C
-                JR      Z, .NOSHFTA
-                LD      C, A
-                LD      B, 0
-                LDIR
-
-.NOSHFTA        ; 3. BLANK VACATED TAIL
-                LD      A, (DWK)
-                LD      C, A
-                LD      A, MAXCOLS
-                SUB     C
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1
-                ADD     HL, DE
-                LD      B, C
-.BLKTXT2        LD      (HL), ' '
-                INC     HL
-                DJNZ    .BLKTXT2
-
-                LD      A, (DWK)
-                LD      C, A
-                LD      A, MAXCOLS
-                SUB     C
-                LD      E, A
-                LD      D, 0
-                LD      HL, WORKBUF + 1 + WORKATTR
-                ADD     HL, DE
-                LD      B, C
-.BLKATR2        LD      (HL), 0
-                INC     HL
-                DJNZ    .BLKATR2
-
-                ; 4. UPDATE LENGTH
-                LD      HL, WORKBUF
-                LD      E, (HL)         ; CURRENT LENGTH
-                LD      A, (SELSTRX)
-                LD      B, A            ; B = STARTX
-                LD      A, (SELENDX)
-                LD      C, A            ; C = ENDX
-                LD      A, E
-                CP      B
-                JR      C, .DLSSETC     ; LEN < STARTX: UNCHANGED
-                JR      Z, .DLSSETC     ; LEN == STARTX: UNCHANGED
-                CP      C
-                JR      C, .DLSSETT     ; LEN < ENDX: LEN = STARTX
-                JR      Z, .DLSSETT
-                LD      A, (DWK)
-                LD      D, A
-                LD      A, E
-                SUB     D
-                LD      (HL), A
-                JR      .DLSSETC
-.DLSSETT        LD      (HL), B
+                CALL    WBDELN
 
 .DLSSETC        ; 5. WRITE LINE TO MAPPER
                 LD      HL, (SELSTRL)
@@ -3110,7 +3056,8 @@ ACTCOPY         LD      A, (SELACT)
                 CP      (HL)
                 RET     Z               ; EMPTY: NOTHING TO COPY
 
-.CPYINIT        LD      HL, CLIPBUF
+.CPYINIT        CALL    SELEOL          ; A COVERED LINE BREAK IS COPIED TOO
+                LD      HL, CLIPBUF
                 LD      (CPYPTR), HL
                 LD      HL, 0
                 LD      (CPYCNT), HL
@@ -3127,37 +3074,16 @@ ACTCOPY         LD      A, (SELACT)
                 LD      HL, (SELTMPL)
                 CALL    LINEREAD
 
-                ; DETERMINE XA FOR THIS LINE
+                ; THE COLUMNS [XA, XB) OF THIS LINE
                 LD      HL, (SELTMPL)
-                LD      DE, (SELSTRL)
-                CALL    CMPHLDE
-                JR      NZ, .CPYMIDL
-                LD      A, (SELSTRX)
-                JR      .CPYSETX
-.CPYMIDL        XOR     A
-.CPYSETX        LD      (SELTMPXA), A
-
-                ; DETERMINE XB FOR THIS LINE
-                LD      A, (WORKBUF)
-                LD      (SELTMPXB), A   ; DEFAULT XB = LINE LENGTH
-                LD      HL, (SELTMPL)
-                LD      DE, (SELENDL)
-                CALL    CMPHLDE
-                JR      NZ, .CPYNEND
-                LD      A, (SELENDX)
+                CALL    LNEXT
+                LD      A, D
+                LD      (SELTMPXA), A
+                LD      A, E
                 LD      (SELTMPXB), A
-.CPYNEND        ; CLAMP XB TO LINE LENGTH
-                LD      A, (WORKBUF)
+                JR      C, .CPYCHKN     ; NO CHARS ON THIS LINE
+                LD      A, D
                 LD      HL, SELTMPXB
-                CP      (HL)
-                JR      NC, .CPYXBOK
-                LD      (SELTMPXB), A
-
-.CPYXBOK        ; CHECK IF XA < XB
-                LD      A, (SELTMPXA)
-                LD      HL, SELTMPXB
-                CP      (HL)
-                JR      NC, .CPYCHKN    ; NO CHARS ON THIS LINE
 
                 ; K = XB - XA
                 SUB     (HL)
@@ -3659,37 +3585,16 @@ APPLSEL         LD      (STYLMASK), A
                 LD      HL, (STYLLN)
                 CALL    LINEREAD
 
-                ; DETERMINE XA FOR THIS LINE
+                ; THE COLUMNS [XA, XB) OF THIS LINE
                 LD      HL, (STYLLN)
-                LD      DE, (SELSTRL)
-                CALL    CMPHLDE
-                JR      NZ, .APLMIDL
-                LD      A, (SELSTRX)
-                JR      .APLSETX
-.APLMIDL        XOR     A
-.APLSETX        LD      (STYLXA), A
-
-                ; DETERMINE XB FOR THIS LINE
-                LD      A, (WORKBUF)
-                LD      (STYLXB), A     ; DEFAULT XB = LINE LENGTH
-                LD      HL, (STYLLN)
-                LD      DE, (SELENDL)
-                CALL    CMPHLDE
-                JR      NZ, .APLNEND
-                LD      A, (SELENDX)
+                CALL    LNEXT
+                LD      A, D
+                LD      (STYLXA), A
+                LD      A, E
                 LD      (STYLXB), A
-.APLNEND        ; CLAMP XB TO LINE LENGTH
-                LD      A, (WORKBUF)
+                JR      C, .APLCHKN     ; NO CHARS ON THIS LINE
+                LD      A, D
                 LD      HL, STYLXB
-                CP      (HL)
-                JR      NC, .APLXBOK
-                LD      (STYLXB), A
-
-.APLXBOK        ; CHECK IF XA < XB
-                LD      A, (STYLXA)
-                LD      HL, STYLXB
-                CP      (HL)
-                JR      NC, .APLCHKN    ; NO CHARS ON THIS LINE
 
                 ; COUNT = XB - XA
                 SUB     (HL)
@@ -3779,12 +3684,29 @@ ACTTAB          LD      A, (SELACT)
                 SUB     C               ; A = TABWIDTH - (CURX % TABWIDTH)
                 LD      B, A            ; B = SPACES TO INSERT (1..8)
 
+                ; ONE RUN: ONE LINEREAD, ONE LINEWRT, ONE UNDO RECORD AND ONE
+                ; REPAINT, INSTEAD OF UP TO EIGHT OF EACH THROUGH EDINSCHR
+                PUSH    BC
+                LD      HL, .SPACES
+                CALL    EDINSRUN
+                POP     BC
+                JR      C, .TABLP       ; DOES NOT FIT: THE WRAP MODE DECIDES
+                LD      A, (RNDHOLD)    ; A PASTE PAINTS ONCE AT THE END
+                OR      A
+                RET     NZ
+                LD      A, (CURY)
+                INC     A
+                LD      B, A
+                JP      RENDIFF
+
 .TABLP          PUSH    BC
                 LD      A, ' '
                 CALL    EDINSCHR
                 POP     BC
                 DJNZ    .TABLP
                 RET
+
+.SPACES         DEFM    "        "      ; TABWIDTH IS AT MOST 8
 
 
 ; --- ACTMENU                   ----------------------------------------
@@ -3833,9 +3755,7 @@ ACTMNU2         LD      A, 2
 ; - CLOBBERS: ALL
 ; -
 
-ACTMNU3         LD      A, 2
-                LD      (MNUID), A
-                JR      MNUENT
+ACTMNU3         EQU     ACTMNU2         ; THREE MENUS: F3..F5 ALL OPEN HELP
 
 
 ; - ACTMNU4 ----------------------------
@@ -3845,9 +3765,7 @@ ACTMNU3         LD      A, 2
 ; - CLOBBERS: ALL
 ; -
 
-ACTMNU4         LD      A, 2
-                LD      (MNUID), A
-                JR      MNUENT
+ACTMNU4         EQU     ACTMNU2
 
 
 ; - MNUENT -----------------------------

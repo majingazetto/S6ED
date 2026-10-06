@@ -954,15 +954,30 @@ REDOSPL         ; 1. UPDATE UNDOPTR AND REDOPTR
                 LD      (TOPLINE), HL
                 CALL    SETCURY
 
-                ; 3. EXECUTE EDNWLIN WITH UNDOHLD = 1
+                ; 3. EXECUTE EDNWLIN WITH UNDOHLD = 1. IT REFUSES IN SILENCE
+                ;    (NO RECORD, DIRECTORY FULL), SO THE LINE COUNT TELLS: A
+                ;    REFUSED SPLIT MUST NOT ADVANCE THE POINTERS, OR THE NEXT
+                ;    CTRL+Z RUNS UNDOSPU AND MERGES AWAY AN UNRELATED LINE.
+                LD      HL, (TOTLINES)
+                PUSH    HL
+                PUSH    IX              ; S2ED'S REPAINT IN EDNWLIN USES IX
                 LD      A, 1
                 LD      (UNDOHLD), A
                 CALL    EDNWLIN
                 XOR     A
                 LD      (UNDOHLD), A
-
-                ; 4. MARK MODIFIED; ACTUNDO / ACTREDO PAINT ONCE PER GROUP
-                JP      UNDOOK
+                POP     IX
+                POP     DE
+                LD      HL, (TOTLINES)
+                OR      A
+                SBC     HL, DE
+                JP      NZ, UNDOOK      ; SPLIT: MARK MODIFIED, PAINTED ONCE LATER
+                LD      (REDOPTR), IX   ; REFUSED: PUT BOTH POINTERS BACK
+                LD      L, (IX + 0)
+                LD      H, (IX + 1)
+                LD      (UNDOPTR), HL
+                SCF
+                RET
 
 
 ; --- UNDOJNU                   ----------------------------------------

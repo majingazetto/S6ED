@@ -159,9 +159,17 @@ DOMNU           LD      A, (MNUID)
 .MOVE           CP      C               ; SAME SELECTION?
                 JP      Z, .KEYLP
                 LD      (MNUSEL), A
-                CALL    MNUDRAW
-                CALL    WDUMP
+                LD      A, C            ; THE TWO ITEMS IT TOUCHES, AND ONLY
+                LD      B, 0            ; THEIR ROWS TO VRAM: IT REPAINTED THE
+                CALL    .ITEM           ; WHOLE MENU (~70 MS PER ARROW)
+                LD      A, (MNUSEL)
+                LD      B, 1
+                CALL    .ITEM
                 JP      .KEYLP
+
+.ITEM           CALL    MNUPNT          ; A = ITEM, B = STYLE
+                LD      A, (MNUTMPY)
+                JP      WDUMPR
 
 .CANCEL         CALL    WINCLOS
                 CALL    MNUTITL         ; UN-HIGHLIGHT TITLE

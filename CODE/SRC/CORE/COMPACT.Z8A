@@ -43,89 +43,179 @@ SEGCOMP         PUSH    IX
 .NOTAPP         LD      HL, SEGSIZE
 .HAVBND         LD      (CMPEND), HL    ; CMPEND = SCAN LIMIT
 
-                ; INITIALIZE SCAN POINTERS: SRC = 0, DST = 0
+                ; THREE PASSES, NOT A DIRECTORY SEARCH PER MOVED RECORD (THAT
+                ; WAS O(MOVED x TOTLINES): 4.2 S FOR A FULL 128 KB SEGMENT).
+                ; 1. WALK THE RECORDS AND WORK OUT WHERE EACH LIVE ONE WILL GO,
+                ;    PARKING THAT OFFSET IN ITS OWN HEADER (.TAG).
+                ; 2. WALK THE DIRECTORY ONCE: EVERY ENTRY IN THIS SEGMENT READS
+                ;    ITS RECORD'S NEW OFFSET FROM THERE.
+                ; 3. WALK THE RECORDS AGAIN: CLEAR THE TAGS AND SLIDE.
+                ; THE TAG: THE NEW OFFSET IS A MULTIPLE OF 4 (A RECORD IS 4 + A
+                ; MULTIPLE OF 32), SO /4 IS 12 BITS -- THE LOW 5 IN RECCAP'S
+                ; BITS 0-4 (ALWAYS 0: THE PAYLOAD IS A MULTIPLE OF 32) AND THE
+                ; HIGH 7 IN RECLEN'S HIGH BYTE (ALWAYS 0: A LINE IS AT MOST 255
+                ; LONG). THAT BYTE STAYS BELOW #80, SO NO LIVE RECORD READS AS
+                ; A TOMBSTONE (#FFFF). A RECORD THE DIRECTORY DOES NOT NAME (ONE
+                ; NEWREC JUST RESERVED) IS TAGGED, MOVED AND CLEARED ALL THE
+                ; SAME, AS IT WAS MOVED BEFORE.
+                LD      A, (CMPSEG)
+                CALL    RECBANK
                 LD      HL, 0
                 LD      (CMPSRC), HL
                 LD      (CMPDST), HL
-
-.SCANLP         ; CHECK IF CMPSRC >= CMPEND
-                LD      HL, (CMPSRC)
+.P1LP           LD      HL, (CMPSRC)
                 LD      DE, (CMPEND)
                 CALL    CMPHLDE
-                JR      NC, .SCANDON    ; SRC REACHED END
+                JR      NC, .P2
+                CALL    .HEAD           ; HL = RECORD, BC = SIZE, CY = DEAD
+                JR      C, .P1NXT
+                PUSH    BC
+                LD      DE, (CMPDST)
+                SRL     D
+                RR      E
+                SRL     D
+                RR      E               ; DE = NEW OFFSET / 4 (0..4095)
+                LD      A, E
+                AND     #1F
+                LD      C, A
+                LD      A, (HL)
+                AND     #E0
+                OR      C
+                LD      (HL), A         ; RECCAP LOW: PAYLOAD | LOW 5 BITS
+                LD      A, E
+                RLCA
+                RLCA
+                RLCA
+                AND     #07             ; E >> 5
+                LD      C, A
+                LD      A, D
+                ADD     A, A
+                ADD     A, A
+                ADD     A, A            ; D << 3
+                OR      C               ; THE HIGH 7 BITS
+                INC     HL
+                INC     HL
+                INC     HL
+                LD      (HL), A         ; RECLEN HIGH
+                POP     BC
+                LD      HL, (CMPDST)
+                ADD     HL, BC
+                LD      (CMPDST), HL
+.P1NXT          LD      HL, (CMPSRC)
+                ADD     HL, BC
+                LD      (CMPSRC), HL
+                JR      .P1LP
 
-                ; BANK COMPACTION SEGMENT INTO PAGE 2
+.P2             LD      HL, 0
+                LD      (CMPSRC), HL    ; NOW THE LINE INDEX
+.P2LP           LD      HL, (CMPSRC)
+                LD      DE, (TOTLINES)
+                CALL    CMPHLDE
+                JR      NC, .P3
+                CALL    DIRREAD         ; A = SEG, DE = OFFSET, HL = ITS HIGH BYTE
+                LD      C, A
                 LD      A, (CMPSEG)
-                CALL    RECBANK
-
-                ; READ RECORD AT TXPAGE + CMPSRC
+                CP      C
+                JR      NZ, .P2NXT
+                PUSH    HL              ; THE ENTRY'S OFFSET HIGH BYTE
+                PUSH    DE
+                CALL    RECBANK         ; A = CMPSEG
+                POP     DE
                 LD      HL, TXPAGE
-                LD      DE, (CMPSRC)
-                ADD     HL, DE          ; HL = RECORD BASE
-                LD      E, (HL)
+                ADD     HL, DE          ; THE RECORD
+                LD      A, (HL)
+                AND     #1F
+                LD      E, A            ; LOW 5 BITS
                 INC     HL
-                LD      D, (HL)         ; DE = RECCAP
                 INC     HL
-                LD      A, (HL)         ; A = RECLEN LOW
                 INC     HL
                 LD      H, (HL)
-                LD      L, A            ; HL = RECLEN
-
-                ; TOTAL RECORD SIZE = RECHDR_SZ + RECCAP
-                EX      DE, HL          ; HL = RECCAP, DE = RECLEN
-                LD      BC, RECHDR_SZ
-                ADD     HL, BC          ; HL = TOTAL RECORD SIZE
-                LD      (CMPRSZ), HL    ; SAVE RECORD SIZE
-
-                ; CHECK IF RECORD IS DEAD (RECLEN == #FFFF)
-                LD      A, D
-                AND     E
-                INC     A               ; IF DE == #FFFF, A BECOMES 0
-                JR      Z, .ISDEAD
-
-                ; RECORD IS ALIVE!
-                ; CHECK IF CMPSRC == CMPDST
-                LD      HL, (CMPSRC)
-                LD      DE, (CMPDST)
-                CALL    CMPHLDE
-                JR      Z, .NOSLIDE     ; SRC == DST: NO MOVEMENT NEEDED
-
-                ; SRC != DST: MUST SLIDE DOWN!
-                ; 1. LDIR RECORD FROM TXPAGE + CMPSRC TO TXPAGE + CMPDST
-                ; DEST: TXPAGE + CMPDST
-                LD      HL, TXPAGE
-                LD      DE, (CMPDST)
-                ADD     HL, DE
-                EX      DE, HL          ; DE = TXPAGE + CMPDST (DEST)
-                ; SRC: TXPAGE + CMPSRC
-                LD      HL, TXPAGE
-                LD      BC, (CMPSRC)
-                ADD     HL, BC          ; HL = TXPAGE + CMPSRC (SRC)
-                LD      BC, (CMPRSZ)
-                LDIR                    ; SLIDE DOWN!
-
-                ; 2. UPDATE DIRSEG: MATCH (CMPSEG, OLDOFF) -> NEWOFF
-                LD      DE, (CMPSRC)    ; DE = OLDOFF
-                LD      BC, (CMPDST)    ; BC = NEWOFF
-                LD      A, (CMPSEG)
-                CALL    DIRUPDOF
-
-                ; RE-BANK COMPACTION SEGMENT
-                LD      A, (CMPSEG)
-                CALL    RECBANK
-
-.NOSLIDE        ; ADVANCE CMPDST BY RECORD SIZE
-                LD      HL, (CMPDST)
-                LD      DE, (CMPRSZ)
-                ADD     HL, DE
-                LD      (CMPDST), HL
-
-.ISDEAD         ; ADVANCE CMPSRC BY RECORD SIZE
-                LD      HL, (CMPSRC)
-                LD      DE, (CMPRSZ)
-                ADD     HL, DE
+                LD      L, 0
+                SRL     H
+                RR      L               ; HL = HIGH 7 BITS << 7
+                LD      A, E
+                ADD     A, A
+                ADD     A, A
+                OR      L
+                LD      L, A            ; HL = NEW OFFSET
+                EX      DE, HL
+                PUSH    DE
+                CALL    DIRBANK
+                POP     DE
+                POP     HL
+                LD      (HL), D         ; THE ENTRY TAKES IT
+                DEC     HL
+                LD      (HL), E
+.P2NXT          LD      HL, (CMPSRC)
+                INC     HL
                 LD      (CMPSRC), HL
-                JR      .SCANLP
+                JR      .P2LP
+
+.P3             LD      A, (CMPSEG)
+                CALL    RECBANK
+                LD      HL, 0
+                LD      (CMPSRC), HL
+                LD      (CMPDST), HL
+.P3LP           LD      HL, (CMPSRC)
+                LD      DE, (CMPEND)
+                CALL    CMPHLDE
+                JR      NC, .SCANDON
+                CALL    .HEAD
+                JR      C, .P3NXT
+                LD      A, (HL)         ; CLEAR THE TAG
+                AND     #E0
+                LD      (HL), A
+                INC     HL
+                INC     HL
+                INC     HL
+                LD      (HL), 0
+                PUSH    BC              ; SLIDE [SRC, SRC + SIZE) DOWN TO DST
+                LD      HL, (CMPDST)
+                LD      DE, TXPAGE
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DESTINATION
+                LD      HL, (CMPSRC)
+                LD      BC, TXPAGE
+                ADD     HL, BC          ; HL = SOURCE
+                POP     BC
+                PUSH    BC
+                LDIR                    ; DST <= SRC: A FORWARD COPY IS SAFE
+                POP     BC
+                LD      HL, (CMPDST)
+                ADD     HL, BC
+                LD      (CMPDST), HL
+.P3NXT          LD      HL, (CMPSRC)
+                ADD     HL, BC
+                LD      (CMPSRC), HL
+                JR      .P3LP
+
+                ; .HEAD: THE RECORD AT CMPSRC. OUT: HL = ITS BASE IN PAGE 2,
+                ; BC = ITS SIZE (4 + PAYLOAD, TAG BITS MASKED), CY = 1 DEAD
+.HEAD           LD      HL, (CMPSRC)
+                LD      DE, TXPAGE
+                ADD     HL, DE
+                PUSH    HL
+                LD      A, (HL)
+                AND     #E0
+                LD      C, A
+                INC     HL
+                LD      A, (HL)
+                AND     #03
+                LD      B, A            ; BC = PAYLOAD (32..512)
+                INC     HL
+                LD      A, (HL)
+                INC     HL
+                AND     (HL)
+                INC     A               ; Z: RECLEN = #FFFF, A TOMBSTONE
+                LD      HL, RECHDR_SZ
+                ADD     HL, BC          ; (ADD HL KEEPS Z)
+                LD      B, H
+                LD      C, L
+                POP     HL
+                SCF
+                RET     Z
+                OR      A
+                RET
 
 .SCANDON        ; COMPACTION FINISHED!
                 ; IF CMPSEG == APPSEG, UPDATE LINEOFF = CMPDST
@@ -164,65 +254,3 @@ SEGCOMP         PUSH    IX
                 JR      .SETMLP
 
 .STRCMP         DEFM    "Compacting...", 0
-
-
-; --- DIRUPDOF                  ----------------------------------------
-
-
-; - DIRUPDOF ---------------------------
-; - UPDATE OFFSET IN DIRSEG FOR ENTRY MATCHING (SEG, OLDOFF)
-; - IN:  A  = SEGMENT NUMBER
-; -      DE = OLD OFFSET
-; -      BC = NEW OFFSET
-; - OUT: CY = 0 UPDATED
-; -      CY = 1 NOT FOUND
-; - CLOBBERS: AF, HL
-; -
-DIRUPDOF        PUSH    BC
-                PUSH    DE
-                CALL    DIRBANK         ; PAGE 2 = DIRSEG
-                LD      HL, (TOTLINES)
-                LD      A, H
-                OR      L
-                JR      Z, .NOTFND
-                LD      B, H
-                LD      C, L            ; BC = COUNT (TOTLINES)
-                LD      HL, DIRWIN      ; HL = FIRST DIRECTORY ENTRY
-                POP     DE              ; DE = OLDOFF
-                PUSH    DE
-                LD      A, (CMPSEG)     ; A = SEGMENT TO MATCH
-
-.SCANLP         CP      (HL)            ; SEGMENT MATCH?
-                JR      NZ, .MIS0
-                INC     HL
-                LD      A, (HL)
-                CP      E               ; OFFSET LOW MATCH?
-                JR      NZ, .MIS1
-                INC     HL
-                LD      A, (HL)
-                CP      D               ; OFFSET HIGH MATCH?
-                JR      NZ, .MIS2
-
-                ; MATCH FOUND! HL IS AT OFFSET HIGH, HL-1 IS AT OFFSET LOW
-                POP     DE              ; CLEAN OLDOFF
-                POP     BC              ; BC = NEWOFF
-                LD      (HL), B         ; WRITE NEW OFFSET HIGH
-                DEC     HL
-                LD      (HL), C         ; WRITE NEW OFFSET LOW
-                OR      A               ; CY = 0: SUCCESS
-                RET
-
-.MIS0           INC     HL              ; ADVANCE FROM +0 TO +1
-.MIS1           INC     HL              ; ADVANCE FROM +1 TO +2
-.MIS2           INC     HL              ; ADVANCE FROM +2 TO +3 (NEXT ENTRY)
-                DEC     BC
-                LD      A, B
-                OR      C
-                JR      Z, .NOTFND
-                LD      A, (CMPSEG)     ; RESTORE A = SEGMENT TO MATCH
-                JR      .SCANLP
-
-.NOTFND         POP     DE
-                POP     BC
-                SCF                     ; CY = 1: NOT FOUND
-                RET

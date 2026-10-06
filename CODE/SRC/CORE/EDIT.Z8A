@@ -1091,18 +1091,15 @@ RECBL80         LD      A, (WORKBUF)
                 ADD     HL, DE
                 PUSH    BC
                 PUSH    HL
-.BLKTXT         LD      (HL), ' '
-                INC     HL
-                DJNZ    .BLKTXT
+                LD      A, ' '
+                CALL    FILLB
                 POP     HL
                 POP     BC
 
                 LD      DE, WORKATTR
                 ADD     HL, DE
-.BLKATT         LD      (HL), 0
-                INC     HL
-                DJNZ    .BLKATT
-                RET
+                XOR     A
+                JP      FILLB
 
 
 ; --- JOIN2L                    ----------------------------------------

@@ -28,40 +28,17 @@ DRWSTAT         LD      A, (MODIFIED)
                 PUSH    AF
                 CALL    DRWMENU
                 POP     AF
-.MODSAM         CALL    BLDSTAT         ; BUILD STRING IN STATBUF
+.MODSAM         CALL    BLDSTAT         ; ALL 64 COLUMNS, SPACE-FILLED
 
-                ; PAD STATBUF WITH SPACES TO 64 CHARACTERS
-                LD      HL, STATBUF
-                LD      B, 0
-.FNDEND         LD      A, (HL)
-                OR      A
-                JR      Z, .PADLP
-                INC     HL
-                INC     B
-                LD      A, B
-                CP      SCRCOLS
-                JR      C, .FNDEND
-                JR      .COMSTAT
+                CALL    VIDBANK
 
-                ; RELOAD THE SPACE EVERY PASS: THE BOUND CHECK BELOW
-                ; NEEDS A, SO THE LOOP MUST RE-ENTER AT .PADLP
-.PADLP          LD      A, ' '
-                LD      (HL), A
-                INC     HL
-                INC     B
-                LD      A, B
-                CP      SCRCOLS
-                JR      C, .PADLP
-
-.COMSTAT        CALL    VIDBANK
-
-                ; COMPOSE 32 CELLS INTO PATSHAD + 23 * 256
+                ; COMPOSE 32 CELLS INTO PATSHAD + 23 * 256. THE ROW'S COLOUR
+                ; IS NOT TOUCHED: INITCOL OWNS ROWS 0 AND 23 (AT BOOT AND ON
+                ; EVERY THEME, THROUGH SETPAL) AND NOTHING ELSE WRITES THEM.
+                ; RE-SENDING IT COST A COLDUMP (~4 MS) ON EVERY KEYSTROKE.
                 LD      HL, PATSHAD + STBROW * ROWLEN
                 PUSH    HL
                 POP     IX
-                LD      HL, COLMAP + STBROW * CELLROW
-                PUSH    HL
-                POP     IY
 
                 LD      HL, STATBUF
                 LD      B, 32           ; 32 CELLS
@@ -74,23 +51,15 @@ DRWSTAT         LD      A, (MODIFIED)
 
                 CALL    CELLPAT         ; THE TWO GLYPHS INTO PATSHAD
 
-                ; STATUS BAR HAS ITS OWN ROLE, DISTINCT FROM THE MENU BAR
-                LD      A, (VCOLSTAT)
-                LD      (IY+0), A
-                INC     IY
-
                 POP     HL
                 POP     BC
                 DJNZ    .STATLP
 
-                ; DUMP STATUS BAR PATTERNS AND COLORS TO VRAM
+                ; DUMP STATUS BAR PATTERNS TO VRAM
                 LD      HL, PATSHAD + STBROW * ROWLEN
                 LD      DE, PGBASE + STBROW * ROWLEN
                 LD      BC, ROWLEN
                 CALL    VDPDUMP
-
-                LD      B, STBROW
-                CALL    COLDUMP
 
                 JP      TXTBANK
 
@@ -186,13 +155,12 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 64 SPACES, FOLLOWED BY NULL TERMINATO
                 CALL    .CPYNUM
                 LD      HL, .STRCOL     ; " Col "
                 CALL    .CPY5
-                LD      A, (CURX)
-                INC     A
-                LD      L, A
-                LD      H, 0
-                LD      B, 2
-                CALL    .CPYNUM
-                RET
+                LD      A, (CURX)       ; 1-BASED, UP TO 256: THREE DIGITS,
+                LD      L, A            ; COLUMNS 61..63 (TWO SHOWED COL 128
+                LD      H, 0            ; AS "28" ONCE THE VIEW SCROLLED)
+                INC     HL
+                LD      B, 3
+                JP      .CPYNUM
 
 .CPY6           LDI
 .CPY5           LDI
@@ -382,14 +350,11 @@ DRWMENU         ; 1. BLANK STATBUF, THEN LAY THE MENU TITLES OVER IT. THE
 
 .NODRAW         CALL    VIDBANK
 
-                ; 5. FILL ROW 0 PATTERNS AND COLORS FROM STATBUF
+                ; 5. FILL ROW 0 PATTERNS FROM STATBUF (ITS COLOUR IS INITCOL'S)
                 LD      HL, STATBUF
                 LD      DE, PATSHAD
                 PUSH    DE
                 POP     IX
-                LD      DE, COLMAP
-                PUSH    DE
-                POP     IY
 
                 LD      B, 32
 .MNULP          PUSH    BC
@@ -401,11 +366,6 @@ DRWMENU         ; 1. BLANK STATBUF, THEN LAY THE MENU TITLES OVER IT. THE
 
                 CALL    CELLPAT         ; THE TWO GLYPHS INTO PATSHAD
 
-                ; ROW 0 USES THE UI THEME COLOR
-                LD      A, (VCOLUI)
-                LD      (IY+0), A
-                INC     IY
-
                 POP     HL
                 POP     BC
                 DJNZ    .MNULP
@@ -415,9 +375,6 @@ DRWMENU         ; 1. BLANK STATBUF, THEN LAY THE MENU TITLES OVER IT. THE
                 LD      DE, PGBASE
                 LD      BC, ROWLEN
                 CALL    VDPDUMP
-
-                LD      B, MNUROW
-                CALL    COLDUMP
 
                 LD      A, (MODIFIED)
                 LD      (MODPRV), A

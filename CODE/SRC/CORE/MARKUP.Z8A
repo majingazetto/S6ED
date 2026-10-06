@@ -22,13 +22,17 @@ SCANMKUP        LD      A, (MKUPMD)
                 OR      A
                 RET     Z               ; MKUP_OFF: PRESERVE MANUAL ATTRS
 
-                ; 1. CLEAR ATTRIBUTES (COLS 0..MAXCOLS-1)
+                ; 1. CLEAR THE ATTRIBUTES OF THE LINE'S OWN COLUMNS (0..LEN-1).
+                ;    EVERY CALLER HAS JUST RUN LINEREAD, WHICH ZEROED THE REST UP
+                ;    TO TEXTCOLS, AND NO PAINTER READS PAST THE LENGTH. IT USED
+                ;    TO CLEAR ALL 255 (~6.6K T ON EVERY ROW PAINTED WITH MARKUP).
+                LD      A, (WORKBUF)
+                OR      A
+                RET     Z               ; EMPTY LINE: NOTHING TO SCAN
+                LD      B, A
                 LD      HL, WORKBUF + 1 + WORKATTR
-                LD      B, MAXCOLS
                 XOR     A
-.CLRATR         LD      (HL), A
-                INC     HL
-                DJNZ    .CLRATR
+                CALL    FILLB
 
                 ; 2. CHECK LINE LENGTH
                 LD      A, (WORKBUF)
@@ -466,7 +470,18 @@ ACTCYCMK        LD      A, (MKUPMD)
 ; - CLOBBERS: ALL
 ; -
 
-INSDELIM        CP      1
+INSDELIM        PUSH    AF              ; ROOM FOR THE PAIR FIRST: EDINSCHR
+                LD      C, 2            ; REFUSES OR WRAPS PAST THE LIMIT, AND
+                CP      1               ; THE CURSOR STEP BACK BELOW ASSUMED
+                JR      NZ, .INSN       ; EVERY DELIMITER WENT IN
+                LD      A, (MKUPMD)
+                CP      MKUP_MD
+                JR      NZ, .INSN
+                LD      C, 4            ; MD BOLD: '****'
+.INSN           CALL    MKROOM
+                JR      C, .NOROOM
+                POP     AF
+                CP      1
                 JR      NZ, .INSIT
 
                 ; BOLD INSERTION
@@ -523,6 +538,38 @@ INSDELIM        CP      1
                 LD      (CURX), A
                 RET
 
+.NOROOM         POP     AF              ; NO ROOM: LEAVE LINE AND CURSOR ALONE
+                RET
+
+
+; - MKROOM -----------------------------
+; - CAN DOCLINE TAKE C MORE CHARACTERS WITHOUT A REFUSAL OR A WRAP?
+; - IN:  C = CHARACTERS
+; - OUT: CY = 1: NO ROOM
+; - CLOBBERS: AF, B, DE, HL
+; -
+; - THE LIMIT IS MAXCOLS IN WRAP_DEV, THE MARGIN IN WRAP_TXT (TXTWIDTH, OR
+; - TEXTCOLS WITHOUT ONE) -- WHERE EDINSCHR STARTS PUSHING WORDS DOWN.
+; -
+
+MKROOM          PUSH    BC
+                LD      HL, (DOCLINE)
+                CALL    LINELEN         ; A = LENGTH
+                POP     BC
+                ADD     A, C
+                RET     C               ; PAST 255
+                LD      B, A            ; B = LENGTH + C
+                LD      A, (WRAPMODE)
+                CP      WRAP_TXT
+                LD      A, MAXCOLS
+                JR      NZ, .LIM
+                LD      A, (TXTWIDTH)
+                OR      A
+                JR      NZ, .LIM
+                LD      A, TEXTCOLS
+.LIM            CP      B               ; CY: LIMIT < LENGTH + C
+                RET
+
 
 ; --- WRAPSEL                   ----------------------------------------
 
@@ -546,6 +593,21 @@ WRAPSEL         PUSH    AF              ; SAVE STYLE (1=BOLD, 2=ITALIC)
                 ; LOAD LINE INTO WORKBUF, AND RECORD IT BEFORE IT CHANGES
                 LD      HL, (SELSTRL)
                 CALL    LINEREAD
+
+                ; ROOM FOR THE DELIMITERS: WBINS DROPS WHAT GOES PAST MAXCOLS
+                ; (AND ITS ATTRIBUTE SHIFT REACHES WORKBUF2 ON A FULL LINE)
+                POP     AF
+                PUSH    AF
+                LD      C, 2
+                CP      1
+                JR      NZ, .WRPN
+                LD      A, (MKUPMD)
+                CP      MKUP_MD
+                JR      NZ, .WRPN
+                LD      C, 4            ; MD BOLD: '**' ... '**'
+.WRPN           LD      A, (WORKBUF)
+                ADD     A, C
+                JP      C, .WRPMUL      ; NO ROOM: LEAVE THE LINE ALONE
                 CALL    UNDOCLS
                 LD      HL, (SELSTRL)
                 LD      A, UNDOT_MOD

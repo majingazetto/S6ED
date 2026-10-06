@@ -691,11 +691,20 @@ BLTCHTR         PUSH    AF
                 XOR     A
                 LD      (VDP_ARG), A
 
+                ; EVERY CHROME X IS A MULTIPLE OF 8 AND SO IS THE SOURCE: A BYTE
+                ; COPY (HMMM, 16 BYTES) INSTEAD OF A DOT COPY (LMMM, 64 DOTS
+                ; READ AND WRITTEN). A DX THAT IS NOT BYTE ALIGNED STILL GOES
+                ; THROUGH LMMM, SO A NEW CALLER CANNOT SMEAR A GLYPH.
                 LD      HL, VDPCMBLK
-                LD      A, VDP_LMMM | VDP_IMP
+                LD      A, (VDP_DX)
+                AND     3
+                JR      NZ, .DOTS
+                CALL    HMMM
+                JR      .DONE
+.DOTS           LD      A, VDP_LMMM | VDP_IMP
                 CALL    LMMM
 
-                POP     HL
+.DONE           POP     HL
                 POP     DE
                 POP     BC
                 POP     AF

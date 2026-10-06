@@ -228,10 +228,10 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 83 SPACES, FOLLOWED BY NULL TERMINATO
                 CALL    .CPYNUM
                 LD      HL, .STRCOL     ; "  Col "
                 CALL    .CPY6
-                LD      A, (CURX)
-                INC     A
-                LD      L, A
+                LD      A, (CURX)       ; 1-BASED IN 16 BITS, AS S62ED: CURX 255
+                LD      L, A            ; IS COLUMN 256, NOT 000
                 LD      H, 0
+                INC     HL
                 LD      B, 3
                 CALL    .CPYNUM
                 RET

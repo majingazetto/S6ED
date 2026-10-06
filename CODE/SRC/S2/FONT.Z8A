@@ -54,7 +54,7 @@ FONTINIT        XOR     A
                 SBC     HL, DE
                 JR      NZ, .BADSIZ
 
-                ; READ 2048 BYTES INTO FONT4H (#B000)
+                ; READ 2048 BYTES INTO FONT4H (PAGE 1 TPA)
                 LD      A, (FNTHAND)
                 LD      HL, FNTFSIZ
                 LD      DE, FONT4H

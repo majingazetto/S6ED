@@ -272,9 +272,8 @@ LINEREAD        CALL    DIRREAD         ; A=SEG, DE=OFFSET (PAGE 2 = DIRSEG)
                 JR      C, .NOTXPAD     ; L > TEXTCOLS: NO PADDING
                 LD      B, A            ; B = SPACES COUNT
                 EX      DE, HL          ; HL = DE (WORKBUF + 1 + L)
-.SPCLP          LD      (HL), ' '
-                INC     HL
-                DJNZ    .SPCLP
+                LD      A, ' '
+                CALL    FILLB
 
 .NOTXPAD        ; NOW COPY ATTRIBUTES!
                 POP     HL              ; HL = TEXT SOURCE
@@ -297,26 +296,45 @@ LINEREAD        CALL    DIRREAD         ; A=SEG, DE=OFFSET (PAGE 2 = DIRSEG)
 
                 LD      B, A            ; B = COUNT OF REMAINING ATTRS
                 EX      DE, HL          ; HL = DE (WORKBUF + 1 + WORKATTR + L)
-.ATRZLP         LD      (HL), 0
-                INC     HL
-                DJNZ    .ATRZLP
-                RET
+                XOR     A
+                JP      FILLB
 
 .EMPTY          ; L == 0:
                 POP     DE              ; BALANCE PUSH DE (C)
                 ; PAD TEXTCOLS SPACES AT WORKBUF + 1
                 LD      HL, WORKBUF + 1
                 LD      B, TEXTCOLS
-.EMPSPC         LD      (HL), ' '
-                INC     HL
-                DJNZ    .EMPSPC
+                LD      A, ' '
+                CALL    FILLB
 
                 ; ZERO TEXTCOLS ATTRS AT WORKBUF + 1 + WORKATTR
                 LD      HL, WORKBUF + 1 + WORKATTR
                 LD      B, TEXTCOLS
-.EMPATR         LD      (HL), 0
-                INC     HL
-                DJNZ    .EMPATR
+                XOR     A
+                JP      FILLB
+
+
+; - FILLB ------------------------------
+; - FILL B BYTES AT HL WITH A
+; - IN:  HL = DESTINATION, B = COUNT (1..255), A = VALUE
+; - OUT: NONE
+; - CLOBBERS: F, BC, DE, HL
+; -
+; - THE FIRST BYTE, THEN AN OVERLAPPING LDIR: ~21 T A BYTE AGAINST ~33 FOR
+; - LD (HL), N / INC HL / DJNZ. LINEREAD PADS EVERY LINE IT READS, SO THIS
+; - IS ON THE PATH OF EVERY ROW PAINTED. A COUNT OF 1 NEVER REACHES THE LDIR
+; - (BC = 0 WOULD COPY 64 KB).
+; -
+
+FILLB           LD      (HL), A
+                DEC     B
+                RET     Z
+                LD      D, H
+                LD      E, L
+                INC     DE
+                LD      C, B
+                LD      B, 0
+                LDIR
                 RET
 
 

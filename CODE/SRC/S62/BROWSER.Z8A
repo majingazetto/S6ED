@@ -718,8 +718,10 @@ DOBRW           XOR     A
                 LD      B, H
                 LD      C, L            ; BC = DY
                 POP     HL              ; HL = RELATIVE X
-                INC     HL
-                INC     HL
+                INC     HL              ; FOUR PIXELS INTO THE SLOT: CHARACTER
+                INC     HL              ; COLUMN 14 * COLUMN, ALIGNED WITH THE
+                INC     HL              ; TITLE AND THE INFORMATION LINE (THE
+                INC     HL              ; +2 OF THE 6 PX FONT LEFT IT 2 PX OFF)
                 LD      DE, (WINX)
                 ADD     HL, DE
                 EX      DE, HL          ; DE = DX

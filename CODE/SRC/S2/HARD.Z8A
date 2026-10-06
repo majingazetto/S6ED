@@ -157,6 +157,8 @@ _PARSE          EQU     #5B
 _GENV           EQU     #6B
 ENOFIL          EQU     #D7             ; DOS 2 ERROR .NOFIL: FILE NOT FOUND
 ERRABT          EQU     #9D             ; DOS 2 ERROR .ABORT: DISK OP ABORTED
+ERRCTLC         EQU     #9E             ; DOS 2 ERROR .CTRLC: CTRL+C PRESSED
+ERRSTOP         EQU     #9F             ; DOS 2 ERROR .STOP: CTRL+STOP PRESSED
 ERRNRDY         EQU     #FC             ; DOS 2 ERROR .NRDY: NOT READY (NO DISK)
 ERRWPRT         EQU     #F8             ; DOS 2 ERROR .WPROT: WRITE PROTECTED
 ERRDISK         EQU     #FD             ; DOS 2 ERROR .DISK: GENERAL DISK ERROR

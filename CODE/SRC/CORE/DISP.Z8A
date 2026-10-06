@@ -56,10 +56,10 @@ DISPKEY         PUSH    AF              ; PRESERVE KEYCODE ACROSS READMOD
                 LD      A, (VILEAD)
                 OR      A
                 JR      Z, .NOLEAD
-                LD      B, A            ; B = PENDING LEADER
-                XOR     A
+                LD      E, A            ; E = PENDING LEADER (B HOLDS THE MODIFIERS
+                XOR     A               ; THE KEYMAP SCAN BELOW MATCHES AGAINST)
                 LD      (VILEAD), A
-                LD      A, B
+                LD      A, E
                 CP      'd'
                 JR      NZ, .NOTVD
                 LD      A, C

@@ -86,28 +86,17 @@ SCRLDNN         XOR     A
                 LD      DE, COLMAP + CELLROW
                 LDIR
 
-                ; 3. DUMP THE MOVED PATTERN BAND (ROWS 1 .. K)
-                POP     BC
-                PUSH    BC
-                LD      HL, PATSHAD + ROWLEN
-                LD      DE, PGBASE + ROWLEN
-                LD      C, 0            ; BC = K * ROWLEN
-                CALL    VDPDUMP
-
-                ; 4. DUMP THE MOVED COLOR BAND (ROWS 1 .. K)
-                POP     BC
-                PUSH    BC
-                LD      C, B            ; C = LAST ROW = K
-                LD      B, TXRFIRST
-                CALL    COLBAND
-
-                CALL    TXTBANK
-
-                ; 5. RE-COMPOSE THE C EXPOSED ROWS AT THE BOTTOM
+                ; 3. COMPOSE THE C EXPOSED ROWS AT THE BOTTOM -- INTO THE
+                ;    SHADOWS ONLY. PUSHING THE MOVED BAND FIRST AND THE NEW ROWS
+                ;    AFTER LEFT THE BOTTOM ROW SHOWING THE LINE ABOVE IT TWICE
+                ;    WHILE THE NEW ONE WAS COMPOSED; NOW THE WHOLE BAND GOES OUT
+                ;    ONCE, ALREADY RIGHT (THE SAME ROWS AS BEFORE, NOT MORE).
                 POP     BC              ; B = K, C = ROWS SCROLLED
                 LD      A, ROWSVIS + 1
                 SUB     C
                 LD      B, A            ; B = FIRST EXPOSED ROW
+                LD      A, 1
+                LD      (RNDNODMP), A
 .RLOOP          PUSH    BC
                 CALL    RENDEROW
                 POP     BC
@@ -115,7 +104,7 @@ SCRLDNN         XOR     A
                 LD      A, B
                 CP      TXRLAST + 1
                 JR      NZ, .RLOOP
-                RET
+                JP      TXTPUSH
 
 
 
@@ -183,36 +172,12 @@ SCRLUPN         XOR     A
                 LD      DE, COLMAP + (TXRLAST + 1) * CELLROW - 1
                 LDDR
 
-                ; 3. DUMP THE MOVED PATTERN BAND (ROWS 1 + C .. TXRLAST)
-                POP     BC
-                PUSH    BC
-                LD      A, C
-                INC     A               ; A = FIRST DUMPED ROW
-                LD      D, A
-                LD      E, 0            ; DE = ROW * ROWLEN
-                LD      HL, PGBASE
-                ADD     HL, DE
-                PUSH    HL              ; VRAM DESTINATION
-                LD      HL, PATSHAD
-                ADD     HL, DE          ; HL = SOURCE
-                POP     DE              ; DE = VRAM DESTINATION
-                LD      C, 0            ; BC = K * ROWLEN
-                CALL    VDPDUMP
-
-                ; 4. DUMP THE MOVED COLOR BAND (ROWS 1 + C .. TXRLAST)
-                POP     BC
-                PUSH    BC
-                LD      A, C
-                INC     A
-                LD      B, A            ; B = FIRST ROW
-                LD      C, TXRLAST      ; C = LAST ROW
-                CALL    COLBAND
-
-                CALL    TXTBANK
-
-                ; 5. RE-COMPOSE THE C EXPOSED ROWS AT THE TOP (1 .. C)
+                ; 3. COMPOSE THE C EXPOSED ROWS AT THE TOP (1 .. C) INTO THE
+                ;    SHADOWS, THEN PUSH THE WHOLE BAND ONCE (SEE SCRLDNN)
                 POP     BC              ; B = K, C = ROWS SCROLLED
                 LD      B, TXRFIRST
+                LD      A, 1
+                LD      (RNDNODMP), A
 .UPLOOP         PUSH    BC
                 CALL    RENDEROW
                 POP     BC
@@ -220,7 +185,31 @@ SCRLUPN         XOR     A
                 LD      A, C
                 CP      B
                 JR      NC, .UPLOOP
-                RET
+                JP      TXTPUSH
+
+
+; --- TXTPUSH                   ----------------------------------------
+
+
+; - TXTPUSH ----------------------------
+; - PUSH THE WHOLE TEXT BAND (ROWS 1..22) FROM THE SHADOWS TO VRAM, AND
+; - END THE COMPOSE-ONLY MODE THE SCROLLS RENDER THEIR NEW ROWS IN
+; - IN:  NONE
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+TXTPUSH         XOR     A
+                LD      (RNDNODMP), A
+                CALL    VIDBANK
+                LD      HL, PATSHAD + TXRFIRST * ROWLEN
+                LD      DE, PGBASE + TXRFIRST * ROWLEN
+                LD      BC, ROWSVIS * ROWLEN
+                CALL    VDPDUMP
+                LD      B, TXRFIRST
+                LD      C, TXRLAST
+                CALL    COLBAND
+                JP      TXTBANK
 
 
 

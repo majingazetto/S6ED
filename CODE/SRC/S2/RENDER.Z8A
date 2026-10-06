@@ -45,7 +45,7 @@ REDRAW          CALL    ADJLCOL
 ; - RENDER A SINGLE SCREEN ROW (1..22) TO VRAM
 ; - IN:  B = SCREEN ROW (1..22)
 ; - OUT: NONE. WORKBUF HOLDS THE LINE RECORD.
-; - CLOBBERS: AF, DE, HL (BC PRESERVED)
+; - CLOBBERS: AF, DE, HL, IX, IY (BC PRESERVED)
 ; -
 
 RENDEROW        PUSH    BC              ; SAVE B = SCREEN ROW (1..22)
@@ -79,7 +79,14 @@ RENDEROW        PUSH    BC              ; SAVE B = SCREEN ROW (1..22)
 
                 ; COMPOSE ROW B INTO SHADOW BUFFERS
                 CALL    VIDBANK
+                XOR     A
+                LD      (COLDIRT), A
                 CALL    COMROW
+
+                ; A SCROLL COMPOSES ITS NEW ROWS FIRST AND PUSHES THE BAND ONCE
+                LD      A, (RNDNODMP)
+                OR      A
+                JR      NZ, .NODUMP
 
                 ; RESTORE B = SCREEN ROW FOR VRAM DUMP
                 POP     BC
@@ -98,12 +105,17 @@ RENDEROW        PUSH    BC              ; SAVE B = SCREEN ROW (1..22)
                 LD      BC, ROWLEN
                 CALL    VDPDUMP
 
-                ; DUMP THE ROW COLORS (COLMAP -> COLEXP -> CTBASE)
+                ; DUMP THE ROW COLORS (COLMAP -> COLEXP -> CTBASE) -- ONLY IF
+                ; COMROW CHANGED ONE. COLMAP ALWAYS MIRRORS THE VRAM COLOUR
+                ; TABLE (EVERY WRITER DUMPS WHAT IT WRITES), SO A ROW WHOSE
+                ; COLOURS CAME OUT THE SAME NEEDS NO COLDUMP (~4 MS).
                 POP     BC
                 PUSH    BC
-                CALL    COLDUMP
+                LD      A, (COLDIRT)
+                OR      A
+                CALL    NZ, COLDUMP
 
-                CALL    TXTBANK
+.NODUMP         CALL    TXTBANK
                 POP     BC
                 RET
 
@@ -153,6 +165,10 @@ CLRROW          PUSH    BC
                 INC     HL
                 DJNZ    .COLP
 
+                LD      A, (RNDNODMP)   ; COMPOSE ONLY: THE SCROLL PUSHES IT
+                OR      A
+                JR      NZ, .CLDONE
+
                 ; 3. DUMP PATTERN SHADOW TO VRAM (PGBASE + B * 256)
                 POP     BC
                 PUSH    BC
@@ -173,7 +189,7 @@ CLRROW          PUSH    BC
                 PUSH    BC
                 CALL    COLDUMP
 
-                CALL    TXTBANK
+.CLDONE         CALL    TXTBANK
                 POP     BC
                 RET
 
@@ -231,8 +247,8 @@ COMROW          LD      A, B
                 LD      E, A
                 LD      A, (WORKBUF)    ; LINE LENGTH
                 CP      E
-                JR      Z, .LBLNK
-                JR      C, .LBLNK
+                JR      Z, .TAIL        ; PAST THE END: THE REST IS BLANK
+                JR      C, .TAIL
                 ; WITHIN LINE LENGTH
                 LD      D, 0
                 LD      HL, WORKBUF + 1
@@ -241,10 +257,6 @@ COMROW          LD      A, B
                 LD      HL, WORKBUF + 1 + WORKATTR
                 ADD     HL, DE
                 LD      D, (HL)         ; D = LEFT ATTR
-                JR      .RGET
-
-.LBLNK          LD      A, ' '
-                LD      D, 0
 
 .RGET           ; PUSH LEFT (A, D)
                 PUSH    AF
@@ -283,6 +295,44 @@ COMROW          LD      A, B
                 LD      A, B
                 CP      TEXTCOLS / 2
                 JR      NZ, .CELLP
+                RET
+
+.TAIL           ; CELLS B..30 ARE ALL PAST THE END OF THE LINE: BLANK PATTERNS
+                ; AND THE TEXT COLOUR, WITHOUT COMPOSING A PAIR OF SPACES PER
+                ; CELL (~1,300 T EACH, MOST OF A REDRAW ON SHORT LINES).
+                LD      A, TEXTCOLS / 2
+                SUB     B
+                LD      B, A            ; B = CELLS LEFT (1..31)
+                PUSH    IX
+                POP     HL
+                LD      C, A
+                XOR     A
+.TPAT           LD      (HL), A         ; 8 BLANK SCANLINES PER CELL
+                INC     HL
+                LD      (HL), A
+                INC     HL
+                LD      (HL), A
+                INC     HL
+                LD      (HL), A
+                INC     HL
+                LD      (HL), A
+                INC     HL
+                LD      (HL), A
+                INC     HL
+                LD      (HL), A
+                INC     HL
+                LD      (HL), A
+                INC     HL
+                DEC     C
+                JR      NZ, .TPAT
+                LD      A, (VCOLTXT)
+.TCOL           CP      (IY+0)
+                JR      Z, .TSAME
+                LD      (IY+0), A
+                LD      HL, COLDIRT
+                LD      (HL), H         ; NON-ZERO (H = HIGH(COLDIRT))
+.TSAME          INC     IY
+                DJNZ    .TCOL
                 RET
 
 
@@ -332,9 +382,13 @@ COMCELL         PUSH    DE              ; SAVE ATTRIBUTES (D=LATTR, E=RATTR)
                 JR      Z, .SETCOL
                 LD      A, (VCOLMARK)
 
-.SETCOL         ; 5. WRITE ONE COLOR BYTE TO COLMAP
+.SETCOL         ; 5. WRITE ONE COLOR BYTE TO COLMAP, NOTING A CHANGE
+                CP      (IY+0)
+                JR      Z, .SAME
                 LD      (IY+0), A
-                INC     IY
+                LD      HL, COLDIRT
+                LD      (HL), H         ; NON-ZERO (H = HIGH(COLDIRT))
+.SAME           INC     IY
                 RET
 
 
@@ -512,60 +566,15 @@ PATINV          LD      A, B
 
 
 ; - RENDIFF ----------------------------
-; - DIFFERENTIAL REPAINT OF SCREEN ROW B
+; - REPAINT SCREEN ROW B AFTER AN EDIT
 ; - IN:  B = SCREEN ROW (1..22), WORKBUF HOLDS THE NEW RECORD
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
+; - ON S2ED THIS IS RENDEROW. THE ROW IS COMPOSED IN RAM AND PUSHED WHOLE,
+; - SO THERE IS NO DIFFERENTIAL PAINT TO FEED: THE PREVBUF CACHE THE S6
+; - TARGETS KEEP WAS FILLED HERE (A 512-BYTE LDIR PER KEYSTROKE) AND NEVER
+; - READ. COLDIRT ALREADY SKIPS THE COLOUR DUMP OF AN UNCHANGED ROW.
+; -
 
-RENDIFF         PUSH    BC
-                LD      A, (PREVROW)
-                CP      B
-                JR      NZ, .MISS
-                LD      HL, (TOPLINE)
-                LD      A, B
-                SUB     TXRFIRST
-                LD      E, A
-                LD      D, 0
-                ADD     HL, DE
-                LD      DE, (PREVLIN)
-                CALL    CMPHLDE
-                JR      NZ, .MISS
-                LD      A, (LEFTCOL)
-                LD      E, A
-                LD      A, (PREVLCOL)
-                CP      E
-                JR      NZ, .MISS
-
-                ; CACHE HIT: UPDATE ROW AND COMMITTED CACHE
-                POP     BC
-                CALL    RENDEROW
-                LD      A, (LEFTCOL)
-                LD      (PREVLCOL), A
-                LD      HL, WORKBUF
-                LD      DE, PREVBUF
-                LD      BC, WORKSIZ
-                LDIR
-                RET
-
-.MISS           POP     BC
-                CALL    RENDEROW
-                LD      HL, (TOPLINE)
-                LD      A, B
-                SUB     TXRFIRST
-                LD      E, A
-                LD      D, 0
-                ADD     HL, DE
-                LD      DE, (TOTLINES)
-                CALL    CMPHLDE
-                RET     NC
-                LD      (PREVLIN), HL
-                LD      A, B
-                LD      (PREVROW), A
-                LD      A, (LEFTCOL)
-                LD      (PREVLCOL), A
-                LD      HL, WORKBUF
-                LD      DE, PREVBUF
-                LD      BC, WORKSIZ
-                LDIR
-                RET
+RENDIFF         EQU     RENDEROW

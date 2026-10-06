@@ -307,6 +307,8 @@ FCB             DEFS    SIZEFCB         ; FCB FOR DOS1 I/O
 PREVROW         DEFB    0
 PREVLIN         DEFW    0
 PREVLCOL        DEFB    0               ; RENDIFF: LEFTCOL OF CACHED ROW
+COLDIRT         DEFB    0               ; S2ED COMROW: THE ROW'S COLMAP CHANGED
+RNDNODMP        DEFB    0               ; S2ED: RENDEROW / CLRROW COMPOSE, NO VRAM
 NEWVIS          DEFB    0               ; RENDIFF: VISIBLE CHARACTERS IN CURRENT ROW
 OLDVIS          DEFB    0               ; RENDIFF: VISIBLE CHARACTERS IN PREVIOUS ROW
 
@@ -345,7 +347,6 @@ CMPSEG          DEFB    0               ; COMPACTION: SEGMENT NUMBER
 CMPEND          DEFW    0               ; COMPACTION: SCAN BOUND
 CMPSRC          DEFW    0               ; COMPACTION: SOURCE OFFSET
 CMPDST          DEFW    0               ; COMPACTION: DESTINATION OFFSET
-CMPRSZ          DEFW    0               ; COMPACTION: RECORD SIZE
                 ; IOBUF, THE DISK I/O BUFFER, IS WORKBUF2 + PREVBUF IN PAGE 3
                 ; (CONST_CORE): S2ED'S PAGE 1 HAS NO BYTES TO SPARE.
 
