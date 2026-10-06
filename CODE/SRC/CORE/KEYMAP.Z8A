@@ -350,8 +350,8 @@ KMAPVIV         ; VI VISUAL MODE (SELECTION EXTENSION)
                 DEFB    'y',     MODNONE, ACVICPY
                 DEFB    'd',     MODNONE, ACVICUT
                 DEFB    'x',     MODNONE, ACVICUT
-                DEFB    'v',     MODNONE, ACVINRM
-                DEFB    'V',     MODANY,  ACVINRM
+                DEFB    'v',     MODNONE, ACVIVIS ; v IN v LEAVES, IN V SWITCHES
+                DEFB    'V',     MODANY,  ACVILIN ; V IN V LEAVES, IN v SWITCHES
                 DEFB    ESC,     MODANY,  ACVINRM
 
                 ; SYSTEM ACCELERATORS

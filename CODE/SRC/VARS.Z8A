@@ -141,6 +141,7 @@ KMAPID          DEFB    0               ; 0=STD, 1=TED, 2=EMACS, 3=VI
 KMAPPTR         DEFW    0               ; POINTER TO ACTIVE KEYMAP TABLE
 VIMODE          DEFB    0               ; 0=NORMAL, 1=INSERT
 VILEAD          DEFB    0               ; VI LEADER KEY PENDING
+VIVLINE         DEFB    0               ; VI VISUAL: 0 = CHARACTERS (v), 1 = LINES (V)
 MODKEYS         DEFB    0               ; LAST READ MODIFIERS BYTE
 DEADST          DEFB    0               ; DEAD KEY STATE (0=NONE, 1=ACUTE, 2=DIAERESIS)
 LASTGRP         DEFB    0               ; LAST MATRIX GRAPH ACCENT KEY PRESSED

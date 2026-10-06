@@ -574,7 +574,10 @@ ESC returns to Normal mode. While inserting:
 
  ---- 8.3.- VISUAL MODE.
 
-v starts a characterwise selection, V selects whole lines.
+v starts a characterwise selection, V selects whole lines:
+however the cursor moves, every line it covers is selected
+from its first character to its line break. v and V switch
+between the two (the same key again leaves visual mode).
 Movements extend the selection instead of moving the cursor:
 
     h / j / k / l            Extend left/down/up/right
@@ -586,7 +589,7 @@ Movements extend the selection instead of moving the cursor:
     Cursor keys              Also extend
     y                        Yank (copy), back to Normal
     d / x                    Cut, back to Normal
-    v / V / ESC              Cancel, back to Normal
+    ESC                      Cancel, back to Normal
 
 
  ---- 8.4.- EX COMMANDS.
@@ -621,10 +624,10 @@ replaces it.
 
 Clipboard: Ctrl+X cut, Ctrl+C copy, Ctrl+V paste (Vi: d/x, y,
 p). Multi-line selections copy and paste whole lines with
-their line breaks. A selection that reaches past the last
-character of a line (Shift+Ctrl+Right, or $ in Vi visual
-mode) takes that line break too, so pasting it opens a new
-line.
+their line breaks. In Vi visual mode a selection that
+reaches the end of a line with $ takes its line break too,
+and V always takes whole lines with their breaks, so pasting
+either opens a new line.
 
 Undo/redo:
 

@@ -31,6 +31,12 @@ TXCELL0         EQU     TXCOL0 / 2      ; GUTTER CELLS AHEAD OF THE TEXT
                 ASSERT  TXCOL0 + TEXTCOLS == SCRCOLS
                 ASSERT  (TXCOL0 & 1) == 0
 
+                ; STATUS BAR RIGHT CHANNEL: MODE (6), SPACE, "Ln NNNNN/NNNNN" (14),
+                ; " Col " (5), NNN (3). IT ENDS ON COLUMN 62, UNDER THE CLOCK, SO
+                ; THE LAST 4 PX COLUMN STAYS BLANK
+STBRCOL         EQU     34
+                ASSERT  STBRCOL + 6 + 1 + 14 + 5 + 3 == SCRCOLS - 1
+
 ROWLEN          EQU     256             ; ONE ROW: 32 CELLS X 8 BYTES = 256 B
 PATLEN          EQU     6144            ; TOTAL SCREEN PATTERN BYTES: 24 X 256 B
 ROWSVIS         EQU     22              ; VISIBLE EDITING ROWS (1..22)

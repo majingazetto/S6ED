@@ -2429,6 +2429,72 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect': ['G12/restored-r8'],
     },
     {
+        'name': 's2-sett-valclr',
+        'why': 'the Settings value field is not blanked before the value is '
+               'written, so a shorter value keeps the tail of a longer one '
+               '(AUTO -> DOS reads DOSO)',
+        'target': 'S2ED',
+        'file': 'WINDOW.Z8A',
+        'old': """                LD      HL, .VALCLR
+                PUSH    IX
+                CALL    WINPUTS""",
+        'new': """                LD      HL, .VALCLR
+                PUSH    IX
+                NOP                     ; MUTATION: FIELD NOT BLANKED
+                NOP
+                NOP""",
+        'filter': 'S2-45',
+        'expect': ['S2-45/values'],
+    },
+    {
+        'name': 's2-stat-rcol',
+        'why': 'the status bar right channel starts one column late and ends '
+               'on column 63, past the clock, flush with the right edge',
+        'target': 'S2ED',
+        'file': 'UI.Z8A',
+        'old': """                LD      DE, STATBUF + STBRCOL
+""",
+        'new': """                LD      DE, STATBUF + STBRCOL + 1 ; MUTATION
+""",
+        'filter': 'S2-40',
+        'expect': ['S2-40/col'],
+    },
+    {
+        'name': 'vi-vline-chars',
+        'why': 'V is line-wise only on entry: once the cursor moves the range '
+               'falls back to characters from the cursor column (the defect '
+               'seen on real hardware)',
+        'target': 'S2ED',
+        'file': 'ACTION.Z8A',
+        'old': """                LD      A, (VIVLINE)
+                OR      A
+                JR      Z, .INCL""",
+        'new': """                LD      A, (VIVLINE)
+                OR      A
+                JR      .INCL           ; MUTATION: NEVER LINE-WISE""",
+        'filter': 'S2-46',
+        'expect_any': ['S2-46-vi-visual-walk/seed1/painted',
+                       'S2-46-vi-visual-walk/seed2/painted'],
+    },
+    {
+        'name': 'undo-pnt-cursor',
+        'why': 'UNDOPNT draws the cursor itself and MAINLOOP draws it again: '
+               'the two XORs cancel while BLNKPH says it is up, so the next '
+               'move leaves an inverted cell behind after every undo',
+        'target': 'S2ED',
+        'file': 'UNDO.Z8A',
+        'old': """                CALL    SHOWLN
+                JP      REDRAW""",
+        'new': """                CALL    SHOWLN
+                CALL    REDRAW          ; MUTATION: THE CURSOR DRAWN HERE TOO
+                CALL    DRWSTAT
+                JP      DRWCUR""",
+        'filter': 'S2-46',
+        'expect_any': ['S2-46-vi-visual-walk/seed1/painted',
+                       'S2-46-vi-visual-walk/seed2/painted',
+                       'S2-46-vi-visual-walk/seed3/painted'],
+    },
+    {
         'name': 's2-drwmenu-de',
         'why': 'the defect as it shipped: DE loaded only on the Untitled '
                'branch, so a bare S2ED measured the name from a garbage DE',

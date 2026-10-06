@@ -3717,9 +3717,11 @@ class S240ColDigits(S2Case):
     def verify(self, ctx, runs):
         run = one(runs)
         raw = run.snaps.get('end', {}).get('STATBUF')
-        tail = bytes(raw[56:64]).decode('latin-1') if raw else None
-        return [Check('S2-40/col', tail == ' Col 131',
-                      'status columns 56..63: %r (CURX %s)'
+        # The right channel ends on column 62, under the clock: column 63,
+        # the last 4 px of the screen, stays blank.
+        tail = bytes(raw[55:64]).decode('latin-1') if raw else None
+        return [Check('S2-40/col', tail == ' Col 131 ',
+                      'status columns 55..63: %r (CURX %s)'
                       % (tail, run.var('end', 'CURX')))]
 
 
@@ -3879,6 +3881,247 @@ class S244MenuStrips(S2Case):
         ]
 
 
+# --- S2-45  EVERY SETTINGS VALUE IS PAINTED CLEAN ---------------------
+
+
+class S245SettingsValues(S2Case):
+    name = 'S2-45-settings-values'
+    desc = ('every Settings row cycles through all its values and back, and '
+            'after each step the label and the value field hold exactly the '
+            'glyphs of the current value: no tail of a longer one')
+    origin = ('2026-10-06, real hardware: garbage seen once in the Shadow '
+              'ON/OFF field; the field had no case of its own')
+
+    # (label, values) in dialog order; Clock and Shadow share .VALALN.
+    ROWS = [('Profile:   ', ['STD', 'TED', 'EMC', 'VI']),
+            ('Wrap:      ', ['DEV', 'TXT']),
+            ('Autoalign: ', ['OFF', 'ON', 'DEV']),
+            ('Clock:     ', ['OFF', 'ON']),
+            ('Tab width: ', ['2', '4', '8']),
+            ('EOL:       ', ['AUTO', 'DOS', 'UNIX']),
+            ('Markup:    ', ['OFF', 'MD', 'LIT']),
+            ('Theme:     ', ['DARK', 'AMBER', 'GREEN', 'LIGHT', 'MSX',
+                            'MONO']),
+            ('Shadow:    ', ['OFF', 'ON'])]
+    STT = [('STTPRF', 9)]
+    FIRST, LABEL, VALUE = 6, 22, 34
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('F3')
+        t.snap('menu', at='WINPOLL')
+        t.press('RETURN')
+        t.snap('open', at='WINPOLL', vram='pat', bytes_=self.STT)
+        for r, (_, vals) in enumerate(self.ROWS):
+            if r:
+                t.press('DOWN')
+            # one more than the count: the last step wraps back to the start
+            for i in range(len(vals) + 1):
+                t.press('RIGHT')
+                t.snap('r%d_%d' % (r, i), at='WINPOLL', vram='pat',
+                       bytes_=self.STT)
+        t.press('ESC')
+        t.snap('closed')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        fnt = font(ctx)
+        checks, bad, steps = [], [], 0
+        start = run.var('open', 'STTPRF')
+        for r, (label, vals) in enumerate(self.ROWS):
+            for i in range(len(vals) + 1):
+                snap = 'r%d_%d' % (r, i)
+                dump = run.blob(snap, 'pat')
+                stt = run.var(snap, 'STTPRF')
+                if dump is None or stt is None:
+                    bad.append('%s: no snapshot' % snap)
+                    continue
+                steps += 1
+                idx = stt[r]
+                if idx >= len(vals):
+                    bad.append('%s: index %d out of %d' % (snap, idx, len(vals)))
+                    continue
+                if start and idx != (start[r] + i + 1) % len(vals):
+                    bad.append('%s: index %d, expected %d' % (
+                        snap, idx, (start[r] + i + 1) % len(vals)))
+                row = self.FIRST + r
+                text = (' ' * self.LABEL + label).ljust(self.VALUE) + \
+                    vals[idx].ljust(5)
+                want = pattern.compose_row(fnt, text)
+                dif = [c for c in pattern.differing_columns(
+                    pattern.row_of(dump, row), want)
+                    if self.LABEL <= c < self.VALUE + 5]
+                if dif:
+                    bad.append('%s (%s): cols %s' % (snap, vals[idx], dif))
+        checks.append(Check('S2-45/values', not bad and steps,
+                            '%d steps across 9 rows, every field clean' % steps
+                            if not bad else '; '.join(bad[:4])))
+        checks.append(Check('S2-45/closed', run.var('closed', 'WINACTV') == 0,
+                            'ESC closes the dialog (WINACTV %s)'
+                            % run.var('closed', 'WINACTV')))
+        return checks
+
+
+# --- S2-46  VI VISUAL MODE, RANDOM WALKS -----------------------------
+
+
+class S246ViVisualWalk(S2Case):
+    name = 'S2-46-vi-visual-walk'
+    desc = ('a seeded random walk of Vi motions, v / V visual mode and edits '
+            '(cut, delete, paste, undo): after every key the screen is exactly '
+            'the document read back from RAM, with the selection the anchor, '
+            'the cursor and the mode describe inverted and nothing else')
+    origin = ('2026-10-06, real hardware: selecting backwards and forwards in '
+              'visual mode reached a state that selected nothing, once.  V was '
+              'only line-wise on entry: the first k or j fell back to '
+              'characters from the cursor column.  Then, same day: inverted '
+              'residue after playing with V and edits in visual mode')
+    variants = ('seed1', 'seed2', 'seed3')
+    cfg = S2_CFG.replace('PROFILE=STD', 'PROFILE=VI')
+
+    LINES = ['ALPHA BETA GAMMA DELTA',
+             'ONE TWO',
+             '',
+             'A MUCH LONGER LINE WITH SEVERAL WORDS IN IT',
+             'X',
+             'SHORT LINE',
+             '',
+             '',
+             'THE LAST BUT ONE LINE OF TEXT',
+             'END'] + ['LINE %02d %s' % (i, 'WORD ' * (i % 7))
+                      for i in range(10, 34)]  # taller than the screen
+    STEPS = 110
+    # (key, weight): motions dominate, mode keys often enough to switch
+    # back and forth; y leaves visual mode without touching the document.
+    KEYS = [('h', 8), ('l', 8), ('j', 7), ('k', 7), ('w', 4), ('b', 4),
+            ('0', 2), ('$', 3), ('G', 2), ('gg', 2), ('v', 4), ('V', 4),
+            ('ESC', 2), ('y', 2), ('d', 2), ('x', 2), ('p', 2), ('u', 2)]
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def walk(self, variant):
+        import random
+        rnd = random.Random(variant)
+        pool = [k for k, w in self.KEYS for _ in range(w)]
+        keys = ['v']                      # start inside visual mode
+        while len(keys) < self.STEPS:
+            keys.append(rnd.choice(pool))
+        return keys
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        for i, k in enumerate(self.walk(variant)):
+            if k == 'ESC':
+                t.press('ESC')
+            else:
+                t.text(k)
+            t.snap('s%03d' % i, vram='pat', mainram=True)
+        return t
+
+    @staticmethod
+    def doc_from_ram(run, label):
+        """The document as the editor holds it: the directory in DIRSEG,
+        3 bytes per line (segment, offset), each record [CAP 2][LEN 2][text]."""
+        ram = run.blob(label, 'ram')
+        dseg, tot = run.var(label, 'DIRSEG'), run.var(label, 'TOTLINES')
+        if ram is None or dseg is None or tot is None:
+            return None
+        out = []
+        for i in range(tot):
+            e = dseg * 16384 + i * 3
+            seg, off = ram[e], ram[e + 1] | ram[e + 2] << 8
+            base = seg * 16384 + off
+            n = ram[base + 2]
+            out.append(ram[base + 4:base + 4 + n].decode('latin-1'))
+        return out
+
+    def expected(self, sel, lines, vline, anchor, cur):
+        """{line: [text columns]} the selection must show inverted."""
+        if not sel:
+            return {}
+        a, c = anchor, cur
+        (sl, sx), (el, ex) = (a, c) if a <= c else (c, a)
+        if vline:
+            sx, ex = 0, min(len(lines[el]) + 1, 255)
+        else:
+            ex = min(ex + 1, 255)                     # inclusive
+        out = {}
+        for ln in range(sl, el + 1):
+            xa = sx if ln == sl else 0
+            xb = ex if ln == el else len(lines[ln]) + 1
+            xb = min(xb, pattern.TEXTCOLS)
+            if xb > xa:
+                out[ln] = list(range(xa, xb))
+        return out
+
+    def verify(self, ctx, runs):
+        fnt = font(ctx)
+        checks = []
+        for variant, run in sorted(runs.items()):
+            v = '%s/%s' % (self.name, variant)
+            keys = self.walk(variant)
+            bad, steps, insel, lmode = [], 0, 0, 0
+            for i, k in enumerate(keys):
+                label = 's%03d' % i
+                dump = run.blob(label, 'pat')
+                if dump is None:
+                    bad.append('%s (%s): no snapshot' % (label, k))
+                    break
+                lines = self.doc_from_ram(run, label)
+                if lines is None:
+                    bad.append('%s (%s): no RAM dump' % (label, k))
+                    break
+                steps += 1
+                sel = run.var(label, 'SELACT')
+                left = run.var(label, 'LEFTCOL') or 0
+                vline = run.var(label, 'VIVLINE')
+                top = run.var(label, 'TOPLINE') or 0
+                anchor = (run.var(label, 'SELANCL'), run.var(label, 'SELANCX'))
+                cur = (run.var(label, 'DOCLINE'), run.var(label, 'CURX'))
+                insel += 1 if sel else 0
+                lmode += 1 if sel and vline else 0
+                want = self.expected(sel, lines, vline, anchor, cur)
+                currow = pattern.TXRFIRST + run.var(label, 'CURY')
+                curcol = pattern.scol(cur[1])
+                for row in range(pattern.TXRFIRST, pattern.TXRLAST + 1):
+                    ln = top + row - pattern.TXRFIRST
+                    text = lines[ln][left:] if ln < len(lines) else ''
+                    exp = pattern.compose_text(fnt, text)
+                    for col in want.get(ln, []):
+                        if 0 <= col - left < pattern.TEXTCOLS:
+                            exp = pattern.invert_column(
+                                exp, pattern.scol(col - left))
+                    dif = pattern.differing_columns(
+                        pattern.row_of(dump, row), exp)
+                    if row == currow:
+                        dif = [c for c in dif if c != curcol]
+                    if dif:
+                        bad.append('%s after %r: row %d cols %s (sel %s, '
+                                   'V %s, anchor %s, cursor %s)'
+                                   % (label, k, row, [c - pattern.TXCOL0
+                                                     for c in dif][:6],
+                                      sel, vline, anchor, cur))
+                        break
+                if bad:
+                    break
+            checks.append(Check('%s/painted' % v, not bad and steps == len(keys),
+                                '%d keys, %d in visual (%d line-wise): the '
+                                'screen matched every time'
+                                % (steps, insel, lmode) if not bad else
+                                bad[0]))
+            checks.append(Check('%s/coverage' % v, insel >= 30 and lmode >= 10,
+                                '%d steps in visual, %d line-wise'
+                                % (insel, lmode)))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -3893,7 +4136,8 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S235LoadProgress(), S236BrowseBusy(), S237IoBlocks(),
          S238ReflowAttrs(), S239BrowseTitle(),
          S240ColDigits(), S241BrowseCaret(),
-         S242ScrollNoDup(), S243ClockHz(), S244MenuStrips()]
+         S242ScrollNoDup(), S243ClockHz(), S244MenuStrips(),
+         S245SettingsValues(), S246ViVisualWalk()]
 
 
 def run(ctx, cases=None):

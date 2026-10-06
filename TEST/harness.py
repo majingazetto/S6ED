@@ -67,7 +67,7 @@ DEFAULT_VARS = [
     ('STTPRF', 1), ('STTWRP', 1), ('STTALN', 1), ('STTCLK', 1),
     ('STTTAB', 1), ('STTEOL', 1), ('STTMKP', 1), ('STTTHM', 1),
     ('STTSHD', 1), ('SHDWOFF', 1), ('SHDWCLR', 1),
-    ('SELANCX', 1), ('SELANCL', 2),
+    ('SELANCX', 1), ('SELANCL', 2), ('VIVLINE', 1),
     ('WINSEL', 1), ('WINRES', 1), ('WINBST', 1),
     ('MNUID', 1), ('MNUSEL', 1),
     ('LOADERR', 1),
@@ -361,6 +361,10 @@ class Session(object):
         if spec['image']:
             # The whole emitted image: nothing may ever write into it.
             a('    dump memory 256 %d %s.image' % (sym['VARS'] - 0x100, label))
+        if spec.get('mainram'):
+            # The whole mapper, every segment at SEG * 16384: enough to read
+            # the document back through the directory (see doc_from_ram).
+            a('    dump "Main RAM" 0 [debug size "Main RAM"] %s.ram' % label)
         if spec['dirseg']:
             # Main RAM exposes every mapper segment at once, so the directory
             # can be walked with the machine untouched -- no banking, no side
@@ -487,7 +491,8 @@ class Session(object):
                     int(v) for v in value.split()]
         for (_, label, spec) in timeline.snaps:
             for kind in ('vram', 'menu', 'screen', 'dir', 'image', 'pal',
-                         'vdp', 'font', 'text', 'pat', 'col', 'patcol'):
+                         'vdp', 'font', 'text', 'pat', 'col', 'patcol',
+                         'ram'):
                 path = os.path.join(self.dir, '%s.%s' % (label, kind))
                 if os.path.exists(path):
                     run.files[(label, kind)] = path

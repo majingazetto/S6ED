@@ -71,8 +71,8 @@ DRWSTAT         LD      A, (MODIFIED)
 
 ; - BLDSTAT ----------------------------
 ; - BUILD DYNAMIC STATUS BAR TEXT IN STATBUF (64 COLS)
-; - LEFT CHANNEL (COLS 0..27): SYSTEM/VI MESSAGES, FILENAME
-; - RIGHT CHANNEL (COLS 28..63): COMPACT FLAGS, VI MODE, LN/COL TELEMETRY
+; - LEFT CHANNEL (COLS 0..33): SYSTEM MESSAGES, THE VI COMMAND LINE
+; - RIGHT CHANNEL (COLS 34..62): MODE, LN/COL; COL 63 STAYS BLANK
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
@@ -87,13 +87,13 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 64 SPACES, FOLLOWED BY NULL TERMINATO
                 XOR     A
                 LD      (STATBUF + SCRCOLS), A ; NULL TERMINATOR AT 64
 
-                ; 2. LEFT CHANNEL: COLS 0..34 (MAX 35 CHARACTERS)
+                ; 2. LEFT CHANNEL: COLS 0..33 (MAX 34 CHARACTERS)
                 LD      DE, STATBUF
                 LD      A, (STATMSG)
                 OR      A
                 JR      Z, .NOSTMSG
                 LD      HL, STATMSG
-                LD      B, 35
+                LD      B, STBRCOL
                 CALL    .CPYMAX
                 JR      .DOLEFT
 
@@ -101,14 +101,15 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 64 SPACES, FOLLOWED BY NULL TERMINATO
                 OR      A
                 JR      Z, .DOLEFT
                 LD      HL, .STROOM     ; "[FILE TOO LARGE]"
-                LD      B, 35
+                LD      B, STBRCOL
                 CALL    .CPYMAX
                 JR      .DOLEFT
 
-.DOLEFT         ; 3. RIGHT CHANNEL AT FIXED OFFSET 35 (COLS 35..62 = 28 CHARS)
-                LD      DE, STATBUF + 35
+.DOLEFT         ; 3. RIGHT CHANNEL, COLS 34..62: IT ENDS WHERE THE CLOCK ON ROW 0
+                ; ENDS, ONE COLUMN (4 PX) SHORT OF THE RIGHT EDGE
+                LD      DE, STATBUF + STBRCOL
 
-                ; A. MODE INDICATOR: 6 CHARS (COLS 35..40)
+                ; A. MODE INDICATOR: 6 CHARS (COLS 34..39)
                 LD      A, (KMAPID)
                 CP      KMVI
                 JR      NZ, .NOTVI
@@ -135,12 +136,12 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 64 SPACES, FOLLOWED BY NULL TERMINATO
                 LD      HL, .STRVII     ; "[INS] "
 .PUTNVI         CALL    .CPY6
 .DONEMOD
-                ; B. 1 SPACE SEPARATOR (COL 41)
+                ; B. 1 SPACE SEPARATOR (COL 40)
                 LD      A, ' '
                 LD      (DE), A
                 INC     DE
 
-                ; C. CURSOR POSITION: 21 CHARS (COLS 42..62)
+                ; C. CURSOR POSITION: 22 CHARS (COLS 41..62)
                 LD      HL, .STRLN      ; "Ln "
                 CALL    .CPY3
                 LD      HL, (DOCLINE)
@@ -156,7 +157,7 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 64 SPACES, FOLLOWED BY NULL TERMINATO
                 LD      HL, .STRCOL     ; " Col "
                 CALL    .CPY5
                 LD      A, (CURX)       ; 1-BASED, UP TO 256: THREE DIGITS,
-                LD      L, A            ; COLUMNS 61..63 (TWO SHOWED COL 128
+                LD      L, A            ; COLUMNS 60..62 (TWO SHOWED COL 128
                 LD      H, 0            ; AS "28" ONCE THE VIEW SCROLLED)
                 INC     HL
                 LD      B, 3

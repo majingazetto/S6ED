@@ -1905,40 +1905,54 @@ ACTVIKIL        CALL    EDKILCHR
 
 
 ; - ACTVIVIS ---------------------------
-; - ENTER CHARACTER VISUAL MODE (VI 'v')
+; - ENTER CHARACTER VISUAL MODE (VI 'v'). IN LINE VISUAL MODE IT SWITCHES
+; - TO CHARACTERS, KEEPING THE ANCHOR; IN CHARACTER MODE IT LEAVES.
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-ACTVIVIS        LD      A, (SELACT)
-                OR      A
-                JP      NZ, ACTVINRM
-                LD      HL, KMAPVIV
-                LD      (KMAPPTR), HL
-                CALL    SELBEG
-                CALL    SELPOST
-                JP      DRWSTAT
-
-
-; --- ACTVILIN                  ----------------------------------------
+ACTVIVIS        LD      B, 0
+                JR      VISMODE
 
 
 ; - ACTVILIN ---------------------------
-; - ENTER LINE VISUAL MODE (VI 'V')
+; - ENTER LINE VISUAL MODE (VI 'V'): WHOLE LINES, FROM COLUMN 0 OF THE
+; - FIRST TO THE LINE BREAK OF THE LAST, WHEREVER THE CURSOR STANDS ON
+; - THEM. IN CHARACTER VISUAL MODE IT SWITCHES TO LINES; IN LINE MODE IT
+; - LEAVES.
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
 ; -
 
-ACTVILIN        LD      A, (SELACT)
+ACTVILIN        LD      B, 1
+                ; FALL THROUGH
+
+
+; - VISMODE ----------------------------
+; - ENTER OR SWITCH VI VISUAL MODE
+; - IN:  B = 0 CHARACTERS, 1 LINES
+; - OUT: NONE
+; - CLOBBERS: ALL
+; -
+
+VISMODE         LD      A, (SELACT)
                 OR      A
-                JP      NZ, ACTVINRM
+                JR      Z, .ENTER
+                LD      A, (VIVLINE)
+                CP      B
+                JP      Z, ACTVINRM     ; THE SAME KEY AGAIN: LEAVE
+                LD      A, B            ; THE OTHER ONE: SWITCH, SAME ANCHOR
+                LD      (VIVLINE), A
+                CALL    SELPOST
+                JP      DRWSTAT
+
+.ENTER          LD      A, B
+                LD      (VIVLINE), A
                 LD      HL, KMAPVIV
                 LD      (KMAPPTR), HL
-                CALL    ACTBOL
                 CALL    SELBEG
-                CALL    ACTEOL
                 CALL    SELPOST
                 JP      DRWSTAT
 
@@ -2076,7 +2090,7 @@ SELEMPTY        LD      HL, (SELSTRL)
 ; - NORMALIZE ANCHOR AND CURSOR TO START/END
 ; - IN:  NONE
 ; - OUT: SELSTRL, SELSTRX, SELENDL, SELENDX
-; - CLOBBERS: AF, DE, HL
+; - CLOBBERS: AF, DE, HL (LINE VISUAL MODE ALSO BANKS PAGE 2: LINELEN)
 ; -
 
 SELNORM         LD      HL, (DOCLINE)
@@ -2111,7 +2125,25 @@ SELNORM         LD      HL, (DOCLINE)
                 LD      DE, KMAPVIV
                 CALL    CMPHLDE
                 RET     NZ
-                ; IN VI VISUAL MODE, SELECTION IS INCLUSIVE:
+                LD      A, (VIVLINE)
+                OR      A
+                JR      Z, .INCL
+                ; LINE VISUAL MODE: COLUMN 0 OF THE FIRST LINE TO ONE PAST THE
+                ; LENGTH OF THE LAST, I.E. ITS LINE BREAK (SELEOL TURNS THAT
+                ; INTO COLUMN 0 OF THE NEXT LINE FOR COPY AND DELETE)
+                XOR     A
+                LD      (SELSTRX), A
+                PUSH    BC              ; LINELEN CLOBBERS BC
+                LD      HL, (SELENDL)
+                CALL    LINELEN
+                POP     BC
+                CP      MAXCOLS
+                JR      NC, .LNEND
+                INC     A
+.LNEND          LD      (SELENDX), A
+                RET
+
+.INCL           ; IN VI VISUAL MODE, SELECTION IS INCLUSIVE:
                 ; INCLUDE THE FINAL CHARACTER IN THE RANGE
                 LD      A, (SELENDX)
                 CP      MAXCOLS
