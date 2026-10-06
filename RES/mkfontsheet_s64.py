@@ -139,7 +139,10 @@ def build_variants(font: bytes) -> Canvas:
     for y in (ROW1_Y, ROW2_Y):
         c.rect(0, y - 1, SCREEN_W, 1, CHROME)
         c.rect(0, y + QUAD_H, SCREEN_W, 1, CHROME)
-        c.rect(QUAD_W - 1, y, 1, QUAD_H, CHROME)
+        # No vertical divider at x = QUAD_W - 1: that is column 7 of glyph
+        # column 31, and a divider there painted over '_', the upper half
+        # block and every glyph reaching the right edge (found 2026-10-06 by
+        # mkfont62's sheet round trip).
 
     y = LEGEND_Y
     for line in LEGEND:

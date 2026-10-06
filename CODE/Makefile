@@ -4,7 +4,7 @@
 #	*************************************************************************
 
 .PHONY: build build-s6 build-s2 build-s62 dsk dsk-s2 dsk-s62 s6 s2 s62 clean check gate test \
-        test-s2 selftest testall \
+        test-s2 test-s62 selftest testall \
         run run-s6 run128 run-s6-128 run-nextor debug \
         run-s2 run-s2-1mb run-s2-msx2 run-s2-msx2-128 \
         run-s62 run-s62-128
@@ -100,7 +100,7 @@ clean:
 	@$(RM) -R $(OUTPUT) $(DATFILE) $(LSTFILE) $(SYMFILE) $(DSKFILE) $(FNTFILE) \
 		$(OUTPUT_S2) $(DATFILE_S2) $(LSTFILE_S2) $(SYMFILE_S2) $(DSKFILE_S2) $(FNTFILE_S2) \
 		$(OUTPUT_S62) $(DATFILE_S62) $(LSTFILE_S62) $(SYMFILE_S62) $(DSKFILE_S62) $(FNTFILE_S62) \
-		$(MANUAL)
+		$(MANUAL) $(FONTS62)
 
 # `build` means the PROJECT, every target.  It used to mean S6ED alone while
 # `clean` removed the artefacts of both, so `make clean build` left the tree
@@ -140,6 +140,12 @@ dsk: $(DSKFILE)
 # converted to the MSX charset with CR LF on the way to the disks: shipped as
 # UTF-8 every accented letter showed as two glyphs.  utf8msx refuses any
 # character the MSX charset has no code for, so the build fails instead.
+# S62ED's example fonts (A:\TOOLS\FONTS on the disks), built further down.
+FONTS62DIR		= $(RES_DIR)/FONTS62
+MKFONT62		= python3 $(RES_DIR)/mkfont62.py
+MKFONT62DEP		= $(RES_DIR)/mkfont62.py $(RES_DIR)/mkfontsheet_s64.py $(RES_DIR)/FONT_BIOS8X8.BIN
+FONTS62			= CGA.FNT CPC.FNT BIOS.FNT
+
 MANUALSRC		= ../DOC/SXED.TXT
 MANUAL			= SXED_MSX.TXT
 UTF8MSX			= python3 ../../msxtools/scripts/utf8msx.py
@@ -153,10 +159,11 @@ DSKTOOLS		= $(OUTPUT) $(DATFILE) $(FNTFILE) S6ED.CFG \
 DSKCONT			= $(DSKTOOLS) $(MANUAL) TEST.TXT TEST_S2.TXT TEST_S62.TXT \
 			  LOCAL_S6.CFG LOCAL_S2.CFG LOCAL_S62.CFG AUTOEXEC.BAT
 
-$(DSKFILE): $(DSKCONT)
+$(DSKFILE): $(DSKCONT) $(FONTS62)
 	@cp $(DSKBASE) $(DSKFILE)
 	@$(DSKFAT) $(DSKFILE) add . AUTOEXEC.BAT
 	@$(DSKFAT) $(DSKFILE) add TOOLS $(DSKTOOLS)
+	@$(DSKFAT) $(DSKFILE) add TOOLS/FONTS $(FONTS62)
 	@$(DSKFAT) $(DSKFILE) add DEV $(MANUAL)=SXED.TXT TEST.TXT TEST_S2.TXT TEST_S62.TXT \
 		LOCAL_S6.CFG=S6ED.CFG LOCAL_S2.CFG=S2ED.CFG LOCAL_S62.CFG=S62ED.CFG
 
@@ -207,20 +214,32 @@ $(DATFILE_S62): $(OUTPUT_S62)
 $(OUTPUT_S62): $(ALL_SOURCES_GEN)
 	@$(ASM) --lst=$(LSTFILE_S62) --sym=$(SYMFILE_S62) $(INCLUDES_S62) $(DEFINES) $(SRC_DIR)/$(SOURCE_S62)
 
-$(FNTFILE_S62): $(RES_DIR)/FONTS_S62.BIN
-	@cp $< $@
+# S62ED's fonts are built from other machines' raw 8x8 fonts by mkfont62,
+# which remaps them to the MSX order by meaning, composes the accented
+# letters a source lacks and writes the four weights (RES/FONTS62/README.md
+# has the sources and their credits). The IBM CGA is the default S62ED.FNT
+# until the commissioned face arrives; all three ship in A:\TOOLS\FONTS.
+CGA.FNT: $(FONTS62DIR)/CGA-TH.F08 $(FONTS62DIR)/CGA.F08 $(MKFONT62DEP)
+	@$(MKFONT62) import --src $(FONTS62DIR)/CGA-TH.F08 --bold-src $(FONTS62DIR)/CGA.F08 --cp cp437 --out $@ >/dev/null
 
-$(RES_DIR)/FONTS_S62.BIN: $(RES_DIR)/FONT_BIOS8X8.BIN
-	cat $< $< $< $< > $@
+CPC.FNT: $(FONTS62DIR)/CPC464.F08 $(MKFONT62DEP)
+	@$(MKFONT62) import --src $< --cp cpc --out $@ >/dev/null
+
+BIOS.FNT: $(RES_DIR)/FONT_BIOS8X8.BIN $(MKFONT62DEP)
+	@$(MKFONT62) import --src $< --cp msx --out $@ >/dev/null
+
+$(FNTFILE_S62): CGA.FNT
+	@cp $< $@
 
 dsk-s62: $(DSKFILE_S62)
 
 DSKCONT_S62		= $(OUTPUT_S62) $(DATFILE_S62) $(FNTFILE_S62) $(CFGFILE_S62)
 
-$(DSKFILE_S62): $(DSKCONT_S62) $(MANUAL) TEST_S62.TXT AUTOEXEC_S62.BAT LOCAL_S62.CFG
+$(DSKFILE_S62): $(DSKCONT_S62) $(FONTS62) $(MANUAL) TEST_S62.TXT AUTOEXEC_S62.BAT LOCAL_S62.CFG
 	@cp $(DSKBASE) $(DSKFILE_S62)
 	@$(DSKFAT) $(DSKFILE_S62) add . AUTOEXEC_S62.BAT=AUTOEXEC.BAT
 	@$(DSKFAT) $(DSKFILE_S62) add TOOLS $(DSKCONT_S62)
+	@$(DSKFAT) $(DSKFILE_S62) add TOOLS/FONTS $(FONTS62)
 	@$(DSKFAT) $(DSKFILE_S62) add DEV $(MANUAL)=SXED.TXT TEST_S62.TXT=TEST.TXT LOCAL_S62.CFG=S62ED.CFG
 
 run-s62-128: build-s62 dsk-s62
@@ -318,6 +337,10 @@ gate:
 # Suite S2: the MSX1 / SCREEN 2 gate, on Custom_MSX1_DOS2 under Nextor.
 test-s2:
 	@$(TESTDIR)/runtests.py --s2
+
+# Suite S62: the 62-column Screen 6 gate, on the 128 kB NMS 8250.
+test-s62:
+	@$(TESTDIR)/runtests.py --s62
 
 test:
 	@$(TESTDIR)/runtests.py
