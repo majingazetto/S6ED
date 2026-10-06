@@ -640,13 +640,17 @@ DORPLAL         LD      A, (SRCHLEN)
                 LD      HL, 0
                 LD      (RPLCNT), HL
                 LD      (DOCLINE), HL
+                XOR     A
+                LD      (RPLREC), A     ; NO LINE RECORDED YET
 
 .ALLLINE        LD      HL, (DOCLINE)
                 LD      DE, (TOTLINES)
                 CALL    CMPHLDE
-                JR      NC, .ALLDONE
+                JP      NC, .ALLDONE
 
                 CALL    LINEREAD
+                XOR     A
+                LD      (RPLLIN), A     ; THIS LINE IS NOT RECORDED YET
                 LD      C, 0            ; SCAN FROM COL 0 OF THIS LINE
 .REPLIN         CALL    SCANLNF
                 JR      C, .NEXTLIN     ; NO MORE MATCHES ON THIS LINE
@@ -680,16 +684,33 @@ DORPLAL         LD      A, (SRCHLEN)
                 JR      .NEXTLIN        ; WOULD OVERFLOW: SKIP
 .ALOK
 
-                ; UNDO RECORD: FIRST REPLACEMENT IN GROUP IS MOD, SUBSEQUENT ARE CHAINED
+                ; UNDO: ONE RECORD PER LINE, TAKEN BEFORE ITS FIRST
+                ; REPLACEMENT, THE FIRST OF THE GROUP MOD AND THE REST CHAINED.
+                ; IT USED TO BE ONE PER OCCURRENCE AND THE GROUP HAD NO CAP:
+                ; PAST UNDOGMAX THE RING EVICTED ITS OWN HEAD AND CTRL+Z
+                ; REVERTED ONLY THE LAST FEW. A GROUP GOES WHOLE OR NOT AT ALL
+                ; (UNDOSEL'S RULE): THE LINE THAT WOULD MAKE IT UNDOGMAX + 1
+                ; DROPS THE HISTORY, AND NOTHING MORE IS RECORDED.
+                LD      A, (RPLLIN)
+                OR      A
+                JR      NZ, .RECD       ; THIS LINE IS ALREADY RECORDED
+                INC     A
+                LD      (RPLLIN), A
                 PUSH    BC
-                LD      HL, (RPLCNT)
-                LD      A, H
-                OR      L
+                LD      HL, RPLREC
+                LD      A, (HL)         ; A = RECORDS ALREADY IN THE GROUP
+                CP      UNDOGMAX
+                JR      C, .GRPOK
+                CALL    UNDOINIT        ; TOO MANY LINES TO KEEP: FORGET IT
+                JR      .RECDP
+.GRPOK          INC     (HL)
+                OR      A
                 LD      A, UNDOT_MOD
                 JR      Z, .FSTREC
                 OR      UNDOF_CHN       ; CHAIN INTO SINGLE UNDO TRANSACTION
 .FSTREC         CALL    UNDOREC
-                POP     BC
+.RECDP          POP     BC
+.RECD
 
                 ; SPLICE LINE
                 PUSH    BC
@@ -716,7 +737,7 @@ DORPLAL         LD      A, (SRCHLEN)
                 LD      HL, RPLCLEN
                 ADD     A, (HL)
                 LD      C, A
-                JR      .REPLIN
+                JP      .REPLIN
 
 .NEXTLIN        LD      HL, (DOCLINE)
                 INC     HL

@@ -737,6 +737,10 @@ EDOVRCHR        CALL    EDINSCHR        ; FOR NOW, ROUTE TO INSERT
 ; -
 
 REFLOW          LD      (RFLINE), HL
+                XOR     A               ; THE FIRST PASS
+                JR      .RFSET
+.RFAGN          LD      A, 1            ; EVERY LATER ONE
+.RFSET          LD      (RFPASS), A
 
 .RFLOOP         ; 1. CHECK IF NEXT LINE EXISTS (L + 1 < TOTLINES)
                 LD      HL, (RFLINE)
@@ -751,8 +755,15 @@ REFLOW          LD      (RFLINE), HL
                 OR      A
                 JR      NZ, .NOTEMP
 
-                ; LINE L+1 IS EMPTY (LEN == 0):
-                ; DELETE THE EMPTY LINE AND STOP (PARAGRAPH BOUNDARY).
+                ; LINE L+1 IS EMPTY (LEN == 0). ON THE FIRST PASS IT IS THE
+                ; LINE THE KEY JOINS (BACKSPACE AT ITS COLUMN 0, DELETE AT THE
+                ; END OF L), SO IT GOES. ON A LATER ONE IT IS THE BLANK LINE
+                ; BETWEEN PARAGRAPHS, WHERE THE CASCADE STOPS -- AND IT STAYS:
+                ; DELETING IT THERE MERGED THE NEXT PARAGRAPH'S SEPARATOR AWAY.
+                LD      A, (RFPASS)
+                OR      A
+                RET     NZ              ; PARAGRAPH BOUNDARY: DONE
+                ; DELETE THE EMPTY LINE AND STOP.
                 ; A REFLOW MOVES TEXT ACROSS LINES AND IS NOT RECORDED: EACH
                 ; BRANCH THAT WRITES DROPS THE HISTORY FIRST, WHICH WOULD
                 ; OTHERWISE NAME LINES THIS IS ABOUT TO SHIFT
@@ -974,7 +985,7 @@ REFLOW          LD      (RFLINE), HL
                 LD      (TOTLINES), HL
                 LD      A, #FF
                 LD      (MODIFIED), A
-                JP      .RFLOOP
+                JP      .RFAGN
 
 .RFALL          ; ENTIRE LINE L+1 FITS ON LINE L!
                 CALL    UNDOINIT
@@ -1049,13 +1060,13 @@ REFLOW          LD      (RFLINE), HL
                 LD      (MODIFIED), A
 
                 ; DO NOT INCREMENT RFLINE; REPEAT FOR SAME RFLINE
-                JP      .RFLOOP
+                JP      .RFAGN
 
 .RFNEXT         ; ADVANCE TO NEXT LINE (L = L + 1)
                 LD      HL, (RFLINE)
                 INC     HL
                 LD      (RFLINE), HL
-                JP      .RFLOOP
+                JP      .RFAGN
 
 ; --- RECBL80                   ----------------------------------------
 

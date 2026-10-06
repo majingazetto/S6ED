@@ -758,7 +758,8 @@ ACTDELLN        CALL    UNDOCLS
                 JR      C, .DLOK
                 DEC     HL
                 LD      (DOCLINE), HL
-.DLOK           CALL    SETCURY
+.DLOK           LD      HL, (DOCLINE)   ; DELETING THE LAST LINE FROM ROW 0
+                CALL    SHOWLN          ; LEFT DOCLINE ABOVE TOPLINE: CURY #FF
                 XOR     A
                 LD      (CURX), A
                 CALL    REDRAW
