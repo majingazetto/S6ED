@@ -614,10 +614,11 @@ def check_build_symmetry(ctx):
     if build is None:
         bad.append('Makefile has no build target')
     else:
-        for want in ('build-s6', 'build-s2'):
+        for want in ('build-s6', 'build-s2', 'build-s62'):
             if not re.search(r'\b%s\b' % want, build):
                 bad.append('build does not reach %s' % want)
-    for name, var in (('build-s6', 'OUTPUT'), ('build-s2', 'OUTPUT_S2')):
+    for name, var in (('build-s6', 'OUTPUT'), ('build-s2', 'OUTPUT_S2'),
+                      ('build-s62', 'OUTPUT_S62')):
         r = rule(name)
         if r is None:
             bad.append('Makefile has no %s target' % name)
@@ -627,22 +628,24 @@ def check_build_symmetry(ctx):
     if clean is None:
         bad.append('Makefile has no clean target')
     else:
-        for var in ('OUTPUT', 'OUTPUT_S2'):
+        for var in ('OUTPUT', 'OUTPUT_S2', 'OUTPUT_S62'):
             if '$(%s)' % var not in clean:
                 bad.append('clean does not remove $(%s)' % var)
-    # The S6ED disk carries S2ED too, so one image runs both editors on an
-    # MSX2.  Nothing in a build failure would reveal a tidied-up DSKCONT --
+    # The S6ED disk carries S2ED and S62ED too, so one image runs all three
+    # editors on an MSX2.  Nothing in a build failure would reveal a tidied-up DSKCONT --
     # the disk would simply come out with one editor on it.
     # DSKTOOLS is what goes into A:\TOOLS, the directory on the PATH: an
     # S2ED.COM anywhere else on the disk would not be found from A:\DEV.
     m = re.search(r'^DSKTOOLS\s*=(.*?)^\s*$', text, re.M | re.S)
     if m is None:
         bad.append('Makefile has no DSKTOOLS')
-    elif '$(OUTPUT_S2)' not in m.group(1):
-        bad.append('the S6ED disk does not carry $(OUTPUT_S2) in TOOLS')
+    else:
+        for var in ('OUTPUT_S2', 'OUTPUT_S62'):
+            if '$(%s)' % var not in m.group(1):
+                bad.append('the S6ED disk does not carry $(%s) in TOOLS' % var)
     return Check('build-symmetry', not bad, '; '.join(bad) if bad else
-                 'build reaches both targets, clean removes what both '
-                 'produce, and the S6ED disk carries both')
+                 'build reaches every target, clean removes what each '
+                 'produces, and the S6ED disk carries all three')
 
 
 def check_statbuf_term(ctx):

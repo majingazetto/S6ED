@@ -99,14 +99,15 @@ all: build dsk
 clean:
 	@$(RM) -R $(OUTPUT) $(DATFILE) $(LSTFILE) $(SYMFILE) $(DSKFILE) $(FNTFILE) \
 		$(OUTPUT_S2) $(DATFILE_S2) $(LSTFILE_S2) $(SYMFILE_S2) $(DSKFILE_S2) $(FNTFILE_S2) \
-		$(OUTPUT_S62) $(DATFILE_S62) $(LSTFILE_S62) $(SYMFILE_S62) $(DSKFILE_S62) $(FNTFILE_S62)
+		$(OUTPUT_S62) $(DATFILE_S62) $(LSTFILE_S62) $(SYMFILE_S62) $(DSKFILE_S62) $(FNTFILE_S62) \
+		$(MANUAL)
 
-# `build` means the PROJECT, both targets.  It used to mean S6ED alone while
+# `build` means the PROJECT, every target.  It used to mean S6ED alone while
 # `clean` removed the artefacts of both, so `make clean build` left the tree
 # half built -- and the S2 half of the harness then died on a .sym that did
 # not exist.  The per-target names stay available, and the runners use them so
 # that running one editor still assembles only that one.
-build: build-s6 build-s2
+build: build-s6 build-s2 build-s62
 
 build-s6: $(OUTPUT) $(DATFILE) $(FNTFILE)
 
@@ -130,19 +131,34 @@ dsk: $(DSKFILE)
 # the current directory; this layout keeps it from hiding anything again.
 # dsktool knows only the root, so the directories are written by dskfat.
 #
-# The S6ED disk carries S2ED too.  An MSX2 runs both editors, so one image
-# lets them be compared side by side without swapping disks: boot goes to
-# S6ED through AUTOEXEC.BAT, and `S2ED TEST_S2.TXT` starts the other.
-MANUAL			= ../DOC/SXED.TXT
+# The S6ED disk carries S2ED and S62ED too.  An MSX2 runs all three editors,
+# so one image lets them be compared side by side without swapping disks:
+# boot goes to S6ED through AUTOEXEC.BAT, and `S2ED TEST_S2.TXT` or
+# `S62ED TEST_S62.TXT` starts the others.
+#
+# The manual is kept in UTF-8 in DOC/ so it reads and diffs on the host, and
+# converted to the MSX charset with CR LF on the way to the disks: shipped as
+# UTF-8 every accented letter showed as two glyphs.  utf8msx refuses any
+# character the MSX charset has no code for, so the build fails instead.
+MANUALSRC		= ../DOC/SXED.TXT
+MANUAL			= SXED_MSX.TXT
+UTF8MSX			= python3 ../../msxtools/scripts/utf8msx.py
+
+$(MANUAL): $(MANUALSRC)
+	@$(UTF8MSX) $< $@
+
 DSKTOOLS		= $(OUTPUT) $(DATFILE) $(FNTFILE) S6ED.CFG \
-			  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2)
-DSKCONT			= $(DSKTOOLS) $(MANUAL) TEST.TXT TEST_S2.TXT LOCAL_S6.CFG LOCAL_S2.CFG AUTOEXEC.BAT
+			  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2) \
+			  $(OUTPUT_S62) $(DATFILE_S62) $(FNTFILE_S62) $(CFGFILE_S62)
+DSKCONT			= $(DSKTOOLS) $(MANUAL) TEST.TXT TEST_S2.TXT TEST_S62.TXT \
+			  LOCAL_S6.CFG LOCAL_S2.CFG LOCAL_S62.CFG AUTOEXEC.BAT
 
 $(DSKFILE): $(DSKCONT)
 	@cp $(DSKBASE) $(DSKFILE)
 	@$(DSKFAT) $(DSKFILE) add . AUTOEXEC.BAT
 	@$(DSKFAT) $(DSKFILE) add TOOLS $(DSKTOOLS)
-	@$(DSKFAT) $(DSKFILE) add DEV $(MANUAL)=SXED.TXT TEST.TXT TEST_S2.TXT LOCAL_S6.CFG=S6ED.CFG LOCAL_S2.CFG=S2ED.CFG
+	@$(DSKFAT) $(DSKFILE) add DEV $(MANUAL)=SXED.TXT TEST.TXT TEST_S2.TXT TEST_S62.TXT \
+		LOCAL_S6.CFG=S6ED.CFG LOCAL_S2.CFG=S2ED.CFG LOCAL_S62.CFG=S62ED.CFG
 
 # -	 S2 Targets --------------------------------------------------------------
 

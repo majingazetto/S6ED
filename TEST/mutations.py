@@ -975,8 +975,18 @@ MUTATIONS = [
         'why': 'the S6ED disk stops carrying S2ED, so the one image that runs '
                'both editors on an MSX2 quietly goes out with one',
         'file': 'Makefile',
-        'old': '\t\t\t  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2)\n',
-        'new': '\t\t\t  $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2)\n',
+        'old': '\t\t\t  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2) \\\n',
+        'new': '\t\t\t  $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2) \\\n',
+        'filter': 'T0',
+        'expect_static': ['build-symmetry'],
+    },
+    {
+        'name': 't0-dsk-nos62',
+        'why': 'the S6ED disk stops carrying S62ED, so the image that compares '
+               'the three editors on an MSX2 goes out with two',
+        'file': 'Makefile',
+        'old': '\t\t\t  $(OUTPUT_S62) $(DATFILE_S62) $(FNTFILE_S62) $(CFGFILE_S62)\n',
+        'new': '\t\t\t  $(DATFILE_S62) $(FNTFILE_S62) $(CFGFILE_S62)\n',
         'filter': 'T0',
         'expect_static': ['build-symmetry'],
     },
@@ -988,8 +998,18 @@ MUTATIONS = [
         'why': 'make build assembles S6ED alone again while clean removes '
                'both, so clean+build leaves the tree half built',
         'file': 'Makefile',
-        'old': 'build: build-s6 build-s2',
-        'new': 'build: build-s6',
+        'old': 'build: build-s6 build-s2 build-s62\n',
+        'new': 'build: build-s6 build-s62\n',
+        'filter': 'T0',
+        'expect_static': ['build-symmetry'],
+    },
+    {
+        'name': 't0-build-nos62',
+        'why': 'make build stops assembling S62ED while clean removes it, so '
+               'clean+build leaves the tree without the third editor',
+        'file': 'Makefile',
+        'old': 'build: build-s6 build-s2 build-s62\n',
+        'new': 'build: build-s6 build-s2\n',
         'filter': 'T0',
         'expect_static': ['build-symmetry'],
     },
