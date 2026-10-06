@@ -4,7 +4,7 @@ SXED Screen X Text Editor v0.1
 
 S6ED  - Screen 6 text editor for MSX2, 80 columns
 S62ED - Screen 6 text editor for MSX2, 62 columns
-S2ED  - Screen 2 text editor for MSX1, 64 columns
+S2ED  - Screen 2 text editor for MSX1, 62 columns
 
 Font by Miguel A. Fernandez
 --------------------------------------------------------------
@@ -127,7 +127,7 @@ The SXED family has three members:
 * S2ED - Screen 2 editor for MSX1/2/2+/turbo-R (TMS9918).
 
     - SCREEN 2 driven as a bitmap: 256x192, 16 fixed colors.
-    - 64 columns x 22 rows of text (plus menu/status bars).
+    - 62 columns x 22 rows of text (plus menu/status bars).
     - Hand-drawn 4x8 font, two characters per 8x8 cell.
     - 6 color themes mapping the 16 TMS9918 colors.
     - Program: S2ED.COM
@@ -241,7 +241,7 @@ The screen has three areas:
                  menus, the current file name and the clock.
     Text area    [S6ED]  24 rows x 80 columns.
                  [S62ED] 24 rows x 62 columns.
-                 [S2ED]  22 rows x 64 columns.
+                 [S2ED]  22 rows x 62 columns.
     Last row     Status bar.
 
 The menu bar shows the base name of the current file (up to
@@ -336,7 +336,7 @@ Two wrap modes, toggled with Ctrl+W or WRAP= in the CFG:
                and deleting pulls words back up (reflow).
 
 The margin is the text width: the screen width by default
-(80 / 62 / 64) or the TEXTWIDTH= value (0 = no margin, i.e.
+(80 / 62 / 62) or the TEXTWIDTH= value (0 = no margin, i.e.
 DEV mode). In Vi mode: ":set wrap", ":set nowrap",
 ":set tw=N".
 

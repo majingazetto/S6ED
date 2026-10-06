@@ -2,7 +2,8 @@
 ;                                       * RENDERER (SCREEN 2 / TMS9918)        *
 ;                                       ****************************************
 ;
-; 64 COLS X 24 ROWS (32 CELLS X 24 ROWS OF 8X8 PATTERNS).
+; 64 COLS X 24 ROWS (32 CELLS X 24 ROWS OF 8X8 PATTERNS). A TEXT ROW IS A
+; GUTTER CELL (TXCELL0) AND 62 TEXT COLUMNS IN THE 31 CELLS AFTER IT.
 ; EACH CELL HOLDS TWO 4X8 GLYPHS FROM FONT4H, THE RIGHT ONE ROTATED INTO THE
 ; LOW NIBBLE (CELLPAT). COLORS COME FROM THE TMS9918 COLOR TABLE (8 BYTES PER CELL, ONE PER
 ; SCANLINE), BUT THE SHADOW KEEPS ONE BYTE PER CELL IN COLMAP AND COLDUMP
@@ -183,7 +184,7 @@ CLRROW          PUSH    BC
 
 
 ; - COMROW -----------------------------
-; - COMPOSES ONE ROW (32 CELLS / 64 COLS) INTO PATSHAD AND COLMAP
+; - COMPOSES ONE ROW (GUTTER + 31 CELLS / 62 COLS) INTO PATSHAD AND COLMAP
 ; - IN:  B = SCREEN ROW (0..23), WORKBUF HOLDS LINE RECORD
 ; - OUT: NONE
 ; - CLOBBERS: AF, BC, DE, HL, IX, IY
@@ -210,7 +211,17 @@ COMROW          LD      A, B
                 PUSH    HL
                 POP     IY              ; IY = COLMAP + ROW * 32
 
-                LD      B, 0            ; B = CELL INDEX (0..31)
+                ; THE GUTTER: BLANK, IN THE DOCUMENT'S COLOR
+                LD      B, TXCELL0
+.GUTLP          PUSH    BC
+                LD      A, ' '
+                LD      C, A
+                LD      DE, 0
+                CALL    COMCELL
+                POP     BC
+                DJNZ    .GUTLP
+
+                LD      B, 0            ; B = TEXT CELL INDEX (0..30)
 
 .CELLP          ; GET LEFT CHARACTER AND ATTRIBUTE (COL = LEFTCOL + 2*B)
                 LD      A, B
@@ -270,7 +281,7 @@ COMROW          LD      A, B
                 POP     BC
                 INC     B
                 LD      A, B
-                CP      32
+                CP      TEXTCOLS / 2
                 JR      NZ, .CELLP
                 RET
 

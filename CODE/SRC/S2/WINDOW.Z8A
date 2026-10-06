@@ -907,10 +907,10 @@ DOABT           LD      A, 6
 
 .TITABT         DEFM    "About S2ED", 0
 .ABTTBL         DEFW    .STRHDR, .STRSUB, .STRVER, .STRDSP, .STRFNT, .STRMEM
-.STRHDR         DEFM    "S2ED - MSX1 64-Col", 0
+.STRHDR         DEFM    "S2ED - MSX1 62-Col", 0
 .STRSUB         DEFM    "Text Editor", 0
 .STRVER         DEFB    "Version ", VERSION.MAJOR, '.', VERSION.MINOR, 0
-.STRDSP         DEFM    "Display: 64x24", 0
+.STRDSP         DEFM    "Display: 62x22", 0
 .STRFNT         DEFM    "Font: 4x8 custom", 0
 .STRMEM         DEFM    "Memory: DOS2/Nextor", 0
 .BTNOK          DEFM    "[  OK  ]", 0

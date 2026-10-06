@@ -463,7 +463,8 @@ DRWCUR          PUSH    AF
                 JR      C, .OFFSCR      ; CURX < LEFTCOL
                 CP      TEXTCOLS
                 JR      NC, .OFFSCR     ; CURX >= LEFTCOL + TEXTCOLS
-                LD      C, A            ; C = SCREEN_X
+                ADD     A, TXCOL0
+                LD      C, A            ; C = SCREEN_X, PAST THE GUTTER
 
                 CALL    VIDBANK
 
@@ -504,10 +505,11 @@ SELXOR          LD      A, E
                 PUSH    AF              ; SAVE COLUMN COUNT
                 CALL    VIDBANK
 
-                LD      A, B
-                INC     A               ; SCREEN ROW = B + 1 (1..22)
-                LD      C, D            ; C = FIRST COLUMN
-                LD      H, A            ; H = SCREEN ROW
+                LD      H, B
+                INC     H               ; H = SCREEN ROW = B + 1 (1..22)
+                LD      A, D
+                ADD     A, TXCOL0
+                LD      C, A            ; C = FIRST SCREEN COLUMN, PAST THE GUTTER
                 POP     AF
                 LD      B, A            ; B = COLUMN COUNT
                 CALL    PATINV
