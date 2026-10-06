@@ -2845,7 +2845,7 @@ class D8Accents(Case):
     # case is deterministic by construction instead of by luck.  That is
     # harness work and is not done.
     GRAPH_ROW = 'AEIOUNW1/'
-    GRAPH_GAPS = (0.029, 0.031, 0.037)
+    GRAPH_GAPS = (0.035, 0.041, 0.049)  # MEASURED 2026-10-06 (RC1 QUEUE)
     GRAPH_PASSES = len(GRAPH_GAPS)
 
     def timeline(self, ctx, variant=None):
@@ -6604,8 +6604,10 @@ class R1FreeListCompact(Case):
         t.press('Y', mods=['CTRL'])
         t.wait(1.0)
         t.snap('deleted')
+        t.snap('c0', at='SEGCOMP')
+        t.snap('c1', at='SEGCOMP.SCANDON')
         t.text('X')                     # 17 characters: a 68-byte record
-        t.wait(15.0)                    # SEGCOMP + DIRUPDOF over 453 lines
+        t.wait(15.0)                    # SEGCOMP over a full segment
         t.snap('grown')
         # Two new lines at the end of it. The first takes the one record
         # on the free list; the second finds the list empty and the segment
@@ -6631,6 +6633,8 @@ class R1FreeListCompact(Case):
         # is retired onto the -- just emptied -- free list.
         want_off = (SEG_FULL - 2) * 36 + 68
         off = run.var('grown', 'LINEOFF')
+        t0, t1 = run.var('c0', 'EMUTUS'), run.var('c1', 'EMUTUS')
+        comp_ms = round((t1 - t0) / 1000.0, 1) if None not in (t0, t1) else None
         return [
             Check('R1/boot', run.var('boot', 'LINEOFF') == SEG_FULL * 36,
                   'LINEOFF %s after the load (want %d)'
@@ -6639,6 +6643,9 @@ class R1FreeListCompact(Case):
                   run.var('grown', 'TOTLINES') == SEG_FULL - 2,
                   'LINEOFF %s (want %d), TOTLINES %s after the growth'
                   % (off, want_off, run.var('grown', 'TOTLINES'))),
+            Check('R1/fast', comp_ms is not None and comp_ms < 1500,
+                  'SEGCOMP over the full segment: %s ms (three passes; the '
+                  'directory search per moved record took ~4,200)' % comp_ms),
             Check('R1/freelist', run.var('grown', 'FREEHD') != 0xFF and
                   run.var('grown', 'FREEOF') == 0,
                   'FREEHD %s FREEOF %s: the retired record, slid to offset 0'
@@ -7328,6 +7335,367 @@ class Q6VdpWaitJiffy(Case):
                   % (ticks, (t1 - t0) / 1e6, want, hz)),
         ]
 
+# --- V1-V3  MINOR DEFECTS FROM THE RC1 REVIEW (2026-10-06) -------------
+
+
+class V1ViLeader(Case):
+    name = 'V1-vi-leader'
+    desc = 'a Vi leader that does not complete (d, then j) still runs the second key'
+    origin = ('2026-10-06 review: DISPKEY kept the pending leader in B, which the '
+              'keymap scan reads as the modifiers, so MODNONE / MODCTRL keys '
+              'after a cancelled leader were swallowed')
+
+    def config(self, ctx, variant=None):
+        return DEFAULT_CFG.replace('PROFILE=STD', 'PROFILE=VI')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE 0', 'LINE 1', 'LINE 2'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('D')
+        t.press('J')
+        t.wait(0.5)
+        t.snap('after')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        return [Check('V1/moved', run.var('after', 'DOCLINE') == 1 and
+                      run.var('after', 'TOTLINES') == 3,
+                      'DOCLINE %s, TOTLINES %s after d, j (want 1, 3)'
+                      % (run.var('after', 'DOCLINE'), run.var('after', 'TOTLINES')))]
+
+
+class V2WrapSelRoom(Case):
+    name = 'V2-wrapsel-room'
+    desc = ('MARKUP=MD: Ctrl+B on a selection of a line too long for the '
+            'delimiters leaves it alone instead of dropping its tail')
+    origin = ('2026-10-06 review: WRAPSEL called WBINS with no room check, so '
+              'a 252-255 character line lost its last characters')
+    LINE = ''.join(chr(65 + i % 26) for i in range(254))
+
+    def config(self, ctx, variant=None):
+        return DEFAULT_CFG.replace('MARKUP=OFF', 'MARKUP=MD')
+
+    def fixture(self, ctx, variant=None):
+        return crlf([self.LINE, 'SECOND'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('RIGHT', mods=['SHIFT'], repeat=2)
+        t.press('B', mods=['CTRL'])
+        t.wait(1.0)
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        want = crlf([self.LINE, 'SECOND'])
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        return [Check('V2/content', got == want, disk_diff(got, want))]
+
+
+class V3InsDelimRoom(Case):
+    name = 'V3-insdelim-room'
+    desc = ('MARKUP=MD: Ctrl+B with no selection on a nearly full line inserts '
+            'nothing and leaves the cursor where it was')
+    origin = ('2026-10-06 review: INSDELIM inserted what fitted of "****" and '
+              'stepped the cursor back by two anyway')
+    LINE = ''.join(chr(65 + i % 26) for i in range(253))
+
+    def config(self, ctx, variant=None):
+        return DEFAULT_CFG.replace('MARKUP=OFF', 'MARKUP=MD')
+
+    def fixture(self, ctx, variant=None):
+        return crlf([self.LINE, 'SECOND'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('RIGHT', repeat=3)
+        t.press('B', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('after')
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        want = crlf([self.LINE, 'SECOND'])
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        return [
+            Check('V3/cursor', run.var('after', 'CURX') == 3,
+                  'CURX %s after Ctrl+B (want 3)' % run.var('after', 'CURX')),
+            Check('V3/content', got == want, disk_diff(got, want)),
+        ]
+
+
+class W1TabRun(Case):
+    name = 'W1-tab-run'
+    desc = 'Tab inserts its spaces as one run: one read, one write, one repaint'
+    origin = ('2026-10-06 review: ACTTAB called EDINSCHR once per space, each '
+              'with its own LINEREAD, LINEWRT and RENDIFF')
+    # Measured 2026-10-06 on the NMS 8250 with 8 spaces: 11.9 ms as one run,
+    # 121.9 ms through EDINSCHR. 40 ms tells the two apart with margin.
+    TIME_MS = 40.0
+
+    def config(self, ctx, variant=None):
+        return DEFAULT_CFG.replace('TABWIDTH=4', 'TABWIDTH=8')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['ABC', 'SECOND'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.snap('t0', at='ACTTAB')
+        t.snap('t1', at='DRWSTAT')
+        t.press('TAB')
+        t.wait(1.0)
+        t.press('S', mods=['CTRL'])
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        t0, t1 = run.var('t0', 'EMUTUS'), run.var('t1', 'EMUTUS')
+        ms = (t1 - t0) / 1000.0 if None not in (t0, t1) else None
+        want = crlf(['        ABC', 'SECOND'])
+        got = run.session.extract(run.dsk, 'DOC.TXT')
+        checks = [Check('W1/content', got == want, disk_diff(got, want))]
+        checks.append(Check('W1/time', ms is not None and
+                            (self.TIME_MS is None or ms < self.TIME_MS),
+                            'ACTTAB to the status repaint: %s ms' % ms))
+        return checks
+
+
+class W2SettingsFocus(Case):
+    name = 'W2-settings-focus'
+    desc = ('Settings repaints only the rows a focus move touches, and five '
+            'moves down and back leave exactly the dialog that opened')
+    origin = ('2026-10-06 review: every arrow recomposed the whole dialog and '
+              'WINSHOWed it (~100 ms); now two strips are recomposed and blitted')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE 1'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('F3')
+        t.snap('menu', at='WINPOLL')
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('open', vram='screen', at='WINPOLL')
+        t.press('DOWN', repeat=5)
+        t.wait(0.5)
+        t.snap('down', vram='screen', at='WINPOLL')
+        t.press('UP', repeat=5)
+        t.wait(0.5)
+        t.snap('back', vram='screen', at='WINPOLL')
+        t.press('ESC')
+        t.wait(1.0)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        a, b, d = (run.blob(k, 'screen') for k in ('open', 'back', 'down'))
+        if None in (a, b, d):
+            return [Check('W2/restored', False, 'missing dump')]
+        same = a == b
+        return [
+            Check('W2/moved', run.var('down', 'SETTFOC') == 5 and a != d,
+                  'SETTFOC %s after five DOWN, screen changed: %s'
+                  % (run.var('down', 'SETTFOC'), a != d)),
+            Check('W2/restored', same and run.var('back', 'SETTFOC') == 0,
+                  'five DOWN and five UP leave the dialog as it opened'
+                  if same else '%d bytes of the screen differ'
+                  % sum(1 for x, y in zip(a, b) if x != y)),
+        ]
+
+
+class X1ViLineBreak(Case):
+    name = 'X1-vi-linebreak'
+    desc = ('Vi visual: $ selects onto the line break and y / d take it, as '
+            'in vim (v$y yanks the line with its newline)')
+    origin = ('2026-10-06, seen by hand: v$ then y and p left the cursor at the '
+              'end of the line -- the break was painted as selected but never '
+              'copied or cut')
+    variants = ('yank', 'cut')
+    LINES = ['ALPHA', 'BRAVO', 'CHARLIE']
+
+    def config(self, ctx, variant=None):
+        return DEFAULT_CFG.replace('PROFILE=STD', 'PROFILE=VI')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.text('v$')
+        t.wait(0.5)
+        t.text('y' if variant == 'yank' else 'd')
+        t.wait(1.0)
+        t.snap('done')
+        t.text(':w')
+        t.press('RETURN')
+        t.wait(3.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            clip = run.snaps.get('done', {}).get('CLIPBUF')
+            n = run.var('done', 'CLIPLEN')
+            got = bytes(clip[:n]) if clip and n is not None else None
+            checks.append(Check('X1/%s/clip' % variant, got == b'ALPHA\r\n',
+                                'clipboard %r (want ALPHA + CR LF)' % got))
+            if variant == 'cut':
+                want = crlf(self.LINES[1:])
+                disk = run.session.extract(run.dsk, 'DOC.TXT')
+                checks.append(Check('X1/cut/content', disk == want,
+                                    disk_diff(disk, want)))
+        return checks
+
+
+class X2CuaLineBreak(Case):
+    name = 'X2-cua-linebreak'
+    desc = ('CUA: Shift+Ctrl+Right ends at the last character (no break); '
+            'Shift+Down to column 0 of the next line takes the break')
+    origin = '2026-10-06: the same rule as X1 must not change CUA selections'
+    variants = ('eol', 'past')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['ALPHA', 'BRAVO'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        if variant == 'past':
+            t.press('DOWN', mods=['SHIFT'])     # to column 0 of the next line
+        else:
+            t.press('RIGHT', mods=['SHIFT', 'CTRL'])
+        t.press('C', mods=['CTRL'])
+        t.wait(1.0)
+        t.snap('done')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, want in (('eol', b'ALPHA'), ('past', b'ALPHA\r\n')):
+            run = runs[variant]
+            clip = run.snaps.get('done', {}).get('CLIPBUF')
+            n = run.var('done', 'CLIPLEN')
+            got = bytes(clip[:n]) if clip and n is not None else None
+            checks.append(Check('X2/%s' % variant, got == want,
+                                'clipboard %r (want %r)' % (got, want)))
+        return checks
+
+
+class V4ViColonBig(Case):
+    name = 'V4-vi-colon-big'
+    desc = ':N past 65535 saturates and goes to the last line'
+    origin = ('2026-10-06 review: the :N parser in ACTEXMOD wrapped at 16 bits '
+              '(:65537 went to line 1); it is ATOI16 now')
+
+    def config(self, ctx, variant=None):
+        return DEFAULT_CFG.replace('PROFILE=STD', 'PROFILE=VI')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE %d' % i for i in range(5)])
+
+    def type_str(self, t, s):
+        for ch in s:
+            k, mods = H27ViEx.key_for(self, ch)
+            t.press(k, mods=mods)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        self.type_str(t, ':65537')
+        t.press('RETURN')
+        t.wait(1.0)
+        t.snap('after')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        return [Check('V4/last', run.var('after', 'DOCLINE') == 4,
+                      'DOCLINE %s after :65537 (want 4, the last line)'
+                      % run.var('after', 'DOCLINE'))]
+
+
+class Z1CtrlStop(Case):
+    name = 'Z1-ctrl-stop'
+    desc = ('Ctrl+STOP never ends the editor: pressed while idle it is '
+            'forgotten (the next save works); pressed during a save it '
+            'cancels that save, and the editor and the document stay')
+    origin = ('2026-10-06 review: DSKABTH returned on .STOP / .CTRLC, which '
+              'terminates the program without TERM. A SMOKE CHECK, NOT A '
+              'REGRESSION TEST: in openMSX DOS 2 never delivered .STOP to the '
+              'abort routine (Ctrl+STOP held through a whole save), so the old '
+              'code passes too and the case carries no mutation')
+    variants = ('idle', 'save')
+    LINES = numbered(90, width=40)
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.text('X')
+        if variant == 'save':
+            # DOS 2 tests the keys themselves at each call, not the BIOS
+            # flag, and a buffered save makes only a few calls: hold
+            # Ctrl+STOP across the whole save so it meets one.
+            t.press('S', mods=['CTRL'], tail=0.1)
+            t.at('keymatrixdown 6 0x02')
+            t.wait(0.1)
+            t.at('keymatrixdown 7 0x10')
+            t.wait(3.0)
+            t.at('keymatrixup 7 0x10')
+            t.wait(0.1)
+            t.at('keymatrixup 6 0x02')
+        else:
+            t.press('STOP', mods=['CTRL'])
+        t.wait(4.0)
+        t.snap('stopped')
+        t.press('S', mods=['CTRL'])
+        t.wait(4.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        want = crlf(['X' + self.LINES[0]] + self.LINES[1:])
+        for variant, run in sorted(runs.items()):
+            checks.append(Check(
+                'Z1/%s/alive' % variant,
+                run.var('stopped', 'SCRRDY') == 0xFF and
+                run.var('stopped', 'SCRMOD') == 6 and
+                run.var('stopped', 'TOTLINES') == 90,
+                'SCRRDY %s, SCRMOD %s, TOTLINES %s after Ctrl+STOP'
+                % (run.var('stopped', 'SCRRDY'), run.var('stopped', 'SCRMOD'),
+                   run.var('stopped', 'TOTLINES'))))
+            got = run.session.extract(run.dsk, 'DOC.TXT')
+            checks.append(Check('Z1/%s/saved' % variant, got == want and
+                                run.var('saved', 'MODIFIED') == 0,
+                                'the next Ctrl+S saves (MODIFIED %s): %s'
+                                % (run.var('saved', 'MODIFIED'),
+                                   disk_diff(got, want))))
+        return checks
+
 
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
@@ -7346,6 +7714,8 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          P1ReflowBoundary(), P2DeleteLastRow0(), P3ReplaceAllUndo(),
          Q1StyleSelection(), Q2ShiftWrapScroll(), Q3FindAdjacent(),
          Q4SettingsBorders(), Q5SettingsShadow(), Q6VdpWaitJiffy(),
+         V1ViLeader(), V2WrapSelRoom(), V3InsDelimRoom(), V4ViColonBig(), W1TabRun(), W2SettingsFocus(),
+         X1ViLineBreak(), X2CuaLineBreak(), Z1CtrlStop(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),

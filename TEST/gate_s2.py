@@ -21,7 +21,7 @@ import pattern
 from gate import BRW_BYTES, H30NewDocument, H36BrowseSaveAs, asciiz
 from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
                    ShippedDiskCase, crlf, io_fixture, numbered)
-from harness import MACH_MSX1
+from harness import MACH_MSX1, Session
 from keys import Timeline
 from result import Check
 
@@ -62,6 +62,7 @@ def restored(after, before, currow, curcol):
     inverse of that one column is not a difference.
     """
     bad = []
+    curcol = pattern.scol(curcol)       # CURX is a text column
     for row in range(pattern.ROWS):
         acol = pattern.colour_row(after[0x2000:], row)
         bcol = pattern.colour_row(before[0x2000:], row)
@@ -264,8 +265,8 @@ class S23Cursor(S2Case):
         run = one(runs)
         curx = run.var('s0', 'CURX')
         row = pattern.TXRFIRST + (run.var('s0', 'CURY') or 0)
-        plain = pattern.compose_row(font(ctx), self.LINES[0])
-        inverted = pattern.invert_column(plain, curx)
+        plain = pattern.compose_text(font(ctx), self.LINES[0])
+        inverted = pattern.invert_column(plain, pattern.scol(curx))
 
         wrong, phases = [], []
         for label in ['s%d' % i for i in range(self.SAMPLES)] + ['drawn']:
@@ -283,7 +284,7 @@ class S23Cursor(S2Case):
 
         drawn = run.var('drawn', 'BLNKPH')
         got = run.blob('drawn', 'pat')
-        one_col = (pattern.differing_columns(
+        one_col = (pattern.text_differing_columns(
             pattern.row_of(got, row), plain) == [curx]) if got else False
         return [
             Check('S2-3/curx', curx == 5, 'CURX = %s (expected 5)' % curx),
@@ -331,7 +332,7 @@ class S24Select(S2Case):
     def verify(self, ctx, runs):
         run = one(runs)
         checks = []
-        plain = pattern.compose_row(font(ctx), self.LINES[0])
+        plain = pattern.compose_text(font(ctx), self.LINES[0])
         row = pattern.TXRFIRST + (run.var('selected', 'CURY') or 0)
         sel = run.blob('selected', 'pat')
         after = run.blob('after', 'pat')
@@ -340,7 +341,7 @@ class S24Select(S2Case):
         checks.append(Check('S2-4/selact',
                             run.var('selected', 'SELACT') == 1,
                             'SELACT = %s' % run.var('selected', 'SELACT')))
-        inv = pattern.inverted_columns(pattern.row_of(sel, row), plain)
+        inv = pattern.text_inverted_columns(pattern.row_of(sel, row), plain)
         # The cursor is itself an inversion and sits at one end of the range,
         # so the inverted set is the selected columns, cursor included.
         want = list(range(5, 12))
@@ -349,7 +350,7 @@ class S24Select(S2Case):
                             if inv == want else 'inverted: %s' % inv))
         # After deselecting, only the cursor cell may differ from the document.
         curx = run.var('after', 'CURX')
-        diff = pattern.differing_columns(pattern.row_of(after, row), plain)
+        diff = pattern.text_differing_columns(pattern.row_of(after, row), plain)
         residue = [c for c in diff if c != curx]
         checks.append(Check('S2-4/no-residue', not residue,
                             'zero columns left inverted after deselect'
@@ -615,7 +616,9 @@ class S28RenderPure(S2Case):
                                 'state mismatch before diff'))
             return checks
         cury = run.var('edited', 'CURY')
-        rows = [r for r in range(pattern.ROWS)
+        # Text rows only: the status bar says [SAVED] in one sample and has
+        # cleared it in the other, which is the message's job, not a paint.
+        rows = [r for r in range(pattern.TXRFIRST, pattern.TXRLAST + 1)
                 if pattern.row_of(a[:0x2000], r) != pattern.row_of(b[:0x2000], r)
                 and r != pattern.TXRFIRST + cury]
         checks.append(Check('S2-8/render-pure', not rows,
@@ -647,7 +650,7 @@ class S29Margin(S2Case):
                'early -- typing X on a line ending in HELLO wrapped it as '
                '"HELLxO", and a space at the margin carried the "O" down.')
     TAIL = 'HELLO'
-    LINE = 'A' * (pattern.COLS - len(TAIL) - 1) + ' ' + TAIL
+    LINE = 'A' * (pattern.TEXTCOLS - len(TAIL) - 1) + ' ' + TAIL
     LINES = [LINE, 'SECOND LINE']
     variants = ('push', 'space')
 
@@ -669,11 +672,11 @@ class S29Margin(S2Case):
         for variant, run in sorted(runs.items()):
             pre = 'S2-9/%s' % variant
             checks.append(Check('%s/clamped' % pre,
-                                run.var('ateol', 'CURX') == pattern.COLS - 1,
+                                run.var('ateol', 'CURX') == pattern.TEXTCOLS - 1,
                                 'ACEOL leaves CURX = %s on a full line'
                                 % run.var('ateol', 'CURX')))
             if variant == 'push':
-                want = [self.LINE[:pattern.COLS - len(self.TAIL)],
+                want = [self.LINE[:pattern.TEXTCOLS - len(self.TAIL)],
                         self.TAIL + 'x', 'SECOND LINE']
                 curx = len(self.TAIL) + 1
             else:
@@ -930,14 +933,14 @@ class S211About(S2Case):
                             'title "About S2ED" rendered from the RAM font'
                             if not bad else 'title cells differ: %s' % bad))
 
-        # Body line: "S2ED - MSX1 64-Col" at row WINR+2, char col 20
+        # Body line: "S2ED - MSX1 62-Col" at row WINR+2, char col 20
         brow = pattern.row_of(dlg[:0x2000], self.WINR + 2)
         bad = [10 + i
                for i, want in enumerate(self.text_cells(
-                   fnt, 'S2ED - MSX1 64-Col'))
+                   fnt, 'S2ED - MSX1 62-Col'))
                if brow[(10 + i) * 8:(11 + i) * 8] != want]
         checks.append(Check('S2-11/body-text', not bad,
-                            'body "S2ED - MSX1 64-Col" rendered'
+                            'body "S2ED - MSX1 62-Col" rendered'
                             if not bad else 'body cells differ: %s' % bad))
 
         # The version line, read from the SYMBOL TABLE rather than written
@@ -1037,7 +1040,7 @@ class S211About(S2Case):
         # darkens, it does not repaint).  The blinking cursor column is the
         # one legitimate diff.
         currow = pattern.TXRFIRST + (run.var('dialog', 'CURY') or 0)
-        curcol = run.var('dialog', 'CURX') or 0
+        curcol = pattern.scol(run.var('dialog', 'CURX') or 0)
         bad = []
         for row in range(pattern.ROWS):
             dpat, bpat = pattern.row_of(dlg, row), pattern.row_of(boot, row)
@@ -1074,7 +1077,7 @@ class S211About(S2Case):
 
         # Restore: identical to boot, except the blinking cursor column
         currow = pattern.TXRFIRST + (run.var('closed', 'CURY') or 0)
-        curcol = run.var('closed', 'CURX') or 0
+        curcol = pattern.scol(run.var('closed', 'CURX') or 0)
         bad = []
         for row in range(pattern.ROWS):
             cols = pattern.differing_columns(pattern.row_of(closed, row),
@@ -1289,7 +1292,7 @@ class S214Markup(S2Case):
         shows in VCOLMARK when the pair owns its cell, or when its neighbour
         carries no attribute of its own (which is the one bleed left).
         """
-        cols = (cell * 2, cell * 2 + 1)
+        cols = (cell * 2 - pattern.TXCOL0, cell * 2 + 1 - pattern.TXCOL0)
 
         def hits(spans):
             return any(ln == line and any(c0 <= c <= c1 for c in cols)
@@ -1435,7 +1438,7 @@ class S215Quit(S2Case):
 
             # ESC cancels and puts the screen back, byte for byte.
             currow = pattern.TXRFIRST + (run.var('boot', 'CURY') or 0)
-            curcol = run.var('boot', 'CURX') or 0
+            curcol = pattern.scol(run.var('boot', 'CURX') or 0)
             bad = []
             for row in range(pattern.ROWS):
                 for cell in range(pattern.CELLS):
@@ -2090,7 +2093,7 @@ class S219SelLines(S2Case):
 
     def plain(self, f, row):
         n = row - pattern.TXRFIRST
-        return pattern.compose_row(
+        return pattern.compose_text(
             f, self.LINES[n] if n < len(self.LINES) else '')
 
     def verify(self, ctx, runs):
@@ -2111,14 +2114,14 @@ class S219SelLines(S2Case):
                 line = row - pattern.TXRFIRST
                 if line < n:            # fully selected, line break included
                     ln = len(self.LINES[line])
-                    want = list(range(min(ln + 1, pattern.COLS)))
+                    want = list(range(min(ln + 1, pattern.TEXTCOLS)))
                 elif line == n:         # the end line: only the cursor
                     want = [0]
                 else:
                     want = []
                 got = pattern.row_of(dump, row)
-                inv = pattern.inverted_columns(got, self.plain(f, row))
-                dif = pattern.differing_columns(got, self.plain(f, row))
+                inv = pattern.text_inverted_columns(got, self.plain(f, row))
+                dif = pattern.text_differing_columns(got, self.plain(f, row))
                 if inv != want or dif != want:
                     bad.append((line, inv if inv == dif else dif))
             checks.append(Check('S2-19/%s' % label, not bad and
@@ -2136,8 +2139,8 @@ class S219SelLines(S2Case):
         curx = run.var('after', 'CURX')
         residue = []
         for row in rows:
-            dif = pattern.differing_columns(pattern.row_of(after, row),
-                                            self.plain(f, row))
+            dif = pattern.text_differing_columns(pattern.row_of(after, row),
+                                                 self.plain(f, row))
             if row - pattern.TXRFIRST == cury:
                 dif = [c for c in dif if c != curx]
             if dif:
@@ -2246,8 +2249,8 @@ class S220UndoSelDel(S2Case):
             bad = []
             for i, text in enumerate(shown):
                 row = pattern.TXRFIRST + i
-                dif = pattern.differing_columns(
-                    pattern.row_of(dump, row), pattern.compose_row(f, text))
+                dif = pattern.text_differing_columns(
+                    pattern.row_of(dump, row), pattern.compose_text(f, text))
                 if i == cury:
                     dif = [c for c in dif if c != curx]
                 if dif:
@@ -2570,8 +2573,8 @@ class S222FindCurrentLine(S2Case):
         hl_ok = False
         inv = 'no dump'
         if pat is not None and cury == 0:
-            plain = pattern.compose_row(font(ctx), self.LINES[0])
-            inv = pattern.inverted_columns(
+            plain = pattern.compose_text(font(ctx), self.LINES[0])
+            inv = pattern.text_inverted_columns(
                 pattern.row_of(pat, pattern.TXRFIRST), plain)
             hl_ok = ({4, 5} <= set(inv)) and not (set(inv) & {0, 1, 2, 3})
         checks.append(Check('S2-22/highlight', hl_ok,
@@ -3377,6 +3380,13 @@ class S233BareLaunch(S2Case):
     def timeline(self, ctx, variant=None):
         t = Timeline()
         t.snap('boot', vram='patcol')
+        # File > New on a clean, unnamed buffer takes DRWMENU's empty-name
+        # exit again, after boot, where a breakpoint can see it.  The screen
+        # cannot: since FNAMBUF moved to page 3 the runaway LDIR lands in the
+        # (empty) undo ring past ENDVARS, clock on or off, and paints nothing.
+        t.snap('new', at='DRWMENU.NODRAW', regs_=['DE'])
+        t.press('N', mods=['CTRL'])
+        t.wait(1.0)
         return t
 
     def verify(self, ctx, runs):
@@ -3424,6 +3434,13 @@ class S233BareLaunch(S2Case):
                             if roles == want else
                             'roles = %s (expected %s)'
                             % (roles, ['#%02X' % b for b in want])))
+        de, fnb = run.var('new', 'DE'), ctx.sym['FNAMBUF']
+        checks.append(Check('S2-33/name-length', de == fnb,
+                            'empty name measured from FNAMBUF (DE #%04X)' % fnb
+                            if de == fnb else
+                            'DE = %s at .NODRAW (expected #%04X): the name '
+                            'was measured from a garbage pointer'
+                            % ('#%04X' % de if de is not None else None, fnb)))
         checks.append(Check('S2-33/totlines', run.var('boot', 'TOTLINES') == 1,
                             'TOTLINES = %s (expected 1)'
                             % run.var('boot', 'TOTLINES')))
@@ -3681,6 +3698,187 @@ class S239BrowseTitle(S2Case):
                       else 'the title row still shows the old path')]
 
 
+class S240ColDigits(S2Case):
+    name = 'S2-40-col-digits'
+    desc = 'the status bar shows a column past 99 with all three digits'
+    origin = '2026-10-06 review: two digits, so column 131 read "31"'
+
+    def fixture(self, ctx, variant=None):
+        return crlf([''.join(chr(65 + i % 26) for i in range(130)), 'X'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('RIGHT', mods=['CTRL'])          # end of line: CURX 130
+        t.wait(1.0)
+        t.snap('end')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        raw = run.snaps.get('end', {}).get('STATBUF')
+        tail = bytes(raw[56:64]).decode('latin-1') if raw else None
+        return [Check('S2-40/col', tail == ' Col 131',
+                      'status columns 56..63: %r (CURX %s)'
+                      % (tail, run.var('end', 'CURX')))]
+
+
+class S241BrowseCaret(S2Case):
+    name = 'S2-41-browse-caret'
+    desc = 'the name field caret leaves no block behind in cell 24'
+    origin = ('2026-10-06 review: .FIELD cleared cells 5..23 while the caret '
+              'reaches column 48, the left half of cell 24')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('O', mods=['CTRL'])
+        t.wait(2.0)
+        t.press('TAB')                          # to the name field
+        t.wait(0.5)
+        t.text('Q' * 40)                        # fills it: caret at column 48
+        t.wait(1.0)
+        t.press('BS')                           # caret back to column 47
+        t.wait(1.0)
+        t.snap('back', vram='patcol', at='WINPOLL')
+        t.press('ESC')
+        t.wait(1.0)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        dump = run.blob('back', 'patcol')
+        if dump is None:
+            return [Check('S2-41/cell24', False, 'no dump')]
+        row = pattern.row_of(dump, 17)          # BRWFLDR
+        cell = row[24 * 8:25 * 8]
+        return [Check('S2-41/cell24', cell == bytes(8) and
+                      run.var('back', 'INPLEN') == 37,
+                      'cell 24 patterns %s, INPLEN %s'
+                      % (cell.hex(), run.var('back', 'INPLEN')))]
+
+
+class S242ScrollNoDup(S2Case):
+    name = 'S2-42-scroll-nodup'
+    desc = ('a scroll never shows the row that is being replaced as a copy of '
+            'its neighbour: new rows are composed before the band goes out')
+    origin = ('2026-10-06, seen by hand: scrolling down pushed the moved band '
+              'first, so the bottom row showed the line above it twice until '
+              'the new line was composed')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE %02d %s' % (i, 'X' * (i % 20)) for i in range(40)])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.press('DOWN', repeat=21)              # cursor on the bottom row
+        t.wait(1.0)
+        t.snap('mid', vram='pat', at='SCRLDNN.RLOOP')
+        t.press('DOWN')                         # scrolls one row
+        t.wait(1.0)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        pat = run.blob('mid', 'pat')
+        if pat is None:
+            return [Check('S2-42/no-dup', False, 'no dump at SCRLDNN.RLOOP')]
+        last = pattern.row_of(pat, pattern.TXRLAST)
+        above = pattern.row_of(pat, pattern.TXRLAST - 1)
+        return [Check('S2-42/no-dup', last != above,
+                      'while the new row is composed, the bottom row is not '
+                      'a copy of the one above' if last != above else
+                      'the bottom row duplicates row %d mid-scroll'
+                      % (pattern.TXRLAST - 1))]
+
+
+class S243ClockHz(S2Case):
+    name = 'S2-43-clock-hz'
+    desc = ('an MSX1 takes its frequency from the ROM ID byte, not RG9SAV: '
+            '50 Hz on the PAL HB-20P, 60 Hz on the NTSC CF-3300')
+    origin = ('2026-10-06 review: the frequency came from RG9SAV (#FFE8), an '
+              'MSX2 variable; an MSX1 has no R#9 and holds whatever was there '
+              '-- which on the emulated HB-20P happens to read as 50 Hz, so '
+              'only the NTSC machine tells the two sources apart')
+    variants = ('pal', 'ntsc')
+    MACHINES = {'pal': MACH_MSX1,
+                'ntsc': ('National_CF-3300', 'ram1mb', 'nextor')}
+
+    def fixture(self, ctx, variant=None):
+        return crlf(['LINE 1'])
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        return t
+
+    def execute(self, ctx):
+        runs = {}
+        for variant in self.variants:
+            self.machine = self.MACHINES[variant]
+            runs[variant] = Session(ctx, self, variant).run(
+                self.timeline(ctx, variant))
+        self.machine = MACH_MSX1
+        return runs
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, want in (('pal', 50), ('ntsc', 60)):
+            run = runs[variant]
+            checks.append(Check('S2-43/%s' % variant,
+                                run.var('boot', 'CLKHZ') == want,
+                                'CLKHZ %s (want %d)'
+                                % (run.var('boot', 'CLKHZ'), want)))
+        return checks
+
+
+class S244MenuStrips(S2Case):
+    name = 'S2-44-menu-strips'
+    desc = ('a menu move repaints only the two items it touches; three moves '
+            'down and back leave the menu exactly as it opened')
+    origin = ('2026-10-06 review: every UP / DOWN repainted all the items and '
+              'dumped the whole menu (~70 ms); now two rows')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.press('F2')                           # Edit: the longest menu
+        t.wait(1.0)
+        t.snap('open', vram='patcol', at='WINPOLL')
+        t.press('DOWN', repeat=3)
+        t.wait(0.5)
+        t.snap('down', vram='patcol', at='WINPOLL')
+        t.press('UP', repeat=3)
+        t.wait(0.5)
+        t.snap('back', vram='patcol', at='WINPOLL')
+        t.press('ESC')
+        t.wait(1.0)
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        a, d, b = (run.blob(k, 'patcol') for k in ('open', 'down', 'back'))
+        if None in (a, d, b):
+            return [Check('S2-44/restored', False, 'missing dump')]
+        return [
+            Check('S2-44/moved', run.var('down', 'MNUSEL') !=
+                  run.var('open', 'MNUSEL') and a != d,
+                  'MNUSEL %s -> %s, screen changed: %s'
+                  % (run.var('open', 'MNUSEL'), run.var('down', 'MNUSEL'),
+                     a != d)),
+            Check('S2-44/restored', a == b,
+                  'three DOWN and three UP leave the menu as it opened'
+                  if a == b else '%d bytes differ'
+                  % sum(1 for x, y in zip(a, b) if x != y)),
+        ]
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -3693,7 +3891,9 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S230BrowseSaveAs(), S231Settings(), S232DiskError(),
          S233BareLaunch(), S234DatForeign(),
          S235LoadProgress(), S236BrowseBusy(), S237IoBlocks(),
-         S238ReflowAttrs(), S239BrowseTitle()]
+         S238ReflowAttrs(), S239BrowseTitle(),
+         S240ColDigits(), S241BrowseCaret(),
+         S242ScrollNoDup(), S243ClockHz(), S244MenuStrips()]
 
 
 def run(ctx, cases=None):

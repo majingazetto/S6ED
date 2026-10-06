@@ -336,6 +336,10 @@ class Session(object):
             a('    for {set i 0} {$i < %d} {incr i} {'
               ' append t "[rb [expr {%d + $i}]] " }' % (count, sym[name]))
             a('    p "KB %s %s $t"' % (label, name))
+        # Registers at an at= breakpoint, for a contract a routine must hold
+        # on entry to a label (S2-33: DE at DRWMENU.NODRAW).
+        for name in spec.get('regs', []):
+            a('    p "KV %s %s [reg %s]"' % (label, name, name))
         # The stack, and the interrupt hook that must never point into page 1.
         a('    p "KV %s SP [reg SP]"' % label)
         a('    p "KV %s PSG15 [debug read {PSG regs} 15]"' % label)

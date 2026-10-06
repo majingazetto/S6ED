@@ -6,7 +6,10 @@ the bulk painter but says nothing about whether either is right.  On S2 we can
 do better, because the whole rendering pipeline is closed-form:
 
     cell(c) = FONT4H[text[2c]] | FONT4L[text[2c + 1]]
-    FONT4L  = FONT4H with the nibbles swapped
+    FONT4L  = FONT4H with the nibbles swapped (S2ED rotates it as it draws)
+
+where text is the screen row: for a document row, the gutter and then the
+line (compose_text).
 
 so the pattern table the VDP should be holding can be COMPUTED in Python from
 `S2ED.FNT` and the document text, and compared byte for byte.  Nothing is
@@ -25,7 +28,15 @@ import os
 
 ROWLEN = 256            # one screen row of patterns: 32 cells x 8 bytes
 CELLS = 32              # cells per row
-COLS = 64               # text columns (two 4 px characters per cell)
+COLS = 64               # screen columns (two 4 px characters per cell)
+
+# The document does not start at screen column 0: the first cell of every text
+# row is a gutter (kept for line marks), so text column c is screen column
+# c + TXCOL0 and a text row holds TEXTCOLS columns (CONST_S2.Z8A).  The menu
+# and status bars still use all 64.
+TXCOL0 = 2
+TEXTCOLS = COLS - TXCOL0
+GUTTER = ' ' * TXCOL0
 ROWS = 24               # physical screen rows
 PATLEN = ROWLEN * ROWS  # 6144
 
@@ -71,6 +82,17 @@ def compose_row(font, text):
     return bytes(out)
 
 
+def compose_text(font, text):
+    """The 256 pattern bytes of a DOCUMENT row showing `text`: the gutter,
+    then the first TEXTCOLS columns of the text."""
+    return compose_row(font, GUTTER + text[:TEXTCOLS])
+
+
+def scol(col):
+    """Screen column of a text column."""
+    return col + TXCOL0
+
+
 def row_of(dump, row):
     """The 256 pattern bytes of one screen row, out of a #0000 dump."""
     return dump[row * ROWLEN:(row + 1) * ROWLEN]
@@ -90,18 +112,21 @@ def expected_screen(font, lines, topline):
     for i in range(ROWSVIS):
         n = topline + i
         out[TXRFIRST + i] = lines[n] if n < len(lines) else ''
-    return {row: compose_row(font, text) for row, text in out.items()}
+    return {row: compose_text(font, text) for row, text in out.items()}
 
 
 def mismatched_rows(dump, font, lines, topline, cursor=None):
     """Which text rows differ from the computed expectation, and how.
 
-    `cursor` is (row, col) in screen coordinates: the cursor is an inversion
-    of one text column and it BLINKS, so that one column may legitimately
-    differ at any given instant.  Nothing else may.
+    `cursor` is (screen row, TEXT column): the cursor is an inversion of one
+    text column and it BLINKS, so that one column may legitimately differ at
+    any given instant.  Nothing else may.  The columns reported are screen
+    columns.
     """
     want = expected_screen(font, lines, topline)
     cur_row, cur_col = cursor if cursor else (None, None)
+    if cur_col is not None:
+        cur_col = scol(cur_col)
     bad = []
     for row in sorted(want):
         got = row_of(dump, row)
@@ -155,6 +180,18 @@ def differing_columns(a_row, b_row):
                for y in range(8)):
             cols.append(col)
     return cols
+
+
+def text_inverted_columns(got_row, plain_row):
+    """inverted_columns of a DOCUMENT row, as text columns (gutter dropped)."""
+    return [c - TXCOL0 for c in inverted_columns(got_row, plain_row)
+            if c >= TXCOL0]
+
+
+def text_differing_columns(a_row, b_row):
+    """differing_columns of a DOCUMENT row, as text columns.  A difference in
+    the gutter comes out negative, so it is never mistaken for column 0."""
+    return [c - TXCOL0 for c in differing_columns(a_row, b_row)]
 
 
 def uniform_colour_cells(coldump, row):

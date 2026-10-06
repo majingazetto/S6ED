@@ -11,6 +11,170 @@ import shutil
 
 MUTATIONS = [
     {
+        'name': 'r1-dir-pass',
+        'why': 'the compaction slides records but its directory pass updates no entry',
+        'file': 'COMPACT.Z8A',
+        'old': """                LD      A, (CMPSEG)
+                CP      C
+                JR      NZ, .P2NXT""",
+        'new': """                LD      A, (CMPSEG)
+                CP      C
+                JR      .P2NXT          ; MUTATION: NO ENTRY FOLLOWS ITS RECORD""",
+        'filter': 'R1',
+        'expect_any': ['R1/content', 'R1/entered', 'R1-freelist-compact'],
+    },
+    {
+        'name': 's2-menu-old-item',
+        'target': 'S2ED',
+        'why': 'a menu move repaints the item it reaches but not the one it leaves',
+        'file': 'MENU.Z8A',
+        'old': """                LD      A, C            ; THE TWO ITEMS IT TOUCHES, AND ONLY
+                LD      B, 0            ; THEIR ROWS TO VRAM: IT REPAINTED THE
+                CALL    .ITEM           ; WHOLE MENU (~70 MS PER ARROW)""",
+        'new': """                LD      A, C            ; THE TWO ITEMS IT TOUCHES, AND ONLY
+                LD      B, 0            ; THEIR ROWS TO VRAM: IT REPAINTED THE
+                CALL    MNUPNT          ; MUTATION: THE OLD ROW NEVER DUMPED""",
+        'filter': 'S2-44',
+        'expect': ['S2-44/restored'],
+    },
+    {
+        'name': 'v4-colon-wrap',
+        'why': 'the :N parser wraps at 16 bits instead of saturating',
+        'file': 'ACTION.Z8A',
+        'old': """.DONUM          CALL    ATOI16          ; HL = TARGET LINE (1-BASED), SATURATED:""",
+        'new': """.DONUM          LD      HL, 1           ; MUTATION: WHAT THE WRAP GAVE FOR 65537""",
+        'filter': 'V4',
+        'expect': ['V4/last'],
+    },
+    {
+        'name': 'x1-seleol',
+        'why': 'copy and cut leave out a line break the Vi selection covers',
+        'file': 'ACTION.Z8A',
+        'old': """.CPYINIT        CALL    SELEOL          ; A COVERED LINE BREAK IS COPIED TOO""",
+        'new': """.CPYINIT        NOP                     ; MUTATION: THE BREAK STAYS OUT
+                NOP
+                NOP""",
+        'filter': 'X1',
+        'expect': ['X1/yank/clip', 'X1/cut/clip'],
+    },
+    {
+        'name': 'w2-focus-old-strip',
+        'why': 'a Settings focus move blits only the row it reaches, not the one it leaves',
+        'file': 'WINDOW.Z8A',
+        'old': """                CALL    WINVSY          ; ONE SYNC FOR BOTH BLITS
+                POP     BC
+                CALL    .UPDFOC""",
+        'new': """                CALL    WINVSY          ; ONE SYNC FOR BOTH BLITS
+                POP     BC
+                NOP                     ; MUTATION: THE OLD STRIP STAYS
+                NOP
+                NOP""",
+        'filter': 'W2',
+        'expect': ['W2/restored'],
+    },
+    {
+        'name': 'w1-tab-perchar',
+        'why': 'ACTTAB inserts its spaces one EDINSCHR at a time',
+        'file': 'ACTION.Z8A',
+        'old': """                JR      C, .TABLP       ; DOES NOT FIT: THE WRAP MODE DECIDES""",
+        'new': """                JR      .TABLP          ; MUTATION: ALWAYS PER CHARACTER""",
+        'filter': 'W1',
+        'expect': ['W1/time'],
+    },
+    {
+        'name': 's2-clock-rg9sav',
+        'target': 'S2ED',
+        'why': 'S2ED takes the frequency from RG9SAV on an MSX1 as well',
+        'file': 'S2ED.Z8A',
+        'old': """                OR      A
+                JR      NZ, .FRQV2""",
+        'new': """                OR      A
+                JR      .FRQV2          ; MUTATION: RG9SAV ON AN MSX1 TOO""",
+        'filter': 'S2-43',
+        'expect': ['S2-43/ntsc'],
+    },
+    {
+        'name': 's2-scroll-band-first',
+        'target': 'S2ED',
+        'why': 'SCRLDNN pushes the moved band before composing the exposed row, which shows the row above twice',
+        'file': 'SCROLL.Z8A',
+        'old': """                LD      A, 1
+                LD      (RNDNODMP), A
+.RLOOP          PUSH    BC""",
+        'new': """                PUSH    BC
+                CALL    TXTPUSH         ; MUTATION: THE BAND GOES OUT FIRST
+                POP     BC
+                LD      A, 1
+                LD      (RNDNODMP), A
+.RLOOP          PUSH    BC""",
+        'filter': 'S2-42',
+        'expect': ['S2-42/no-dup'],
+    },
+    {
+        'name': 'v1-leader-b',
+        'why': 'the pending Vi leader is kept in B, over the modifiers the keymap scan matches',
+        'file': 'DISP.Z8A',
+        'old': """                LD      E, A            ; E = PENDING LEADER (B HOLDS THE MODIFIERS
+                XOR     A               ; THE KEYMAP SCAN BELOW MATCHES AGAINST)
+                LD      (VILEAD), A
+                LD      A, E""",
+        'new': """                LD      B, A            ; MUTATION: THE LEADER OVER THE MODIFIERS
+                XOR     A
+                LD      (VILEAD), A
+                LD      A, B""",
+        'filter': 'V1',
+        'expect': ['V1/moved'],
+    },
+    {
+        'name': 'v2-wrapsel-room',
+        'why': 'WRAPSEL inserts its delimiters whether or not the line has room',
+        'file': 'MARKUP.Z8A',
+        'old': """                JP      C, .WRPMUL      ; NO ROOM: LEAVE THE LINE ALONE""",
+        'new': """                NOP                     ; MUTATION: NO ROOM CHECK
+                NOP
+                NOP""",
+        'filter': 'V2',
+        'expect': ['V2/content'],
+    },
+    {
+        'name': 'v3-insdelim-room',
+        'why': 'INSDELIM inserts what fits and steps the cursor back regardless',
+        'file': 'MARKUP.Z8A',
+        'old': """.INSN           CALL    MKROOM
+                JR      C, .NOROOM""",
+        'new': """.INSN           CALL    MKROOM
+                NOP                     ; MUTATION: NO ROOM CHECK
+                NOP""",
+        'filter': 'V3',
+        # The cursor lands on 3 either way (two '*' in, two steps back):
+        # the document is what shows the half-inserted delimiters.
+        'expect': ['V3/content'],
+    },
+    {
+        'name': 's2-col-digits',
+        'target': 'S2ED',
+        'why': 'the S2ED status bar shows the column with two digits',
+        'file': 'UI.Z8A',
+        'old': """                INC     HL
+                LD      B, 3
+                JP      .CPYNUM""",
+        'new': """                INC     HL
+                LD      B, 2            ; MUTATION: TWO DIGITS
+                JP      .CPYNUM""",
+        'filter': 'S2-40',
+        'expect': ['S2-40/col'],
+    },
+    {
+        'name': 's2-caret-cell24',
+        'target': 'S2ED',
+        'why': 'the S2ED name field clears cells 5..23 only',
+        'file': 'BROWSER.Z8A',
+        'old': """                LD      B, 20 * 8       ; 160""",
+        'new': """                LD      B, 19 * 8       ; MUTATION: NOT CELL 24""",
+        'filter': 'S2-41',
+        'expect': ['S2-41/cell24'],
+    },
+    {
         'name': 'q1-applsel-selpre',
         'why': 'APPLSEL repaints the selected rows without taking the overlay off first',
         'file': 'ACTION.Z8A',
@@ -98,10 +262,10 @@ MUTATIONS = [
         'target': 'S2ED',
         'why': 'the S2ED browser repaint starts below the title row a rescan rebuilt',
         'file': 'BROWSER.Z8A',
-        'old': """                LD      A, BRWWINR
-                LD      B, BRWBTNR - BRWWINR + 1 ; 17 ROWS""",
-        'new': """                LD      A, BRWRLST      ; MUTATION: NOT THE TITLE
-                LD      B, BRWBTNR - BRWRLST + 1""",
+        'old': """                ;    TO THIS ONE -- IT USED TO SEND THE ROWS TWICE (~85 MS)
+                JP      WDUMP""",
+        'new': """                ;    TO THIS ONE -- IT USED TO SEND THE ROWS TWICE (~85 MS)
+                RET                     ; MUTATION: THE REPAINT NEVER REACHES VRAM""",
         'filter': 'S2-39',
         'expect': ['S2-39/title'],
     },
@@ -1040,18 +1204,14 @@ MUTATIONS = [
     },
     {
         'name': 's2-scroll-nodump',
-        'why': 'SCRLUPN moves the shadow bands and never pushes the pattern '
+        'why': 'TXTPUSH composes the scrolled band and never pushes the pattern '
                'band to VRAM -- the round-1 defect: the shadows are right and '
                'the screen is a scroll behind',
         'target': 'S2ED',
         'file': 'SCROLL.Z8A',
-        'old': """                LD      HL, PATSHAD + ROWLEN
-                LD      DE, PGBASE + ROWLEN
-                LD      C, 0            ; BC = K * ROWLEN
+        'old': """                LD      BC, ROWSVIS * ROWLEN
                 CALL    VDPDUMP""",
-        'new': """                LD      HL, PATSHAD + ROWLEN
-                LD      DE, PGBASE + ROWLEN
-                LD      C, 0            ; BC = K * ROWLEN
+        'new': """                LD      BC, ROWSVIS * ROWLEN
                                         ; MUTATION: BAND NEVER PUSHED TO VRAM""",
         'filter': 'S2-5',
         'expect': ['S2-5/scrolled-rows'],
@@ -1070,24 +1230,20 @@ MUTATIONS = [
                    'S2-10/amber/menu', 'S2-10/amber/status'],
     },
     {
-        'name': 's2-rendiff-hit',
-        'why': 'the differential painter takes its cache-hit path and repaints '
-               'nothing.  MEASURED: this passes render-pure -- the stale row '
-               'survives a full REDRAW, so comparing the screen against the '
-               'screen sees two identical wrong pictures.  Only the '
-               'comparison against the table computed from the font and the '
-               'document catches it, which is the whole argument for this '
-               'suite.',
+        'name': 's2-coldirt',
         'target': 'S2ED',
+        'why': 'COMCELL changes COLMAP without flagging the row, so RENDEROW skips its COLDUMP and the new colours never reach VRAM',
         'file': 'RENDER.Z8A',
-        'old': """                ; CACHE HIT: UPDATE ROW AND COMMITTED CACHE
-                POP     BC
-                CALL    RENDEROW""",
-        'new': """                ; CACHE HIT: UPDATE ROW AND COMMITTED CACHE
-                POP     BC
-                                        ; MUTATION: CACHE HIT REPAINTS NOTHING""",
-        'filter': 'S2-8',
-        'expect': ['S2-8/matches-document'],
+        'old': """                LD      (IY+0), A
+                LD      HL, COLDIRT
+                LD      (HL), H         ; NON-ZERO (H = HIGH(COLDIRT))
+.SAME           INC     IY""",
+        'new': """                LD      (IY+0), A
+                LD      HL, COLDIRT
+                NOP                     ; MUTATION: THE ROW STAYS CLEAN
+.SAME           INC     IY""",
+        'filter': 'S2-14',
+        'expect': ['S2-14/line0', 'S2-14/line1'],
     },
     {
         # The TPA chain (VARS.Z8A) exists so no buffer ever names an address.
@@ -1124,11 +1280,15 @@ MUTATIONS = [
         'why': 'DRWSTAT paints the status bar in the document text role, so '
                'the bar stops being chrome and no theme can move it',
         'target': 'S2ED',
-        'file': 'UI.Z8A',
-        'old': """                ; STATUS BAR HAS ITS OWN ROLE, DISTINCT FROM THE MENU BAR
+        'file': 'VDP.Z8A',
+        'old': """                ; ROW 23: STATUS BAR COLOR
+                LD      HL, COLMAP + (STBROW * CELLROW)
+                LD      B, CELLROW
                 LD      A, (VCOLSTAT)""",
-        'new': """                ; MUTATION: THE BAR IS NOT CHROME ANY MORE
-                LD      A, (VCOLTXT)""",
+        'new': """                ; ROW 23: STATUS BAR COLOR
+                LD      HL, COLMAP + (STBROW * CELLROW)
+                LD      B, CELLROW
+                LD      A, (VCOLTXT)    ; MUTATION: THE BAR IS NOT CHROME ANY MORE""",
         'filter': 'S2-10',
         'expect': ['S2-10/amber/status'],
     },
@@ -1785,8 +1945,8 @@ MUTATIONS = [
         'name': 't0-layout-off',
         'why': 'CORE addresses the attribute half of a line record as + 81',
         'file': 'ACTION.Z8A',
-        'old': 'LD      HL, WORKBUF + 1 + WORKATTR\n                ADD     HL, DE\n                EX      DE, HL          ; DE = DEST\n\n                LD      A, (DWFROM)',
-        'new': 'LD      HL, WORKBUF + 81\n                ADD     HL, DE\n                EX      DE, HL          ; DE = DEST\n\n                LD      A, (DWFROM)',
+        'old': 'LD      HL, WORKBUF + 1 + WORKATTR\n                CALL    .SHIFT          ; THE ATTRIBUTES',
+        'new': 'LD      HL, WORKBUF + 81\n                CALL    .SHIFT          ; THE ATTRIBUTES',
         'filter': 'T0',
         'expect_static': ['target-params'],
     },
@@ -1818,10 +1978,12 @@ MUTATIONS = [
         'name': 'g4-freelist',
         'why': 'LINEDEL abandons the record instead of handing it back',
         'file': 'BUFFER.Z8A',
-        'old': """                LD      A, (TXSEG)      ; A = SEGMENT
-                CALL    FREEPSH""",
-        'new': """                LD      A, (TXSEG)      ; A = SEGMENT
-                NOP                     ; MUTATION: LEAK THE RECORD""",
+        'old': """                LD      A, B
+                JP      Z, FREEPSH      ; A = SEGMENT, DE = OFFSET""",
+        'new': """                LD      A, B
+                NOP                     ; MUTATION: LEAK THE RECORD
+                NOP
+                NOP""",
         'filter': 'G4',
         'expect': ['G4/no-growth'],
     },
@@ -2289,12 +2451,12 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 JR      Z, .CHKEND      ; MUTATION: DE NOT YET LOADED
                 LD      DE, FNAMBUF""",
         'filter': 'S2-33',
-        # A garbage LDIR has no single observable.  With CLOCK=0 DE is
-        # STATBUF + 23, so ~248 bytes land from STATBUF + 71 and zero the
-        # colour roles; with the clock on DE is two ASCII digits and the
-        # damage depends on the minute -- the user's black screen.
-        'expect_any': ['S2-33/roles', 'S2-33/status', 'S2-33/menubar',
-                       'S2-33-bare-launch'],
+        # A garbage LDIR has no single observable on screen: it once zeroed
+        # the colour roles (the user's black screen), but since FNAMBUF moved
+        # to page 3 it lands in the empty undo ring, clock on or off.  The
+        # pointer itself is checked at .NODRAW (S2-33/name-length).
+        'expect_any': ['S2-33/name-length', 'S2-33/roles', 'S2-33/status',
+                       'S2-33/menubar', 'S2-33-bare-launch'],
     },
     {
         'name': 'h1-help',
@@ -3197,8 +3359,8 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'file': 'UNDO.Z8A',
         'old': """                LD      A, B
                 AND     UNDOF_CHN
-                JP      Z, UNDOPNT      ; THE GROUP'S FIRST RECORD: DONE""",
-        'new': """                JP      UNDOPNT         ; MUTATION: ONE RECORD PER CTRL+Z""",
+                JR      Z, .FINISH      ; THE GROUP'S FIRST RECORD: DONE""",
+        'new': """                JR      .FINISH         ; MUTATION: ONE RECORD PER CTRL+Z""",
         'filter': 'U6',
         'expect': ['U6/multi/undo'],
     },
@@ -3339,9 +3501,9 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 'undo-applsel-rec',
         'why': 'toggling bold across a selection is not recorded',
         'file': 'ACTION.Z8A',
-        'old': """.APLINIT        LD      A, UNDOT_MOD    ; EVERY SELECTED LINE, ONE UNDO GROUP
+        'old': """                LD      A, UNDOT_MOD    ; EVERY SELECTED LINE, ONE UNDO GROUP
                 CALL    UNDOSEL""",
-        'new': """.APLINIT        ; MUTATION: NOT RECORDED""",
+        'new': """                ; MUTATION: NOT RECORDED""",
         'filter': 'U9',
         'expect': ['U9/style/undo'],
     },

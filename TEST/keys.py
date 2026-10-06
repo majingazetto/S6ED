@@ -101,7 +101,8 @@ class Timeline(object):
     # - observation ----------------------------------------------------
 
     def snap(self, label, vram=False, dirseg=False, image=False,
-             palette=False, vars_=None, at=None, bytes_=None, vdpregs=False):
+             palette=False, vars_=None, at=None, bytes_=None, vdpregs=False,
+             regs_=None):
         """Sample state at a breakpoint inside our own code.
 
         Never asynchronously from a timer: a timer sample catches the DOS 2
@@ -112,7 +113,8 @@ class Timeline(object):
             'vram': vram, 'dirseg': dirseg, 'image': image,
             'palette': palette, 'vdpregs': vdpregs,
             'vars': list(vars_) if vars_ else None,
-            'at': at, 'bytes': list(bytes_) if bytes_ else []}))
+            'at': at, 'bytes': list(bytes_) if bytes_ else [],
+            'regs': list(regs_) if regs_ else []}))
         self.t += 0.6
         return self
 
