@@ -72,37 +72,7 @@ DRWSTAT         LD      A, (MODIFIED)
                 INC     HL
                 PUSH    HL
 
-                ; RESOLVE LEFT GLYPH
-                LD      L, A
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                LD      A, H
-                ADD     A, HIGH(FONT4H)
-                LD      H, A            ; HL = FONT4H + LCHAR * 8
-
-                ; RESOLVE RIGHT GLYPH
-                LD      E, C
-                LD      D, 0
-                EX      DE, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                LD      A, H
-                ADD     A, HIGH(FONT4L)
-                LD      H, A
-                EX      DE, HL          ; DE = FONT4L + RCHAR * 8
-
-                ; OR 8 SCANLINES
-                LD      B, 8
-.STPLP          LD      A, (DE)
-                OR      (HL)
-                LD      (IX+0), A
-                INC     HL
-                INC     DE
-                INC     IX
-                DJNZ    .STPLP
+                CALL    CELLPAT         ; THE TWO GLYPHS INTO PATSHAD
 
                 ; STATUS BAR HAS ITS OWN ROLE, DISTINCT FROM THE MENU BAR
                 LD      A, (VCOLSTAT)
@@ -429,36 +399,7 @@ DRWMENU         ; 1. BLANK STATBUF, THEN LAY THE MENU TITLES OVER IT. THE
                 INC     HL
                 PUSH    HL
 
-                ; RESOLVE LEFT GLYPH
-                LD      L, A
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                LD      A, H
-                ADD     A, HIGH(FONT4H)
-                LD      H, A
-
-                ; RESOLVE RIGHT GLYPH
-                LD      E, C
-                LD      D, 0
-                EX      DE, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                LD      A, H
-                ADD     A, HIGH(FONT4L)
-                LD      H, A
-                EX      DE, HL
-
-                LD      B, 8
-.MNUPL          LD      A, (DE)
-                OR      (HL)
-                LD      (IX+0), A
-                INC     HL
-                INC     DE
-                INC     IX
-                DJNZ    .MNUPL
+                CALL    CELLPAT         ; THE TWO GLYPHS INTO PATSHAD
 
                 ; ROW 0 USES THE UI THEME COLOR
                 LD      A, (VCOLUI)

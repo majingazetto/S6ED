@@ -3,8 +3,8 @@
 ;                                       ****************************************
 ;
 ; 64 COLS X 24 ROWS (32 CELLS X 24 ROWS OF 8X8 PATTERNS).
-; EACH CELL HOLDS TWO 4X8 GLYPHS (HIGH NIBBLE FROM FONT4H, LOW NIBBLE FROM
-; FONT4L). COLORS COME FROM THE TMS9918 COLOR TABLE (8 BYTES PER CELL, ONE PER
+; EACH CELL HOLDS TWO 4X8 GLYPHS FROM FONT4H, THE RIGHT ONE ROTATED INTO THE
+; LOW NIBBLE (CELLPAT). COLORS COME FROM THE TMS9918 COLOR TABLE (8 BYTES PER CELL, ONE PER
 ; SCANLINE), BUT THE SHADOW KEEPS ONE BYTE PER CELL IN COLMAP AND COLDUMP
 ; EXPANDS IT X8 ON THE WAY OUT -- ALL EIGHT SCANLINES OF A CELL ALWAYS CARRY
 ; THE SAME COLOR. STYLES (BOLD, ITALIC, CODE) ARE DISPLAYED USING DISTINCT
@@ -289,37 +289,7 @@ COMROW          LD      A, B
 
 COMCELL         PUSH    DE              ; SAVE ATTRIBUTES (D=LATTR, E=RATTR)
 
-                ; 1. RESOLVE LEFT GLYPH (FONT4H + LCHAR * 8)
-                LD      L, A
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                LD      A, H
-                ADD     A, HIGH(FONT4H)
-                LD      H, A            ; HL = FONT4H + LCHAR * 8
-
-                ; 2. RESOLVE RIGHT GLYPH (FONT4L + RCHAR * 8)
-                LD      E, C
-                LD      D, 0
-                EX      DE, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL
-                LD      A, H
-                ADD     A, HIGH(FONT4L)
-                LD      H, A
-                EX      DE, HL          ; DE = FONT4L + RCHAR * 8
-
-                ; 3. OR 8 SCANLINES INTO PATSHAD
-                LD      B, 8
-.PATLP          LD      A, (DE)
-                OR      (HL)
-                LD      (IX+0), A
-                INC     HL
-                INC     DE
-                INC     IX
-                DJNZ    .PATLP
+                CALL    CELLPAT         ; 1-3. THE TWO GLYPHS INTO PATSHAD
 
                 ; 4. MAP ATTRIBUTES TO THEME COLOR
                 POP     DE              ; RESTORE D=LATTR, E=RATTR
@@ -354,6 +324,59 @@ COMCELL         PUSH    DE              ; SAVE ATTRIBUTES (D=LATTR, E=RATTR)
 .SETCOL         ; 5. WRITE ONE COLOR BYTE TO COLMAP
                 LD      (IY+0), A
                 INC     IY
+                RET
+
+
+; --- CELLPAT                   ----------------------------------------
+
+
+; - CELLPAT ----------------------------
+; - COMPOSE TWO 4X8 GLYPHS INTO ONE 8X8 CELL PATTERN
+; - IN:  A = LEFT CHAR, C = RIGHT CHAR, IX = DESTINATION (8 BYTES)
+; - OUT: IX += 8
+; - CLOBBERS: AF, B, DE, HL
+; -
+; - THE FONT HOLDS EVERY GLYPH IN THE HIGH NIBBLE. THE RIGHT ONE IS
+; - MOVED TO THE LOW NIBBLE HERE, FOUR RRCA PER SCANLINE, INSTEAD OF
+; - KEEPING A NIBBLE-SWAPPED COPY OF THE FONT: THAT COPY (FONT4L) COST
+; - 2 KB OF PAGE 1 TPA, WHICH S2ED DOES NOT HAVE.
+; -
+
+CELLPAT         CALL    GLYPH
+                EX      DE, HL          ; DE = LEFT GLYPH
+                LD      A, C
+                CALL    GLYPH
+                EX      DE, HL          ; HL = LEFT, DE = RIGHT GLYPH
+                LD      B, 8
+.LP             LD      A, (DE)
+                RRCA
+                RRCA
+                RRCA
+                RRCA                    ; RIGHT GLYPH TO THE LOW NIBBLE
+                OR      (HL)
+                LD      (IX+0), A
+                INC     HL
+                INC     DE
+                INC     IX
+                DJNZ    .LP
+                RET
+
+
+; - GLYPH ------------------------------
+; - ADDRESS OF A CHARACTER'S 4X8 GLYPH
+; - IN:  A = CHARACTER
+; - OUT: HL = FONT4H + A * 8 (GLYPH IN THE HIGH NIBBLE OF 8 BYTES)
+; - CLOBBERS: AF
+; -
+
+GLYPH           LD      L, A
+                LD      H, 0
+                ADD     HL, HL
+                ADD     HL, HL
+                ADD     HL, HL
+                LD      A, H
+                ADD     A, HIGH(FONT4H)
+                LD      H, A
                 RET
 
 

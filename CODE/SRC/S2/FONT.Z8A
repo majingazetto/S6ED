@@ -6,8 +6,9 @@
 ; AND BITS 3-0 FOR LOW NIBBLE).
 ;
 ; SOURCE: S2ED.FNT, READ FROM DISK AT STARTUP -- EXACTLY 2,048 BYTES LOADED
-; INTO FONT4H IN TPA RAM (PAGE 1). FONT4L IS DERIVED AT BOOT
-; BY SWAPPING HIGH AND LOW NIBBLES.
+; INTO FONT4H IN TPA RAM (PAGE 1), EVERY GLYPH IN THE HIGH NIBBLE. THE
+; RIGHT GLYPH OF A CELL IS ROTATED INTO THE LOW NIBBLE AS IT IS DRAWN
+; (CELLPAT, WINPUTC): THERE IS NO NIBBLE-SWAPPED COPY (FONT4L) ANY MORE.
 ;
 ; FALLBACK: IF S2ED.FNT IS MISSING OR CORRUPT, DERIVES THE 4PX FONT FROM
 ; THE MSX BIOS ROM CHARSET (CGTABL AT #0004) VIA PAIR-OR COMPRESSION.
@@ -25,7 +26,7 @@ FNTNAME         DEFM    "S2ED.FNT", 0
 
 
 ; - FONTINIT ---------------------------
-; - INITIALIZES 4X8 FONT TABLES IN TPA RAM (FONT4H AND FONT4L)
+; - INITIALIZES THE 4X8 FONT TABLE IN TPA RAM (FONT4H)
 ; - IN:  NONE
 ; - OUT: FNTOK = #FF IF S2ED.FNT USED, 0 IF ROM FALLBACK
 ; - CLOBBERS: ALL
@@ -91,25 +92,8 @@ FONTINIT        XOR     A
                 OR      C
                 JR      NZ, .ROMLP
 
-                ; BUILD FONT4L (#B800) BY NIBBLE SWAPPING FONT4H (#B000)
-.MAKEL          LD      HL, FONT4H
-                LD      DE, FONT4L
-                LD      BC, FNTLEN
-.SWPLP          LD      A, (HL)
-                RRCA
-                RRCA
-                RRCA
-                RRCA
-                LD      (DE), A
-                INC     HL
-                INC     DE
-                DEC     BC
-                LD      A, B
-                OR      C
-                JR      NZ, .SWPLP
-
                 ; RESTORE TEXT SEGMENT TO PAGE 2
-                JP      TXTBANK
+.MAKEL          JP      TXTBANK
 
 
 

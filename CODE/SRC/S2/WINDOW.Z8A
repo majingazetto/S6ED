@@ -785,27 +785,26 @@ WINPUTC         PUSH    BC              ; ROW/COL FOR THE CALLER
                 LD      A, D
                 LD      (HL), A         ; COLOR BYTE
 
-                ; GLYPH ADDRESS -> HL
-                LD      L, E
-                LD      H, 0
-                ADD     HL, HL
-                ADD     HL, HL
-                ADD     HL, HL          ; HL = CHAR*8
+                LD      A, E
+                CALL    GLYPH           ; HL = THE GLYPH, IN THE HIGH NIBBLE
                 POP     AF              ; CF = HALF
-                JR      C, .RGHT
-                LD      A, H
-                ADD     A, HIGH(FONT4H)
-                LD      H, A            ; HL = FONT4H + CHAR*8
-                LD      D, #0F          ; KEEP THE RIGHT GLYPH OF THE CELL
-                JR      .MRGE
-.RGHT           LD      A, H
-                ADD     A, HIGH(FONT4L)
-                LD      H, A            ; HL = FONT4L + CHAR*8
-                LD      D, #F0          ; KEEP THE LEFT GLYPH
-.MRGE           LD      B, 8
-.MRLP           LD      A, (IX+0)
+                SBC     A, A            ; A = #FF ON THE RIGHT HALF, 0 ON THE LEFT
+                LD      E, A
+                XOR     #0F
+                LD      D, A            ; D = #0F: KEEP THE RIGHT GLYPH; #F0: THE LEFT
+                LD      B, 8
+.MRLP           LD      A, (HL)
+                INC     E
+                DEC     E
+                JR      Z, .MRL         ; LEFT HALF: THE GLYPH IS WHERE IT GOES
+                RRCA
+                RRCA
+                RRCA
+                RRCA                    ; RIGHT HALF: TO THE LOW NIBBLE
+.MRL            LD      C, A
+                LD      A, (IX+0)
                 AND     D
-                OR      (HL)
+                OR      C
                 LD      (IX+0), A
                 INC     HL
                 INC     IX
