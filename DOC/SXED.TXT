@@ -6,7 +6,7 @@ S6ED  - Screen 6 text editor for MSX2, 80 columns
 S62ED - Screen 6 text editor for MSX2, 62 columns
 S2ED  - Screen 2 text editor for MSX1, 62 columns
 
-Font by Miguel A. Fernandez
+Fonts by Miguel A. Fernandez
 --------------------------------------------------------------
 
 
@@ -118,9 +118,9 @@ The SXED family has three members:
     - For those who prefer big characters over wide lines:
       every cell is byte aligned, so it is also the fastest
       of the three at drawing text.
-    - Font: the IBM CGA's, thin as normal and thick as
-      bold, until the hand-drawn 8x8 face arrives; the
-      Amstrad CPC and MSX BIOS faces come along (see 13).
+    - Hand-drawn 8x8 font with the same 4 weights; the
+      IBM CGA, Amstrad CPC and MSX BIOS faces come along
+      as alternatives (see 13).
     - The same 6 color themes and custom colors as S6ED.
     - Program: S62ED.COM
 
@@ -268,8 +268,7 @@ The status bar has two channels:
         [NORM]  Vi normal mode     [VIS]   Vi visual mode
 
         Ln NNNNN/NNNNN  Col NNN    (S6ED)
-        Ln NNNNN/NNNNN Col NNN     (S62ED)
-        Ln NNNNN/NNNNN Col NN      (S2ED)
+        Ln NNNNN/NNNNN Col NNN     (S62ED, S2ED)
 
       Line and column numbers are 1-based; the second figure
       is the total line count.
@@ -622,7 +621,10 @@ replaces it.
 
 Clipboard: Ctrl+X cut, Ctrl+C copy, Ctrl+V paste (Vi: d/x, y,
 p). Multi-line selections copy and paste whole lines with
-their line breaks.
+their line breaks. A selection that reaches past the last
+character of a line (Shift+Ctrl+Right, or $ in Vi visual
+mode) takes that line break too, so pasting it opens a new
+line.
 
 Undo/redo:
 
@@ -637,7 +639,7 @@ a single undo. Each undo also restores the cursor position
 and the viewport. A new edit invalidates the redo chain.
 
 The undo history lives in a 4 KB ring (about 23 operations on
-S6ED, 30 on S62ED, 29 on S2ED); the oldest operations are
+S6ED, 30 on S62ED and S2ED); the oldest operations are
 forgotten as it fills. A single operation touching more lines
 than the ring can hold (a huge selection delete, for example)
 cannot be recorded half-way: in that case the whole history is
@@ -931,7 +933,11 @@ editor again:
 
     COPY A:\TOOLS\FONTS\CPC.FNT A:\TOOLS\S62ED.FNT
 
-    CGA.FNT    IBM CGA (the default). Normal is the CGA's thin
+The default S62ED.FNT is hand-drawn by Miguel A. Fernandez.
+Its normal weight is his drawing; bold, italic and
+bold+italic are derived from it for now.
+
+    CGA.FNT    IBM CGA. Normal is the CGA's thin
                font and bold its thick one: the card carried
                both. Font design (c) IBM; raw ROM dumps from
                VileR's VGA text mode font collection.
@@ -954,6 +960,10 @@ block, ink in colour 3. Draw on the sheet with any paint
 program that keeps the palette, then convert it back:
 
     mkfont62.py sheet MYFONT.PNG --out S62ED.FNT
+
+With --derive only the normal block is read and the other
+three weights are generated from it, so you can start by
+drawing one block.
 
 RES/FONTS62/README.md lists the sources and their credits.
 
@@ -989,13 +999,15 @@ error handlers, so an empty drive, an open drive door or a
 write-protected disk no longer drops the DOS "Abort, Retry,
 Ignore?" prompt over the graphics screen. The operation
 simply fails and the status bar tells you ([SAVE ERROR],
-[CANNOT OPEN]...).
+[CANNOT OPEN]...). Ctrl+STOP pressed in the middle of a disk
+operation is handled the same way: the operation is
+abandoned and the editor carries on.
 
 Every save reports on the status bar: a "Saving..." progress
 bar over the lines while it writes, then [SAVED] or [SAVE
 ERROR]. A load shows a "Loading..." bar over the file size: a
-large file on a floppy takes seconds (the 990 lines of this
-manual, about 15 s), and the bar tells a slow disk from a
+large file on a floppy takes seconds (the 1,100 lines of
+this manual, about 10 s), and the bar tells a slow disk from a
 hung machine. The line count on the right grows meanwhile.
 
 Each editor checks that its .DAT file is its own: a sibling's
@@ -1051,8 +1063,8 @@ The disk boots to the DOS prompt instead of the editor
 
  -------- 16.- THANKS.
 
-    - Miguel A. Fernandez, for the beautiful hand-drawn 6x8
-      and 4x8 fonts (and for testing beyond the call of
+    - Miguel A. Fernandez, for the beautiful hand-drawn 6x8,
+      8x8 and 4x8 fonts (and for testing beyond the call of
       duty).
     - VileR, for the VGA text mode font collection the IBM
       CGA font comes from. Font design (c) IBM.
