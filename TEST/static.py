@@ -667,6 +667,40 @@ def check_statbuf_term(ctx):
                  % (got, cols + 1))
 
 
+def check_manual_width(ctx):
+    """DOC/SXED.TXT fits the narrowest text viewport of the three editors.
+
+    The manual says it is that wide "on purpose: you can read it with any
+    of the editors themselves, without horizontal scrolling".  The width is
+    TEXTCOLS of whichever target is narrowest -- 61 on S2ED since its right
+    margin, 2026-10-06 -- read from each .sym, so narrowing a target turns
+    this red until the manual is rewrapped, and a line typed one column too
+    long turns it red at once.
+    """
+    widths = {}
+    for prefix in ('S6ED', 'S2ED', 'S62ED'):
+        path = os.path.join(ctx.code_dir, prefix + '.sym')
+        try:
+            text = open(path, errors='replace').read()
+        except OSError:
+            return Check('manual-width', False, '%s.sym not found' % prefix)
+        m = re.search(r'^TEXTCOLS:\s*EQU\s+0x([0-9A-Fa-f]+)', text, re.M)
+        if not m:
+            return Check('manual-width', False,
+                         'TEXTCOLS not in %s.sym' % prefix)
+        widths[prefix] = int(m.group(1), 16)
+    limit = min(widths.values())
+    path = os.path.join(ctx.code_dir, '..', 'DOC', 'SXED.TXT')
+    with open(path, encoding='utf-8') as fh:
+        over = [(n, len(l.rstrip('\r\n'))) for n, l in enumerate(fh, 1)
+                if len(l.rstrip('\r\n')) > limit]
+    return Check('manual-width', not over,
+                 'SXED.TXT fits %d columns (narrowest TEXTCOLS: %s)'
+                 % (limit, ', '.join('%s %d' % kv for kv in widths.items()))
+                 if not over else 'lines wider than %d: %s'
+                 % (limit, over[:6]))
+
+
 ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_layout_asserts, check_record_exclusive, check_target_params,
        check_data_placement, check_statbuf_term,
@@ -674,7 +708,8 @@ ALL = [check_build_clean, check_image_end, check_vars_block, check_init_clear,
        check_number_notation, check_defb_width, check_version_literal,
        check_page1_hooks,
        check_assets, check_feature_discipline, check_window_discipline,
-       check_ftr_budget, check_tpa_chain, check_build_symmetry]
+       check_ftr_budget, check_tpa_chain, check_build_symmetry,
+       check_manual_width]
 
 
 def run(ctx):

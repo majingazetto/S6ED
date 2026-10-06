@@ -136,6 +136,17 @@ class S21Render(S2Case):
         if dump is None:
             return [Check('S2-1/dump', False, 'no VRAM dump')]
         pat, col = dump[:0x2000], dump[0x2000:]
+        # pattern.py states the text geometry so it can run without a build;
+        # every verdict computed from it is only as good as that statement.
+        model = (pattern.TXCOL0, pattern.TEXTCOLS,
+                 pattern.TXCOL0 + pattern.TEXTCOLS + pattern.RMARGIN)
+        built = (ctx.sym.get('TXCOL0'), ctx.sym.get('TEXTCOLS'),
+                 ctx.sym.get('SCRCOLS'))
+        checks.append(Check('S2-1/model', model == built,
+                            'pattern.py geometry (TXCOL0, TEXTCOLS, width) '
+                            '= %s, as built' % (model,) if model == built else
+                            'pattern.py says %s, the build says %s'
+                            % (model, built)))
         bad = pattern.mismatched_rows(
             pat, font(ctx), self.LINES, run.var('boot', 'TOPLINE'),
             cursor=(pattern.TXRFIRST + run.var('boot', 'CURY'),
@@ -933,15 +944,27 @@ class S211About(S2Case):
                             'title "About S2ED" rendered from the RAM font'
                             if not bad else 'title cells differ: %s' % bad))
 
-        # Body line: "S2ED - MSX1 62-Col" at row WINR+2, char col 20
+        # Body line: "S2ED - MSX1 NN-Col" at row WINR+2, char col 20.  NN is
+        # TEXTCOLS from the SYMBOL TABLE, as the version below is: the About
+        # spells it from the constant, and a width typed by hand goes red.
+        hdr = 'S2ED - MSX1 %d-Col' % ctx.sym['TEXTCOLS']
         brow = pattern.row_of(dlg[:0x2000], self.WINR + 2)
         bad = [10 + i
-               for i, want in enumerate(self.text_cells(
-                   fnt, 'S2ED - MSX1 62-Col'))
+               for i, want in enumerate(self.text_cells(fnt, hdr))
                if brow[(10 + i) * 8:(11 + i) * 8] != want]
         checks.append(Check('S2-11/body-text', not bad,
-                            'body "S2ED - MSX1 62-Col" rendered'
+                            'body %r rendered' % hdr
                             if not bad else 'body cells differ: %s' % bad))
+
+        # The display line, the same way: TEXTCOLS x ROWSVIS.
+        dsp = 'Display: %dx%d' % (ctx.sym['TEXTCOLS'], ctx.sym['ROWSVIS'])
+        dsp += ' ' * (len(dsp) % 2)
+        drow = pattern.row_of(dlg[:0x2000], self.WINR + 5)
+        bad = [10 + i for i, want in enumerate(self.text_cells(fnt, dsp))
+               if drow[(10 + i) * 8:(11 + i) * 8] != want]
+        checks.append(Check('S2-11/display', not bad,
+                            '%r rendered from TEXTCOLS and ROWSVIS' % dsp
+                            if not bad else 'display cells differ: %s' % bad))
 
         # The version line, read from the SYMBOL TABLE rather than written
         # here: CORE/CONST_CORE.Z8A holds VERSION.MAJOR/.MINOR and both
@@ -4122,6 +4145,83 @@ class S246ViVisualWalk(S2Case):
         return checks
 
 
+# --- S2-47  THE RIGHT MARGIN ------------------------------------------
+
+
+class S247RightMargin(S2Case):
+    name = 'S2-47-right-margin'
+    desc = ('the text ends on screen column 62, column 63 stays blank, also '
+            'on a line longer than the viewport and scrolled sideways')
+    origin = ('2026-10-06: TEXTCOLS 62 -> 61 so the text ends with the clock '
+              'and the status bar (a CRT eats the last 4 px). The last cell '
+              'becomes half text, half margin, and COMROW used to blank a '
+              'right half only past the end of the LINE: a longer line would '
+              'have painted its column 61 into the margin.')
+    LONG = ''.join(chr(65 + i % 26) for i in range(130))
+    LINES = [LONG, ''.join(chr(97 + i % 26) for i in range(61)), 'X']
+
+    def fixture(self, ctx, variant=None):
+        return crlf(self.LINES)
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot', vram='patcol')
+        # Mid-line, not at its end: with the cursor on column 70 the view
+        # has scrolled and the line still runs past its right edge, so the
+        # margin has a real character behind it.  At the end of the line it
+        # would not (measured: LEFTCOL 78, and 78 + 61 > 130).
+        t.press('RIGHT', repeat=70)
+        t.wait(1.0)
+        t.snap('mid', vram='patcol')
+        return t
+
+    def check(self, ctx, run, label):
+        dump = run.blob(label, 'patcol')
+        if dump is None:
+            return [Check('S2-47/%s' % label, False, 'no VRAM dump')]
+        fnt = font(ctx)
+        left = run.var(label, 'LEFTCOL') or 0
+        top = run.var(label, 'TOPLINE') or 0
+        currow = pattern.TXRFIRST + (run.var(label, 'CURY') or 0)
+        curcol = pattern.scol((run.var(label, 'CURX') or 0) - left)
+        bad, margin = [], []
+        for i in range(pattern.ROWSVIS):
+            row, n = pattern.TXRFIRST + i, top + i
+            text = self.LINES[n][left:] if n < len(self.LINES) else ''
+            got = pattern.row_of(dump, row)
+            dif = pattern.differing_columns(
+                got, pattern.compose_text(fnt, text))
+            if row == currow:
+                dif = [c for c in dif if c != curcol]
+            if dif:
+                bad.append((row, dif[:6]))
+            if any(got[31 * 8 + y] & 0x0F for y in range(8)):
+                margin.append(row)
+        return [
+            Check('S2-47/%s' % label, not bad,
+                  'LEFTCOL %d: every text row matches the computed screen, '
+                  'column 60 drawn, 61 off the viewport' % left
+                  if not bad else 'LEFTCOL %d, rows differ (screen cols): %s'
+                  % (left, bad[:4])),
+            Check('S2-47/%s-margin' % label, not margin,
+                  'screen column 63 blank on every text row' if not margin
+                  else 'column 63 painted on rows %s' % margin[:6]),
+        ]
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        checks = self.check(ctx, run, 'boot') + self.check(ctx, run, 'mid')
+        left = run.var('mid', 'LEFTCOL') or 0
+        curx = run.var('mid', 'CURX') or 0
+        checks.append(Check('S2-47/scrolled', curx == 70 and left > 0 and
+                            left + pattern.TEXTCOLS < len(self.LONG) and
+                            0 <= curx - left < pattern.TEXTCOLS,
+                            'CURX %d, LEFTCOL %d: the view scrolled, the cursor '
+                            'is on view column %d and the line runs past the '
+                            'margin' % (curx, left, curx - left)))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -4137,7 +4237,7 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S238ReflowAttrs(), S239BrowseTitle(),
          S240ColDigits(), S241BrowseCaret(),
          S242ScrollNoDup(), S243ClockHz(), S244MenuStrips(),
-         S245SettingsValues(), S246ViVisualWalk()]
+         S245SettingsValues(), S246ViVisualWalk(), S247RightMargin()]
 
 
 def run(ctx, cases=None):

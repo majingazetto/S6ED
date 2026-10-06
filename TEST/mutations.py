@@ -151,6 +151,64 @@ MUTATIONS = [
         'expect': ['V3/content'],
     },
     {
+        # The margin is blanked by POSITION.  Without the test the last cell's
+        # right half is fetched like any other column, and on a line longer
+        # than the viewport that is a real character -- painted into the
+        # 4 px the margin exists to keep clear.
+        'name': 's2-rmargin-pos',
+        'target': 'S2ED',
+        'why': 'COMROW blanks the right margin only past the end of the line, '
+               'so a long line paints its column 61 on screen column 63',
+        'file': 'RENDER.Z8A',
+        'old': """                LD      A, B
+                CP      TXCELLS - 1
+                JR      Z, .RBLNK
+                ADD     A, A""",
+        'new': """                LD      A, B
+                                        ; MUTATION: MARGIN BY LENGTH ONLY
+                ADD     A, A""",
+        'filter': 'S2-47',
+        'expect': ['S2-47/boot-margin', 'S2-47/mid-margin'],
+    },
+    {
+        # TEXTCOLS is odd now, so TEXTCOLS / 2 is one cell short: the cell
+        # holding text column 60 would never be composed.
+        'name': 's2-txcells-half',
+        'target': 'S2ED',
+        'why': 'COMROW stops at TEXTCOLS / 2 cells, so text column 60 is '
+               'never drawn',
+        'file': 'RENDER.Z8A',
+        'old': """                CP      TXCELLS
+                JR      NZ, .CELLP""",
+        'new': """                CP      TEXTCOLS / 2    ; MUTATION: ONE CELL SHORT
+                JR      NZ, .CELLP""",
+        'filter': 'S2-47',
+        'expect': ['S2-47/boot'],
+    },
+    {
+        'name': 's2-about-width',
+        'target': 'S2ED',
+        'why': 'the About states the width by hand, and it says 62',
+        'file': 'WINDOW.Z8A',
+        'old': """.STRHDR         DEFB    "S2ED - MSX1 ", '0' + TEXTCOLS / 10
+                DEFB    '0' + TEXTCOLS - TEXTCOLS / 10 * 10, "-Col", 0""",
+        'new': """.STRHDR         DEFM    "S2ED - MSX1 62-Col", 0 ; MUTATION""",
+        'filter': 'S2-11',
+        'expect': ['S2-11/body-text'],
+    },
+    {
+        'name': 't0-manual-62',
+        'why': 'a manual line one column wider than the narrowest editor, '
+               'which then needs horizontal scrolling to read it',
+        'file': '../DOC/SXED.TXT',
+        'old': 'SXED is a family of full screen text editors for MSX\n'
+               'computers running MSX-DOS 2 or Nextor.',
+        'new': 'SXED is a family of full screen text editors for MSX computers\n'
+               'running MSX-DOS 2 or Nextor.',
+        'filter': 'T0',
+        'expect_static': ['manual-width'],
+    },
+    {
         'name': 's2-col-digits',
         'target': 'S2ED',
         'why': 'the S2ED status bar shows the column with two digits',

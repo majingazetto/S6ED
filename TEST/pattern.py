@@ -32,10 +32,13 @@ COLS = 64               # screen columns (two 4 px characters per cell)
 
 # The document does not start at screen column 0: the first cell of every text
 # row is a gutter (kept for line marks), so text column c is screen column
-# c + TXCOL0 and a text row holds TEXTCOLS columns (CONST_S2.Z8A).  The menu
-# and status bars still use all 64.
+# c + TXCOL0 and a text row holds TEXTCOLS columns (CONST_S2.Z8A).  The last
+# screen column is a blank margin, so the text ends on column 62 with the
+# clock and the status bar.  The menu and status bars still use all 64.
+# S2-1/model checks these three against the symbol table.
 TXCOL0 = 2
-TEXTCOLS = COLS - TXCOL0
+RMARGIN = 1
+TEXTCOLS = COLS - TXCOL0 - RMARGIN
 GUTTER = ' ' * TXCOL0
 ROWS = 24               # physical screen rows
 PATLEN = ROWLEN * ROWS  # 6144
