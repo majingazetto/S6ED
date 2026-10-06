@@ -91,7 +91,7 @@ RG26SA          EQU     #FFFB
 RG27SA          EQU     #FFFC
 
 CGTABL          EQU     #0004           ; WORD IN THE BIOS ROM HOLDING THE
-                                        ; ADDRESS OF THE 6X8 CHARSET.
+                                        ; ADDRESS OF THE 8X8 CHARSET.
                                         ; PAGE 0 IS RAM UNDER DOS, SO IT MUST
                                         ; BE READ WITH RDSLT USING THE SLOT ID
                                         ; IN EXPTBL. VERIFIED AGAINST

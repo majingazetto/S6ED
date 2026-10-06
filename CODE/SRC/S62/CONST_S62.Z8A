@@ -91,14 +91,14 @@ BRWMAX          EQU     160             ; FILE BROWSER ENTRY CAPACITY
 BRWCOLS         EQU     4               ; FILE BROWSER GRID: COLUMNS...
 BRWROWS         EQU     12              ; ...AND ROWS ON SCREEN
 BRWSLOT         EQU     14              ; CHARACTERS PER GRID SLOT
-                ; INFORMATION LINE COLUMNS (56 CHARACTERS ON S62ED)
+                ; INFORMATION LINE COLUMNS (55 CHARACTERS ON S62ED)
 BICSIZE         EQU     14              ; SIZE, RIGHT-ALIGNED IN BICSZW
 BICSZW          EQU     7
 BICDATE         EQU     23              ; DATE, AS DIR PRINTS IT
 BICTIME         EQU     32              ; TIME, AS DIR PRINTS IT
 BICATTR         EQU     41              ; RHSA
-BICCNTE         EQU     56              ; COUNT, RIGHT-ALIGNED, ENDS HERE
-BICLEN          EQU     56              ; LINE LENGTH
+BICCNTE         EQU     55              ; COUNT, RIGHT-ALIGNED, ENDS HERE
+BICLEN          EQU     55              ; LINE LENGTH: 8 + 55 * 8 = 448, 4 PX INSIDE BRWIW
 
 
 ; --- PALETTE                   ----------------------------------------

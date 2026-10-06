@@ -2,21 +2,20 @@
 ;                                       * FILE BROWSER WINDOW (SCREEN 6)       *
 ;                                       ****************************************
 ;
-; THE S6ED HALF OF THE FILE BROWSER (DEV/SPEC_FILE_BROWSER.MD): A GRID OF
-; BRWCOLS X BRWROWS SLOTS OF BRWSLOT CHARACTERS (5 X 14 OF 14 = 70 COLUMNS,
-; THE EXACT WIDTH OF A 432-PIXEL WINDOW), A SEPARATOR, THE INFORMATION LINE,
+; THE S62ED HALF OF THE FILE BROWSER (DEV/SPEC_FILE_BROWSER.MD): A GRID OF
+; BRWCOLS X BRWROWS SLOTS OF BRWSLOT CHARACTERS (4 X 12 OF 14 = 56 COLUMNS,
+; THE EXACT INNER WIDTH OF A 456-PIXEL WINDOW), A SEPARATOR, THE INFORMATION LINE,
 ; THE NAME FIELD AND TWO BUTTONS. THE LISTING, THE PATHS AND THE LINE'S TEXT
 ; ARE CORE/BROWSE.Z8A. THE FIELD REUSES WINEDIT'S PAINTERS (EDBOX / EDFLD /
 ; EDBLIT) BUT NOT ITS KEY LOOP: THE FOCUS HERE HAS FOUR STOPS.
 ;
-; A SLOT IS 84 PIXELS WIDE AND STARTS AT RELATIVE X 4 + 84 * COLUMN, BOTH
+; A SLOT IS 112 PIXELS WIDE AND STARTS AT RELATIVE X 4 + 112 * COLUMN, BOTH
 ; MULTIPLES OF 4, SO EVERY SLOT IS A BYTE-ALIGNED WINUPD. ITS TEXT STARTS
-; TWO PIXELS IN, WHERE WINPCO PUTS CHARACTER COLUMN 14 * COLUMN.
+; FOUR PIXELS IN, WHERE WINPCO PUTS CHARACTER COLUMN 14 * COLUMN.
 
-BRWX            EQU     24              ; WINDOW, CENTRED: (512 - 464) / 2
-BRWY            EQU     10
-BRWW            EQU     464
-BRWH            EQU     192
+BRWX            EQU     28              ; WINDOW, CENTRED: (512 - 456) / 2
+BRWY            EQU     18              ; CENTRED: (212 - BRWH) / 2
+BRWW            EQU     456
 BRWSLW          EQU     BRWSLOT * 8     ; SLOT WIDTH IN PIXELS (14 * 8 = 112)
 BRWLSTY         EQU     16              ; FIRST GRID ROW, RELATIVE Y
 BRWSEPY         EQU     BRWLSTY + BRWROWS * 8 + 3 ; SEPARATOR
@@ -24,8 +23,10 @@ BRWINFR         EQU     BRWROWS + 1     ; INFORMATION LINE, TEXT ROW
 BRWFLDR         EQU     BRWROWS + 3     ; NAME FIELD, TEXT ROW
 BRWBTNY         EQU     BRWLSTY + (BRWFLDR + 2) * 8 + 2 ; BUTTONS, RELATIVE Y
 BRWIW           EQU     BRWW - 8        ; WIDTH OF A FULL INNER LINE
+BRWH            EQU     BRWBTNY + 22    ; BUTTONS (14) + 8 PX BOTTOM MARGIN = 176
                 ASSERT  BRWCOLS == 4            ; .LIST / .ROWMV MULTIPLY BY 4
-                ASSERT  BRWSLOT * BRWCOLS * 8 + 16 == BRWW
+                ASSERT  BRWSLOT * BRWCOLS * 8 + 8 == BRWW ; GRID SPANS BRWIW
+                ASSERT  BRWY * 2 + BRWH == 212  ; VERTICALLY CENTRED
 
 
 ; --- DOBRW                     ----------------------------------------
@@ -832,7 +833,7 @@ DOBRW           XOR     A
                 OR      A
                 JR      Z, .BTN1
                 LD      HL, .BTNSAV
-.BTN1           LD      DE, 300
+.BTN1           LD      DE, 292         ; BORDERS 291..364, 371..444: RIGHT-ALIGNED
                 LD      BC, BRWBTNY
                 LD      A, (BRWFOC)
                 CP      BRF_OK
@@ -841,7 +842,7 @@ DOBRW           XOR     A
                 INC     A
 .BTN1S          CALL    WINBTS
                 LD      HL, .BTNCAN
-                LD      DE, 364
+                LD      DE, 372         ; 292 + 74 + 6 PX GAP, MULTIPLE OF 4
                 LD      BC, BRWBTNY
                 LD      A, (BRWFOC)
                 CP      BRF_CANC

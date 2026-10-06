@@ -128,9 +128,9 @@ STATCEL         LD      L, C
 
 
 ; - BLDSTAT ----------------------------
-; - BUILD DYNAMIC STATUS BAR TEXT IN STATBUF (83 COLS)
-; - LEFT CHANNEL (COLS 0..52): SYSTEM/VI MESSAGES, ROM FALLBACK
-; - RIGHT CHANNEL (COLS 53..82): MODE, LN/COL TELEMETRY (ENDS AT 506, -1 MARGIN)
+; - BUILD DYNAMIC STATUS BAR TEXT IN STATBUF (62 COLS)
+; - LEFT CHANNEL (COLS 0..32): SYSTEM/VI MESSAGES, ROM FALLBACK
+; - RIGHT CHANNEL (COLS 33..61): MODE, LN/COL TELEMETRY
 ; - IN:  NONE
 ; - OUT: NONE
 ; - CLOBBERS: ALL
@@ -145,13 +145,14 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 62 SPACES, FOLLOWED BY NULL TERMINATO
                 XOR     A
                 LD      (STATBUF + STATCOLS), A ; NULL TERMINATOR AT 62
 
-                ; 2. LEFT CHANNEL: COLS 0..33 (MAX 34 CHARACTERS)
+                ; 2. LEFT CHANNEL: COLS 0..32 (MAX 33 CHARACTERS; THE LONGEST
+                ;    USER IS THE VI EX LINE, ':' + 26)
                 LD      DE, STATBUF
                 LD      A, (STATMSG)
                 OR      A
                 JR      Z, .NOSTMSG
                 LD      HL, STATMSG
-                LD      B, 34
+                LD      B, 33
                 CALL    .CPYMAX
                 JR      .DOLEFT
 
@@ -159,7 +160,7 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 62 SPACES, FOLLOWED BY NULL TERMINATO
                 OR      A
                 JR      Z, .CHKROM
                 LD      HL, .STROOM     ; "[FILE TOO LARGE]"
-                LD      B, 34
+                LD      B, 33
                 CALL    .CPYMAX
                 JR      .DOLEFT
 
@@ -168,7 +169,7 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 62 SPACES, FOLLOWED BY NULL TERMINATO
                 ;   LD HL, .STRROM
                 ;   JR Z, .PUTFNT
                 ;   LD HL, .STRNOFN
-                LD      B, 34
+                LD      B, 33
                 LD      A, (FNTOK)
                 OR      A
                 LD      HL, .STRROM
@@ -176,10 +177,10 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 62 SPACES, FOLLOWED BY NULL TERMINATO
                 LD      HL, .STRNOFN
 .PUTFNT         CALL    .CPYMAX
 
-.DOLEFT         ; 3. RIGHT CHANNEL AT FIXED OFFSET 34 (COLS 34..61 = 28 CHARS)
-                LD      DE, STATBUF + 34
+.DOLEFT         ; 3. RIGHT CHANNEL AT FIXED OFFSET 33 (COLS 33..61 = 29 CHARS)
+                LD      DE, STATBUF + 33
 
-                ; A. MODE INDICATOR: 6 CHARS (COLS 34..39)
+                ; A. MODE INDICATOR: 6 CHARS (COLS 33..38)
                 LD      A, (KMAPID)
                 CP      KMVI
                 JR      NZ, .NOTVI
@@ -206,12 +207,12 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 62 SPACES, FOLLOWED BY NULL TERMINATO
                 LD      HL, .STRVII     ; "[INS] "
 .PUTNVI         CALL    .CPY6
 .DONEMOD
-                ; B. 1 SPACE SEPARATOR (COL 40)
+                ; B. 1 SPACE SEPARATOR (COL 39)
                 LD      A, ' '
                 LD      (DE), A
                 INC     DE
 
-                ; C. CURSOR POSITION: 21 CHARS (COLS 41..61)
+                ; C. CURSOR POSITION: 22 CHARS (COLS 40..61)
                 LD      HL, .STRLN      ; "Ln "
                 CALL    .CPY3
                 LD      HL, (DOCLINE)
@@ -227,10 +228,10 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 62 SPACES, FOLLOWED BY NULL TERMINATO
                 LD      HL, .STRCOL     ; " Col "
                 CALL    .CPY5
                 LD      A, (CURX)
-                INC     A
                 LD      L, A
                 LD      H, 0
-                LD      B, 2
+                INC     HL              ; 1..256: CURX 255 MUST NOT WRAP
+                LD      B, 3
                 CALL    .CPYNUM
                 RET
 
@@ -285,7 +286,7 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 62 SPACES, FOLLOWED BY NULL TERMINATO
 .STROVR         DEFM    "[OVR] "
 .STRSEL         DEFM    "[SEL] "
 .STRLN          DEFM    "Ln "
-.STRCOL         DEFM    "  Col "
+.STRCOL         DEFM    " Col "
 .STROOM         DEFM    "[FILE TOO LARGE]", 0
 
 
@@ -778,7 +779,7 @@ DRWCUR          PUSH    AF
                 LD      (VDP_SX), HL
                 LD      (VDP_SY), HL
 
-                LD      HL, CELLW       ; NX = 6
+                LD      HL, CELLW       ; NX = 8
                 LD      (VDP_NX), HL
                 LD      HL, CELLH       ; NY = 8
                 LD      (VDP_NY), HL

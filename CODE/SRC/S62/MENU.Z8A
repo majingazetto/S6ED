@@ -625,9 +625,9 @@ MNUPNT          PUSH    AF
                 LD      B, H
                 LD      C, L            ; BC = DY = WINCOMP_Y + RelY
                 LD      HL, (WINX)
-                LD      DE, 6
+                LD      DE, 8
                 ADD     HL, DE
-                EX      DE, HL          ; DE = DX = WINX + 6
+                EX      DE, HL          ; DE = DX = WINX + 8
                 LD      HL, (MNUTMPP)   ; HL = STRING POINTER
                 XOR     A               ; VARIANT 0 (NORMAL)
                 CALL    WINSTR
@@ -648,9 +648,9 @@ MNUPNT          PUSH    AF
                 LD      B, H
                 LD      C, L            ; BC = DY = WINCOMP_Y + RelY
                 LD      HL, (WINX)
-                LD      DE, 6
+                LD      DE, 8
                 ADD     HL, DE
-                EX      DE, HL          ; DE = DX = WINX + 6
+                EX      DE, HL          ; DE = DX = WINX + 8
                 LD      HL, (MNUTMPP)   ; HL = STRING POINTER
                 LD      A, 1            ; VARIANT 1 (BOLD)
                 CALL    WINSTR3

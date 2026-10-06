@@ -611,7 +611,7 @@ WINBOX          PUSH    HL
                 ; 7. SIDE BORDER SLIVERS (LMMV, 1 PX, COL_UI), Y=1..WINH-2
                 CALL    WINSID
 
-                ; 8. TITLE TEXT IN BOLD + COLOR 3 (TOR) AT (WINX+6, +2)
+                ; 8. TITLE TEXT IN BOLD + COLOR 3 (TOR) AT (WINX+8, +2)
 .TITLE          POP     HL              ; HL = TITLE STRING
                 LD      A, H
                 OR      L
@@ -621,7 +621,7 @@ WINBOX          PUSH    HL
                 RET     Z
                 PUSH    HL
                 LD      HL, (WINX)
-                LD      DE, 6
+                LD      DE, 8
                 ADD     HL, DE
                 EX      DE, HL          ; DE = DX
                 LD      BC, WINCOMP_Y + 2
@@ -706,7 +706,7 @@ WINBTS          LD      (WINBST), A
                 PUSH    DE
                 PUSH    BC
 
-                ; 1. OUTER BORDER (COL_HI) 58 X 14
+                ; 1. OUTER BORDER (COL_HI) 74 X 14
                 LD      HL, (WINX)
                 ADD     HL, DE
                 DEC     HL
@@ -715,7 +715,7 @@ WINBTS          LD      (WINBST), A
                 ADD     HL, BC
                 DEC     HL
                 LD      (VDP_DY), HL
-                LD      HL, 58
+                LD      HL, 74
                 LD      (VDP_NX), HL
                 LD      HL, 14
                 LD      (VDP_NY), HL
@@ -727,7 +727,8 @@ WINBTS          LD      (WINBST), A
                 LD      A, VDP_LMMV | VDP_IMP
                 CALL    LMMV
 
-                ; 2. BUTTON BODY 56 X 12: COL_UI NORMAL, COL_HI SELECTED.
+                ; 2. BUTTON BODY 72 X 12: COL_UI NORMAL, COL_HI SELECTED.
+                ;    8 CHARS X 8 PX + 4 PX PADDING EACH SIDE.
                 ;    BYTE FILL: REL X IS A MULTIPLE OF 4 BY CONTRACT
                 POP     BC
                 POP     DE
@@ -739,7 +740,7 @@ WINBTS          LD      (WINBST), A
                 LD      HL, WINCOMP_Y
                 ADD     HL, BC
                 LD      (VDP_DY), HL
-                LD      HL, 56
+                LD      HL, 72
                 LD      (VDP_NX), HL
                 LD      HL, 12
                 LD      (VDP_NY), HL
@@ -929,11 +930,11 @@ WINCLOS         XOR     A
 ; - CLOBBERS: ALL
 ; -
 
-DOABT           LD      HL, 76
+DOABT           LD      HL, 72          ; CENTRED: (512 - 368) / 2
                 LD      (WINX), HL
                 LD      HL, 44
                 LD      (WINY), HL
-                LD      HL, 360
+                LD      HL, 368
                 LD      (WINW), HL
                 LD      HL, 116
                 LD      (WINH), HL
@@ -941,9 +942,9 @@ DOABT           LD      HL, 76
                 LD      HL, .TITABT
                 CALL    WINOPEN
 
-                ; LINE 0: "S62ED - MSX2 Screen 6 Text Editor"
+                ; LINE 0: "S62ED - MSX2 Screen 6 Text Editor" (33 CHARS)
                 LD      HL, .S6ED
-                LD      C, 6
+                LD      C, 5
                 LD      B, 0
                 LD      A, 1            ; BOLD
                 CALL    WINPRN
@@ -952,9 +953,9 @@ DOABT           LD      HL, 76
                 XOR     A               ; NORMAL
                 CALL    WINSTR
 
-                ; LINE 1: "Version 0.1 " (BOLD) + "(Experimental)" (ITALIC)
+                ; LINE 1: "Version 0.1 " (BOLD) + "(Experimental)" (ITALIC), 26 CHARS
                 LD      HL, .STRVER
-                LD      C, 10
+                LD      C, 9
                 LD      B, 1
                 LD      A, 1            ; BOLD
                 CALL    WINPRN
@@ -963,9 +964,11 @@ DOABT           LD      HL, 76
                 LD      A, 2            ; ITALIC
                 CALL    WINSTR
 
+                ; LINES 3..5: 9-CHAR LABEL + UP TO 33-CHAR VALUE = 42 CHARS,
+                ; FROM COL 1: REL X 16..352, 16 PX MARGIN EACH SIDE
                 ; LINE 3: "Display: " (BOLD) + "62x24 Columns (512x212, 4 Colors)" (NORM)
                 LD      HL, .LBDSP
-                LD      C, 2
+                LD      C, 1
                 LD      B, 3
                 LD      A, 1            ; BOLD
                 CALL    WINPRN
@@ -976,7 +979,7 @@ DOABT           LD      HL, 76
 
                 ; LINE 4: "Fonts:   " (BOLD) + "8x8 Native 4 Weights (B, I, BI)" (NORM)
                 LD      HL, .LBFNT
-                LD      C, 2
+                LD      C, 1
                 LD      B, 4
                 LD      A, 1            ; BOLD
                 CALL    WINPRN
@@ -987,7 +990,7 @@ DOABT           LD      HL, 76
 
                 ; LINE 5: "Memory:  " (BOLD) + "DOS 2 / Nextor Mapper Manager" (NORM)
                 LD      HL, .LBMEM
-                LD      C, 2
+                LD      C, 1
                 LD      B, 5
                 LD      A, 1            ; BOLD
                 CALL    WINPRN
@@ -996,16 +999,16 @@ DOABT           LD      HL, 76
                 XOR     A               ; NORMAL
                 CALL    WINSTR
 
-                ; LINE 7: "Press ENTER, SPACE or ESC to close"
+                ; LINE 7: "Press ENTER, SPACE or ESC to close" (34 CHARS, CENTRED)
                 LD      HL, .STRINS
                 LD      C, 5
                 LD      B, 7
                 XOR     A               ; NORMAL
                 CALL    WINPRN
 
-                ; BUTTON [  OK  ] (REL X = 152, REL Y = 94)
+                ; BUTTON [  OK  ] (REL X = (368 - 72) / 2 = 148, REL Y = 94)
                 LD      HL, .BTNOK
-                LD      DE, 152
+                LD      DE, 148
                 LD      BC, 94
                 CALL    WINBTN
 
@@ -1102,9 +1105,9 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
                 XOR     A
                 LD      (WINRES), A
 
-                ; MESSAGE LINE
+                ; MESSAGE LINE (UP TO 16 CHARS FROM COL 3: REL X 32..160)
                 POP     HL
-                LD      C, 7
+                LD      C, 3
                 LD      B, 1
                 XOR     A               ; NORMAL
                 CALL    WINPRN
@@ -1117,7 +1120,7 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
                 OR      A
                 JR      Z, .NOWRN
                 LD      HL, .STRWRN
-                LD      C, 7
+                LD      C, 3
                 LD      B, 2
                 LD      A, 1            ; BOLD
                 CALL    WINPRN
@@ -1157,14 +1160,14 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
                 LD      (HL), A
                 CALL    .BTNS
                 CALL    WINVSY          ; ONE SYNC FOR THE WHOLE BATCH
-                LD      HL, 32          ; YES BUTTON RECT: BORDER AT REL 35
+                LD      HL, 16          ; YES BUTTON RECT: BORDER 19..92, BYTE ALIGNED
                 LD      DE, 43          ; BORDER TOP AT REL 43
-                LD      BC, 64
+                LD      BC, 80
                 LD      A, 14
                 CALL    WINUPD
-                LD      HL, 104         ; NO BUTTON RECT: BORDER AT REL 107
+                LD      HL, 104         ; NO BUTTON RECT: BORDER 107..180
                 LD      DE, 43
-                LD      BC, 64
+                LD      BC, 80
                 LD      A, 14
                 CALL    WINUPD
                 JR      .KEYLP
@@ -1187,7 +1190,7 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
                 JR      .YSGO
 .YSSEL          LD      A, 1            ; YES SELECTED
 .YSGO           LD      HL, .BTNYES
-                LD      DE, 36
+                LD      DE, 20
                 LD      BC, 44
                 CALL    WINBTS
                 LD      A, (WINSEL)
@@ -1209,7 +1212,7 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
 .STRNEW         DEFM    "Discard changes?", 0
 .STROVR         DEFM    "Overwrite file?", 0
 .STRWRN         DEFM    "Unsaved changes!", 0
-.BTNYES         DEFM    "[  YES  ]", 0
+.BTNYES         DEFM    "[  YES ]", 0
 .BTNNO          DEFM    "[  NO  ]", 0
 
 
@@ -1610,7 +1613,7 @@ DOGOTO          LD      HL, 156
 ; -
 
 EDBTNS          LD      HL, .BTNOK
-                LD      DE, 36
+                LD      DE, 20          ; PAIR 20..180, CENTRED IN 200
                 LD      BC, 50
                 LD      A, (WINSEL)
                 CP      ED_FOK
@@ -1636,6 +1639,12 @@ EDBTNS          LD      HL, .BTNOK
 ; --- DOFIND                    ----------------------------------------
 
 
+                ; FIND FIELD GEOMETRY: TEXT COL 10 -> REL X 8 + 10 * CELLW,
+                ; SRCHMAX CHARS + CARET = 19 CELLS OF CELLW PIXELS
+FNDFLDX         EQU     8 + 10 * CELLW          ; = 88
+FNDFLDW         EQU     (SRCHMAX + 1) * CELLW   ; = 152
+
+
 ; - DOFIND -----------------------------
 ; - FIND & REPLACE DIALOG (PHASED IN FTRBASE VIA FCALL).
 ; - COLLECTS SEARCH PATTERN, REPLACE PATTERN, OPTIONS AND ACTION.
@@ -1645,11 +1654,11 @@ EDBTNS          LD      HL, .BTNOK
 ; - CLOBBERS: ALL
 ; -
 
-DOFIND          LD      HL, 110
+DOFIND          LD      HL, 88          ; CENTRED: (512 - 336) / 2
                 LD      (WINX), HL
                 LD      HL, 56
                 LD      (WINY), HL
-                LD      HL, 260
+                LD      HL, 336         ; 4 BUTTONS: 12 + 4 * 72 + 3 * 8 + 12
                 LD      (WINW), HL
                 LD      HL, 74
                 LD      (WINH), HL
@@ -1935,14 +1944,14 @@ DOFIND          LD      HL, 110
                 CP      2
                 JR      NZ, .CASUNF
 
-                ; FOCUSED: FILL 6X8 CHECKBOX WITH COL_HI (YELLOW)
+                ; FOCUSED: FILL 8X8 CHECKBOX (COL 14: REL X 120) WITH COL_HI
                 LD      HL, (WINX)
-                LD      DE, 90
+                LD      DE, 120
                 ADD     HL, DE
                 LD      (VDP_DX), HL
                 LD      HL, WINCOMP_Y + 32
                 LD      (VDP_DY), HL
-                LD      HL, 6
+                LD      HL, CELLW
                 LD      (VDP_NX), HL
                 LD      HL, 8
                 LD      (VDP_NY), HL
@@ -1959,7 +1968,7 @@ DOFIND          LD      HL, 110
                 BIT     0, A
                 JR      Z, .CASDON
                 LD      HL, (WINX)
-                LD      DE, 90
+                LD      DE, 120
                 ADD     HL, DE          ; HL = DX
                 LD      DE, WINCOMP_Y + 32 ; DE = DY
                 LD      A, 'X'
@@ -1988,7 +1997,7 @@ DOFIND          LD      HL, 110
                 INC     A               ; VARIANT 1 (BOLD) WHEN FOCUSED
 .BRKNF          CALL    WINPRN
 
-                ; DRAW BUTTONS AT RELATIVE Y = 50
+                ; DRAW BUTTONS AT RELATIVE Y = 50: 72 PX WIDE, 80 PX STEP
                 LD      HL, .BTNFND
                 LD      DE, 12
                 LD      BC, 50
@@ -2000,7 +2009,7 @@ DOFIND          LD      HL, 110
 .B0SEL          CALL    WINBTS
 
                 LD      HL, .BTNRPL
-                LD      DE, 72
+                LD      DE, 92
                 LD      BC, 50
                 LD      A, (FNDFOC)
                 CP      4
@@ -2010,7 +2019,7 @@ DOFIND          LD      HL, 110
 .B1SEL          CALL    WINBTS
 
                 LD      HL, .BTNALL
-                LD      DE, 132
+                LD      DE, 172
                 LD      BC, 50
                 LD      A, (FNDFOC)
                 CP      5
@@ -2020,7 +2029,7 @@ DOFIND          LD      HL, 110
 .B2SEL          CALL    WINBTS
 
                 LD      HL, .BTNCAN
-                LD      DE, 192
+                LD      DE, 252
                 LD      BC, 50
                 LD      A, (FNDFOC)
                 CP      6
@@ -2029,7 +2038,8 @@ DOFIND          LD      HL, 110
                 INC     A
 .B3SEL          JP      WINBTS
 
-.FLDBOX         ; A = ROW (0 OR 1)
+.FLDBOX         ; A = ROW (0 OR 1). TEXT COL 10 = REL X 88, SRCHMAX + CARET
+                ; = 19 CELLS = 152 PX
                 LD      L, A
                 LD      H, 0
                 ADD     HL, HL
@@ -2039,10 +2049,10 @@ DOFIND          LD      HL, 110
                 ADD     HL, DE
                 LD      (VDP_DY), HL
                 LD      HL, (WINX)
-                LD      DE, 64
+                LD      DE, FNDFLDX
                 ADD     HL, DE
                 LD      (VDP_DX), HL
-                LD      HL, 116
+                LD      HL, FNDFLDW
                 LD      (VDP_NX), HL
                 LD      HL, 8
                 LD      (VDP_NY), HL
@@ -2100,8 +2110,8 @@ DOFIND          LD      HL, 110
 .RFBLIT         PUSH    DE
                 CALL    WINVSY
                 POP     DE
-                LD      HL, 64          ; REL X = 64
-                LD      BC, 116         ; NX = 116
+                LD      HL, FNDFLDX     ; REL X = FNDFLDX
+                LD      BC, FNDFLDW     ; NX = FNDFLDW
                 LD      A, 8            ; NY = 8
                 JP      WINUPD
 
@@ -2406,7 +2416,7 @@ DOSETT          LD      HL, 120
 
                 ; DRAW BUTTONS AT RELATIVE Y = 94
                 LD      HL, .BTNOK
-                LD      DE, 56
+                LD      DE, 48          ; PAIR 48..226, CENTRED IN 272
                 LD      BC, 94
                 LD      A, (SETTFOC)
                 CP      9
@@ -2416,7 +2426,7 @@ DOSETT          LD      HL, 120
 .B0SEL          CALL    WINBTS
 
                 LD      HL, .BTNCAN
-                LD      DE, 160
+                LD      DE, 152         ; 48 + 74 + 30 PX GAP, MULTIPLE OF 4
                 LD      BC, 94
                 LD      A, (SETTFOC)
                 CP      10
