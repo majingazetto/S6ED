@@ -84,6 +84,7 @@ BYTE_VARS = [
     ('STATBUF', 80), ('VCOLTXT', 12), ('SRCHPAT', 19), ('RPLCPAT', 19),
     ('CLIPBUF', 32),
     ('WORKBUF', 81), ('HOMEPTH', 80), ('FILENAME', 64), ('STATMSG', 44),
+    ('BRWINF', 72),
 ]
 
 HOOK_ADDR = 0xFD9F      # H.TIMI: nothing of ours may ever live behind it

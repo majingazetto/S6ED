@@ -79,7 +79,7 @@ DOBRW           XOR     A
 .FOCUS          LD      (BRWFOC), A
 
                 CALL    BRWDTEN
-                CALL    BRWSCAN
+                CALL    BRWSCNM         ; "Reading directory..." MEANWHILE
 .REOPEN         CALL    .TITLE
                 LD      HL, BRWTTL
                 CALL    WINOPEN         ; DRAWS FRAME, TITLE, SHADOW, AND WDUMP
@@ -87,7 +87,7 @@ DOBRW           XOR     A
 
                 ; --- THE KEY LOOP
 .KEYLP          CALL    WINPOLL
-                JP      Z, .KEYLP
+                JR      Z, .KEYLP
 
 .KEY            CP      ESC
                 JP      Z, .CANCEL
@@ -110,7 +110,7 @@ DOBRW           XOR     A
                 JR      Z, .BTNRGT
                 CP      CUP
                 JR      Z, .BTNUP
-                JP      .KEYLP
+                JR      .KEYLP
 .KBTN           LD      A, (BRWFOC)
                 CP      BRF_CANC
                 JP      Z, .CANCEL
@@ -120,7 +120,7 @@ DOBRW           XOR     A
 .BTNRGT         LD      A, BRF_CANC
 .BTNFOC         LD      HL, BRWFOC
                 CP      (HL)
-                JP      Z, .KEYLP
+                JR      Z, .KEYLP
                 JP      .SETFOC
 .BTNUP          LD      A, BRF_FLD
                 JP      .SETFOC
@@ -444,7 +444,11 @@ DOBRW           XOR     A
                 XOR     A
                 LD      (BRWPREV), A
 
-.RESCAN         CALL    BRWSCAN
+.RESCAN         CALL    BRWBUSY         ; THE WINDOW IS UP: SAY SO IN IT
+                CALL    .INFOD
+                LD      A, BRWINFR
+                CALL    WDUMPR
+                CALL    BRWSCAN
                 CALL    .TITLE
                 LD      HL, BRWTTL
                 CALL    WBOX            ; UPDATES BOX AND TITLE IN SHADOW
@@ -778,7 +782,9 @@ DOBRW           XOR     A
                 DJNZ    .PTDUMP
                 RET
 
-                ; .INFO: FORMAT AND DRAW THE INFORMATION LINE AT ROW 16
+                ; .INFO: FORMAT AND DRAW THE INFORMATION LINE AT ROW 16;
+                ; .INFOD: DRAW WHAT BRWINF ALREADY HOLDS (BRWBUSY PADS IT TO
+                ; THE FULL WIDTH, AND WINPUTC OVERWRITES ALL 8 SCANLINES)
 .INFO           ; CLEAR CELLS 2..29 OF ROW BRWINFR (56 CHARS = 28 CELLS)
                 LD      A, #80 + BRWINFR
                 LD      H, A
@@ -799,7 +805,7 @@ DOBRW           XOR     A
                 CALL    BRWINFO         ; 56 CHARS IN BRWINF
 
                 ; DRAW IT AT ROW 16, CHAR COL 4
-                LD      B, BRWINFR
+.INFOD          LD      B, BRWINFR
                 LD      C, 4
                 LD      HL, BRWINF
                 LD      A, (VCOLWIN)

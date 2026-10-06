@@ -140,34 +140,26 @@ CHKDAT          LD      HL, DATNAME
 ; - VALIDATE THE 16-BYTE CONTAINER HEADER IN DATHDR
 ; - IN:  DATHDR FILLED, DATSIZE/DATSZH = FILE SIZE
 ; - OUT: CY = 1: CORRUPT HEADER
-; - CLOBBERS: AF, DE, HL
+; - CLOBBERS: AF, B, DE, HL
 ; -
 ; - CHECKS MAGIC, VERSION, NUMBLKS IN [1..DATMAX], TABLE OFFSET >= 16 AND
 ; - THE WHOLE DESCRIPTOR TABLE INSIDE THE FILE. SHARED BY CHKDAT (TEXT
 ; - MODE PRE-CHECK) AND DATLOAD (THE REAL LOAD).
 
-DATHCHK         ; MAGIC: "S6ED" OR "S2ED"
+DATHCHK         ; MAGIC: THIS TARGET'S OWN DATMAGIC, BYTE FOR BYTE. EACH
+                ; CONTAINER IS CODE PHASED FOR ONE EDITOR: ACCEPTING A
+                ; SIBLING'S RENAMED .DAT WOULD FCALL INTO FOREIGN CODE.
                 LD      HL, DATHDR
-                LD      A, (HL)
-                CP      'S'
+                LD      DE, DATMAGIC
+                LD      B, 4
+.MAGIC          LD      A, (DE)
+                CP      (HL)
                 JR      NZ, .BAD
                 INC     HL
-                LD      A, (HL)
-                CP      '6'
-                JR      Z, .ISNUM
-                CP      '2'
-                JR      NZ, .BAD
-.ISNUM          INC     HL
-                LD      A, (HL)
-                CP      'E'
-                JR      NZ, .BAD
-                INC     HL
-                LD      A, (HL)
-                CP      'D'
-                JR      NZ, .BAD
+                INC     DE
+                DJNZ    .MAGIC
 
                 ; VERSION: 1 (16-BIT LE)
-                INC     HL
                 LD      A, (HL)
                 CP      1
                 JR      NZ, .BAD
@@ -460,6 +452,8 @@ CFGRUN          CALL    DATLOAD
                 LD      A, (FTRSEG)
                 LD      HL, CFGLOAD
                 JP      FCALL
+
+DATMAGIC        DEFM    DATMAG          ; THE TARGET'S CONTAINER MAGIC (4 BYTES)
 
                 IFDEF   S2ED
 DATNAME         DEFM    "S2ED.DAT", 0

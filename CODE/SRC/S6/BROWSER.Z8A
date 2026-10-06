@@ -85,7 +85,7 @@ DOBRW           XOR     A
 .FOCUS          LD      (BRWFOC), A
 
                 CALL    BRWDTEN
-                CALL    BRWSCAN
+                CALL    BRWSCNM         ; "Reading directory..." MEANWHILE
 .REOPEN         CALL    .TITLE
                 LD      HL, BRWTTL
                 CALL    WINOPEN
@@ -435,7 +435,8 @@ DOBRW           XOR     A
                 XOR     A
                 LD      (BRWPREV), A
 
-.RESCAN         CALL    BRWSCAN
+.RESCAN         CALL    .BUSY           ; THE WINDOW IS UP: SAY SO IN IT
+                CALL    BRWSCAN
                 CALL    .TITLE
                 LD      HL, BRWTTL
                 CALL    WINBOX
@@ -796,9 +797,10 @@ DOBRW           XOR     A
                 CALL    .FIELD
                 JP      .BTNS
 
-                ; .INFOC: FORMAT AND COMPOSE THE INFORMATION LINE
+                ; .INFOC: FORMAT AND COMPOSE THE INFORMATION LINE;
+                ; .INFOP: COMPOSE WHAT BRWINF ALREADY HOLDS
 .INFOC          CALL    BRWINFO
-                LD      A, COL_UI
+.INFOP          LD      A, COL_UI
                 LD      (VDP_CLR), A
                 LD      HL, 4
                 LD      DE, BRWLSTY + BRWINFR * 8
@@ -811,9 +813,14 @@ DOBRW           XOR     A
                 XOR     A
                 JP      WINPRN
 
+                ; .BUSY: "Reading directory..." ON THE LINE, ON SCREEN
+.BUSY           CALL    BRWBUSY
+                CALL    .INFOP
+                JR      .INFOS
+
                 ; .INFO: THE SAME, AND ON SCREEN
 .INFO           CALL    .INFOC
-                CALL    WINVSY
+.INFOS          CALL    WINVSY
                 LD      HL, 4
                 LD      DE, BRWLSTY + BRWINFR * 8
                 LD      BC, BRWIW

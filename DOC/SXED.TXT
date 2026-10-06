@@ -252,7 +252,10 @@ The status bar has two channels:
     - Left: ephemeral messages ([SAVED], [SAVE ERROR],
       [NEW FILE], [CANNOT OPEN], [FILE TOO LARGE], [ROM]...).
       In Vi mode this is also the ":" command line. Messages
-      disappear with the next keystroke.
+      disappear with the next keystroke. While the disk is
+      busy it says so: "Loading... N" and "Saving... N" count
+      the lines every 16, and "Reading directory..." shows
+      while the file browser scans.
     - Right: a mode tag and the cursor position:
 
         [INS]   insert mode        [OVR]   overwrite mode
@@ -923,8 +926,15 @@ Ignore?" prompt over the graphics screen. The operation
 simply fails and the status bar tells you ([SAVE ERROR],
 [CANNOT OPEN]...).
 
-Every save reports on the status bar: "Saving..." while it
-writes, then [SAVED] or [SAVE ERROR].
+Every save reports on the status bar: "Saving... N" while it
+writes, then [SAVED] or [SAVE ERROR]. A load shows
+"Loading... N" the same way: a large file on a floppy takes
+seconds (the 990 lines of this manual, about 15 s), and the
+count tells a slow disk from a hung machine.
+
+Each editor checks that its .DAT file is its own: a sibling's
+container renamed is refused at start with "<editor>.DAT
+corrupt.", in text mode.
 
 
 

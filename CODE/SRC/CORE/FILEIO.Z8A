@@ -76,6 +76,34 @@ CHKFLEN         PUSH    DE              ; [SP+2] = FILE SIZE HIGH
 
 
 ; - FILELOAD ---------------------------
+; - LOAD A FILE, SAYING SO ON THE STATUS BAR WHILE IT HAPPENS
+; - IN:  HL: FILENAME (ASCIIZ), AS LOADDOC
+; - OUT: AS LOADDOC, AND STATMSG EMPTY ON EVERY EXIT
+; - CLOBBERS: ALL
+; -
+; - A LARGE FILE TAKES SECONDS ON A FLOPPY (THE 990-LINE MANUAL, 15 S ON
+; - THE 2 MB MACHINE) AND THE SCREEN USED TO STAY UNCHANGED THROUGHOUT,
+; - WHICH READS AS A HANG. "Loading..." GOES UP BEFORE THE OPEN AND
+; - LOADDOC COUNTS THE LINES INTO IT. IT IS CLEARED ON EVERY EXIT SO THE
+; - CALLER'S OWN VERDICT ([CANNOT OPEN], [NEW FILE]) OR LOADERR'S
+; - [FILE TOO LARGE], WHICH BLDSTAT SHOWS ONLY WITH STATMSG EMPTY, WINS.
+; - THE CALLER MUST HAVE THE CHROME UP: AT BOOT IT IS DRAWN FIRST.
+; -
+
+FILELOAD        PUSH    HL
+                LD      HL, STRLDG
+                CALL    SETMSG
+                CALL    DRWSTAT
+                POP     HL
+                CALL    LOADDOC
+                PUSH    AF
+                XOR     A
+                LD      (STATMSG), A
+                POP     AF
+                RET
+
+
+; - LOADDOC ----------------------------
 ; - LOAD FILE FROM DISK INTO BUFFER
 ; - IN:  HL: FILENAME (ASCIIZ). MAY BE FILENAME ITSELF (BOOT) OR ANY
 ; -      OTHER BUFFER (:e); FILENAME TAKES THE NAME ONLY ON SUCCESS.
@@ -93,7 +121,7 @@ CHKFLEN         PUSH    DE              ; [SP+2] = FILE SIZE HIGH
 ; - THE FILE WITH THE REMAINS.
 ; -
 
-FILELOAD        XOR     A
+LOADDOC         XOR     A
                 LD      (LOADERR), A
                 PUSH    HL              ; [SP] = NAME
 
@@ -234,6 +262,7 @@ FILELOAD        XOR     A
                 LD      (EOLARED), A
 .STORCR         CALL    STORLINE
                 JR      C, .OOM
+                CALL    .PROG
                 JP      .SKIP
 
 .ISLF           LD      A, (WASCR)
@@ -251,10 +280,15 @@ FILELOAD        XOR     A
                 LD      (EOLARED), A
 .STORLF         CALL    STORLINE
                 JR      C, .OOM
+                CALL    .PROG
                 JP      .SKIP
 .SKIPLF         XOR     A
                 LD      (WASCR), A
                 JP      .SKIP
+
+.PROG           LD      HL, (TOTLINES)  ; NO REGISTER IS LIVE HERE: .PROCLP
+                LD      DE, STRLDG      ; KEEPS ITS STATE ON THE STACK
+                JP      PROGRS
 
 .OOM            POP     HL              ; BALANCE PUSH HL IN .PROCLP
                 POP     BC              ; BALANCE PUSH BC IN .PROCLP
@@ -484,6 +518,12 @@ FILESAVE        LD      HL, FILENAME
                 
                 POP     BC
                 INC     BC
+                PUSH    BC
+                LD      H, B
+                LD      L, C
+                LD      DE, STRSAVG
+                CALL    PROGRS          ; "Saving... N" EVERY 16 LINES
+                POP     BC
                 LD      H, B
                 LD      L, C
                 LD      DE, (TOTLINES)
@@ -535,6 +575,96 @@ SETMSG          LD      DE, STATMSG
                 INC     DE
                 JR      .SETMLP
 
+
+; - PROGRS -----------------------------
+; - SHOW "<VERB> N" ON THE STATUS BAR, ONCE EVERY 16 LINES
+; - IN:  HL = LINES DONE SO FAR, DE = ASCIIZ VERB ("Loading..." ...)
+; - OUT: NONE
+; - CLOBBERS: ALL (IX TOO: B2D16)
+; -
+; - THE COUNT IS WHAT TELLS A LONG OPERATION FROM A HANG. ONE STATUS
+; - BAR UPDATE REPAINTS ONLY THE CELLS THAT CHANGED (STATCEL), SO ONE IN
+; - 16 LINES COSTS A FEW PERCENT OF THE DISK TIME IT ACCOMPANIES.
+; -
+
+PROGRS          LD      A, L
+                AND     15
+                RET     NZ
+                PUSH    HL
+                EX      DE, HL
+                CALL    SETMSG          ; DE = THE NUL AFTER THE VERB
+                LD      A, ' '
+                LD      (DE), A
+                INC     DE
+                POP     HL
+                PUSH    DE
+                CALL    B2D16           ; HL = FIRST DIGIT, NUL TERMINATED
+                POP     DE
+.COPY           LD      A, (HL)
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                OR      A
+                JR      NZ, .COPY
+                JP      DRWSTAT
+
+
+                IFDEF   BROWSER
+; - BRWSCNM ----------------------------
+; - SCAN THE BROWSED DIRECTORY, SAYING SO ON THE STATUS BAR
+; - IN:  AS BRWSCAN
+; - OUT: NONE; STATMSG EMPTY AGAIN
+; - CLOBBERS: ALL
+; -
+; - THE FIRST SCAN RUNS BEFORE THE WINDOW OPENS, SO WITHOUT THIS CTRL+O
+; - LEFT THE SCREEN UNCHANGED FOR AS LONG AS THE DIRECTORY TOOK TO READ.
+; - THE MESSAGE IS CLEARED BEFORE RETURNING: THE WINDOW SAVES WHAT IT
+; - COVERS, AND ON S6ED ITS SHADOW REACHES THE STATUS BAR. RESIDENT
+; - BECAUSE S2ED'S FEATURE CONTAINER HAS NO ROOM; CALLED FROM DOBRW,
+; - WHERE PAGE 2 IS FTRSEG AND BRWSCAN IS REACHABLE.
+; -
+
+BRWSCNM         LD      HL, STRRDIR
+                CALL    SETMSG
+                CALL    DRWSTAT
+.SCAN           CALL    BRWSCAN
+                XOR     A
+                LD      (STATMSG), A
+                JP      DRWSTAT
+
+
+; - BRWBUSY ----------------------------
+; - PUT "Reading directory..." IN THE BROWSER'S INFORMATION LINE
+; - IN:  NONE
+; - OUT: BRWINF = THE MESSAGE, SPACE PADDED TO BICLEN + NUL
+; - CLOBBERS: AF, B, DE, HL
+; -
+; - A RESCAN (ANOTHER DIRECTORY, DRIVE OR MASK) HAPPENS WITH THE WINDOW
+; - UP, SO THE WINDOW'S OWN STATUS LINE CARRIES THE NOTICE.
+; -
+
+BRWBUSY         LD      HL, BRWINF
+                LD      B, BICLEN
+.CLR            LD      (HL), ' '
+                INC     HL
+                DJNZ    .CLR
+                LD      (HL), 0
+                LD      HL, STRRDIR
+                LD      DE, BRWINF
+.COPY           LD      A, (HL)
+                OR      A
+                JR      Z, .DONE
+                LD      (DE), A
+                INC     HL
+                INC     DE
+                JR      .COPY
+.DONE           RET
+
+
+STRRDIR         DEFM    "Reading directory...", 0
+                ENDIF
+
+STRLDG          DEFM    "Loading...", 0
 STRSAVG         DEFM    "Saving...", 0
 STRSAVD         DEFM    "[SAVED]", 0
 STRSERR         DEFM    "[SAVE ERROR]", 0

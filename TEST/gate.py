@@ -1344,6 +1344,18 @@ class H8DatBadMagic(_DatCorrupt):
         return dat
 
 
+class H39DatForeign(_DatCorrupt):
+    name = 'H39-dat-foreign'
+    desc = "a sibling editor's container renamed to S6ED.DAT is rejected"
+    origin = ('2026-10-06: DATHCHK accepted any "S?ED" magic, so S6ED would '
+              'load S2ED.DAT (and S62ED shipped S6ED\'s magic) and FCALL into '
+              'code phased for another editor')
+
+    def dat_mutate(self, ctx, dat):
+        with open(os.path.join(ctx.code_dir, 'S2ED.DAT'), 'rb') as fh:
+            return fh.read()
+
+
 class H9DatBadVersion(_DatCorrupt):
     name = 'H9-dat-bad-version'
     desc = 'container with an unknown format version is rejected'
@@ -6419,6 +6431,87 @@ class U9UndoLineEdits(Case):
                             '%d px' % (changed, len(d1), again, len(d2))))
         return checks
 
+# --- H40 / H41  DISK ACTIVITY ON THE STATUS BAR ------------------------
+
+
+class H40LoadProgress(Case):
+    name = 'H40-load-progress'
+    desc = ('a load says "Loading..." and counts the lines into the status '
+            'bar, and leaves it clean once the document is up')
+    origin = ('2026-10-06: the 990-line manual took 15 s to load with nothing '
+              'on screen, which read as a hang')
+    absolute = True
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(40))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline(start=2.0)
+        t.snap('loaded', at='LOADDOC.CLSFIL')
+        t.snap('boot', at='MAINLOOP')
+        t.t = 45.0
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        msg = asciiz(run, 'loaded', 'STATMSG')
+        after = asciiz(run, 'boot', 'STATMSG')
+        return [
+            Check('H40/progress', msg == 'Loading... 32',
+                  'STATMSG at the end of the read: %r (want the last multiple '
+                  'of 16 of 40 lines)' % msg),
+            Check('H40/cleared', after == '' and
+                  run.var('boot', 'TOTLINES') == 40,
+                  'STATMSG %r with %s lines once the editor is up'
+                  % (after, run.var('boot', 'TOTLINES'))),
+        ]
+
+
+class H41BrowseBusy(Case):
+    name = 'H41-browse-busy'
+    desc = ('Ctrl+O says "Reading directory..." on the status bar while it '
+            'scans, and a rescan says it on the information line')
+    origin = ('2026-10-06: the first scan ran before the window opened, so '
+              'Ctrl+O left the screen unchanged while the disk worked')
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def disk_files(self, ctx, variant=None):
+        files = Case.disk_files(self, ctx, variant)
+        files['SUB\\NOTE.TXT'] = crlf(['NOTE'])
+        return files
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.snap('scan', at='BRWSCNM.SCAN')       # armed before the key
+        t.press('O', mods=['CTRL'])
+        t.wait(2.0)
+        t.snap('busy', at='BRWBUSY.DONE')       # SUB\ sorts first
+        t.press('RETURN')
+        t.wait(2.0)
+        t.press('ESC')
+        t.wait(1.0)
+        t.snap('after')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        scan = asciiz(run, 'scan', 'STATMSG')
+        busy = asciiz(run, 'busy', 'BRWINF')
+        after = asciiz(run, 'after', 'STATMSG')
+        return [
+            Check('H41/scan', scan == 'Reading directory...',
+                  'STATMSG during the first scan: %r' % scan),
+            Check('H41/busy', busy is not None and
+                  busy.startswith('Reading directory...'),
+                  'information line during the rescan: %r' % busy),
+            Check('H41/cleared', after == '',
+                  'STATMSG after the browser closed: %r' % after),
+        ]
+
+
 
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
@@ -6430,7 +6523,8 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H24GoToLine(), H25FindReplace(), H26FindCurrentLine(), H27ViEx(),
          H28TextWidth(), H29HomePath(), H30NewDocument(), H31EditOpen(),
          H32SaveNoName(), H33LongPath(), H34BrowseOpen(),
-         H35BrowseMany(), H36BrowseSaveAs(), H37Settings(), H38DiskError(),
+         H35BrowseMany(), H36BrowseSaveAs(), H37Settings(), H38DiskError(), H39DatForeign(),
+         H40LoadProgress(), H41BrowseBusy(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),

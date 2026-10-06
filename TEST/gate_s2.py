@@ -3430,6 +3430,122 @@ class S233BareLaunch(S2Case):
         return checks
 
 
+class S234DatForeign(S2Case):
+    """A sibling's container renamed to S2ED.DAT is rejected in text mode.
+
+    DATHCHK used to accept any "S?ED" magic, so S2ED would have loaded
+    S6ED.DAT -- code phased for the Screen 6 window, FCALLed on an MSX1.
+    """
+    name = 'S2-34-dat-foreign'
+    desc = "S6ED.DAT renamed to S2ED.DAT aborts with the corrupt message"
+    origin = '2026-10-06: per-target container magic (DATMAG)'
+    absolute = True
+    with_dat = False
+    autoexec = 'S2ED'
+    cfg = None
+
+    def disk_files(self, ctx, variant=None):
+        files = S2Case.disk_files(self, ctx, variant)
+        with open(os.path.join(ctx.code_dir, 'S6ED.DAT'), 'rb') as fh:
+            files['S2ED.DAT'] = fh.read()
+        return files
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline(start=2.0)
+        t.snap('exit', vram='text', at='TERM.TERMDON')
+        t.t = 45.0
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        want = b'S2ED.DAT corrupt.'
+        text = run.blob('exit', 'text')
+        printed = text is not None and want in text
+        return [
+            Check('S2-34/corrupt-printed', printed,
+                  'text VRAM holds %r' % want if printed else
+                  'error message %r not found in text-mode name table' % want),
+            Check('S2-34/no-screen2',
+                  run.var('exit', 'SCRRDY') == 0,
+                  'SCRRDY %s: aborted before the editor came up'
+                  % run.var('exit', 'SCRRDY')),
+        ]
+
+
+class S235LoadProgress(S2Case):
+    name = 'S2-35-load-progress'
+    desc = 'a load counts its lines on the status bar and leaves it clean'
+    origin = '2026-10-06: a long load showed nothing and read as a hang'
+    absolute = True
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(40))
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline(start=2.0)
+        t.snap('loaded', at='LOADDOC.CLSFIL')
+        t.snap('boot', at='MAINLOOP')
+        t.t = 45.0
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        msg = asciiz(run, 'loaded', 'STATMSG')
+        after = asciiz(run, 'boot', 'STATMSG')
+        return [
+            Check('S2-35/progress', msg == 'Loading... 32',
+                  'STATMSG at the end of the read: %r' % msg),
+            Check('S2-35/cleared', after == '' and
+                  run.var('boot', 'TOTLINES') == 40,
+                  'STATMSG %r with %s lines once the editor is up'
+                  % (after, run.var('boot', 'TOTLINES'))),
+        ]
+
+
+class S236BrowseBusy(S2Case):
+    name = 'S2-36-browse-busy'
+    desc = ('Ctrl+O says "Reading directory..." on the status bar, a rescan '
+            'on the information line')
+    origin = '2026-10-06: Ctrl+O left the screen unchanged during the scan'
+
+    def fixture(self, ctx, variant=None):
+        return crlf(numbered(5))
+
+    def disk_files(self, ctx, variant=None):
+        files = S2Case.disk_files(self, ctx, variant)
+        files['SUB\\NOTE.TXT'] = crlf(['NOTE'])
+        return files
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('boot')
+        t.snap('scan', at='BRWSCNM.SCAN')
+        t.press('O', mods=['CTRL'])
+        t.wait(2.0)
+        t.snap('busy', at='BRWBUSY.DONE')
+        t.press('RETURN')
+        t.wait(2.0)
+        t.press('ESC')
+        t.wait(1.0)
+        t.snap('after')
+        return t
+
+    def verify(self, ctx, runs):
+        run = one(runs)
+        scan = asciiz(run, 'scan', 'STATMSG')
+        busy = asciiz(run, 'busy', 'BRWINF')
+        after = asciiz(run, 'after', 'STATMSG')
+        return [
+            Check('S2-36/scan', scan == 'Reading directory...',
+                  'STATMSG during the first scan: %r' % scan),
+            Check('S2-36/busy', busy is not None and
+                  busy.startswith('Reading directory...'),
+                  'information line during the rescan: %r' % busy),
+            Check('S2-36/cleared', after == '',
+                  'STATMSG after the browser closed: %r' % after),
+        ]
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -3440,7 +3556,8 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S224ShippedDisk(), S225NewDocument(), S226LongPath(),
          S227DialogKeys(), S228BrowseOpen(), S229BrowseMany(),
          S230BrowseSaveAs(), S231Settings(), S232DiskError(),
-         S233BareLaunch()]
+         S233BareLaunch(), S234DatForeign(),
+         S235LoadProgress(), S236BrowseBusy()]
 
 
 def run(ctx, cases=None):

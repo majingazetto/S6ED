@@ -389,10 +389,10 @@ MUTATIONS = [
         'why': 'the defect as it shipped: FILELOAD resets the document before '
                'opening the file, so a refused :e has already thrown it away',
         'file': 'FILEIO.Z8A',
-        'old': """FILELOAD        XOR     A
+        'old': """LOADDOC         XOR     A
                 LD      (LOADERR), A
                 PUSH    HL              ; [SP] = NAME""",
-        'new': """FILELOAD        PUSH    HL
+        'new': """LOADDOC         PUSH    HL
                 CALL    FILENEW         ; MUTATION: RESET BEFORE OPENING
                 POP     HL
                 XOR     A
@@ -2132,13 +2132,109 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'expect_any': ['G13/cfg-applied', 'G13-feature-residency'],
     },
     {
+        # DATHCHK used to accept any "S?ED": S6ED loaded S2ED.DAT and S62ED
+        # shipped S6ED's magic.  Checking only the 'S' brings that back.
+        'name': 'dat-magic-any',
+        'why': "DATHCHK checks one byte of the magic, so a sibling editor's "
+               'container renamed to S6ED.DAT is loaded and FCALLed',
+        'file': 'XSEG.Z8A',
+        'old': """                LD      DE, DATMAGIC
+                LD      B, 4""",
+        'new': """                LD      DE, DATMAGIC
+                LD      B, 1            ; MUTATION: ONLY THE 'S'""",
+        'filter': 'H39',
+        'expect': ['H39/corrupt-printed'],
+    },
+    {
+        'name': 'load-progress',
+        'why': 'LOADDOC no longer counts lines into the status bar, so a long '
+               'load shows a frozen "Loading..." again',
+        'file': 'FILEIO.Z8A',
+        'old': """.STORCR         CALL    STORLINE
+                JR      C, .OOM
+                CALL    .PROG""",
+        'new': """.STORCR         CALL    STORLINE
+                JR      C, .OOM
+                NOP                     ; MUTATION: NO LOAD PROGRESS
+                NOP
+                NOP""",
+        'filter': 'H40',
+        'expect': ['H40/progress'],
+    },
+    {
+        'name': 's2-load-progress',
+        'why': 'the same, measured on the S2 gate: the counter is CORE',
+        'file': 'FILEIO.Z8A',
+        'old': """.STORCR         CALL    STORLINE
+                JR      C, .OOM
+                CALL    .PROG""",
+        'new': """.STORCR         CALL    STORLINE
+                JR      C, .OOM
+                NOP                     ; MUTATION: NO LOAD PROGRESS
+                NOP
+                NOP""",
+        'filter': 'S2-35',
+        'expect': ['S2-35/progress'],
+    },
+    {
+        'name': 'load-msg-stays',
+        'why': 'FILELOAD leaves its message in STATMSG, which then hides '
+               '[FILE TOO LARGE] and sits on the status bar after the load',
+        'file': 'FILEIO.Z8A',
+        'old': """                CALL    LOADDOC
+                PUSH    AF
+                XOR     A
+                LD      (STATMSG), A""",
+        'new': """                CALL    LOADDOC
+                PUSH    AF
+                XOR     A
+                NOP                     ; MUTATION: "Loading..." STAYS UP
+                NOP
+                NOP""",
+        'filter': 'H40',
+        'expect': ['H40/cleared'],
+    },
+    {
+        'name': 'brw-scan-silent',
+        'why': 'the first directory scan says nothing again, so Ctrl+O leaves '
+               'the screen unchanged while the disk works',
+        'file': 'FILEIO.Z8A',
+        'old': """BRWSCNM         LD      HL, STRRDIR
+                CALL    SETMSG
+                CALL    DRWSTAT""",
+        'new': """BRWSCNM         NOP                     ; MUTATION: SILENT FIRST SCAN""",
+        'filter': 'H41',
+        'expect': ['H41/scan'],
+    },
+    {
+        'name': 'brw-rescan-silent',
+        'why': 'a rescan with the browser up no longer marks the information '
+               'line, so entering a directory looks frozen',
+        'file': 'S6/BROWSER.Z8A',
+        'old': """.RESCAN         CALL    .BUSY           ; THE WINDOW IS UP: SAY SO IN IT""",
+        'new': """.RESCAN         NOP                     ; MUTATION: SILENT RESCAN
+                NOP
+                NOP""",
+        'filter': 'H41',
+        'expect': ['H41/busy'],
+    },
+    {
+        'name': 's2-brw-rescan-silent',
+        'why': 'the same on S2ED, whose browser draws the line its own way',
+        'file': 'S2/BROWSER.Z8A',
+        'old': """.RESCAN         CALL    BRWBUSY         ; THE WINDOW IS UP: SAY SO IN IT""",
+        'new': """.RESCAN         NOP                     ; MUTATION: SILENT RESCAN
+                NOP
+                NOP""",
+        'filter': 'S2-36',
+        'expect': ['S2-36/busy'],
+    },
+    {
         'name': 'f2-datmagic',
         'why': 'S6ED.DAT header magic corrupted',
         'file': 'S6ED.Z8A',
-        'old': """DATHDRS:
-                DEFM    "S6ED"          ; 0..3: MAGIC ID (4 BYTES)""",
-        'new': """DATHDRS:
-                DEFM    "S6XX"          ; MUTATION: CORRUPT MAGIC""",
+        'old': 'DEFINE  DATMAG  "S6ED"',
+        'new': 'DEFINE  DATMAG  "S6XX"',
         'filter': 'G13',
         'expect_static': ['feature-discipline'],
     },

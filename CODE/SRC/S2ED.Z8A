@@ -8,6 +8,7 @@
                 OUTPUT  "S2ED.COM"
 
                 DEFINE  S2ED    1
+                DEFINE  DATMAG  "S2ED"     ; CONTAINER MAGIC: FIRST 4 CHARS OF THE NAME
 
 ; --- MACROS                    ----------------------------------------
 
@@ -259,6 +260,8 @@ INIT            DBG     "1: INIT START (S2ED)"
                 LD      A, (FILENAME)
                 AND     A
                 JR      Z, .NOARG
+                CALL    DRWMENU         ; CHROME FIRST: FILELOAD REPORTS
+                                        ; ITS PROGRESS ON THE STATUS BAR
                 LD      HL, FILENAME
                 CALL    FILELOAD
                 CALL    REDRAW
@@ -398,7 +401,7 @@ SETPAL          LD      A, (SCRRDY)
 ; --- FILE HEADER (16 BYTES) -------------------------------------------
 
 DATHDRS:
-                DEFM    "S2ED"          ; 0..3: MAGIC ID (4 BYTES)
+                DEFM    DATMAG          ; 0..3: MAGIC ID (4 BYTES, SEE DATMAG)
                 DEFW    1               ; 4..5: FORMAT VERSION 1 (16-BIT LE)
                 DEFB    #1A             ; 6:    DOS EOF MARKER (STOPS TYPE)
                 DEFB    1               ; 7:    NUMBER OF BLOCKS IN TABLE (1)
