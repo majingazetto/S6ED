@@ -10,6 +10,7 @@ failure of the self-test, not as a catch.
 
 import gate
 import gate_s2
+import gate_s62
 import mutations
 import static
 from result import Check
@@ -71,6 +72,7 @@ def run(ctx, name_filter='', baseline=None):
     static.check_build_clean(ctx)
     ctx.reload_symbols()
     static.check_build_clean(ctx.for_target('S2ED'))
+    static.check_build_clean(ctx.for_target('S62ED'))
     return checks
 
 
@@ -123,8 +125,9 @@ def _verdicts(ctx, muts):
             chk = fn(ctx)
             out[chk.name] = not chk.counts_as_failure
     filters = {m['filter'].upper() for m in muts}
-    catalog = gate_s2.CASES if ctx.target == 'S2ED' else gate.CASES
-    runner = gate_s2.run if ctx.target == 'S2ED' else gate.run
+    catalog, runner = {'S2ED': (gate_s2.CASES, gate_s2.run),
+                       'S62ED': (gate_s62.CASES, gate_s62.run)}.get(
+                           ctx.target, (gate.CASES, gate.run))
     cases = [c for c in catalog
              if any(f in c.name.upper() for f in filters)]
     for chk in runner(ctx, cases):

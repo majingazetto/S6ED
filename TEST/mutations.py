@@ -462,11 +462,12 @@ MUTATIONS = [
         'file': 'WINDOW.Z8A',
         'old': """DONEW           LD      HL, DOASK.TITNEW
                 LD      DE, DOASK.STRNEW""",
+        # Same size as the two LDs it replaces (6 bytes): S2ED's feature
+        # container has 2 bytes above its 128-byte floor, so a mutation that
+        # grows it no longer assembles (measured 2026-10-06).
         'new': """DONEW           LD      A, 1            ; MUTATION: YES WITHOUT ASKING
                 LD      (WINRES), A
-                RET
-                LD      HL, DOASK.TITNEW
-                LD      DE, DOASK.STRNEW""",
+                RET""",
         'filter': 'S2-25',
         'expect_any': ['S2-25/dirty-no/asked', 'S2-25-new-document'],
     },
@@ -2135,13 +2136,19 @@ SELTMPXB        EQU     SELTMPXB2""")],
         # DATHCHK used to accept any "S?ED": S6ED loaded S2ED.DAT and S62ED
         # shipped S6ED's magic.  Checking only the 'S' brings that back.
         'name': 'dat-magic-any',
-        'why': "DATHCHK checks one byte of the magic, so a sibling editor's "
-               'container renamed to S6ED.DAT is loaded and FCALLed',
+        'why': "DATHCHK ignores the magic, so a sibling editor's container "
+               'renamed to S6ED.DAT is loaded and FCALLed',
         'file': 'XSEG.Z8A',
-        'old': """                LD      DE, DATMAGIC
-                LD      B, 4""",
-        'new': """                LD      DE, DATMAGIC
-                LD      B, 1            ; MUTATION: ONLY THE 'S'""",
+        # The loop still walks all four bytes, so HL reaches the version
+        # field as before: only the verdict is dropped.  (Shortening the loop
+        # instead left HL on byte 1 and the version check refused the file.)
+        'old': """.MAGIC          LD      A, (DE)
+                CP      (HL)
+                JR      NZ, .BAD""",
+        'new': """.MAGIC          LD      A, (DE)
+                CP      (HL)
+                NOP                     ; MUTATION: ANY MAGIC WILL DO
+                NOP""",
         'filter': 'H39',
         'expect': ['H39/corrupt-printed'],
     },
@@ -2159,6 +2166,7 @@ SELTMPXB        EQU     SELTMPXB2""")],
     },
     {
         'name': 's2-load-progress',
+        'target': 'S2ED',
         'why': 'the same, measured on the S2 gate: the counter is CORE',
         'file': 'FILEIO.Z8A',
         'old': """                CALL    PRGADV          ; NO PAGE 2 STATE IS LIVE BETWEEN""",
@@ -2208,10 +2216,13 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 NOP
                 NOP""",
         'filter': 'H41',
-        'expect': ['H41/busy'],
+        # without the notice BRWBUSY.DONE never fires and the session
+        # cannot finish, which reports under the case name
+        'expect_any': ['H41/busy', 'H41-browse-busy'],
     },
     {
         'name': 's2-brw-rescan-silent',
+        'target': 'S2ED',
         'why': 'the same on S2ED, whose browser draws the line its own way',
         'file': 'S2/BROWSER.Z8A',
         'old': """.RESCAN         CALL    BRWBUSY         ; THE WINDOW IS UP: SAY SO IN IT""",
@@ -2219,7 +2230,142 @@ SELTMPXB        EQU     SELTMPXB2""")],
                 NOP
                 NOP""",
         'filter': 'S2-36',
-        'expect': ['S2-36/busy'],
+        # without the notice BRWBUSY.DONE never fires and the session
+        # cannot finish, which reports under the case name
+        'expect_any': ['S2-36/busy', 'S2-36-browse-busy'],
+    },
+    {
+        'name': 's62-cell-nx6',
+        'target': 'S62ED',
+        'why': 'ROWSET presets the glyph blit 6 px wide, the S6ED cell: every S62 cell loses its last two pixel columns',
+        'file': 'S62/RENDER.Z8A',
+        'old': """                LD      HL, CELLH
+                LD      (VDP_NY), HL
+                LD      HL, CELLW
+                LD      (VDP_NX), HL""",
+        'new': """                LD      HL, CELLH
+                LD      (VDP_NY), HL
+                LD      HL, 6           ; MUTATION: THE S6 CELL WIDTH
+                LD      (VDP_NX), HL""",
+        'filter': 'S62-1',
+        'expect': ['S62-1/text'],
+    },
+    {
+        'name': 's62-scroll-dx16',
+        'target': 'S62ED',
+        'why': 'the scroll blit starts at x 16, the S6ED margin: the first text column never moves',
+        'file': 'S62/SCROLL.Z8A',
+        'old': """                LD      HL, TXORG_X
+                LD      (VDP_DX), HL
+                XOR     A               ; ARG = 0 (TOP-TO-BOTTOM)""",
+        'new': """                LD      HL, 16          ; MUTATION: THE S6 MARGIN
+                LD      (VDP_DX), HL
+                XOR     A               ; ARG = 0 (TOP-TO-BOTTOM)""",
+        'filter': 'S62-3',
+        'expect': ['S62-3/down/text'],
+    },
+    {
+        'name': 's62-title-inset6',
+        'target': 'S62ED',
+        'why': 'window titles go back to WINX + 6, two pixels off the body text and off the byte grid',
+        'file': 'S62/WINDOW.Z8A',
+        'old': """                LD      HL, (WINX)
+                LD      DE, 8
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DX
+                LD      BC, WINCOMP_Y + 2""",
+        'new': """                LD      HL, (WINX)
+                LD      DE, 6           ; MUTATION: THE S6 INSET
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DX
+                LD      BC, WINCOMP_Y + 2""",
+        'filter': 'S62-5',
+        'expect': ['S62-5/about/title'],
+    },
+    {
+        'name': 's62-menu-inset6',
+        'target': 'S62ED',
+        'why': 'unselected dropdown items go back to WINX + 6',
+        'file': 'S62/MENU.Z8A',
+        'old': """                LD      DE, 8
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DX = WINX + 8
+                LD      HL, (MNUTMPP)   ; HL = STRING POINTER
+                XOR     A               ; VARIANT 0 (NORMAL)""",
+        'new': """                LD      DE, 6           ; MUTATION: THE S6 INSET
+                ADD     HL, DE
+                EX      DE, HL          ; DE = DX = WINX + 8
+                LD      HL, (MNUTMPP)   ; HL = STRING POINTER
+                XOR     A               ; VARIANT 0 (NORMAL)""",
+        'filter': 'S62-5',
+        'expect': ['S62-5/file/items'],
+    },
+    {
+        'name': 's62-menu-22',
+        'target': 'S62ED',
+        'why': 'a 22-character item reaches the right border at 8 px and WINCLIPX drops its last glyph ("Ctrl+")',
+        'file': 'S62/MENU.Z8A',
+        'old': '.S01            DEFM    "Open...       Ctrl+O", 0',
+        'new': '.S01            DEFM    "Open...         Ctrl+O", 0',
+        'filter': 'S62-5',
+        'expect': ['S62-5/file/items'],
+    },
+    {
+        'name': 's62-bic56',
+        'target': 'S62ED',
+        'why': 'the information line is 56 characters again: its last column falls past the clip and the count loses a digit',
+        'file': 'S62/CONST_S62.Z8A',
+        'old': 'BICCNTE         EQU     55',
+        'new': 'BICCNTE         EQU     56',
+        'also': [('S62/CONST_S62.Z8A', 'BICLEN          EQU     55', 'BICLEN          EQU     56')],
+        'filter': 'S62-6',
+        'expect': ['S62-6/info'],
+    },
+    {
+        'name': 's62-col-2digit',
+        'target': 'S62ED',
+        'why': "the status bar's column goes back to two digits: Col 21 at column 121",
+        'file': 'S62/UI.Z8A',
+        'old': """                INC     HL              ; 1..256: CURX 255 MUST NOT WRAP
+                LD      B, 3""",
+        'new': """                INC     HL              ; 1..256: CURX 255 MUST NOT WRAP
+                LD      B, 2            ; MUTATION: S2ED'S TWO DIGITS""",
+        'filter': 'S62-4',
+        'expect': ['S62-4/col'],
+    },
+    {
+        'name': 's62-dat-magic',
+        'target': 'S62ED',
+        'why': "S62ED takes S6ED's container magic again, so a renamed S6ED.DAT is loaded and FCALLed",
+        'file': 'S62ED.Z8A',
+        'old': 'DEFINE  DATMAG  "S62E"',
+        'new': 'DEFINE  DATMAG  "S6ED"',
+        'filter': 'S62-7',
+        'expect_any': ['S62-7/corrupt-printed', 'S62-7-dat-foreign'],
+    },
+    {
+        'name': 's62-rescan-silent',
+        'target': 'S62ED',
+        'why': 'a rescan with the S62ED browser up no longer marks the information line',
+        'file': 'S62/BROWSER.Z8A',
+        'old': '.RESCAN         CALL    .BUSY           ; THE WINDOW IS UP: SAY SO IN IT',
+        'new': """.RESCAN         NOP                     ; MUTATION: SILENT RESCAN
+                NOP
+                NOP""",
+        'filter': 'S62-9',
+        # without the notice BRWBUSY.DONE never fires and the session
+        # cannot finish, which reports under the case name
+        'expect_any': ['S62-9/busy', 'S62-9-browse-busy'],
+    },
+    {
+        'name': 's62-autoexec-lf',
+        'target': 'S62ED',
+        'why': 'AUTOEXEC_S62.BAT with bare LF: COMMAND2.COM ignores it and the disk boots to the prompt',
+        'file': 'AUTOEXEC_S62.BAT',
+        'old': 'MODE 80\r\nPATH A:\\TOOLS\r\nCD \\DEV\r\nS62ED TEST.TXT\r\n',
+        'new': 'MODE 80\nPATH A:\\TOOLS\nCD \\DEV\nS62ED TEST.TXT\n',
+        'filter': 'S62-10',
+        'expect_any': ['S62-10-shipped-disk', 'S62-10/booted'],
     },
     {
         'name': 'f2-datmagic',
@@ -3113,13 +3259,15 @@ class Applied(object):
             if path not in self.backups:
                 self.backups[path] = path + '.mutbak'
                 shutil.copy(path, self.backups[path])
-            with open(path) as fh:
+            # newline='': keep CR LF as it is, so a mutation can target line
+            # endings (AUTOEXEC.BAT) and never rewrites the rest of a file.
+            with open(path, newline='') as fh:
                 text = fh.read()
             if old not in text:
                 self.__exit__(None, None, None)
                 raise RuntimeError('mutation %s: anchor not found in %s'
                                    % (self.mut['name'], fname))
-            with open(path, 'w') as fh:
+            with open(path, 'w', newline='') as fh:
                 fh.write(text.replace(old, new, 1))
         return self
 

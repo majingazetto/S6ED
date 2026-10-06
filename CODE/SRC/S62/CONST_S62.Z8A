@@ -50,14 +50,6 @@ WINBUF_Y        EQU     512             ; OFF-SCREEN VRAM WINDOW BUFFER BASE Y
 WINCOMP_Y       EQU     768             ; OFF-SCREEN VRAM COMPOSITION BUFFER BASE Y
 WINSHDW         EQU     4               ; WINDOW DROP SHADOW OFFSET/WIDTH (PX)
 
-MNUX_FIL        EQU     48              ; FILE MENU X
-MNUY_FIL        EQU     8               ; FILE MENU Y
-MNUW_FIL        EQU     144             ; FILE MENU WIDTH
-MNUH_FIL        EQU     60              ; FILE MENU HEIGHT
-MNUTX_FL        EQU     54              ; FILE MENU TEXT X
-MNUBX_FL        EQU     52              ; FILE MENU BAR X
-MNUBW_FL        EQU     136             ; FILE MENU BAR WIDTH
-MNUCNT_F        EQU     7               ; TOTAL ITEMS IN FILE MENU
 
 FONTSIZ         EQU     2048            ; 256 GLYPHS X 8 BYTES, 1BPP (SOURCE)
 FNTFSIZ         EQU     FONTSIZ * 4     ; S62ED.FNT: THE FOUR VARIANTS, EXACTLY

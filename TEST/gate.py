@@ -1346,13 +1346,14 @@ class H8DatBadMagic(_DatCorrupt):
 
 class H39DatForeign(_DatCorrupt):
     name = 'H39-dat-foreign'
-    desc = "a sibling editor's container renamed to S6ED.DAT is rejected"
-    origin = ('2026-10-06: DATHCHK accepted any "S?ED" magic, so S6ED would '
-              'load S2ED.DAT (and S62ED shipped S6ED\'s magic) and FCALL into '
-              'code phased for another editor')
+    desc = "S62ED's container renamed to S6ED.DAT is rejected"
+    origin = ('2026-10-06: DATHCHK accepted any "S?ED" magic and S62ED shipped '
+              'S6ED\'s, so S6ED would load code phased for another editor. '
+              'S62ED.DAT is the sibling to test with: its header and block '
+              'layout are S6ED\'s, so only the magic can tell them apart')
 
     def dat_mutate(self, ctx, dat):
-        with open(os.path.join(ctx.code_dir, 'S2ED.DAT'), 'rb') as fh:
+        with open(os.path.join(ctx.code_dir, 'S62ED.DAT'), 'rb') as fh:
             return fh.read()
 
 

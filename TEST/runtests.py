@@ -33,6 +33,8 @@ def main():
     ap.add_argument('--gate', action='store_true', help='runtime Gate only')
     ap.add_argument('--s2', action='store_true',
                     help='the S2ED (MSX1 / SCREEN 2) Gate only')
+    ap.add_argument('--s62', action='store_true',
+                    help='the S62ED (MSX2 / SCREEN 6, 62 columns) Gate only')
     ap.add_argument('-k', '--filter', default='',
                     help='run only cases whose name contains this')
     ap.add_argument('--out', default=None, help='output directory')
@@ -44,10 +46,11 @@ def main():
                     help='everything: T0 static, the Gate and the self-test')
     args = ap.parse_args()
 
-    picked = args.static or args.gate or args.selftest or args.s2
+    picked = args.static or args.gate or args.selftest or args.s2 or args.s62
     run_static = args.all or args.static or not picked
     run_gate = args.all or args.gate or not picked
     run_s2 = args.all or args.s2 or not picked
+    run_s62 = args.all or args.s62 or not picked
     run_selftest = args.all or args.selftest
     color = not args.no_color and sys.stdout.isatty()
 
@@ -99,6 +102,23 @@ def main():
             s2checks += gate_s2.run(s2ctx, s2cases) if s2cases else []
         all_checks += s2checks
         failed += result.report('S2  GATE  (MSX1 / SCREEN 2)', s2checks, color)
+
+    if run_s62:
+        # Third target: Screen 6 like S6ED, but 8x8 byte-aligned cells, its
+        # own driver (S62/) and its own .sym -- a separate context again.
+        import gate_s62
+        s62ctx = ctx.for_target('S62ED')
+        build = static.check_build_clean(s62ctx)
+        build = result.Check('build-clean-s62', build.ok, build.detail)
+        s62checks = [build]
+        if build.ok:
+            s62ctx.reload_symbols()
+            s62cases = [c for c in gate_s62.CASES
+                        if args.filter.upper() in c.name.upper()]
+            s62checks += gate_s62.run(s62ctx, s62cases) if s62cases else []
+        all_checks += s62checks
+        failed += result.report('S62  GATE  (MSX2 / SCREEN 6, 62 COLUMNS)',
+                                s62checks, color)
 
     if run_selftest:
         import selftest

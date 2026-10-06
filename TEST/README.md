@@ -1,16 +1,17 @@
-# SXED regression suite (S6ED + S2ED)
+# SXED regression suite (S6ED + S2ED + S62ED)
 
 ```
 make check       # T0 only: static invariants, no emulator          ~0.2 s
 make gate        # the S6 Gate: headless openMSX on an MSX2          ~30 s
 make test-s2     # the S2 Gate: headless openMSX on an MSX1          ~14 s
-make test        # static + both gates -- before calling a job done  ~45 s
+make test-s62    # the S62 Gate: headless openMSX on an MSX2         ~12 s
+make test        # static + the three gates -- before calling a job done
 make selftest    # put each historical defect back, prove it is caught
 make testall     # all of it in one run, every check printed
 ```
 
 All of them from `CODE/`. Or directly:
-`TEST/runtests.py [--all|--static|--gate|--s2|--selftest] [-k NAME]`. Exit code
+`TEST/runtests.py [--all|--static|--gate|--s2|--s62|--selftest] [-k NAME]`. Exit code
 is 0 only when every check passes.
 
 Nothing short-circuits: every section asked for runs to the end and every check
@@ -49,6 +50,8 @@ Every new test or code change must satisfy the four rules documented in [`AGENTS
 | `gate.py` | the S6ED runtime cases (Screen 6, MSX2) |
 | `gate_s2.py` | the S2ED runtime cases (Screen 2, MSX1) |
 | `pattern.py` | Screen 2 expectation computed from `S2ED.FNT` + the document |
+| `gate_s62.py` | the S62ED runtime cases (Screen 6, 62 columns, MSX2) |
+| `screen62.py` | S62ED expectation computed from `S62ED.FNT` + the document |
 | `cases.py` | case base class, fixture helpers |
 | `harness.py` | one openMSX session: disk, generated `.tcl`, run, dumps |
 | `keys.py` | MSX key matrix and the input timeline |
@@ -156,6 +159,36 @@ case:
   finishes with a full repaint microseconds before the snapshot -- a mutation
   that dropped a scroll's VRAM push went straight through it. The timeline now
   ends with a mid-document split.
+
+## The S62 Gate
+
+S62ED is the third target (`S62/`, MSX2 Screen 6, 62 x 24 cells of 8 x 8). Its
+cells are byte aligned, so the S2 method applies directly: `screen62.py` expands
+each glyph of `S62ED.FNT` to 2bpp and compares every text cell, the 8 px
+margins and the status bar (against `STATBUF`, on UI paper) with no golden
+image. `cell_text()` reads a run of cells back into a string, which is how
+window and menu text is checked: a glyph drawn off its 8 px grid, or clipped by
+`WINCLIPX`, reads back as `?`.
+
+S62ED was cloned from S6ED's 6x8 code, and every defect found in it was a 6 px
+measurement left behind -- so most mutations here put one back.
+
+| Case | Derived from |
+|---|---|
+| `S62-1-render` | boot screen vs the computed image: text, margins, status bar, menu bar |
+| `S62-2-edit` | type / split / join / delete repaint differentially; the file saved matches |
+| `S62-3-scroll` | YMMM scroll and exposed rows; the fixture varies column 0, or a scroll that leaves it behind still looks right |
+| `S62-4-hscroll` | a 120-column line scrolls left; the status bar reads `Col 121` (it printed `Col01`) |
+| `S62-5-windows` | menu items and the About title read back whole at `WINX + 8` (they were at `+ 6`, and 22-char items lost their last glyph) |
+| `S62-6-browse` | browser 456 x 176 at (28, 18); the information line reads back as `BRWINF`, last column included |
+| `S62-7-dat-foreign` | `S6ED.DAT` renamed to `S62ED.DAT` is refused (S62ED shipped S6ED's magic) |
+| `S62-8-load-progress` | the load bar is full at the end of the read and gone afterwards |
+| `S62-9-browse-busy` | `Reading directory...` on the status bar, then on the information line for a rescan |
+| `S62-10-shipped-disk` | `S62ED.DSK` boots into `\DEV\TEST.TXT` (its AUTOEXEC had bare LF and booted to the prompt) |
+
+A snapshot gated on a label the mutation makes unreachable (`BRWBUSY.DONE`)
+never fires, the session cannot finish, and the failure is reported under the
+case name -- so such a mutation lists the case name in `expect_any` as well.
 
 ## The S6 Gate
 

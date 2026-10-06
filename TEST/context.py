@@ -15,6 +15,7 @@ import symbols
 TARGETS = {
     'S6ED': ('', 'CORE', 'S6'),
     'S2ED': ('', 'CORE', 'S2'),
+    'S62ED': ('', 'CORE', 'S62'),
 }
 
 
