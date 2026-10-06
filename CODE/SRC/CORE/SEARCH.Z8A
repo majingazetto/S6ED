@@ -174,14 +174,16 @@ SRCHFWD         LD      A, (SRCHLEN)
                 SCF
                 RET     Z               ; NO PATTERN
 
-                ; 1. CHECK REST OF CURRENT LINE STARTING AT CURX + 1
+                ; 1. CHECK REST OF CURRENT LINE FROM .FIRST ON
                 LD      HL, (DOCLINE)
                 CALL    LINEREAD
-                LD      A, (CURX)
-                INC     A
+                CALL    SRCHFST
+                JR      Z, .STEP2       ; CURSOR AT 255: NOTHING LEFT ON THIS LINE
                 LD      C, A
                 CALL    SCANLNF
                 JR      NC, .MATCUR     ; MATCH ON CURRENT LINE
+
+.STEP2
 
                 ; 2. SEARCH FORWARD: DOCLINE+1 UP TO TOTLINES-1
                 LD      HL, (DOCLINE)
@@ -215,15 +217,16 @@ SRCHFWD         LD      A, (SRCHLEN)
                 INC     HL
                 JR      .WRPLP
 
-.LSTCHK         ; CHECK LINE 0..CURX OF ORIGINAL DOCLINE
+.LSTCHK         ; CHECK THE ORIGINAL DOCLINE BEFORE WHERE STEP 1 STARTED
                 LD      HL, (DOCLINE)
                 CALL    LINEREAD
                 LD      C, 0
                 CALL    SCANLNF
                 RET     C               ; NOT FOUND ANYWHERE
-                LD      A, (CURX)
+                CALL    SRCHFST         ; KEEPS C
+                DEC     A               ; LAST COLUMN STEP 1 DID NOT SCAN
                 CP      C
-                RET     C               ; FOUND ONLY AT/PAST CURX (ALREADY CHECKED)
+                RET     C               ; FOUND ONLY AT/PAST IT (ALREADY CHECKED)
 
 .MATCUR         LD      HL, (DOCLINE)   ; SCANLNF LEAVES HL IN WORKBUF: RELOAD LINE
 .MATCH          ; MATCH AT LINE HL, COLUMN C
@@ -248,6 +251,33 @@ SRCHFWD         LD      A, (SRCHLEN)
                 CALL    SELPOST
                 CALL    DRWSTAT
                 AND     A               ; CY = 0: SUCCESS
+                RET
+
+
+; - SRCHFWD.FIRST: THE FIRST COLUMN STEP 1 SCANS -- ONE PAST THE START OF
+; - THE MATCH THE SELECTION HOLDS, OR ONE PAST THE CURSOR WITHOUT ONE. AFTER
+; - A MATCH THE CURSOR IS AT ITS END, SO CURX + 1 SKIPPED A MATCH THAT
+; - STARTS THERE ("AB" IN "ABAB" NEVER REACHED COLUMN 2). Z: THE CURSOR IS
+; - AT 255, NOTHING LEFT ON THE LINE (CURX + 1 WRAPPED TO COLUMN 0).
+; - OUT: A, Z. CLOBBERS: AF (KEEPS BC, DE, HL)
+; - THE SELECTION COUNTS ONLY WHEN IT STARTS ON DOCLINE.
+; -
+
+SRCHFST         LD      A, (SELACT)
+                OR      A
+                JR      Z, .CUR
+                PUSH    HL
+                PUSH    DE
+                LD      HL, (SELSTRL)   ; ONLY A SELECTION THAT STARTS ON THIS
+                LD      DE, (DOCLINE)   ; LINE NAMES A COLUMN ON IT
+                OR      A
+                SBC     HL, DE
+                POP     DE
+                POP     HL
+                LD      A, (SELSTRX)
+                JR      Z, .ONE
+.CUR            LD      A, (CURX)
+.ONE            INC     A
                 RET
 
 

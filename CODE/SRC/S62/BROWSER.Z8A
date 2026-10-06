@@ -59,7 +59,7 @@ DOBRW           XOR     A
                 LD      (WINH), HL
                 LD      A, BRWLSTY + BRWFLDR * 8
                 LD      (EDROW), A
-                LD      A, 44           ; THE BOX STARTS AT 40, A MULTIPLE OF 4
+                LD      A, 60           ; THE BOX STARTS AT 56, CLEAR OF "Name:" (8..47)
                 LD      (EDCOL), A
                 LD      A, 38
                 LD      (EDWID), A

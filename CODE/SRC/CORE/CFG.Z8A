@@ -935,12 +935,9 @@ CFGSAVE         LD      A, (CFGLOC)
                 XOR     A               ; 0 = OFF (SHDWOFF != 0)
 .S2SHOK         LD      HL, .ALNV
                 ELSE
-                LD      A, (SHDWCLR)
-                CP      CLR_BG
-                LD      A, 0            ; 0 = OFF (SHDWCLR == CLR_BG)
-                JR      Z, .S6SHOK
-                INC     A               ; 1 = UI (SHDWCLR != CLR_BG)
-.S6SHOK         LD      HL, .S6SHDV
+                LD      A, (SHDWCLR)    ; A PACKED BYTE: COLOUR N IS N * #55
+                AND     3               ; 0 OFF (BG), 1 FG, 2 UI, 3 HI
+                LD      HL, .S6SHDV
                 ENDIF
                 CALL    .WRLIST
 
@@ -1027,8 +1024,10 @@ CFGSAVE         LD      A, (CFGLOC)
 .SVM2           DEFM    "LIT", 0
 
                 IFNDEF  S2ED
-.S6SHDV         DEFW    .SVA0, .S6SH1
-.S6SH1          DEFM    "UI", 0
+.S6SHDV         DEFW    .SVA0, .S6SH1, .S6SH2, .S6SH3
+.S6SH1          DEFM    "FG", 0
+.S6SH2          DEFM    "UI", 0
+.S6SH3          DEFM    "HI", 0
                 ENDIF
 
 

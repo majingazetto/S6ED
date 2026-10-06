@@ -943,18 +943,16 @@ REFLOW          LD      (RFLINE), HL
                 ; COPY REMAINING TEXT FROM WORKBUF2 TO WORKBUF
                 LD      E, C
                 LD      D, 0
+                PUSH    DE              ; [SP] = SOURCE OFFSET, FOR THE ATTRIBUTES
                 LD      HL, WORKBUF2
                 ADD     HL, DE          ; HL = WORKBUF2 + C
                 LD      DE, WORKBUF + 1
-                LD      C, B
+                LD      C, B            ; (C NOW THE COUNT: THE OFFSET IS STACKED)
                 LD      B, 0
-                PUSH    BC
                 LDIR
-                POP     BC
 
                 ; COPY REMAINING ATTRIBUTES FROM WORKBUF2 TO WORKBUF
-                LD      E, C
-                LD      D, 0
+                POP     DE              ; DE = SOURCE OFFSET
                 LD      HL, WORKBUF2 + WORKATTR
                 ADD     HL, DE          ; HL = WORKBUF2 + WORKATTR + C
                 LD      DE, WORKBUF + 1 + WORKATTR

@@ -2322,6 +2322,7 @@ DOSETT          LD      HL, 120
                 LD      DE, 12
                 LD      A, CLR_BG
                 CALL    WINBAND
+                CALL    WINSID          ; THE BAND SPANS WINW: PUT THE SIDES BACK
 
                 ; DRAW 9 SETTING ROWS
                 LD      IX, .SETTBL
@@ -2488,7 +2489,10 @@ DOSETT          LD      HL, 120
                 OR      A
                 LD      A, CLR_BG
                 JR      Z, .SHDDON
-                LD      A, CLR_UI
+                LD      A, (SHDWCLR)    ; STAYS ON: KEEP FG / UI / HI AS THE CFG
+                CP      CLR_BG          ; SET IT. IT WAS ALWAYS REWRITTEN AS UI
+                JR      NZ, .SHDDON
+                LD      A, CLR_UI       ; TURNED ON: UI
 .SHDDON         LD      (SHDWCLR), A
 
                 LD      HL, STRSAVG

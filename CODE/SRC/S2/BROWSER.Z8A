@@ -770,9 +770,10 @@ DOBRW           XOR     A
                 ; 5. BUTTONS (ROW 18)
                 CALL    .BTNS
 
-                ; 6. DUMP ALL INNER ROWS 3..18 (16 ROWS)
-                LD      A, BRWRLST
-                LD      B, BRWBTNR - BRWRLST + 1 ; 16 ROWS
+                ; 6. DUMP ROWS 2..18: THE TITLE TOO, WHICH A RESCAN REBUILDS
+                ;    (NEW PATH OR MASK) AND NOTHING ELSE SENT TO VRAM
+                LD      A, BRWWINR
+                LD      B, BRWBTNR - BRWWINR + 1 ; 17 ROWS
 .PTDUMP         PUSH    AF
                 PUSH    BC
                 CALL    WDUMPR

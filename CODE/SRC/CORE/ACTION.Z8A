@@ -2579,7 +2579,11 @@ ACTSELAL        CALL    SELPRE          ; UN-XOR EXISTING IF DRAWN
 ; -
 
 ACTSLML         CALL    SELBEG
-                CALL    ACTMVL          ; NO SCROLL, NO REPAINT: SELPOST DIFFS
+                LD      A, (CURY)
+                LD      HL, CURX
+                OR      (HL)
+                CALL    Z, SELPRE       ; ROW 0, COLUMN 0: A WRAP (WRAP_TXT) SCROLLS
+                CALL    ACTMVL          ; OTHERWISE NO SCROLL: SELPOST DIFFS
                 JP      SELPOST
 
 
@@ -2594,7 +2598,17 @@ ACTSLML         CALL    SELBEG
 ; -
 
 ACTSLMR         CALL    SELBEG
-                CALL    ACTMVR          ; NO SCROLL, NO REPAINT: SELPOST DIFFS
+                LD      A, (CURY)
+                CP      ROWSVIS - 1
+                JR      NZ, .MOVE       ; NOT THE BOTTOM ROW: NO SCROLL
+                LD      HL, (DOCLINE)
+                CALL    LINELEN         ; A = LENGTH
+                LD      HL, CURX
+                CP      (HL)            ; LENGTH - CURX
+                JR      Z, .PRE
+                JR      NC, .MOVE       ; NOT AT THE END: NO WRAP
+.PRE            CALL    SELPRE          ; A WRAP (WRAP_TXT) SCROLLS: UN-XOR FIRST
+.MOVE           CALL    ACTMVR          ; SELPOST DIFFS WHAT IS LEFT
                 JP      SELPOST
 
 
@@ -3633,7 +3647,10 @@ APPLSEL         LD      (STYLMASK), A
                 CP      (HL)
                 RET     Z               ; EMPTY: NOTHING TO STYLE
 
-.APLINIT        LD      A, UNDOT_MOD    ; EVERY SELECTED LINE, ONE UNDO GROUP
+.APLINIT        CALL    SELPRE          ; THE ROWS ARE REPAINTED CLEAN BELOW: TAKE
+                                        ; THE OVERLAY OFF FIRST, OR SELPOST FINDS IT
+                                        ; "PAINTED" AND THE NEXT DESELECT XORS RESIDUE
+                LD      A, UNDOT_MOD    ; EVERY SELECTED LINE, ONE UNDO GROUP
                 CALL    UNDOSEL
                 LD      HL, (SELSTRL)
                 LD      (STYLLN), HL

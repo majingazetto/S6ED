@@ -11,21 +11,20 @@
 ; -
 
 VDPWAIT         PUSH    AF
-                LD      A, 2
+.WAIT           LD      A, 2
                 DI
                 OUT     (VDPCT), A
                 LD      A, #8F          ; SELECT STATUS REG S#2 (R#15=2)
                 OUT     (VDPCT), A
-.WAIT           IN      A, (VDPST)
+                IN      A, (VDPST)
                 RRA                     ; CE INTO CARRY
-                JR      C, .WAIT
-                XOR     A               ; RESTORE S#0 SELECTION
-                DI
+                LD      A, 0            ; RESTORE S#0 SELECTION (KEEPS CARRY)
                 OUT     (VDPCT), A
                 LD      A, #8F
                 OUT     (VDPCT), A
-                EI
-                POP     AF
+                EI                      ; ONE POLL PER DI: THE VBLANK IS SERVED
+                JR      C, .WAIT        ; BETWEEN POLLS, NOT HELD OFF FOR THE
+                POP     AF              ; WHOLE COMMAND (A 128 MS YMMM LOST ~6)
                 RET
 
 
