@@ -288,8 +288,8 @@ LOADERR         DEFB    0               ; 1 = FILELOAD FAILED DUE TO CAPACITY/OO
 LINEOFF         DEFW    0               ; OFFSET OF THE NEXT FREE LINE RECORD
 CURLLEN         DEFB    0               ; LENGTH OF THE LINE BEING BUILT
 FCB             DEFS    SIZEFCB         ; FCB FOR DOS1 I/O
-PARMTMP         DEFS    40              ; CHKFILE: TEMP COPY OF ONE PARAM
-PARBUF          DEFS    128             ; EXTPARM RAW OUTPUT BUFFER
+                ; PARMTMP AND PARBUF (BOOT PARAMETERS) ARE IN THE PAGE 3
+                ; SCRATCH BLOCK (CONST_CORE): S2ED'S PAGE 1 IS FULL.
 
 
 ; --- WORK BUFFER               ----------------------------------------
@@ -342,8 +342,8 @@ CMPEND          DEFW    0               ; COMPACTION: SCAN BOUND
 CMPSRC          DEFW    0               ; COMPACTION: SOURCE OFFSET
 CMPDST          DEFW    0               ; COMPACTION: DESTINATION OFFSET
 CMPRSZ          DEFW    0               ; COMPACTION: RECORD SIZE
-                ; FILEBUF, THE DISK READ BUFFER, IS IN THE PAGE 3 SCRATCH
-                ; BLOCK (CONST_CORE): S2ED'S PAGE 1 HAD NO 256 BYTES TO SPARE.
+                ; IOBUF, THE DISK I/O BUFFER, IS WORKBUF2 + PREVBUF IN PAGE 3
+                ; (CONST_CORE): S2ED'S PAGE 1 HAS NO BYTES TO SPARE.
 
 
 
@@ -384,7 +384,7 @@ STATPRV         DEFS    STATCOLS
 STATPRV         DEFS    1               ; S2ED ALWAYS REPAINTS THE ROW: NO CELL CACHE
                 ENDIF
                 ; STATMSG AND THE PROGRESS BAR STATE ARE IN THE PAGE 3 SCRATCH
-                ; BLOCK (CONST_CORE), WITH FILEBUF: S2ED'S PAGE 1 IS FULL.
+                ; BLOCK (CONST_CORE), WITH IOPTR: S2ED'S PAGE 1 IS FULL.
 MODPRV          DEFB    0               ; PREVIOUS MODIFIED STATE FOR REACTIVE ROW 0 REDRAW
                 IFNDEF  S2ED
 FNAMBUF         DEFS    36, 0           ; ROW 0 FILENAME COMPOSITION BUFFER

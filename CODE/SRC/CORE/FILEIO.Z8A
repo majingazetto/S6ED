@@ -81,7 +81,7 @@ CHKFLEN         PUSH    DE              ; [SP+2] = FILE SIZE HIGH
 ; - OUT: AS LOADDOC, AND STATMSG EMPTY ON EVERY EXIT
 ; - CLOBBERS: ALL
 ; -
-; - A LARGE FILE TAKES SECONDS ON A FLOPPY (THE 990-LINE MANUAL, 15 S ON
+; - A LARGE FILE TAKES SECONDS ON A FLOPPY (THE 1071-LINE MANUAL, 10 S ON
 ; - THE 2 MB MACHINE) AND THE SCREEN USED TO STAY UNCHANGED THROUGHOUT,
 ; - WHICH READS AS A HANG. "Loading..." GOES UP BEFORE THE OPEN AND
 ; - LOADDOC TURNS IT INTO A BAR OVER THE FILE SIZE (PRGBEG / PRGADV).
@@ -164,138 +164,162 @@ LOADDOC         XOR     A
                 CALL    FNAMSET         ; THE NAME BECOMES THE DOCUMENT'S
                 XOR     A
                 LD      (MODIFIED), A
-
-                LD      HL, 0
-                LD      (TOTLINES), HL
-                LD      (LINEOFF), HL
-                XOR     A
-                LD      (CURLLEN), A
                 LD      (WASCR), A
                 LD      (EOLARED), A
+                LD      (PREVROW), A    ; IOBUF RUNS OVER PREVBUF: NO CACHE
+                LD      H, A
+                LD      L, A
+                LD      (TOTLINES), HL
+                LD      (LINEOFF), HL
+
+                ; THE LOADER NEVER WRITES AN ATTRIBUTE AND NOTHING ON ITS PATH
+                ; WRITES WORKBUF, SO STORLINE FINDS THEM ZERO FOR EVERY LINE:
+                ; CLEARED ONCE HERE, NOT 255 BYTES PER LINE (~1.5 MS EACH).
+                LD      HL, WORKBUF + 1 + WORKATTR
+                LD      (HL), 0
+                LD      D, H
+                LD      E, L
+                INC     DE
+                LD      BC, MAXCOLS - 1
+                LDIR
                 LD      HL, STRLDG
                 CALL    PRGBEG
+                LD      DE, WORKBUF + 1 ; DE = WHERE THE NEXT CHARACTER GOES
 
-.READBLK        LD      A, (FILEHAND)
-                LD      HL, 256
-                LD      DE, FILEBUF
+                ; THE LINE IS BUILT AT DE. THE LENGTH IS E - LOW(WORKBUF + 1),
+                ; AND THE LINE IS FULL (MAXCOLS) EXACTLY WHEN DE REACHES THE
+                ; NEXT 256-BYTE PAGE -- WHERE THE FULL LENGTH ALSO COMES OUT
+                ; OF THAT SUBTRACTION AS MAXCOLS.
+                ASSERT  LOW(WORKBUF + 1 + MAXCOLS) == 0
+                ASSERT  LOW(WORKBUF + 1) == 1
+
+.READBLK        PUSH    DE
+                LD      A, (FILEHAND)
+                LD      HL, IOBSIZ
+                LD      DE, IOBUF
                 CALL    DSKREAD         ; HL = BYTES READ
                 LD      A, H
                 OR      L
                 JP      Z, .EOF
+                ; NO PAGE 2 STATE IS LIVE BETWEEN BLOCKS: STORLINE BANKS ITS
+                ; OWN. PRGADV TAKES AT MOST 655 UNITS, SO A BLOCK IS TWO HALVES.
+                PUSH    HL              ; [SP] = BYTES READ
+                SRL     H
+                RR      L
                 PUSH    HL
-                CALL    PRGADV          ; NO PAGE 2 STATE IS LIVE BETWEEN
-                POP     HL              ; BLOCKS: STORLINE BANKS ITS OWN
-                
-                LD      B, H
-                LD      C, L            ; BC = BYTES TO PROCESS
-                LD      HL, FILEBUF
-.PROCLP         PUSH    BC
+                CALL    PRGADV
+                POP     DE
+                POP     HL
                 PUSH    HL
-                
-                LD      A, (HL)
-                CP      13              ; CR
-                JR      Z, .ISCR
-                CP      10              ; LF
-                JP      Z, .ISLF
-                CP      9               ; TAB
-                JR      Z, .ISTAB
-                
-                ; REGULAR CHARACTER: CLEAR WASCR
-                PUSH    AF
-                XOR     A
-                LD      (WASCR), A
-                POP     AF
-                
-                ; APPEND TO WORKBUF IN TPA RAM
-                LD      B, A
-                LD      A, (CURLLEN)
-                CP      MAXCOLS
-                JP      NC, .SKIP       ; TRUNCATE AT MAX LINE WIDTH
-
-                LD      HL, WORKBUF + 1
-                LD      E, A
-                LD      D, 0
-                ADD     HL, DE          ; HL = WORKBUF + 1 + CURLLEN
-                LD      (HL), B
-
-                INC     A
-                LD      (CURLLEN), A
-                JP      .SKIP
-
-.ISTAB          ; TAB EXPANSION: INSERT SPACES UP TO NEXT TAB STOP
-                XOR     A
-                LD      (WASCR), A
-
-                LD      A, (TABWIDTH)
-                LD      D, A            ; D = TABWIDTH
-                LD      A, (CURLLEN)
-.TABMD          CP      D
-                JR      C, .TABRM
-                SUB     D
-                JR      .TABMD
-.TABRM          ; A = CURLLEN % TABWIDTH
-                LD      E, A
-                LD      A, D
-                SUB     E               ; A = SPACES TO ADD (1..TABWIDTH)
-                LD      E, A            ; E = COUNT OF SPACES
-
-.TABSP          LD      A, (CURLLEN)
-                CP      MAXCOLS
-                JP      NC, .SKIP       ; TRUNCATE AT MAX LINE WIDTH
-
-                LD      HL, WORKBUF + 1
-                LD      C, A
-                LD      B, 0
-                ADD     HL, BC
-                LD      (HL), ' '
-
-                LD      A, (CURLLEN)
-                INC     A
-                LD      (CURLLEN), A
-
-                DEC     E
-                JR      NZ, .TABSP
-                JP      .SKIP
-
-.ISCR           LD      A, 1
-                LD      (WASCR), A
-                ; EOL AUTO-DETECT: DOS CRLF
-                LD      A, (AUTOLOD)
                 OR      A
-                JR      Z, .STORCR
-                LD      A, (EOLARED)
-                OR      A
-                JR      NZ, .STORCR
-                XOR     A
-                LD      (SAVEEOL), A    ; DETECTED DOS (CRLF)
-                INC     A
-                LD      (EOLARED), A
-.STORCR         CALL    STORLINE
-                JR      C, .OOM
-                JP      .SKIP
-
-.ISLF           LD      A, (WASCR)
+                SBC     HL, DE          ; THE OTHER HALF
+                CALL    PRGADV
+                POP     BC              ; BC = BYTES TO PROCESS
+                POP     DE
+                LD      HL, WASCR       ; A CR ENDED THE LAST BLOCK: AN LF
+                LD      A, (HL)         ; OPENING THIS ONE BELONGS TO IT
+                LD      (HL), 0
+                LD      HL, IOBUF
                 AND     A
-                JR      NZ, .SKIPLF     ; IF CRLF, SKIP THE LF
-                ; STANDALONE LF: UNIX EOL
+                JR      Z, .PROCLP
+                LD      A, (HL)
+                CP      LF
+                JR      Z, .SKIP
+
+.PROCLP         LD      A, (HL)
+                CP      ' '
+                JR      C, .CTRL
+.CHAR           LD      A, D
+                CP      HIGH(WORKBUF + 1 + MAXCOLS)
+                JR      Z, .SKIP        ; FULL: TRUNCATE AT MAX LINE WIDTH
+                LDI
+                JP      PE, .PROCLP
+                JR      .READBLK
+
+.SKIP           INC     HL
+                DEC     BC
+.NEXT           LD      A, B
+                OR      C
+                JR      NZ, .PROCLP
+                JR      .READBLK
+
+.CTRL           CP      CR
+                JR      Z, .ISCR
+                CP      LF
+                JR      Z, .ISLF
+                CP      TAB
+                JR      NZ, .CHAR       ; ANY OTHER CONTROL CODE IS TEXT
+
+                ; TAB EXPANSION: SPACES UP TO THE NEXT TAB STOP
+                INC     HL
+                DEC     BC
+                PUSH    BC
+                LD      A, D
+                CP      HIGH(WORKBUF + 1 + MAXCOLS)
+                JR      Z, .TABEND
+                LD      A, (TABWIDTH)
+                LD      B, A
+                LD      A, E
+                SUB     LOW(WORKBUF + 1) ; A = LENGTH SO FAR
+.TABMD          SUB     B
+                JR      NC, .TABMD
+                NEG                     ; A = SPACES TO ADD (1..TABWIDTH)
+                LD      B, A
+.TABSP          LD      A, ' '
+                LD      (DE), A
+                INC     DE
+                LD      A, D
+                CP      HIGH(WORKBUF + 1 + MAXCOLS)
+                JR      Z, .TABEND
+                DJNZ    .TABSP
+.TABEND         POP     BC
+                JR      .NEXT
+
+.ISLF           LD      A, 1            ; A = THE SAVEEOL IT SUGGESTS: UNIX
+                JR      .EOL
+.ISCR           XOR     A               ; DOS (CRLF)
+.EOL            INC     HL
+                DEC     BC
+                PUSH    BC
+                PUSH    HL
+                PUSH    AF              ; [SP] = KIND
+                ; EOL AUTO-DETECT: THE FIRST LINE END DECIDES
+                LD      C, A
                 LD      A, (AUTOLOD)
                 OR      A
-                JR      Z, .STORLF
-                LD      A, (EOLARED)
+                JR      Z, .STORE
+                LD      HL, EOLARED
+                LD      A, (HL)
                 OR      A
-                JR      NZ, .STORLF
-                LD      A, 1
-                LD      (SAVEEOL), A    ; DETECTED UNIX (LF)
-                LD      (EOLARED), A
-.STORLF         CALL    STORLINE
+                JR      NZ, .STORE
+                INC     (HL)
+                LD      A, C
+                LD      (SAVEEOL), A    ; DETECTED: DOS (CRLF) OR UNIX (LF)
+.STORE          LD      A, E
+                SUB     LOW(WORKBUF + 1)
+                LD      (CURLLEN), A
+                CALL    STORLINE
                 JR      C, .OOM
-                JP      .SKIP
-.SKIPLF         XOR     A
+                POP     AF
+                POP     HL
+                POP     BC
+                LD      DE, WORKBUF + 1
+                OR      A
+                JR      NZ, .NEXT       ; LF: DONE
+                LD      A, B            ; CR: SWALLOW THE LF BEHIND IT, HERE
+                OR      C               ; OR AT THE START OF THE NEXT BLOCK
+                JR      Z, .CREND
+                LD      A, (HL)
+                CP      LF
+                JR      Z, .SKIP
+                JP      .PROCLP
+.CREND          INC     A
                 LD      (WASCR), A
-                JP      .SKIP
+                JP      .READBLK
 
-.OOM            POP     HL              ; BALANCE PUSH HL IN .PROCLP
-                POP     BC              ; BALANCE PUSH BC IN .PROCLP
+.OOM            POP     AF              ; BALANCE .EOL'S PUSHES
+                POP     HL
+                POP     BC
 .OOMNL          ; ROLLBACK DUE TO CAPACITY EXHAUSTION DURING LOAD
                 LD      A, (FILEHAND)
                 CALL    DSKCLOSE
@@ -308,26 +332,17 @@ LOADDOC         XOR     A
                 SCF                     ; RETURN ERROR
                 RET
 
-.SKIP           POP     HL
-                INC     HL
-                POP     BC
-                DEC     BC
-                LD      A, B
-                OR      C
-                JP      NZ, .PROCLP
-                JP      .READBLK
-
-.EOF            LD      A, (CURLLEN)
-                AND     A
-                JR      Z, .CHKTOT
-                CALL    STORLINE        ; STORE FINAL PENDING LINE
-                JR      C, .OOMNL
-                JR      .CLSFIL
-.CHKTOT         LD      HL, (TOTLINES)
+.EOF            POP     DE
+                LD      A, E
+                SUB     LOW(WORKBUF + 1)
+                JR      NZ, .LAST       ; STORE THE FINAL PENDING LINE
+                LD      HL, (TOTLINES)
                 LD      A, H
                 OR      L
                 JR      NZ, .CLSFIL
-                CALL    STORLINE        ; ENSURE AT LEAST 1 LINE IF FILE WAS EMPTY
+                XOR     A               ; EMPTY FILE: ONE EMPTY LINE
+.LAST           LD      (CURLLEN), A
+                CALL    STORLINE
                 JR      C, .OOMNL
 .CLSFIL         LD      A, (FILEHAND)
                 CALL    DSKCLOSE
@@ -395,7 +410,7 @@ FNBASE          LD      HL, FILENAME
 
 ; - STORLINE ---------------------------
 ; - FINISH CURRENT LINE, ADD TO DIRECTORY, PREPARE NEXT
-; - IN:  NONE (USES CURLLEN, TOTLINES)
+; - IN:  NONE (USES CURLLEN, TOTLINES; WORKBUF'S ATTRIBUTES MUST BE ZERO)
 ; - OUT: CY = 1  NO ROOM LEFT (DIRECTORY FULL, OR NO MAPPER SEGMENT LEFT)
 ; - CLOBBERS: ALL
 ; -
@@ -408,17 +423,10 @@ STORLINE        ; 1. CHECK IF LINE DIRECTORY IS FULL
                 SCF
                 RET                     ; DIRECTORY FULL
 
-.HAVDIR         ; 2. SET LENGTH IN WORKBUF[0] AND ZERO ATTRIBUTES
+.HAVDIR         ; 2. SET LENGTH IN WORKBUF[0]. THE ATTRIBUTES ARE ALREADY
+                ; ZERO: LOADDOC CLEARS THEM ONCE AND NOTHING WRITES THEM
                 LD      A, (CURLLEN)
                 LD      (WORKBUF), A
-
-                LD      HL, WORKBUF + 1 + WORKATTR
-                LD      (HL), 0
-                LD      D, H
-                LD      E, L
-                INC     DE
-                LD      BC, MAXCOLS - 1
-                LDIR
 
                 ; 3. ALLOCATE RECORD IN MAPPER VIA NEWREC
                 LD      C, A            ; C = CAPACITY NEEDED
@@ -488,6 +496,10 @@ FILESAVE        LD      HL, FILENAME
                 RET
 
 .OPNOK          LD      (SAVHAND), A
+                XOR     A
+                LD      (PREVROW), A    ; IOBUF RUNS OVER PREVBUF: NO CACHE
+                LD      HL, IOBUF
+                LD      (IOPTR), HL     ; THE SAVE BUFFER STARTS EMPTY
                 LD      HL, (TOTLINES)  ; THE BAR'S 100%: THE LINE COUNT
                 LD      (PRGTOT), HL
                 XOR     A
@@ -501,29 +513,23 @@ FILESAVE        LD      HL, FILENAME
                 LD      L, C
                 CALL    LINEREAD        ; LOAD INTO WORKBUF
                 
-                ; WRITE LINE CHARACTERS: WORKBUF[0] BYTES
+                ; THE LINE'S CHARACTERS: WORKBUF[0] BYTES, INTO THE BUFFER
                 LD      A, (WORKBUF)
-                OR      A
-                JR      Z, .WREOL
-                
-                LD      L, A
-                LD      H, 0
-                LD      DE, WORKBUF + 1
-                LD      A, (SAVHAND)
-                CALL    DSKWRITE
+                LD      C, A
+                LD      B, 0
+                LD      HL, WORKBUF + 1
+                CALL    IOPUT
                 JR      C, .WRERR
-                
-.WREOL          ; WRITE CR, LF (DOS) OR LF ONLY (UNIX)
-                LD      HL, 2
-                LD      DE, CRLFSTR
+
+                ; THEN CR, LF (DOS) OR LF ONLY (UNIX)
+                LD      BC, 2
+                LD      HL, CRLFSTR
                 LD      A, (SAVEEOL)
                 OR      A
                 JR      Z, .WREOL2
-                ; UNIX EOL: WRITE LF ONLY
-                LD      HL, 1
-                INC     DE
-.WREOL2         LD      A, (SAVHAND)
-                CALL    DSKWRITE
+                DEC     C               ; UNIX EOL: LF ONLY
+                INC     HL
+.WREOL2         CALL    IOPUT
                 JR      C, .WRERR
                 
                 POP     BC
@@ -537,7 +543,9 @@ FILESAVE        LD      HL, FILENAME
                 LD      DE, (TOTLINES)
                 CALL    CMPHLDE
                 JR      C, .LINELP
-                
+
+                CALL    IOFLUSH         ; WHAT THE LAST BLOCK HOLDS
+                JR      C, .WRFAIL
                 LD      A, (SAVHAND)
                 CALL    DSKCLOSE
                 
@@ -552,7 +560,7 @@ FILESAVE        LD      HL, FILENAME
                 RET
 
 .WRERR          POP     BC
-                LD      A, (SAVHAND)
+.WRFAIL         LD      A, (SAVHAND)
                 CALL    DSKCLOSE
                 LD      HL, STRSERR
                 CALL    SETMSG
@@ -562,6 +570,66 @@ FILESAVE        LD      HL, FILENAME
 
 .STRNONM        DEFM    "[NO FILE NAME]", 0
 CRLFSTR         DEFB    CR, LF
+
+
+; - IOPUT ------------------------------
+; - APPEND BYTES TO THE SAVE BUFFER, WRITING IT OUT EVERY TIME IT FILLS
+; - IN:  HL = SOURCE, BC = COUNT (0 IS FINE), IOPTR = NEXT FREE BYTE
+; - OUT: CY = 1: A WRITE FAILED
+; - CLOBBERS: ALL
+; -
+; - A SAVE USED TO BE TWO DSKWRITE PER LINE, AND THE COST OF A WRITE IS
+; - THE CALL, NOT THE BYTES: 394 S FOR THE 1071-LINE MANUAL ON AN MSX1
+; - UNDER NEXTOR, 17.7 S ON AN MSX2. NOW ONE DSKWRITE PER IOBSIZ BYTES.
+; -
+
+IOPUT           LD      A, B
+                OR      C
+                RET     Z               ; CY = 0
+                PUSH    HL              ; [SP] = SOURCE
+                PUSH    BC              ; [SP] = COUNT
+                LD      HL, IOBUF + IOBSIZ
+                LD      DE, (IOPTR)
+                OR      A
+                SBC     HL, DE          ; HL = ROOM, NEVER 0: A FULL BUFFER
+                OR      A               ; IS WRITTEN OUT AT ONCE
+                SBC     HL, BC
+                ADD     HL, BC          ; CY = 1: ROOM < COUNT
+                JR      NC, .FITS
+                LD      B, H
+                LD      C, L            ; BC = ROOM: FILL THE BUFFER
+.FITS           POP     HL
+                OR      A
+                SBC     HL, BC          ; HL = COUNT LEFT AFTER THIS COPY
+                EX      (SP), HL        ; [SP] = LEFT, HL = SOURCE
+                LDIR
+                LD      (IOPTR), DE
+                PUSH    HL              ; [SP] = SOURCE, THEN LEFT
+                LD      HL, IOBUF + IOBSIZ
+                OR      A
+                SBC     HL, DE          ; Z: FULL (CY = 0 EITHER WAY)
+                CALL    Z, IOFLUSH
+                POP     HL
+                POP     BC
+                RET     C
+                JR      IOPUT
+
+
+; - IOFLUSH ----------------------------
+; - WRITE OUT WHAT THE SAVE BUFFER HOLDS AND EMPTY IT
+; - IN:  IOPTR, SAVHAND
+; - OUT: CY = 1: THE WRITE FAILED
+; - CLOBBERS: ALL
+; -
+
+IOFLUSH         LD      HL, (IOPTR)
+                LD      DE, IOBUF
+                LD      (IOPTR), DE
+                OR      A
+                SBC     HL, DE          ; HL = BYTES HELD
+                RET     Z               ; CY = 0
+                LD      A, (SAVHAND)
+                JP      DSKWRITE
 
 
 ; --- SETMSG                    ----------------------------------------
