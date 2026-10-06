@@ -13,7 +13,7 @@ import re
 
 import vram
 from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
-                   ShippedDiskCase, crlf, numbered)
+                   ShippedDiskCase, crlf, io_fixture, numbered)
 from harness import MACH_128K, MACH_2MB, MACH_JP
 from keys import Timeline
 from result import Check
@@ -6514,6 +6514,59 @@ class H41BrowseBusy(Case):
         ]
 
 
+class H42IoBlocks(Case):
+    name = 'H42-io-blocks'
+    desc = ('a document across the 1 KB disk I/O buffer loads and saves back '
+            'byte for byte: a CR LF split over two reads, lines split over '
+            'several buffer flushes, a line over MAXCOLS kept to 255')
+    origin = ('2026-10-06: loads read 256 B per call and saves wrote twice per '
+              'line (394 s for the manual on S2ED); both now go through IOBUF, '
+              'so the loader carries a CR across reads and the saver splits '
+              'lines across flushes')
+    variants = ('dos', 'unix')
+
+    def _doc(self, variant):
+        return io_fixture(b'\r\n' if variant == 'dos' else b'\n')
+
+    def fixture(self, ctx, variant=None):
+        return self._doc(variant)[0]
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('loaded')
+        t.press('S', mods=['CTRL'])
+        t.wait(6.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            _, want, count = self._doc(variant)
+            eol = 0 if variant == 'dos' else 1
+            got = run.session.extract(run.dsk, self.fixture_name)
+            lines = run.var('loaded', 'TOTLINES')
+            checks.append(Check('H42/%s/lines' % variant, lines == count,
+                                'TOTLINES %s after the load (want %d)'
+                                % (lines, count)))
+            checks.append(Check('H42/%s/eol' % variant,
+                                run.var('loaded', 'SAVEEOL') == eol,
+                                'SAVEEOL %s (want %d)'
+                                % (run.var('loaded', 'SAVEEOL'), eol)))
+            if got == want:
+                why = '%d bytes back, byte for byte' % len(got)
+            elif got is None:
+                why = 'no file on disk'
+            else:
+                at = next((i for i in range(min(len(got), len(want)))
+                           if got[i] != want[i]), min(len(got), len(want)))
+                why = ('%d bytes, want %d; first difference at %d: %r / %r'
+                       % (len(got), len(want), at, got[at:at + 12],
+                          want[at:at + 12]))
+            checks.append(Check('H42/%s/content' % variant, got == want,
+                                why))
+        return checks
+
 
 CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G6Hooks(),
          G7Selection(), G8Config(), G9Directory(), G10Autoalign(), G11Paste(),
@@ -6526,7 +6579,7 @@ CASES = [G1Image(), G2Save(), G3Oom(), G3BOomShort(), G4FreeList(), G5Clock(), G
          H28TextWidth(), H29HomePath(), H30NewDocument(), H31EditOpen(),
          H32SaveNoName(), H33LongPath(), H34BrowseOpen(),
          H35BrowseMany(), H36BrowseSaveAs(), H37Settings(), H38DiskError(), H39DatForeign(),
-         H40LoadProgress(), H41BrowseBusy(),
+         H40LoadProgress(), H41BrowseBusy(), H42IoBlocks(),
          B2Font(), B3Rom(), B4CfgStream(), B5ShippedDisk(), F1Scroll(), F2Keyrun(),
          D1Insert(), D2Enter(), D3Backspace(), D4Delete(), D5WordLineDel(), D6Reflow(),
          D7Tabs(), D8Accents(), D9Kana(), D10Markup(), D11Margin(), D12LongLine(),

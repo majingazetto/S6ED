@@ -1649,16 +1649,18 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 'load-rollback',
         'why': 'FILELOAD does not roll back on OOM, leaving truncated lines',
         'file': 'FILEIO.Z8A',
-        'old': """.STORCR         CALL    STORLINE
-                JR      C, .OOM""",
-        'new': """.STORCR         CALL    STORLINE
-                JR      C, .CLSFIL      ; MUTATION: NO ROLLBACK ON OOM""",
+        'old': """                CALL    STORLINE
+                JR      C, .OOM
+                POP     AF""",
+        'new': """                CALL    STORLINE
+                JR      C, .CLSFIL      ; MUTATION: NO ROLLBACK ON OOM
+                POP     AF""",
         # G3's long-line fixture never reaches the read loop: CHKFLEN refuses
         # it up front.  The mid-read OOM path is exercised by G3B, whose
         # one-char lines pass the worst-case size estimate but exhaust the
         # real 36-byte records halfway through the read.
         'filter': 'G3B',
-        # .CLSFIL is entered with .PROCLP's PUSH HL still on the stack, so
+        # .CLSFIL is entered with .EOL's three pushes still on the stack, so
         # the RET that follows is undefined: which address it lands on moves
         # with the code layout.  Measured 2026-09-27: 12 bytes added to
         # EDPSHWR turned a refused load into a dead session.  Either one is
@@ -2092,10 +2094,10 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'name': 'i2-autolod-lf',
         'why': 'FILELOAD does not auto-detect standalone LF as UNIX EOL',
         'file': 'FILEIO.Z8A',
-        'old': """                LD      A, 1
-                LD      (SAVEEOL), A    ; DETECTED UNIX (LF)""",
+        'old': """                LD      A, C
+                LD      (SAVEEOL), A    ; DETECTED: DOS (CRLF) OR UNIX (LF)""",
         'new': """                XOR     A               ; MUTATION: DO NOT DETECT UNIX
-                LD      (SAVEEOL), A    ; DETECTED UNIX (LF)""",
+                LD      (SAVEEOL), A    ; DETECTED: DOS (CRLF) OR UNIX (LF)""",
         'filter': 'I1',
         'expect': ['I1/saveeol', 'I1/content'],
     },
@@ -2157,8 +2159,24 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'why': 'LOADDOC never advances the progress bar, so a long load '
                'shows a frozen 0% again',
         'file': 'FILEIO.Z8A',
-        'old': """                CALL    PRGADV          ; NO PAGE 2 STATE IS LIVE BETWEEN""",
-        'new': """                NOP                     ; MUTATION: THE BAR NEVER MOVES
+        'old': """                PUSH    HL
+                CALL    PRGADV
+                POP     DE
+                POP     HL
+                PUSH    HL
+                OR      A
+                SBC     HL, DE          ; THE OTHER HALF
+                CALL    PRGADV""",
+        'new': """                PUSH    HL
+                NOP                     ; MUTATION: THE BAR NEVER MOVES
+                NOP
+                NOP
+                POP     DE
+                POP     HL
+                PUSH    HL
+                OR      A
+                SBC     HL, DE          ; THE OTHER HALF
+                NOP
                 NOP
                 NOP""",
         'filter': 'H40',
@@ -2169,12 +2187,110 @@ SELTMPXB        EQU     SELTMPXB2""")],
         'target': 'S2ED',
         'why': 'the same, measured on the S2 gate: the counter is CORE',
         'file': 'FILEIO.Z8A',
-        'old': """                CALL    PRGADV          ; NO PAGE 2 STATE IS LIVE BETWEEN""",
-        'new': """                NOP                     ; MUTATION: THE BAR NEVER MOVES
+        'old': """                PUSH    HL
+                CALL    PRGADV
+                POP     DE
+                POP     HL
+                PUSH    HL
+                OR      A
+                SBC     HL, DE          ; THE OTHER HALF
+                CALL    PRGADV""",
+        'new': """                PUSH    HL
+                NOP                     ; MUTATION: THE BAR NEVER MOVES
+                NOP
+                NOP
+                POP     DE
+                POP     HL
+                PUSH    HL
+                OR      A
+                SBC     HL, DE          ; THE OTHER HALF
+                NOP
                 NOP
                 NOP""",
         'filter': 'S2-35',
         'expect': ['S2-35/progress'],
+    },
+    {
+        'name': 'io-flush-end',
+        'why': 'FILESAVE closes the file without writing what the last, partial save buffer holds',
+        'file': 'FILEIO.Z8A',
+        'old': """                CALL    IOFLUSH         ; WHAT THE LAST BLOCK HOLDS
+                JR      C, .WRFAIL""",
+        'new': """                NOP                     ; MUTATION: NO FINAL FLUSH
+                NOP
+                NOP
+                NOP
+                NOP""",
+        'filter': 'H42',
+        'expect': ['H42/dos/content', 'H42/unix/content'],
+    },
+    {
+        'name': 's2-io-flush-end',
+        'target': 'S2ED',
+        'why': 'the same on S2ED: the save buffer is CORE',
+        'file': 'FILEIO.Z8A',
+        'old': """                CALL    IOFLUSH         ; WHAT THE LAST BLOCK HOLDS
+                JR      C, .WRFAIL""",
+        'new': """                NOP                     ; MUTATION: NO FINAL FLUSH
+                NOP
+                NOP
+                NOP
+                NOP""",
+        'filter': 'S2-37',
+        'expect': ['S2-37/dos/content', 'S2-37/unix/content'],
+    },
+    {
+        'name': 'io-split',
+        'why': 'IOPUT fills the buffer and flushes it but drops the rest of a run that did not fit',
+        'file': 'FILEIO.Z8A',
+        'old': """                POP     HL
+                POP     BC
+                RET     C
+                JR      IOPUT""",
+        'new': """                POP     HL
+                POP     BC
+                RET     C
+                OR      A               ; MUTATION: THE REST OF A SPLIT RUN
+                RET                     ; IS DROPPED""",
+        'filter': 'H42',
+        'expect': ['H42/dos/content', 'H42/unix/content'],
+    },
+    {
+        'name': 'load-crlf-split',
+        'why': 'a CR that ends one read is forgotten, so the LF opening the next is a second, empty line',
+        'file': 'FILEIO.Z8A',
+        'old': """.CREND          INC     A
+                LD      (WASCR), A""",
+        'new': """.CREND          INC     A
+                NOP                     ; MUTATION: THE CR IS FORGOTTEN
+                NOP                     ; ACROSS THE READ
+                NOP""",
+        'filter': 'H42',
+        'expect': ['H42/dos/lines', 'H42/dos/content'],
+    },
+    {
+        'name': 's2-load-crlf-split',
+        'target': 'S2ED',
+        'why': 'the same on S2ED: the loader is CORE',
+        'file': 'FILEIO.Z8A',
+        'old': """.CREND          INC     A
+                LD      (WASCR), A""",
+        'new': """.CREND          INC     A
+                NOP                     ; MUTATION: THE CR IS FORGOTTEN
+                NOP                     ; ACROSS THE READ
+                NOP""",
+        'filter': 'S2-37',
+        'expect': ['S2-37/dos/lines', 'S2-37/dos/content'],
+    },
+    {
+        'name': 'load-trunc',
+        'why': 'the loader does not stop at MAXCOLS: a longer line runs into the attribute half of WORKBUF',
+        'file': 'FILEIO.Z8A',
+        'old': """                JR      Z, .SKIP        ; FULL: TRUNCATE AT MAX LINE WIDTH""",
+        'new': """                NOP                     ; MUTATION: NO MAXCOLS BOUND
+                NOP""",
+        'filter': 'H42',
+        'expect': ['H42/dos/content', 'H42/unix/content'],
     },
     {
         'name': 'load-msg-stays',

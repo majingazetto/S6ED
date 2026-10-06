@@ -320,6 +320,10 @@ class Session(object):
         a = L.append
         a('set ::snapdone%d 0' % i)
         a('proc take_snap%d {} {' % i)
+        # Emulated time of the sample, in microseconds: what bench_io.py
+        # measures load and save costs with, at breakpoints in our own code.
+        a('    p "KV %s EMUTUS [expr {int([machine_info time] * 1000000)}]"'
+          % label)
         for name, size in varlist:
             if name not in sym.addr:
                 continue

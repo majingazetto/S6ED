@@ -20,7 +20,7 @@ import os
 import pattern
 from gate import BRW_BYTES, H30NewDocument, H36BrowseSaveAs, asciiz
 from cases import (Case, DEFAULT_CFG, HomePathCase, LongPathCase,
-                   ShippedDiskCase, crlf, numbered)
+                   ShippedDiskCase, crlf, io_fixture, numbered)
 from harness import MACH_MSX1
 from keys import Timeline
 from result import Check
@@ -3549,6 +3549,60 @@ class S236BrowseBusy(S2Case):
         ]
 
 
+class S237IoBlocks(S2Case):
+    name = 'S2-37-io-blocks'
+    desc = ('a document across the 1 KB disk I/O buffer loads and saves back '
+            'byte for byte: a CR LF split over two reads, lines split over '
+            'several buffer flushes, a line over MAXCOLS kept to 255')
+    origin = ('2026-10-06: loads read 256 B per call and saves wrote twice per '
+              'line (394 s for the manual on S2ED); both now go through IOBUF, '
+              'so the loader carries a CR across reads and the saver splits '
+              'lines across flushes')
+    variants = ('dos', 'unix')
+
+    def _doc(self, variant):
+        return io_fixture(b'\r\n' if variant == 'dos' else b'\n')
+
+    def fixture(self, ctx, variant=None):
+        return self._doc(variant)[0]
+
+    def timeline(self, ctx, variant=None):
+        t = Timeline()
+        t.snap('loaded')
+        t.press('S', mods=['CTRL'])
+        t.wait(6.0)
+        t.snap('saved')
+        return t
+
+    def verify(self, ctx, runs):
+        checks = []
+        for variant, run in sorted(runs.items()):
+            _, want, count = self._doc(variant)
+            eol = 0 if variant == 'dos' else 1
+            got = run.session.extract(run.dsk, self.fixture_name)
+            lines = run.var('loaded', 'TOTLINES')
+            checks.append(Check('S2-37/%s/lines' % variant, lines == count,
+                                'TOTLINES %s after the load (want %d)'
+                                % (lines, count)))
+            checks.append(Check('S2-37/%s/eol' % variant,
+                                run.var('loaded', 'SAVEEOL') == eol,
+                                'SAVEEOL %s (want %d)'
+                                % (run.var('loaded', 'SAVEEOL'), eol)))
+            if got == want:
+                why = '%d bytes back, byte for byte' % len(got)
+            elif got is None:
+                why = 'no file on disk'
+            else:
+                at = next((i for i in range(min(len(got), len(want)))
+                           if got[i] != want[i]), min(len(got), len(want)))
+                why = ('%d bytes, want %d; first difference at %d: %r / %r'
+                       % (len(got), len(want), at, got[at:at + 12],
+                          want[at:at + 12]))
+            checks.append(Check('S2-37/%s/content' % variant, got == want,
+                                why))
+        return checks
+
+
 CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S26DelType(), S27EnterBot(), S28RenderPure(), S29Margin(),
          S210Theme(), S211About(), S212DialogUndo(),
@@ -3560,7 +3614,7 @@ CASES = [S21Render(), S22Attrs(), S23Cursor(), S24Select(), S25Band(),
          S227DialogKeys(), S228BrowseOpen(), S229BrowseMany(),
          S230BrowseSaveAs(), S231Settings(), S232DiskError(),
          S233BareLaunch(), S234DatForeign(),
-         S235LoadProgress(), S236BrowseBusy()]
+         S235LoadProgress(), S236BrowseBusy(), S237IoBlocks()]
 
 
 def run(ctx, cases=None):

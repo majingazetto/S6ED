@@ -105,6 +105,33 @@ def numbered(count, width=26):
     return [('LINE %05d %s' % (i, alpha[:1 + (i % width)])) for i in range(1, count + 1)]
 
 
+IO_BLOCK = 1024        # IOBSIZ: LOADDOC reads, FILESAVE writes, this many
+
+
+def io_fixture(eol, block=IO_BLOCK):
+    """A document laid across the disk I/O buffer's boundaries.
+
+    Returns (file bytes, what a save writes back, line count).  The first EOL
+    straddles the first boundary -- with CR LF the CR is the last byte of the
+    first read and the LF the first byte of the next, which is the one place
+    the loader carries state across blocks -- and later lines cross the
+    others, so a save has to split lines over several buffer flushes.  One
+    line is longer than MAXCOLS: the loader keeps 255 characters of it.
+    """
+    lines = [l.encode('ascii') for l in numbered(30, width=40)]
+    head = len(eol.join(lines) + eol)
+    pad = block - 1 - head              # the pad line's EOL starts at block-1
+    assert 0 <= pad <= 255, pad
+    lines.append(b'P' * pad)
+    lines.append(b'X' * 300)
+    lines += [b'', b'']
+    lines += [l.encode('ascii') for l in numbered(70, width=40)[30:]]
+    data = eol.join(lines) + eol
+    assert data[block - 1:block - 1 + len(eol)] == eol
+    kept = [l[:255] for l in lines]
+    return data, eol.join(kept) + eol, len(lines)
+
+
 class HomePathCase(Case):
     """The program lives in \\TOOLS, found through PATH, and runs from \\DEV.
 
