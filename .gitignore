@@ -28,6 +28,7 @@ CODE/debug*.txt
 CODE/basic_screen6.txt
 CODE/screen*.png
 scratch/
+dist/
 
 # --- TEST HARNESS OUTPUT ---
 TEST/out/
