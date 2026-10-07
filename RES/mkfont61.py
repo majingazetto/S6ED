@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""mkfont62 -- S62ED 8x8 fonts: build them from other machines, or from a sheet.
+"""mkfont61 -- S61ED 8x8 fonts: build them from other machines, or from a sheet.
 
-S62ED.FNT is four variants of 2,048 bytes -- NORMAL, BOLD, ITALIC, BOLD+ITALIC,
+S61ED.FNT is four variants of 2,048 bytes -- NORMAL, BOLD, ITALIC, BOLD+ITALIC,
 in that order -- each 256 glyphs of 8 rows, 1bpp, bit 7 the leftmost pixel, in
 the MSX international character set order.  All eight columns are blitted:
 the letter spacing is whatever the artwork leaves blank (column 7 by custom).
 
-    mkfont62.py import --src CGA-TH.F08 --cp cp437 [--bold-src CGA.F08]
+    mkfont61.py import --src CGA-TH.F08 --cp cp437 [--bold-src CGA.F08]
                        --out CGA.FNT [--sheet CGA.PNG]
-    mkfont62.py sheet  FONTSHEET.PNG --out S62ED.FNT [--derive] [--sheet FULL.PNG]
+    mkfont61.py sheet  FONTSHEET.PNG --out S61ED.FNT [--derive] [--sheet FULL.PNG]
 
 `import` takes a raw 2,048-byte 8x8 font in its own machine's order (cp437 for
 the IBM PC, cpc for the Amstrad CPC, msx for one already in MSX order) and
@@ -277,9 +277,9 @@ def write_sheet(path, variants, title):
         # FONTSHEET_S64's divider there painted over '_', the upper half
         # block and every other glyph that reaches the right edge.
     y = sheetlib.LEGEND_Y
-    for line in ('S62ED 8x8 font sheet, four weights, MSX international order.',
+    for line in ('S61ED 8x8 font sheet, four weights, MSX international order.',
                  'Glyph N at ((N & 31) * 8, (N >> 5) * 8) in each 256x64 block.',
-                 'Ink is palette index 3. Rebuild: mkfont62.py sheet THIS.PNG',
+                 'Ink is palette index 3. Rebuild: mkfont61.py sheet THIS.PNG',
                  'Hamburgefonstiv 0123 áéíóú '
                  'ñÑ ¿? ¡!'):
         c.text(normal, ''.join(chr(_msx_code(ch)) for ch in line), 2, y,
@@ -320,23 +320,23 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
-    imp = sub.add_parser('import', help='remap a raw 8x8 font into S62ED.FNT')
+    imp = sub.add_parser('import', help='remap a raw 8x8 font into S61ED.FNT')
     imp.add_argument('--src', required=True, help='raw 2,048-byte 8x8 font')
     imp.add_argument('--cp', required=True, choices=sorted(CODEPAGES))
     imp.add_argument('--bold-src', help='the same machine\'s bold font, if any')
     imp.add_argument('--bios', default=os.path.join(HERE, 'FONT_BIOS8X8.BIN'))
-    imp.add_argument('--title', default='S62ED 8x8 font')
+    imp.add_argument('--title', default='S61ED 8x8 font')
     imp.add_argument('--out', required=True)
     imp.add_argument('--sheet', help='also write the editable PNG sheet')
     imp.add_argument('--report', action='store_true',
                      help='list the codes composed or taken from the BIOS')
-    sh = sub.add_parser('sheet', help='build S62ED.FNT from a PNG sheet')
+    sh = sub.add_parser('sheet', help='build S61ED.FNT from a PNG sheet')
     sh.add_argument('png')
     sh.add_argument('--out', required=True)
     sh.add_argument('--derive', action='store_true',
                     help='read NORMAL only and generate the other three')
     sh.add_argument('--sheet', help='also write the full four-block sheet')
-    sh.add_argument('--title', default='S62ED 8x8 font')
+    sh.add_argument('--title', default='S61ED 8x8 font')
     a = ap.parse_args()
 
     if a.cmd == 'sheet':

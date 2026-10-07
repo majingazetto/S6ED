@@ -228,7 +228,7 @@ BLDSTAT         ; 1. PRE-FILL STATBUF WITH 83 SPACES, FOLLOWED BY NULL TERMINATO
                 CALL    .CPYNUM
                 LD      HL, .STRCOL     ; "  Col "
                 CALL    .CPY6
-                LD      A, (CURX)       ; 1-BASED IN 16 BITS, AS S62ED: CURX 255
+                LD      A, (CURX)       ; 1-BASED IN 16 BITS, AS S61ED: CURX 255
                 LD      L, A            ; IS COLUMN 256, NOT 000
                 LD      H, 0
                 INC     HL
@@ -319,7 +319,7 @@ DRWMENU         LD      HL, 0
 
                 ; PRINT MENU TEXT
                 LD      HL, MNUTEXT
-                LD      DE, 6           ; DX = 6
+                LD      DE, 16          ; DX = 16 (ALIGNED WITH TXORG_X)
                 LD      BC, 0           ; DY = 0
                 CALL    BLTSTR
                 CALL    DRWFNAM

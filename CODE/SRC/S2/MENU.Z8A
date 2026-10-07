@@ -187,8 +187,8 @@ DOMNU           LD      A, (MNUID)
 
                 ; TITLE SPANS IN ROW 0, AS PAIRS [CHAR COLUMN, WIDTH]. THEY
                 ; MUST MATCH .MNUTXT IN S2/UI.Z8A:
-                ; "S2ED | File  Edit  Help"
-.TITX           DEFB    #07, #04, #0D, #04, #13, #04
+                ; "  S2ED | File  Edit  Help"
+.TITX           DEFB    #09, #04, #0F, #04, #15, #04
 
                 ; DROPDOWN TITLES, ONE POINTER PER MENU
 .TITP           DEFW    .T0, .T1, .T2
@@ -208,15 +208,15 @@ DOMNU           LD      A, (MNUID)
                 ; THAT LEAVES WINNC - 2 = 10 CELLS = 20 CHARACTERS OF TEXT.
 
 .MNUTBL         ; MENU 0: FILE
-                DEFB    #03, #0C, #08, #06
+                DEFB    #04, #0C, #08, #06
                 DEFW    .STBL0, .ACC0
 
                 ; MENU 1: EDIT
-                DEFB    #06, #0C, #0C, #0A
+                DEFB    #07, #0C, #0C, #0A
                 DEFW    .STBL1, .ACC1
 
                 ; MENU 2: HELP
-                DEFB    #09, #0C, #06, #04
+                DEFB    #0A, #0C, #06, #04
                 DEFW    .STBL2, .ACC2
 
 ; --- MENU 0 (FILE) ---

@@ -269,7 +269,7 @@ DOMNU           LD      A, (MNUID)
                 OR      A               ; CY = 0 (SUCCESS)
                 RET
 
-.TITX           DEFW    72, 120, 168
+.TITX           DEFW    80, 128, 176
 .TITW           DEFW    32, 32, 32
 
 .MNUTBL         ; 16 BYTES PER MENU RECORD:
@@ -279,19 +279,19 @@ DOMNU           LD      A, (MNUID)
                 ; MENU 0: FILE. 176 = 8 + 20 CHARS * 8 + 8: AN ITEM IS A 14-CHAR
                 ; LABEL AND A 6-CHAR SHORTCUT, AND WINCLIPX STOPS A GLYPH THAT
                 ; WOULD END ON THE RIGHT BORDER (22 CHARS LOST THE LAST ONE)
-                DEFW    72, 176, 52
+                DEFW    80, 176, 52
                 DEFB    6, 0
                 DEFW    .YTBL0, .STBL0
                 DEFW    0, 0
 
                 ; MENU 1: EDIT
-                DEFW    120, 176, 82
+                DEFW    128, 176, 82
                 DEFB    10, 0
                 DEFW    .YTBL1, .STBL1
                 DEFW    0, 0
 
                 ; MENU 2: HELP
-                DEFW    168, 152, 36
+                DEFW    176, 152, 36
                 DEFB    4, 0
                 DEFW    .YTBL2, .STBL2
                 DEFW    0, 0
@@ -327,7 +327,7 @@ DOMNU           LD      A, (MNUID)
 
 .S20            DEFM    "Settings...", 0
 .S21            DEFM    "Help...", 0
-.S23            DEFM    "About S62ED...", 0
+.S23            DEFM    "About S61ED...", 0
 
 
 ; --- MNUSWCH                   ----------------------------------------

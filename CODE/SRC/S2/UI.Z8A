@@ -393,7 +393,7 @@ DRWMENU         ; 1. BLANK STATBUF, THEN LAY THE MENU TITLES OVER IT. THE
 .STRUNT         DEFM    "Untitled", 0
 .STRMOD         DEFM    " *", 0
 .STRCLK         DEFM    " | ", 0
-.MNUTXT         DEFM    "S2ED | File  Edit  Help"
+.MNUTXT         DEFM    "  S2ED | File  Edit  Help"
 .MNUEND
 
 

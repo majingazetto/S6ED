@@ -1,30 +1,35 @@
 ;                                       ****************************************
-;                                       * SCREEN 62 CONSTANTS (V9938)          *
+;                                       * SCREEN 61 CONSTANTS (V9938)          *
 ;                                       ****************************************
 
 
 ; --- SCREEN LAYOUT             ----------------------------------------
 
 
-                ; CHARACTER GRID
-SCRCOLS         EQU     62              ; TEXT AREA COLUMNS
+                ; CHARACTER GRID: 64 COLS OF 8 PX = THE FULL 512 PX LINE,
+                ; OF WHICH THE TEXT USES 61 (TXCOL0 .. 62)
+SCRCOLS         EQU     64              ; SCREEN COLUMNS
 SCRROWS         EQU     24              ; TEXT AREA ROWS (ROWS 1-24)
 ROWSVIS         EQU     SCRROWS         ; DOCUMENT LINES ON SCREEN AT ONCE
 CELLW           EQU     8               ; CELL WIDTH IN PIXELS
 CELLH           EQU     8               ; CELL HEIGHT IN PIXELS
-TEXTCOLS        EQU     62              ; MAX CHARS PER LINE FOR S62
-LINEREC         EQU     1 + TEXTCOLS + TEXTCOLS ; MAX LINE RECORD: 1 + 62 + 62 = 125
+TEXTCOLS        EQU     61              ; MAX CHARS PER LINE FOR S61
+LINEREC         EQU     1 + TEXTCOLS + TEXTCOLS ; MAX LINE RECORD: 1 + 61 + 61 = 123
 
-                ; PIXEL LAYOUT. THE 62 X 8 PX TEXT AREA IS CENTRED IN THE
-                ; 512 PX LINE WITH AN 8 PX MARGIN ON EACH SIDE. 8 PX IS 2
-                ; BYTES IN SCREEN 6, SO EVERY COLUMN STARTS ON A BYTE
-                ; BOUNDARY AND THE BYTE COMMANDS (HMMV, HMMM, YMMM) CAN
-                ; ADDRESS IT.
-MARGPX          EQU     8               ; SIDE MARGIN: (512 - 496) / 2
-TXAREAPX        EQU     496             ; TEXT AREA WIDTH (62 X 8PX)
-TXORG_X         EQU     MARGPX          ; TEXT AREA X ORIGIN
+                ; PIXEL LAYOUT. THE TEXT STARTS TWO COLUMNS IN: THE FIRST
+                ; 16 PX OF EVERY TEXT ROW ARE A GUTTER, KEPT FOR LINE MARKS
+                ; AND NUMBERS AND DOUBLING AS THE LEFT CRT MARGIN. ON THE
+                ; RIGHT ONE 8 PX COLUMN STAYS BLANK (X 504..511) -- THE SAME
+                ; 2-LEFT / 1-RIGHT SHAPE AS S2ED, AT 8 PX PER CELL. EVERY
+                ; COLUMN STARTS ON A BYTE BOUNDARY (8 PX = 2 BYTES IN
+                ; SCREEN 6), SO THE BYTE COMMANDS (HMMV, HMMM, YMMM) CAN
+                ; ADDRESS THEM ALL.
+TXCOL0          EQU     2               ; SCREEN COLUMN OF TEXT COLUMN 0
+TXORG_X         EQU     TXCOL0 * CELLW  ; TEXT AREA X ORIGIN (16)
+TXAREAPX        EQU     TEXTCOLS * CELLW ; TEXT AREA WIDTH (61 X 8 PX = 488)
 TXORG_Y         EQU     CELLH           ; TEXT AREA Y ORIGIN (SKIP MENU ROW 0)
 SCRTOTY         EQU     212             ; TOTAL SCREEN HEIGHT IN PIXELS
+                ASSERT  TXCOL0 + TEXTCOLS + 1 == SCRCOLS
 
                 ; ROWS (IN CHARACTER UNITS)
 MNUROW          EQU     0               ; MENU BAR ROW
@@ -52,7 +57,7 @@ WINSHDW         EQU     4               ; WINDOW DROP SHADOW OFFSET/WIDTH (PX)
 
 
 FONTSIZ         EQU     2048            ; 256 GLYPHS X 8 BYTES, 1BPP (SOURCE)
-FNTFSIZ         EQU     FONTSIZ * 4     ; S62ED.FNT: THE FOUR VARIANTS, EXACTLY
+FNTFSIZ         EQU     FONTSIZ * 4     ; S61ED.FNT: THE FOUR VARIANTS, EXACTLY
 
                 ; FONT TABLE GEOMETRY (ALL TABLES IDENTICAL STRUCTURE)
                 ;   32 GLYPHS PER ROW -> 8 ROWS (256 TOTAL)
@@ -83,7 +88,7 @@ BRWMAX          EQU     160             ; FILE BROWSER ENTRY CAPACITY
 BRWCOLS         EQU     4               ; FILE BROWSER GRID: COLUMNS...
 BRWROWS         EQU     12              ; ...AND ROWS ON SCREEN
 BRWSLOT         EQU     14              ; CHARACTERS PER GRID SLOT
-                ; INFORMATION LINE COLUMNS (55 CHARACTERS ON S62ED)
+                ; INFORMATION LINE COLUMNS (55 CHARACTERS ON S61ED)
 BICSIZE         EQU     14              ; SIZE, RIGHT-ALIGNED IN BICSZW
 BICSZW          EQU     7
 BICDATE         EQU     23              ; DATE, AS DIR PRINTS IT

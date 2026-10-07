@@ -1,14 +1,14 @@
 ; **********************************************
-; * S62ED                                      *
-; * MSX2 SCREEN 6 (62-COL) TEXT EDITOR         *
-; * 62 COLS X 24 ROWS, 8X8 FONT, DOS2/NEXTOR   *
+; * S61ED                                      *
+; * MSX2 SCREEN 6 (61-COL) TEXT EDITOR         *
+; * 61 COLS X 24 ROWS, 8X8 FONT, DOS2/NEXTOR   *
 ; * 2026 CODED BY ARMANDO PEREZ                *
 ; **********************************************
 
-                OUTPUT  "S62ED.COM"
+                OUTPUT  "S61ED.COM"
 
-                DEFINE  S62ED   1
-                DEFINE  DATMAG  "S62E"     ; CONTAINER MAGIC: FIRST 4 CHARS OF THE NAME
+                DEFINE  S61ED   1
+                DEFINE  DATMAG  "S61E"     ; CONTAINER MAGIC: FIRST 4 CHARS OF THE NAME
 
 ; --- MACROS                    ----------------------------------------
 
@@ -29,7 +29,7 @@
 
                 ; DEBUG LOG TO OPENMSX DEBUGDEVICE (PORTS #2E / #2F)
                 ; BUILD WITH  make DEBUG=1  AND CAPTURE WITH:
-                ;   m2d2 S62ED.DSK -ext debugdevice
+                ;   m2d2 S61ED.DSK -ext debugdevice
                 ; ASSEMBLES TO NOTHING IN A NORMAL BUILD.
                 MACRO   DBG MSG
                 IFDEF   DEBUG
@@ -43,7 +43,7 @@
 
 
                 INCLUDE HARD.Z8A
-                INCLUDE CONST_S62.Z8A
+                INCLUDE CONST_S61.Z8A
                 INCLUDE CONST_CORE.Z8A
 
 
@@ -61,13 +61,13 @@ ENODOS2         DEFM    "Requires MSX-DOS 2 or Nextor.$"
 ENOMAP          DEFM    "No mapper manager found.$"
 ENOTPA          DEFM    "Insufficient Page 3 memory.$"
 ENOMEM          DEFM    "Out of mapper memory.$"
-ENO2SEG         DEFM    "S62ED requires 2 free mapper segments.$"
-TXTHLP          DEFM    "S62ED v"
+ENO2SEG         DEFM    "S61ED requires 2 free mapper segments.$"
+TXTHLP          DEFM    "S61ED v"
                 DEFB    VERSION.MAJOR, '.', VERSION.MINOR
-                DEFM    " - Screen 6 (62-col) text editor for MSX2", 13, 10
+                DEFM    " - Screen 6 (61-col) text editor for MSX2", 13, 10
                 DEFM    "Requires MSX-DOS 2 or Nextor and 2 free mapper "
                 DEFM    "segments.", 13, 10, 13, 10
-                DEFM    "Usage: S62ED [file] [/V] [/H | /?]", 13, 10, 13, 10
+                DEFM    "Usage: S61ED [file] [/V] [/H | /?]", 13, 10, 13, 10
                 DEFM    "  file    file to open (paths allowed: A:/DIR/FILE.TXT)"
                 DEFM    13, 10
                 DEFM    "  /V      verbose startup info and memory stats", 13, 10
@@ -193,7 +193,7 @@ INIT            DBG     "1: INIT START"
                 SBC     HL, DE
                 JP      C, .NOTPA
 
-                ; WHERE THE PROGRAM LIVES: S62ED.DAT, .FNT AND THE GENERAL
+                ; WHERE THE PROGRAM LIVES: S61ED.DAT, .FNT AND THE GENERAL
                 ; CFG ARE READ FROM THERE, THE LOCAL CFG FROM HERE.
                 DBG     "2a2: HOMEINIT"
                 CALL    HOMEINIT
@@ -224,7 +224,7 @@ INIT            DBG     "1: INIT START"
                 DBG     "4b: SEGRESV"
                 CALL    SEGRESV
 
-                ; VERIFY S62ED.DAT EXISTS BEFORE ENTERING GRAPHICS MODE
+                ; VERIFY S61ED.DAT EXISTS BEFORE ENTERING GRAPHICS MODE
                 DBG     "4c: CHKDAT"
                 CALL    CHKDAT
 
@@ -254,7 +254,7 @@ INIT            DBG     "1: INIT START"
                 DBG     "7: BUFINIT"
                 CALL    BUFINIT
 
-                ; LOAD CONFIGURATION FROM S62ED.CFG (IF PRESENT)
+                ; LOAD CONFIGURATION FROM S61ED.CFG (IF PRESENT)
                 DBG     "7b: CFGRUN"
                 CALL    CFGRUN
 
@@ -477,13 +477,13 @@ DEFPLT          DEFB    #00, #00, #00, #00, #11, #06, #33, #07  ; 0:TRANSP, 1:BL
                 INCLUDE VARS.Z8A
 
 
-; --- S62ED.DAT                 ----------------------------------------
+; --- S61ED.DAT                 ----------------------------------------
 
-                ; S62ED.DAT MULTI-SEGMENT FEATURE CONTAINER
+                ; S61ED.DAT MULTI-SEGMENT FEATURE CONTAINER
                 ; ASSEMBLED AS AN INDEPENDENT BINARY FILE VIA ROTATING OUTPUT.
                 ; CONTAINS 16-BYTE FILE HEADER, 8-BYTE BLOCK DESCRIPTORS,
                 ; AND THE FEATURE PAYLOAD PHASED AT #8000.
-                OUTPUT  "S62ED.DAT"
+                OUTPUT  "S61ED.DAT"
 
 ; --- FILE HEADER (16 BYTES) -------------------------------------------
 
@@ -502,7 +502,7 @@ DATHDRS:
                 DEFB    1               ; 1: FLAGS (1 = MANDATORY)
                 DEFW    FTRBASE         ; 2..3: LOAD ADDRESS IN PAGE 2
                 DEFW    BLK0LEN         ; 4..5: PAYLOAD LENGTH IN BYTES
-                DEFW    BLK0OFF         ; 6..7: ABSOLUTE OFFSET IN S62ED.DAT
+                DEFW    BLK0OFF         ; 6..7: ABSOLUTE OFFSET IN S61ED.DAT
 
 BLK0OFF         EQU     $ - DATHDRS
 

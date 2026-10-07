@@ -504,8 +504,8 @@ TXTVTIT         DEFM    "S2ED v"
                 DEFB    VERSION.MAJOR, '.', VERSION.MINOR
                 DEFM    " - Screen 2 text editor for MSX1", 13, 10
                 ELSE
-                IFDEF   S62ED
-TXTVTIT         DEFM    "S62ED v"
+                IFDEF   S61ED
+TXTVTIT         DEFM    "S61ED v"
                 DEFB    VERSION.MAJOR, '.', VERSION.MINOR
                 DEFM    " - Screen 6 text editor for MSX2", 13, 10
                 ELSE

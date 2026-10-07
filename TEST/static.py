@@ -404,7 +404,7 @@ def check_build_clean(ctx):
     # Per-target names, never the umbrella `build`: it assembles both and
     # the summary parsed below is whichever ran first.
     target = {'S6ED': 'build-s6', 'S2ED': 'build-s2',
-              'S62ED': 'build-s62'}[ctx.prefix]
+              'S61ED': 'build-s61'}[ctx.prefix]
     r = subprocess.run(['make', '-B', target], cwd=ctx.code_dir,
                        capture_output=True, text=True)
     tail = (r.stdout + r.stderr).strip().splitlines()
@@ -507,14 +507,14 @@ def check_ftr_budget(ctx):
             if not any('FTR-BUDGET' in l for l in near):
                 bad.append('CORE/%s:%d FCALL without FTR-BUDGET comment'
                            % (fname, n + 1))
-    for root in ('S6ED.Z8A', 'S2ED.Z8A', 'S62ED.Z8A'):
+    for root in ('S6ED.Z8A', 'S2ED.Z8A', 'S61ED.Z8A'):
         text = open(os.path.join(ctx.src_dir, root),
                     errors='replace').read()
         if not re.search(r'^FTRFREE\s+EQU\b', text, re.M):
             bad.append('%s does not define FTRFREE' % root)
         if not re.search(r'\bASSERT\s+FTRFREE\s*>=\s*128\b', text):
             bad.append('%s does not ASSERT FTRFREE >= 128' % root)
-    for prefix in ('S6ED', 'S2ED', 'S62ED'):
+    for prefix in ('S6ED', 'S2ED', 'S61ED'):
         symfile = os.path.join(ctx.code_dir, prefix + '.sym')
         if not os.path.exists(symfile):
             continue
@@ -575,7 +575,7 @@ def check_tpa_chain(ctx):
             bad.append('VARS.Z8A: the TPA chain does not define %s' % want)
     if not re.search(r'ASSERT\s+TPATOP\s*<=\s*TXPAGE', '\n'.join(tail)):
         bad.append('VARS.Z8A does not ASSERT TPATOP <= TXPAGE')
-    for prefix in ('S6ED', 'S2ED', 'S62ED'):
+    for prefix in ('S6ED', 'S2ED', 'S61ED'):
         if not os.path.exists(os.path.join(ctx.code_dir, prefix + '.sym')):
             continue
         sym = symbols.load(ctx.code_dir, prefix, TARGETS[prefix])
@@ -615,11 +615,11 @@ def check_build_symmetry(ctx):
     if build is None:
         bad.append('Makefile has no build target')
     else:
-        for want in ('build-s6', 'build-s2', 'build-s62'):
+        for want in ('build-s6', 'build-s2', 'build-s61'):
             if not re.search(r'\b%s\b' % want, build):
                 bad.append('build does not reach %s' % want)
     for name, var in (('build-s6', 'OUTPUT'), ('build-s2', 'OUTPUT_S2'),
-                      ('build-s62', 'OUTPUT_S62')):
+                      ('build-s61', 'OUTPUT_S61')):
         r = rule(name)
         if r is None:
             bad.append('Makefile has no %s target' % name)
@@ -629,10 +629,10 @@ def check_build_symmetry(ctx):
     if clean is None:
         bad.append('Makefile has no clean target')
     else:
-        for var in ('OUTPUT', 'OUTPUT_S2', 'OUTPUT_S62'):
+        for var in ('OUTPUT', 'OUTPUT_S2', 'OUTPUT_S61'):
             if '$(%s)' % var not in clean:
                 bad.append('clean does not remove $(%s)' % var)
-    # The S6ED disk carries S2ED and S62ED too, so one image runs all three
+    # The S6ED disk carries S2ED and S61ED too, so one image runs all three
     # editors on an MSX2.  Nothing in a build failure would reveal a tidied-up DSKCONT --
     # the disk would simply come out with one editor on it.
     # DSKTOOLS is what goes into A:\TOOLS, the directory on the PATH: an
@@ -641,7 +641,7 @@ def check_build_symmetry(ctx):
     if m is None:
         bad.append('Makefile has no DSKTOOLS')
     else:
-        for var in ('OUTPUT_S2', 'OUTPUT_S62'):
+        for var in ('OUTPUT_S2', 'OUTPUT_S61'):
             if '$(%s)' % var not in m.group(1):
                 bad.append('the S6ED disk does not carry $(%s) in TOOLS' % var)
     return Check('build-symmetry', not bad, '; '.join(bad) if bad else
@@ -678,7 +678,7 @@ def check_manual_width(ctx):
     long turns it red at once.
     """
     widths = {}
-    for prefix in ('S6ED', 'S2ED', 'S62ED'):
+    for prefix in ('S6ED', 'S2ED', 'S61ED'):
         path = os.path.join(ctx.code_dir, prefix + '.sym')
         try:
             text = open(path, errors='replace').read()

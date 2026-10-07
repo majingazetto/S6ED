@@ -3,11 +3,11 @@
 #	* (c) 2024 - 2025 Armando Pérez            						    	*
 #	*************************************************************************
 
-.PHONY: build build-s6 build-s2 build-s62 dsk dsk-s2 dsk-s62 s6 s2 s62 clean check gate test \
-        test-s2 test-s62 selftest testall \
+.PHONY: build build-s6 build-s2 build-s61 dsk dsk-s2 dsk-s61 s6 s2 s61 clean check gate test \
+        test-s2 test-s61 selftest testall \
         run run-s6 run128 run-s6-128 run-nextor debug \
         run-s2 run-s2-1mb run-s2-msx2 run-s2-msx2-128 \
-        run-s62 run-s62-128
+        run-s61 run-s61-128
 
 # 	=========================================================================
 # 	CONSTANTS
@@ -74,21 +74,21 @@ INCLUDES_S2 		= -I.	\
 			  -I$(SRC_DIR)/CORE \
 			  -I$(SRC_DIR)/S2 \
 
-# --- S62 (Screen 6 62-col 8x8 font) Targets -----------------------------
-SOURCE_S62		= S62ED.Z8A
-CFGFILE_S62		= S62ED.CFG
-OUTPUT_S62		= S62ED.COM
-FNTFILE_S62		= S62ED.FNT
-DATFILE_S62		= S62ED.DAT
-DSKFILE_S62		= S62ED.DSK
-LSTFILE_S62		= S62ED.lst
-SYMFILE_S62		= S62ED.sym
+# --- S61 (Screen 6 61-col 8x8 font) Targets -----------------------------
+SOURCE_S61		= S61ED.Z8A
+CFGFILE_S61		= S61ED.CFG
+OUTPUT_S61		= S61ED.COM
+FNTFILE_S61		= S61ED.FNT
+DATFILE_S61		= S61ED.DAT
+DSKFILE_S61		= S61ED.DSK
+LSTFILE_S61		= S61ED.lst
+SYMFILE_S61		= S61ED.sym
 
-INCLUDES_S62 		= -I.	\
+INCLUDES_S61 		= -I.	\
 			  -I$(RES_DIR) \
 			  -I$(SRC_DIR) \
 			  -I$(SRC_DIR)/CORE \
-			  -I$(SRC_DIR)/S62 \
+			  -I$(SRC_DIR)/S61 \
 
 # -	 All Target --------------------------------------------------------------
 
@@ -99,15 +99,15 @@ all: build dsk
 clean:
 	@$(RM) -R $(OUTPUT) $(DATFILE) $(LSTFILE) $(SYMFILE) $(DSKFILE) $(FNTFILE) \
 		$(OUTPUT_S2) $(DATFILE_S2) $(LSTFILE_S2) $(SYMFILE_S2) $(DSKFILE_S2) $(FNTFILE_S2) \
-		$(OUTPUT_S62) $(DATFILE_S62) $(LSTFILE_S62) $(SYMFILE_S62) $(DSKFILE_S62) $(FNTFILE_S62) \
-		$(MANUAL) $(FONTS62)
+		$(OUTPUT_S61) $(DATFILE_S61) $(LSTFILE_S61) $(SYMFILE_S61) $(DSKFILE_S61) $(FNTFILE_S61) \
+		$(MANUAL) $(FONTS61)
 
 # `build` means the PROJECT, every target.  It used to mean S6ED alone while
 # `clean` removed the artefacts of both, so `make clean build` left the tree
 # half built -- and the S2 half of the harness then died on a .sym that did
 # not exist.  The per-target names stay available, and the runners use them so
 # that running one editor still assembles only that one.
-build: build-s6 build-s2 build-s62
+build: build-s6 build-s2 build-s61
 
 build-s6: $(OUTPUT) $(DATFILE) $(FNTFILE)
 
@@ -131,20 +131,20 @@ dsk: $(DSKFILE)
 # the current directory; this layout keeps it from hiding anything again.
 # dsktool knows only the root, so the directories are written by dskfat.
 #
-# The S6ED disk carries S2ED and S62ED too.  An MSX2 runs all three editors,
+# The S6ED disk carries S2ED and S61ED too.  An MSX2 runs all three editors,
 # so one image lets them be compared side by side without swapping disks:
 # boot goes to S6ED through AUTOEXEC.BAT, and `S2ED TEST_S2.TXT` or
-# `S62ED TEST_S62.TXT` starts the others.
+# `S61ED TEST_S61.TXT` starts the others.
 #
 # The manual is kept in UTF-8 in DOC/ so it reads and diffs on the host, and
 # converted to the MSX charset with CR LF on the way to the disks: shipped as
 # UTF-8 every accented letter showed as two glyphs.  utf8msx refuses any
 # character the MSX charset has no code for, so the build fails instead.
-# S62ED's example fonts (A:\TOOLS\FONTS on the disks), built further down.
-FONTS62DIR		= $(RES_DIR)/FONTS62
-MKFONT62		= python3 $(RES_DIR)/mkfont62.py
-MKFONT62DEP		= $(RES_DIR)/mkfont62.py $(RES_DIR)/mkfontsheet_s64.py $(RES_DIR)/FONT_BIOS8X8.BIN
-FONTS62			= CGA.FNT CPC.FNT BIOS.FNT
+# S61ED's example fonts (A:\TOOLS\FONTS on the disks), built further down.
+FONTS61DIR		= $(RES_DIR)/FONTS61
+MKFONT61		= python3 $(RES_DIR)/mkfont61.py
+MKFONT61DEP		= $(RES_DIR)/mkfont61.py $(RES_DIR)/mkfontsheet_s64.py $(RES_DIR)/FONT_BIOS8X8.BIN
+FONTS61			= CGA.FNT CPC.FNT BIOS.FNT
 
 MANUALSRC		= ../DOC/SXED.TXT
 MANUAL			= SXED_MSX.TXT
@@ -155,17 +155,17 @@ $(MANUAL): $(MANUALSRC)
 
 DSKTOOLS		= $(OUTPUT) $(DATFILE) $(FNTFILE) S6ED.CFG \
 			  $(OUTPUT_S2) $(DATFILE_S2) $(FNTFILE_S2) $(CFGFILE_S2) \
-			  $(OUTPUT_S62) $(DATFILE_S62) $(FNTFILE_S62) $(CFGFILE_S62)
-DSKCONT			= $(DSKTOOLS) $(MANUAL) TEST.TXT TEST_S2.TXT TEST_S62.TXT \
-			  LOCAL_S6.CFG LOCAL_S2.CFG LOCAL_S62.CFG AUTOEXEC.BAT
+			  $(OUTPUT_S61) $(DATFILE_S61) $(FNTFILE_S61) $(CFGFILE_S61)
+DSKCONT			= $(DSKTOOLS) $(MANUAL) TEST.TXT TEST_S2.TXT TEST_S61.TXT \
+			  LOCAL_S6.CFG LOCAL_S2.CFG LOCAL_S61.CFG AUTOEXEC.BAT
 
-$(DSKFILE): $(DSKCONT) $(FONTS62)
+$(DSKFILE): $(DSKCONT) $(FONTS61)
 	@cp $(DSKBASE) $(DSKFILE)
 	@$(DSKFAT) $(DSKFILE) add . AUTOEXEC.BAT
 	@$(DSKFAT) $(DSKFILE) add TOOLS $(DSKTOOLS)
-	@$(DSKFAT) $(DSKFILE) add TOOLS/FONTS $(FONTS62)
-	@$(DSKFAT) $(DSKFILE) add DEV $(MANUAL)=SXED.TXT TEST.TXT TEST_S2.TXT TEST_S62.TXT \
-		LOCAL_S6.CFG=S6ED.CFG LOCAL_S2.CFG=S2ED.CFG LOCAL_S62.CFG=S62ED.CFG
+	@$(DSKFAT) $(DSKFILE) add TOOLS/FONTS $(FONTS61)
+	@$(DSKFAT) $(DSKFILE) add DEV $(MANUAL)=SXED.TXT TEST.TXT TEST_S2.TXT TEST_S61.TXT \
+		LOCAL_S6.CFG=S6ED.CFG LOCAL_S2.CFG=S2ED.CFG LOCAL_S61.CFG=S61ED.CFG
 
 # -	 S2 Targets --------------------------------------------------------------
 
@@ -200,53 +200,53 @@ $(DSKFILE_S2): $(DSKCONT_S2) $(MANUAL) TEST_S2.TXT AUTOEXEC_S2.BAT LOCAL_S2.CFG
 	@$(DSKFAT) $(DSKFILE_S2) add TOOLS $(DSKCONT_S2)
 	@$(DSKFAT) $(DSKFILE_S2) add DEV $(MANUAL)=SXED.TXT TEST_S2.TXT=TEST.TXT LOCAL_S2.CFG=S2ED.CFG
 
-# -	 S62 Targets -------------------------------------------------------------
+# -	 S61 Targets -------------------------------------------------------------
 
-s62: run-s62
+s61: run-s61
 
-build-s62: $(OUTPUT_S62) $(DATFILE_S62) $(FNTFILE_S62)
+build-s61: $(OUTPUT_S61) $(DATFILE_S61) $(FNTFILE_S61)
 
-$(DATFILE_S62): $(OUTPUT_S62)
-	@if [ ! -f $(DATFILE_S62) ]; then \
-		$(ASM) --lst=$(LSTFILE_S62) --sym=$(SYMFILE_S62) $(INCLUDES_S62) $(DEFINES) $(SRC_DIR)/$(SOURCE_S62); \
+$(DATFILE_S61): $(OUTPUT_S61)
+	@if [ ! -f $(DATFILE_S61) ]; then \
+		$(ASM) --lst=$(LSTFILE_S61) --sym=$(SYMFILE_S61) $(INCLUDES_S61) $(DEFINES) $(SRC_DIR)/$(SOURCE_S61); \
 	fi
 
-$(OUTPUT_S62): $(ALL_SOURCES_GEN)
-	@$(ASM) --lst=$(LSTFILE_S62) --sym=$(SYMFILE_S62) $(INCLUDES_S62) $(DEFINES) $(SRC_DIR)/$(SOURCE_S62)
+$(OUTPUT_S61): $(ALL_SOURCES_GEN)
+	@$(ASM) --lst=$(LSTFILE_S61) --sym=$(SYMFILE_S61) $(INCLUDES_S61) $(DEFINES) $(SRC_DIR)/$(SOURCE_S61)
 
-# S62ED's fonts are built from other machines' raw 8x8 fonts by mkfont62,
+# S61ED's fonts are built from other machines' raw 8x8 fonts by mkfont61,
 # which remaps them to the MSX order by meaning, composes the accented
-# letters a source lacks and writes the four weights (RES/FONTS62/README.md
+# letters a source lacks and writes the four weights (RES/FONTS61/README.md
 # has the sources and their credits); all three ship in A:\TOOLS\FONTS.
-# The default S62ED.FNT is the commissioned face by Miguel A. Fernandez,
+# The default S61ED.FNT is the commissioned face by Miguel A. Fernandez,
 # drawn on RES/FONTSHEET_S64.PNG. Only its NORMAL block is his so far:
 # --derive generates BOLD, ITALIC and BOLD+ITALIC from it. Drop --derive
 # when the sheet comes back with the four blocks drawn.
-CGA.FNT: $(FONTS62DIR)/CGA-TH.F08 $(FONTS62DIR)/CGA.F08 $(MKFONT62DEP)
-	@$(MKFONT62) import --src $(FONTS62DIR)/CGA-TH.F08 --bold-src $(FONTS62DIR)/CGA.F08 --cp cp437 --out $@ >/dev/null
+CGA.FNT: $(FONTS61DIR)/CGA-TH.F08 $(FONTS61DIR)/CGA.F08 $(MKFONT61DEP)
+	@$(MKFONT61) import --src $(FONTS61DIR)/CGA-TH.F08 --bold-src $(FONTS61DIR)/CGA.F08 --cp cp437 --out $@ >/dev/null
 
-CPC.FNT: $(FONTS62DIR)/CPC464.F08 $(MKFONT62DEP)
-	@$(MKFONT62) import --src $< --cp cpc --out $@ >/dev/null
+CPC.FNT: $(FONTS61DIR)/CPC464.F08 $(MKFONT61DEP)
+	@$(MKFONT61) import --src $< --cp cpc --out $@ >/dev/null
 
-BIOS.FNT: $(RES_DIR)/FONT_BIOS8X8.BIN $(MKFONT62DEP)
-	@$(MKFONT62) import --src $< --cp msx --out $@ >/dev/null
+BIOS.FNT: $(RES_DIR)/FONT_BIOS8X8.BIN $(MKFONT61DEP)
+	@$(MKFONT61) import --src $< --cp msx --out $@ >/dev/null
 
-$(FNTFILE_S62): $(RES_DIR)/FONTSHEET_S64.PNG $(MKFONT62DEP)
-	@$(MKFONT62) sheet $< --derive --out $@ >/dev/null
+$(FNTFILE_S61): $(RES_DIR)/FONTSHEET_S64.PNG $(MKFONT61DEP)
+	@$(MKFONT61) sheet $< --derive --out $@ >/dev/null
 
-dsk-s62: $(DSKFILE_S62)
+dsk-s61: $(DSKFILE_S61)
 
-DSKCONT_S62		= $(OUTPUT_S62) $(DATFILE_S62) $(FNTFILE_S62) $(CFGFILE_S62)
+DSKCONT_S61		= $(OUTPUT_S61) $(DATFILE_S61) $(FNTFILE_S61) $(CFGFILE_S61)
 
-$(DSKFILE_S62): $(DSKCONT_S62) $(FONTS62) $(MANUAL) TEST_S62.TXT AUTOEXEC_S62.BAT LOCAL_S62.CFG
-	@cp $(DSKBASE) $(DSKFILE_S62)
-	@$(DSKFAT) $(DSKFILE_S62) add . AUTOEXEC_S62.BAT=AUTOEXEC.BAT
-	@$(DSKFAT) $(DSKFILE_S62) add TOOLS $(DSKCONT_S62)
-	@$(DSKFAT) $(DSKFILE_S62) add TOOLS/FONTS $(FONTS62)
-	@$(DSKFAT) $(DSKFILE_S62) add DEV $(MANUAL)=SXED.TXT TEST_S62.TXT=TEST.TXT LOCAL_S62.CFG=S62ED.CFG
+$(DSKFILE_S61): $(DSKCONT_S61) $(FONTS61) $(MANUAL) TEST_S61.TXT AUTOEXEC_S61.BAT LOCAL_S61.CFG
+	@cp $(DSKBASE) $(DSKFILE_S61)
+	@$(DSKFAT) $(DSKFILE_S61) add . AUTOEXEC_S61.BAT=AUTOEXEC.BAT
+	@$(DSKFAT) $(DSKFILE_S61) add TOOLS $(DSKCONT_S61)
+	@$(DSKFAT) $(DSKFILE_S61) add TOOLS/FONTS $(FONTS61)
+	@$(DSKFAT) $(DSKFILE_S61) add DEV $(MANUAL)=SXED.TXT TEST_S61.TXT=TEST.TXT LOCAL_S61.CFG=S61ED.CFG
 
-run-s62-128: build-s62 dsk-s62
-	m2d2 128k $(DSKFILE_S62)
+run-s61-128: build-s61 dsk-s61
+	m2d2 128k $(DSKFILE_S61)
 
 # -	 Build Target ------------------------------------------------------------
 
@@ -281,8 +281,8 @@ run128: run-s6-128
 run-s6-128: build dsk
 	m2d2 128k $(DSKFILE)
 
-run-s62: build-s62 dsk-s62
-	m2d2 $(DSKFILE_S62)
+run-s61: build-s61 dsk-s61
+	m2d2 $(DSKFILE_S61)
 
 # S2ED's target is an MSX1, so that is what `run-s2` gives you.  MSX-DOS 2
 # does not run on an MSX1 (the kernel halts at #4005), so m1d2 boots a Nextor
@@ -341,9 +341,9 @@ gate:
 test-s2:
 	@$(TESTDIR)/runtests.py --s2
 
-# Suite S62: the 62-column Screen 6 gate, on the 128 kB NMS 8250.
-test-s62:
-	@$(TESTDIR)/runtests.py --s62
+# Suite S61: the 61-column Screen 6 gate, on the 128 kB NMS 8250.
+test-s61:
+	@$(TESTDIR)/runtests.py --s61
 
 test:
 	@$(TESTDIR)/runtests.py

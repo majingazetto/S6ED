@@ -5,17 +5,17 @@ import os
 import symbols
 
 
-# The two build targets of the SXED tree.  Everything that differs between them
-# lives here: the file-name prefix and the assembler include path -- which is
-# also the harness's source-resolution path.  A recursive walk of SRC/ is wrong
-# now that it holds two targets: UI.Z8A and SCROLL.Z8A exist in both S6/ and
-# S2/, os.walk order is filesystem-dependent, and a mutation that lands in the
-# copy the target does not compile fails silently as "anchor not found" at best
-# and as an uncaught mutation at worst.
+# The three build targets of the SXED tree.  Everything that differs between
+# them lives here: the file-name prefix and the assembler include path -- which
+# is also the harness's source-resolution path.  A recursive walk of SRC/ is
+# wrong now that it holds three targets: UI.Z8A and SCROLL.Z8A exist in S6/,
+# S2/ and S61/, os.walk order is filesystem-dependent, and a mutation that
+# lands in the copy the target does not compile fails silently as "anchor not
+# found" at best and as an uncaught mutation at worst.
 TARGETS = {
     'S6ED': ('', 'CORE', 'S6'),
     'S2ED': ('', 'CORE', 'S2'),
-    'S62ED': ('', 'CORE', 'S62'),
+    'S61ED': ('', 'CORE', 'S61'),
 }
 
 

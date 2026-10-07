@@ -318,7 +318,7 @@ DRWMENU         LD      HL, 0
 
                 ; PRINT MENU TEXT
                 LD      HL, MNUTEXT
-                LD      DE, 8           ; DX = 8
+                LD      DE, 16          ; DX = 16 (ALIGNED WITH TXORG_X)
                 LD      BC, 0           ; DY = 0
                 CALL    BLTSTR
                 CALL    DRWFNAM
@@ -326,7 +326,7 @@ DRWMENU         LD      HL, 0
                 LD      (CLKMIN), A
                 JP      UPDMCLK
 
-MNUTEXT         DEFM    "S62ED | File  Edit  Help", 0
+MNUTEXT         DEFM    "S61ED | File  Edit  Help", 0
 
 
 ; --- DRWFNAM                   ----------------------------------------

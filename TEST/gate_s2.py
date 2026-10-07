@@ -1515,8 +1515,8 @@ class S216Menu(S2Case):
               'of two source files cannot.')
     LINES = ['%02d MENU TEST LINE ABCDEFGHIJKLM' % i for i in range(12)]
     # MENU 0 (FILE) in .MNUTBL, in cell units
-    WINR, WINC, WINNR, WINNC = 1, 3, 8, 12
-    C0, C1 = WINC + 1, WINC + WINNC - 2     # content cells 4..13
+    WINR, WINC, WINNR, WINNC = 1, 4, 8, 12
+    C0, C1 = WINC + 1, WINC + WINNC - 2     # content cells 5..14
     SEPITEM = 4                             # File: separator between Save As and Quit
 
     def fixture(self, ctx, variant=None):

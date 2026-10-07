@@ -101,10 +101,10 @@ class S621Render(S62Case):
         checks = screen_checks('S62-1', ctx, run, 'boot', self.LINES)
         dump = run.blob('boot', 'screen')
         fnt = font(ctx)
-        menu = (screen62.cell_text(dump, fnt, 8, 0, 24, screen62.COL_FG,
+        menu = (screen62.cell_text(dump, fnt, 16, 0, 25, screen62.COL_FG,
                                    screen62.COL_UI)
                 if dump is not None and fnt is not None else None)
-        want = 'S62ED | File  Edit  Help'
+        want = 'S61ED | File  Edit  Help'
         checks.append(Check('S62-1/menubar', menu == want,
                             'row 0 reads %r' % menu))
         checks.append(Check('S62-1/totlines',
@@ -309,7 +309,7 @@ class S625Windows(S62Case):
                                     'items read back whole at WINX + 8'
                                     if not bad else 'item text: %s' % bad))
             else:
-                want = 'About S62ED'
+                want = 'About S61ED'
                 bold = screen62.load_font(ctx, screen62.BOLD)  # WINSTR3, variant 1
                 got = screen62.cell_text(dump, bold, wx + 8, wy + 2, len(want),
                                          screen62.COL_HI, screen62.COL_UI)

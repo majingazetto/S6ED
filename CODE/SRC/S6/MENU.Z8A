@@ -269,7 +269,7 @@ DOMNU           LD      A, (MNUID)
                 OR      A               ; CY = 0 (SUCCESS)
                 RET
 
-.TITX           DEFW    48, 84, 120
+.TITX           DEFW    58, 94, 130
 .TITW           DEFW    24, 24, 24
 
 .MNUTBL         ; 16 BYTES PER MENU RECORD:
@@ -277,19 +277,19 @@ DOMNU           LD      A, (MNUID)
                 ;  PTR_YTBL(2B), PTR_STBL(2B), DUMMY(2B), DUMMY(2B)]
 
                 ; MENU 0: FILE
-                DEFW    48, 144, 52
+                DEFW    58, 144, 52
                 DEFB    6, 0
                 DEFW    .YTBL0, .STBL0
                 DEFW    0, 0
 
                 ; MENU 1: EDIT
-                DEFW    84, 144, 82
+                DEFW    94, 144, 82
                 DEFB    10, 0
                 DEFW    .YTBL1, .STBL1
                 DEFW    0, 0
 
                 ; MENU 2: HELP
-                DEFW    120, 128, 36
+                DEFW    130, 128, 36
                 DEFB    4, 0
                 DEFW    .YTBL2, .STBL2
                 DEFW    0, 0

@@ -942,7 +942,7 @@ DOABT           LD      HL, 72          ; CENTRED: (512 - 368) / 2
                 LD      HL, .TITABT
                 CALL    WINOPEN
 
-                ; LINE 0: "S62ED - MSX2 Screen 6 Text Editor" (33 CHARS)
+                ; LINE 0: "S61ED - MSX2 Screen 6 Text Editor" (33 CHARS)
                 LD      HL, .S6ED
                 LD      C, 5
                 LD      B, 0
@@ -966,7 +966,7 @@ DOABT           LD      HL, 72          ; CENTRED: (512 - 368) / 2
 
                 ; LINES 3..5: 9-CHAR LABEL + UP TO 33-CHAR VALUE = 42 CHARS,
                 ; FROM COL 1: REL X 16..352, 16 PX MARGIN EACH SIDE
-                ; LINE 3: "Display: " (BOLD) + "62x24 Columns (512x212, 4 Colors)" (NORM)
+                ; LINE 3: "Display: " (BOLD) + "61x24 Columns (512x212, 4 Colors)" (NORM)
                 LD      HL, .LBDSP
                 LD      C, 1
                 LD      B, 3
@@ -1028,13 +1028,13 @@ DOABT           LD      HL, 72          ; CENTRED: (512 - 368) / 2
 
 .DONE           JP      WINCLOS
 
-.TITABT         DEFM    "About S62ED", 0
-.S6ED           DEFM    "S62ED", 0
+.TITABT         DEFM    "About S61ED", 0
+.S6ED           DEFM    "S61ED", 0
 .STRSUB         DEFM    " - MSX2 Screen 6 Text Editor", 0
 .STRVER         DEFB    "Version ", VERSION.MAJOR, '.', VERSION.MINOR, " ", 0
 .STREXP         DEFM    "(Experimental)", 0
 .LBDSP          DEFM    "Display: ", 0
-.VALDSP         DEFM    "62x24 Columns (512x212, 4 Colors)", 0
+.VALDSP         DEFM    "61x24 Columns (512x212, 4 Colors)", 0
 .LBFNT          DEFM    "Fonts:   ", 0
 .VALFNT         DEFM    "8x8 Native 4 Weights (B, I, BI)", 0
 .LBMEM          DEFM    "Memory:  ", 0
@@ -1204,7 +1204,7 @@ DOASK           LD      A, 1            ; SHOW UNSAVED WARNING IF DIRTY
                 LD      BC, 44
                 JP      WINBTS
 
-.TITQIT         DEFM    "Quit S62ED", 0
+.TITQIT         DEFM    "Quit S61ED", 0
 .STRQIT         DEFM    "Exit to MSX-DOS?", 0
 .TITNEW         DEFM    "New Document", 0
 .TITOPN         DEFM    "Open", 0

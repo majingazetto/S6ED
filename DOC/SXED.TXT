@@ -3,7 +3,7 @@ SXED Screen X Text Editor v0.1
 2024 - 2026 Armando Pérez Abad
 
 S6ED  - Screen 6 text editor for MSX2, 80 columns
-S62ED - Screen 6 text editor for MSX2, 62 columns
+S61ED - Screen 6 text editor for MSX2, 61 columns
 S2ED  - Screen 2 text editor for MSX1, 61 columns
 
 Fonts by Miguel A. Fernandez
@@ -111,10 +111,10 @@ The SXED family has three members:
     - 6 color themes plus fully custom colors.
     - Program: S6ED.COM
 
-* S62ED - Screen 6 editor for MSX2/2+/turbo-R, big type.
+* S61ED - Screen 6 editor for MSX2/2+/turbo-R, big type.
 
     - SCREEN 6 bitmap: 512x212 pixels, 4 colors.
-    - 62 columns x 24 rows of text, 8x8 character cells.
+    - 61 columns x 24 rows of text, 8x8 character cells.
     - For those who prefer big characters over wide lines:
       every cell is byte aligned, so it is also the fastest
       of the three at drawing text.
@@ -122,7 +122,7 @@ The SXED family has three members:
       IBM CGA, Amstrad CPC and MSX BIOS faces come along
       as alternatives (see 13).
     - The same 6 color themes and custom colors as S6ED.
-    - Program: S62ED.COM
+    - Program: S61ED.COM
 
 * S2ED - Screen 2 editor for MSX1/2/2+/turbo-R (TMS9918).
 
@@ -134,9 +134,9 @@ The SXED family has three members:
 
 Everything in this manual applies to all three editors
 unless a note says otherwise. Differences (screen geometry,
-themes, color configuration) are marked with [S6ED], [S62ED]
-or [S2ED]. S6ED and S62ED share the Screen 6 hardware, so
-most of those notes read [S6ED/S62ED].
+themes, color configuration) are marked with [S6ED], [S61ED]
+or [S2ED]. S6ED and S61ED share the Screen 6 hardware, so
+most of those notes read [S6ED/S61ED].
 
 
 
@@ -151,9 +151,9 @@ Minimum requirements (all editors):
 
 Notes per editor:
 
-    - [S6ED/S62ED] need an MSX2 or higher. On a 128 KB
+    - [S6ED/S61ED] need an MSX2 or higher. On a 128 KB
       machine they run under MSX-DOS 2 (101 lines of text
-      capacity on S6ED, 131 on S62ED) but NOT under Nextor,
+      capacity on S6ED, 133 on S61ED) but NOT under Nextor,
       which reserves one segment more; with Nextor use 256 KB
       or more. More mapper memory means bigger documents (up
       to 5461 lines).
@@ -162,14 +162,14 @@ Notes per editor:
       with a disk interface works fine).
 
 Each editor is made of four files, named after it (S6ED.*,
-S62ED.* or S2ED.*):
+S61ED.* or S2ED.*):
 
     .COM   The program.
     .DAT   Feature container. MANDATORY: the editor aborts
            if it is missing or corrupt.
     .FNT   Font file. Optional: if missing or of the wrong
            size, the MSX ROM charset is used instead
-           ([S6ED/S62ED] show [ROM] on the status bar).
+           ([S6ED/S61ED] show [ROM] on the status bar).
     .CFG   Configuration. Optional (defaults are used if
            absent). See 11.
 
@@ -187,11 +187,11 @@ changes to \DEV and starts an editor.
 
     S6ED.DSK    MSX2. Carries all three editors and starts
                 S6ED. Run the others from \DEV with
-                "S62ED TEST_S62.TXT" or "S2ED TEST_S2.TXT".
-    S62ED.DSK   MSX2. S62ED alone.
+                "S61ED TEST_S61.TXT" or "S2ED TEST_S2.TXT".
+    S61ED.DSK   MSX2. S61ED alone.
     S2ED.DSK    MSX1 (Nextor) or MSX2. S2ED alone.
 
-The MSX2 disks also carry S62ED's example fonts in
+The MSX2 disks also carry S61ED's example fonts in
 A:\TOOLS\FONTS (see 13).
 
 
@@ -201,7 +201,7 @@ A:\TOOLS\FONTS (see 13).
 Usage:
 
     S6ED  [file] [/V] [/H | /?]
-    S62ED [file] [/V] [/H | /?]
+    S61ED [file] [/V] [/H | /?]
     S2ED  [file] [/V] [/H | /?]
 
     file    File to open. Full DOS 2 paths are allowed
@@ -224,7 +224,7 @@ mode and aborts with a clear message if something is missing:
     Out of mapper memory.
     S6ED.DAT not found.   /   S6ED.DAT corrupt.
 
-(with S62ED or S2ED in place of S6ED for the other editors).
+(with S61ED or S2ED in place of S6ED for the other editors).
 
 While editing, use ESC or Ctrl+Q to leave the editor. If the
 document has unsaved changes a confirmation dialog appears
@@ -240,7 +240,7 @@ The screen has three areas:
     Row 0        Menu bar: program name, the File/Edit/Help
                  menus, the current file name and the clock.
     Text area    [S6ED]  24 rows x 80 columns.
-                 [S62ED] 24 rows x 62 columns.
+                 [S61ED] 24 rows x 61 columns.
                  [S2ED]  22 rows x 61 columns.
     Last row     Status bar.
 
@@ -268,7 +268,7 @@ The status bar has two channels:
         [NORM]  Vi normal mode     [VIS]   Vi visual mode
 
         Ln NNNNN/NNNNN  Col NNN    (S6ED)
-        Ln NNNNN/NNNNN Col NNN     (S62ED, S2ED)
+        Ln NNNNN/NNNNN Col NNN     (S61ED, S2ED)
 
       Line and column numbers are 1-based; the second figure
       is the total line count.
@@ -335,7 +335,7 @@ Two wrap modes, toggled with Ctrl+W or WRAP= in the CFG:
                and deleting pulls words back up (reflow).
 
 The margin is the text width: the screen width by default
-(80 / 62 / 61) or the TEXTWIDTH= value (0 = no margin, i.e.
+(80 / 61 / 61) or the TEXTWIDTH= value (0 = no margin, i.e.
 DEV mode). In Vi mode: ":set wrap", ":set nowrap",
 ":set tw=N".
 
@@ -389,7 +389,7 @@ or re-weights styled spans without modifying the file:
     LIT  Chat style:  *bold*  _italic_
     OFF  Raw text (best for source code).
 
-[S6ED/S62ED] render bold/italic with the font weights;
+[S6ED/S61ED] render bold/italic with the font weights;
 [S2ED] renders them in theme colors. Ctrl+T cycles the mode.
 Ctrl+B / Ctrl+I (STD profile) insert a delimiter pair or wrap
 the current selection.
@@ -642,7 +642,7 @@ a single undo. Each undo also restores the cursor position
 and the viewport. A new edit invalidates the redo chain.
 
 The undo history lives in a 4 KB ring (about 23 operations on
-S6ED, 30 on S62ED and S2ED); the oldest operations are
+S6ED, 30 on S61ED and S2ED); the oldest operations are
 forgotten as it fills. A single operation touching more lines
 than the ring can hold (a huge selection delete, for example)
 cannot be recorded half-way: then the whole history is
@@ -701,14 +701,14 @@ The three menus are File, Edit and Help.
  ---- 10.5.- FILE BROWSER (OPEN / SAVE AS).
 
 The browser shows the files of a directory as a grid (5x14
-slots on S6ED, 4x12 on S62ED and S2ED), sorted: "..", then
+slots on S6ED, 4x12 on S61ED and S2ED), sorted: "..", then
 directories, then files, then drives, each group in
 alphabetical order. Hidden and system files are shown in a
 different style. The information line under the grid shows
 name, size (or <DIR>), date, time and attributes of the
 selected entry, plus the entry count (N+/MAX if the directory
 has more entries than the browser holds: 160 on S6ED and
-S62ED, 64 on S2ED).
+S61ED, 64 on S2ED).
 
 The starting directory is the current file's directory when
 known, or the current directory.
@@ -826,7 +826,7 @@ summary. RETURN, SPACE or ESC close it.
 
  -------- 11.- CONFIGURATION FILE.
 
-S6ED.CFG, S62ED.CFG and S2ED.CFG are plain text files of
+S6ED.CFG, S61ED.CFG and S2ED.CFG are plain text files of
 KEY=VALUE lines, one per line. Spaces around "=" are allowed,
 ";" and "#" start comments, blank lines are ignored, and
 values are case insensitive. Unknown keys or values are
@@ -854,17 +854,17 @@ Keys (defaults in brackets):
     AUTOALIGN OFF / ON / DEV                    [OFF]
     THEME     DARK / AMBER / GREEN / LIGHT /
               MSX / MONO                        [DARK]
-    SHADOW    See below                  [S6ED/S62ED: OFF]
+    SHADOW    See below                  [S6ED/S61ED: OFF]
                                                [S2ED: ON]
 
 SHADOW chooses which color the window drop shadows borrow:
 
-    [S6ED/S62ED]  OFF or BG (document background), FG, UI,
+    [S6ED/S61ED]  OFF or BG (document background), FG, UI,
                   HI. ON means UI.
     [S2ED]        OFF, ON (the theme's own shadow color) or
                   a single hex digit 0-F (a TMS9918 color).
 
-Extra keys, only on [S6ED/S62ED] (Screen 6 has a
+Extra keys, only on [S6ED/S61ED] (Screen 6 has a
 programmable palette; they are never written by Settings):
 
     COLOR_BG=R,G,B          Background   (color 0)
@@ -891,7 +891,7 @@ the same six themes:
     MSX      Classic MSX blue
     MONO     Pure white on black
 
-[S6ED/S62ED] reprogram the four Screen 6 palette entries per
+[S6ED/S61ED] reprogram the four Screen 6 palette entries per
 theme; COLOR_* keys can then override any of them.
 
 [S2ED] cannot reprogram the fixed TMS9918 palette, so a theme
@@ -906,9 +906,9 @@ moment you accept.
  -------- 13.- FONTS.
 
 Each editor draws its text with a font file that sits next to
-the program: S6ED.FNT, S62ED.FNT or S2ED.FNT. If it is
+the program: S6ED.FNT, S61ED.FNT or S2ED.FNT. If it is
 missing or has the wrong size, the MSX ROM charset is used
-instead ([S6ED/S62ED] show [ROM] on the status bar).
+instead ([S6ED/S61ED] show [ROM] on the status bar).
 
 All three keep the glyphs in the MSX international character
 order, 8 bytes per glyph (one per row, bit 7 is the leftmost
@@ -919,7 +919,7 @@ pixel), 256 glyphs:
                bits 7-2. Normal must leave column 5 empty: it
                is the letter spacing. The other three may use
                it.
-    S62ED.FNT  8192 bytes: same four variants, 8x8 glyphs,
+    S61ED.FNT  8192 bytes: same four variants, 8x8 glyphs,
                all eight columns drawn. Column 7 is the usual
                letter spacing; box and block glyphs use it to
                meet their neighbours.
@@ -930,13 +930,13 @@ pixel), 256 glyphs:
 The markup engine (6.7) picks the variant, so a font whose
 four variants are equal simply shows no weights.
 
-Changing the S62ED font: the disks carry example fonts in
+Changing the S61ED font: the disks carry example fonts in
 A:\TOOLS\FONTS. Copy one over the editor's own and start the
 editor again:
 
-    COPY A:\TOOLS\FONTS\CPC.FNT A:\TOOLS\S62ED.FNT
+    COPY A:\TOOLS\FONTS\CPC.FNT A:\TOOLS\S61ED.FNT
 
-The default S62ED.FNT is hand-drawn by Miguel A. Fernandez.
+The default S61ED.FNT is hand-drawn by Miguel A. Fernandez.
 Its normal weight is his drawing; bold, italic and
 bold+italic are derived from it for now.
 
@@ -954,22 +954,22 @@ bold+italic are derived from it for now.
                is a 6 pixel design, so at 8x8 it looks spaced
                out.
 
-Making a font: the source distribution has RES/mkfont62.py,
+Making a font: the source distribution has RES/mkfont61.py,
 which turns any raw 2048-byte 8x8 font from another machine
-into an S62ED.FNT (mapping each character by meaning,
+into an S61ED.FNT (mapping each character by meaning,
 building missing accented letters, deriving the weights), and
 writes an editable sheet: a 512x212 indexed PNG with the four
 variants in 32x8 grids, glyph N at ((N AND 31)*8, (N / 32)*8)
 of its block, ink in colour 3. Draw on the sheet with any
 paint program that keeps the palette, then convert it back:
 
-    mkfont62.py sheet MYFONT.PNG --out S62ED.FNT
+    mkfont61.py sheet MYFONT.PNG --out S61ED.FNT
 
 With --derive only the normal block is read and the other
 three weights are generated from it, so you can start by
 drawing one block.
 
-RES/FONTS62/README.md lists the sources and their credits.
+RES/FONTS61/README.md lists the sources and their credits.
 
 
 
@@ -1022,7 +1022,7 @@ corrupt.", in text mode.
 
  -------- 15.- TROUBLESHOOTING.
 
-(S6ED is used as the example; read S62ED or S2ED for the
+(S6ED is used as the example; read S61ED or S2ED for the
 other editors.)
 
 "S6ED.DAT not found." / "S6ED.DAT corrupt."
@@ -1031,7 +1031,7 @@ other editors.)
     distribution disk. Each editor needs its own .DAT: they
     are not interchangeable.
 
-The text looks wrong / status bar shows [ROM]  [S6ED/S62ED]
+The text looks wrong / status bar shows [ROM]  [S6ED/S61ED]
     The .FNT file is missing or has the wrong size; the MSX
     ROM charset is being used. Restore the .FNT file.
 
@@ -1070,14 +1070,12 @@ The disk boots to the DOS prompt instead of the editor
     - Miguel A. Fernandez, for the beautiful hand-drawn 6x8,
       8x8 and 4x8 fonts (and for testing beyond the call of
       duty).
+    - Miguel Fides, for his support and ideas.
     - VileR, for the VGA text mode font collection the IBM
       CGA font comes from. Font design (c) IBM.
     - Amstrad, for the CPC font: Amstrad have kindly given
       their permission for the redistribution of their
       copyrighted material but retain that copyright.
-    - The openMSX team, for the emulator that made the
-      200+ mutation-tested regression suite possible.
-    - The sjasmplus authors, for the assembler.
     - Konamiman, for Nextor.
     - The whole MSX community, for keeping this machine
       alive 40+ years on.

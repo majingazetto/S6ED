@@ -1794,15 +1794,15 @@ class H21Shadow(Case):
 
 class H22FileMenu(Case):
     name = 'H22-file-menu'
-    desc = ('SELECT opens File dropdown menu at (48,8); DOWN/UP navigates '
+    desc = ('SELECT opens File dropdown menu at (58,8); DOWN/UP navigates '
             'items skipping separator; ESC/SELECT cancels and restores screen; '
             'accelerators and actions execute cleanly')
     origin = ('Dropdown menu subsystem: first top menu (File) with XOR title toggle, '
               'custom item rendering in composition buffer, and action dispatch')
 
-    ITEM0_PX = (53, 13)    # Item 0 (New) selection bar body padding (DX=52..187, RelY=3..10 -> Y=11..18)
-    ITEM1_PX = (53, 21)    # Item 1 (Open) bar body padding (RelY=11..18 -> Y=19..26)
-    SEP_PX = (53, 45)      # Separator line body (RelY=37 -> Y=45)
+    ITEM0_PX = (63, 13)    # Item 0 (New) selection bar body padding (DX=52..187, RelY=3..10 -> Y=11..18)
+    ITEM1_PX = (63, 21)    # Item 1 (Open) bar body padding (RelY=11..18 -> Y=19..26)
+    SEP_PX = (63, 45)      # Separator line body (RelY=37 -> Y=45)
 
     def fixture(self, ctx, variant=None):
         return crlf(numbered(10))
@@ -1897,7 +1897,7 @@ class H22FileMenu(Case):
         if r0_boot is not None and r0_open is not None:
             xor_ok = True
             for y in range(8):
-                for x in range(48, 72):
+                for x in range(58, 82):
                     p_boot = vram.pixel(r0_boot, x, y, first_line=0)
                     p_open = vram.pixel(r0_open, x, y, first_line=0)
                     if p_open != (p_boot ^ 1):
@@ -1908,7 +1908,7 @@ class H22FileMenu(Case):
         else:
             xor_ok = False
         checks.append(Check('H22/title-xor', xor_ok,
-                            'row 0 "File" title inverted with XOR (48..71, 0..7)'
+                            'row 0 "File" title inverted with XOR (58..81, 0..7)'
                             if xor_ok else
                             'title XOR mismatch in row 0'))
 
@@ -1947,7 +1947,7 @@ class H22FileMenu(Case):
         r0_match = True
         if r0_boot and r0_esc:
             for y in range(8):
-                for x in range(48, 72):
+                for x in range(58, 82):
                     if vram.pixel(r0_esc, x, y, first_line=0) != vram.pixel(r0_boot, x, y, first_line=0):
                         r0_match = False
                         break
@@ -2134,12 +2134,12 @@ class H23MenuNav(Case):
         if r0_boot is not None and r0_edit is not None:
             for y in range(8):
                 # File title restored
-                for x in range(48, 72):
+                for x in range(58, 82):
                     if vram.pixel(r0_edit, x, y, first_line=0) != vram.pixel(r0_boot, x, y, first_line=0):
                         xor_title_ok = False
                         break
                 # Edit title inverted
-                for x in range(84, 108):
+                for x in range(94, 118):
                     if vram.pixel(r0_edit, x, y, first_line=0) != (vram.pixel(r0_boot, x, y, first_line=0) ^ 1):
                         xor_title_ok = False
                         break
@@ -2150,7 +2150,7 @@ class H23MenuNav(Case):
         checks.append(Check(
             'H23/title-switch-xor',
             xor_title_ok,
-            'Switching to Edit menu restores File title and inverts Edit title (84..107)'
+            'Switching to Edit menu restores File title and inverts Edit title (94..117)'
             if xor_title_ok else 'Title switch XOR mismatch'))
 
         # 4. Horizontal LEFT navigation + wrap
