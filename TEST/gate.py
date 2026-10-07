@@ -1346,14 +1346,14 @@ class H8DatBadMagic(_DatCorrupt):
 
 class H39DatForeign(_DatCorrupt):
     name = 'H39-dat-foreign'
-    desc = "S62ED's container renamed to S6ED.DAT is rejected"
-    origin = ('2026-10-06: DATHCHK accepted any "S?ED" magic and S62ED shipped '
+    desc = "S61ED's container renamed to S6ED.DAT is rejected"
+    origin = ('2026-10-06: DATHCHK accepted any "S?ED" magic and S61ED shipped '
               'S6ED\'s, so S6ED would load code phased for another editor. '
-              'S62ED.DAT is the sibling to test with: its header and block '
+              'S61ED.DAT is the sibling to test with: its header and block '
               'layout are S6ED\'s, so only the magic can tell them apart')
 
     def dat_mutate(self, ctx, dat):
-        with open(os.path.join(ctx.code_dir, 'S62ED.DAT'), 'rb') as fh:
+        with open(os.path.join(ctx.code_dir, 'S61ED.DAT'), 'rb') as fh:
             return fh.read()
 
 
@@ -1800,9 +1800,9 @@ class H22FileMenu(Case):
     origin = ('Dropdown menu subsystem: first top menu (File) with XOR title toggle, '
               'custom item rendering in composition buffer, and action dispatch')
 
-    ITEM0_PX = (63, 13)    # Item 0 (New) selection bar body padding (DX=52..187, RelY=3..10 -> Y=11..18)
-    ITEM1_PX = (63, 21)    # Item 1 (Open) bar body padding (RelY=11..18 -> Y=19..26)
-    SEP_PX = (63, 45)      # Separator line body (RelY=37 -> Y=45)
+    ITEM0_PX = (61, 13)    # Item 0 (New) selection bar body padding (DX=WINX+4..WINX+WINW-5, RelY=3..10 -> Y=11..18)
+    ITEM1_PX = (61, 21)    # Item 1 (Open) bar body padding (RelY=11..18 -> Y=19..26)
+    SEP_PX = (61, 45)      # Separator line body (RelY=37 -> Y=45)
 
     def fixture(self, ctx, variant=None):
         return crlf(numbered(10))

@@ -18,9 +18,9 @@ import os
 
 LINE = 128                  # bytes per Screen 6 scanline
 CELLW = 8
-TXORG_X = 8
+TXORG_X = 16
 ROWS = 24                   # text rows 1..24
-COLS = 62
+COLS = 61
 STB_X = 8
 STB_Y = 202
 STATCOLS = 62
@@ -32,14 +32,14 @@ NORMAL, BOLD, ITALIC, BOLDITALIC = 0, 1, 2, 3
 
 
 def load_font(ctx, variant=NORMAL):
-    """One variant of the shipped S62ED.FNT (2,048 bytes).
+    """One variant of the shipped S61ED.FNT (2,048 bytes).
 
     Window titles and the selected menu item are drawn BOLD: compare them
     with the BOLD variant.  With a font whose four variants are equal (the
-    BIOS one S62ED first shipped) any variant would do, which is exactly why
+    BIOS one S61ED first shipped) any variant would do, which is exactly why
     the distinction went unnoticed until the CGA font arrived.
     """
-    path = os.path.join(ctx.code_dir, 'S62ED.FNT')
+    path = os.path.join(ctx.code_dir, 'S61ED.FNT')
     if not os.path.exists(path):
         return None
     with open(path, 'rb') as fh:
@@ -106,11 +106,11 @@ def text_mismatches(screen, font, lines, top=0, left=0, cursor=None):
 
 
 def margin_dirty(screen):
-    """Text-area scanlines with ink in the 8 px margins (x 0..7, 504..511)."""
+    """Text-area scanlines with ink in the margins (left: x 0..15, right: x 504..511)."""
     bad = []
     for y in range(8, 200):
         row = screen[y * LINE:(y + 1) * LINE]
-        if row[0] or row[1] or row[126] or row[127]:
+        if row[0] or row[1] or row[2] or row[3] or row[126] or row[127]:
             bad.append(y)
     return bad
 

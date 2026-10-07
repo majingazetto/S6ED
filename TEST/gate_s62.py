@@ -50,7 +50,7 @@ def screen_checks(tag, ctx, run, label, lines, cursor=True):
     fnt = font(ctx)
     if dump is None or fnt is None:
         return [Check('%s/dump' % tag, False,
-                      'no screen dump' if dump is None else 'no S62ED.FNT')]
+                      'no screen dump' if dump is None else 'no S61ED.FNT')]
     top = run.var(label, 'TOPLINE') or 0
     left = run.var(label, 'LEFTCOL') or 0
     cur = None
@@ -101,10 +101,10 @@ class S621Render(S62Case):
         checks = screen_checks('S62-1', ctx, run, 'boot', self.LINES)
         dump = run.blob('boot', 'screen')
         fnt = font(ctx)
-        menu = (screen62.cell_text(dump, fnt, 16, 0, 25, screen62.COL_FG,
+        want = 'S61ED | File  Edit  Help'
+        menu = (screen62.cell_text(dump, fnt, 16, 0, len(want), screen62.COL_FG,
                                    screen62.COL_UI)
                 if dump is not None and fnt is not None else None)
-        want = 'S61ED | File  Edit  Help'
         checks.append(Check('S62-1/menubar', menu == want,
                             'row 0 reads %r' % menu))
         checks.append(Check('S62-1/totlines',
@@ -375,17 +375,17 @@ class S626Browse(S62Case):
 
 class S627DatForeign(S62Case):
     name = 'S62-7-dat-foreign'
-    desc = "S6ED.DAT renamed to S62ED.DAT aborts with the corrupt message"
-    origin = 'S62ED shipped S6ED\'s container magic until 2026-10-06'
+    desc = "S6ED.DAT renamed to S61ED.DAT aborts with the corrupt message"
+    origin = 'S61ED shipped S6ED\'s container magic until 2026-10-06'
     absolute = True
     with_dat = False
-    autoexec = 'S62ED'
+    autoexec = 'S61ED'
     cfg = None
 
     def disk_files(self, ctx, variant=None):
         files = S62Case.disk_files(self, ctx, variant)
         with open(os.path.join(ctx.code_dir, 'S6ED.DAT'), 'rb') as fh:
-            files['S62ED.DAT'] = fh.read()
+            files['S61ED.DAT'] = fh.read()
         return files
 
     def timeline(self, ctx, variant=None):
@@ -396,7 +396,7 @@ class S627DatForeign(S62Case):
 
     def verify(self, ctx, runs):
         run = one(runs)
-        want = b'S62ED.DAT corrupt.'
+        want = b'S61ED.DAT corrupt.'
         text = run.blob('exit', 'text')
         printed = text is not None and want in text
         return [Check('S62-7/corrupt-printed', printed,
@@ -485,13 +485,13 @@ class S629BrowseBusy(S62Case):
 
 class S6210ShippedDisk(ShippedDiskCase):
     name = 'S62-10-shipped-disk'
-    desc = 'S62ED.DSK as make dsk-s62 ships it boots into \\DEV\\TEST.TXT'
-    origin = ('2026-10-06: AUTOEXEC_S62.BAT had bare LF line endings, which '
+    desc = 'S61ED.DSK as make dsk-s61 ships it boots into \\DEV\\TEST.TXT'
+    origin = ('2026-10-06: AUTOEXEC_S61.BAT had bare LF line endings, which '
               'COMMAND2.COM ignores -- the disk booted to the DOS prompt')
     machine = MACH_128K
-    dsk_target = 'dsk-s62'
-    dsk_name = 'S62ED.DSK'
-    doc_host = 'TEST_S62.TXT'
+    dsk_target = 'dsk-s61'
+    dsk_name = 'S61ED.DSK'
+    doc_host = 'TEST_S61.TXT'
 
     def verify(self, ctx, runs):
         return self.shipped_checks(ctx, runs, 'S62-10', Check)
