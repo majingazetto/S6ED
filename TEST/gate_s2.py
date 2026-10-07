@@ -3650,8 +3650,12 @@ class S238ReflowAttrs(S2Case):
     origin = ('2026-10-06 review: REFLOW copied the remainder\'s attributes from '
               'the byte count instead of the source offset (LD C, B)')
 
+    # Line 0 leaves exactly room for ' xx yy' below REFLOW's margin
+    # (TEXTCOLS - 1), so the whole of 'xx yy' comes up and 'BBBB' stays.
+    # Derived, not typed: as 'A' * 55 it was tied to 62 columns, and at 61
+    # only 'xx' came up and the case measured the wrong characters.
     def fixture(self, ctx, variant=None):
-        return crlf(['A' * 55, 'xx yy '])
+        return crlf(['A' * (pattern.TEXTCOLS - 7), 'xx yy '])
 
     def timeline(self, ctx, variant=None):
         t = Timeline()
@@ -4158,7 +4162,8 @@ class S247RightMargin(S2Case):
               'right half only past the end of the LINE: a longer line would '
               'have painted its column 61 into the margin.')
     LONG = ''.join(chr(65 + i % 26) for i in range(130))
-    LINES = [LONG, ''.join(chr(97 + i % 26) for i in range(61)), 'X']
+    LINES = [LONG, ''.join(chr(97 + i % 26) for i in range(pattern.TEXTCOLS)),
+             'X']
 
     def fixture(self, ctx, variant=None):
         return crlf(self.LINES)
