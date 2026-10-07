@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-27  
 **Status:** Approved Specification (Phase 1 SDD)  
-**Authors:** Armando Pérez Abad & Gemini / Antigravity  
+**Authors:** Armando Pérez Abad  
 **Target Systems:** MSX2 Screen 6 (S6ED, 80 cols) & MSX1 Screen 2 (S2ED, 64 cols)  
 
 ---

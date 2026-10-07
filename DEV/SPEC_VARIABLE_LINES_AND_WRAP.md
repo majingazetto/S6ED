@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-24  
 **Status:** Approved Roadmap & Architectural Specification (Phase 1 SDD)  
-**Authors:** Armando Pérez Abad & Claude / Antigravity  
+**Authors:** Armando Pérez Abad  
 **Target Systems:** MSX2 Screen 6 (S6ED, 80 cols) & MSX1 Screen 2 (S2ED, 64 cols)  
 
 ---

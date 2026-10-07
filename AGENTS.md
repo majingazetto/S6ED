@@ -1,12 +1,12 @@
-# S6ED Development Guidelines & Testing Framework
+# SXED Development Guidelines & Testing Framework
 
-This document outlines the architectural conventions, testing standards, and anti-regression rules for S6ED. All contributors and AI assistants working on this codebase must adhere strictly to these principles.
+This document outlines the architectural conventions, testing standards, and anti-regression rules for SXED (S6ED, S61ED, S2ED). All contributors and automated agents working on this codebase must adhere strictly to these principles.
 
 ---
 
 ## 1. The Four Anti-Regression Rules
 
-The S6ED test suite (`TEST/`) is built on historical defects. To prevent past failures (such as the duplicate GRAPH accent delivery and silent test pass-throughs) from recurring, follow these four cardinal rules:
+The SXED test suite (`TEST/`) is built on historical defects. To prevent past failures (such as the duplicate GRAPH accent delivery and silent test pass-throughs) from recurring, follow these four cardinal rules:
 
 ### Rule 1: Mandatory Green Baseline for Mutation Testing
 * **The Rule:** A mutation only proves test efficacy if the check it targets was **100% GREEN on the clean build**.
