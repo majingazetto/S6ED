@@ -824,7 +824,7 @@ class S211About(S2Case):
     name = 'S2-11-about'
     desc = ('F5 opens the About dialog through the FTRBASE window engine, '
             'and closing it restores the screen byte for byte')
-    origin = ('phase W1 of the S2 window engine (DEV/SPEC_S2ED_WINDOW_MENU.md): '
+    origin = ('phase W1 of the S2 window engine (DEV/ARCHITECTURE.md): '
               'with no command engine and no off-screen VRAM, windows compose '
               'in the RAM shadows and the background is saved to a buffer at '
               'the top of FTRBASE.  A save or restore off by one cell leaves '

@@ -486,7 +486,7 @@ def check_ftr_budget(ctx):
 
     The window/menu system leaves the two FTRBASE containers in radically
     different states -- S6ED with ~9,600 B free, S2ED with ~200 B once the
-    menus land (DEV/SPEC_S2ED_FTRBASE_GUARD.md).  A shared passenger that
+    menus land (DEV/ARCHITECTURE.md).  A shared passenger that
     fits on one target can silently overflow the other.  Three layers form
     the net: the FTR-BUDGET comment required at every FCALL site in CORE,
     the ASSERT FTRFREE >= 128 in both root sources, and the FTRFREE value

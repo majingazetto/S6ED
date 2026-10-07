@@ -31,8 +31,13 @@ class Context(object):
         self.src_dir = os.path.join(self.code_dir, 'SRC')
         self.res_dir = os.path.join(self.project_dir, 'RES')
         self.workspace = os.path.dirname(self.project_dir)
-        self.dsktool = os.path.join(self.workspace, 'msxtools', 'bin', 'dsktool')
-        self.dskfat = os.path.join(self.workspace, 'msxtools', 'scripts', 'dskfat.py')
+        local_dsktool = os.path.join(self.project_dir, 'tools', 'bin', 'dsktool')
+        ws_dsktool = os.path.join(self.workspace, 'msxtools', 'bin', 'dsktool')
+        self.dsktool = local_dsktool if os.path.exists(local_dsktool) else ws_dsktool
+
+        local_dskfat = os.path.join(self.project_dir, 'tools', 'dskfat.py')
+        ws_dskfat = os.path.join(self.workspace, 'msxtools', 'scripts', 'dskfat.py')
+        self.dskfat = local_dskfat if os.path.exists(local_dskfat) else ws_dskfat
         self.out_dir = os.path.abspath(out_dir or
                                        os.path.join(self.test_dir, 'out'))
         os.makedirs(self.out_dir, exist_ok=True)

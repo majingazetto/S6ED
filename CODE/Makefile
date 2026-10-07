@@ -54,8 +54,8 @@ FNTFILE			= S6ED.FNT
 DATFILE			= S6ED.DAT
 
 DSKFILE			= S6ED.DSK
-DSKTOOL			= ../../msxtools/bin/dsktool
-DSKFAT			= python3 ../../msxtools/scripts/dskfat.py
+DSKTOOL			= ../tools/bin/dsktool
+DSKFAT			= python3 ../tools/dskfat.py
 DSKBASE			= $(RES_DIR)/DOS2.DSK
 
 # --- S2 (Screen 2 TMS9918) Targets -------------------------------------
@@ -148,7 +148,7 @@ FONTS61			= CGA.FNT CPC.FNT BIOS.FNT
 
 MANUALSRC		= ../DOC/SXED.TXT
 MANUAL			= SXED_MSX.TXT
-UTF8MSX			= python3 ../../msxtools/scripts/utf8msx.py
+UTF8MSX			= python3 ../tools/utf8msx.py
 
 $(MANUAL): $(MANUALSRC)
 	@$(UTF8MSX) $< $@

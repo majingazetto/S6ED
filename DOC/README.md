@@ -1,10 +1,8 @@
 # SXED — Editor Documentation
 
-This directory is reserved for the documentation **of the editor itself**:
-user manuals, keybinding references, file-format notes for end users, and
-user-facing architecture descriptions.
+This directory contains the user-facing documentation for the SXED editor family:
 
-- `SXED.TXT` — User manual and full reference guide.
+- **[`MANUAL.md`](MANUAL.md)** — Comprehensive user manual formatted in Markdown with table of contents and full reference sections.
+- **[`SXED.TXT`](SXED.TXT)** — Plain-text MSX-formatted user manual (61-column layout, viewable directly inside SXED on MSX hardware).
 
-Development documentation (design documents, phase plans, investigation
-reports) lives in `../DEV/`, not here.
+For technical specifications, subsystem architecture, and custom font creation guides, see the [`../DEV/`](../DEV/) directory.

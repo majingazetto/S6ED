@@ -33,7 +33,7 @@ that runs at the end of **every** integration, whatever was touched.
 
 ## The Four Anti-Regression Rules
 
-Every new test or code change must satisfy the four rules documented in [`AGENTS.md`](file:///Users/armandoperezabad/Code/brew/S6ED/AGENTS.md):
+Every new test or code change must satisfy the four cardinal anti-regression rules:
 
 1. **Mandatory Green Baseline:** A mutation test in `selftest.py` only proves a catch if all expected checks are 100% green on the clean build first. A mutation caught by a check that was already failing is reported as a self-test failure (`BASELINE NOT GREEN`).
 2. **Deterministic Race & Timing Tests:** Race conditions between the keyboard matrix and BIOS ISRs must be tested deterministically. Turn off host-clock dependencies (`CLOCK=0`) and use multi-pass bursts (e.g. 4 passes across the key row) to sweep the CPU/ISR phase window. Never rely on an isolated single keypress.

@@ -63,10 +63,14 @@ Designed for serious text editing directly on vintage hardware, SXED features a 
 
 ## Documentation
 
-- **User Manual & Complete Reference:** [`DOC/SXED.TXT`](DOC/SXED.TXT)  
-  *Comprehensive user documentation covering setup, keystroke tables, command syntax, configuration files (`SXED.CFG`), and troubleshooting.*
-- **Technical Specifications & Architecture:** [`DEV/`](DEV/)  
-  *Detailed engineering specs, memory budget invariants, and subsystem design notes.*
+- **User Manual (Markdown):** [`DOC/MANUAL.md`](DOC/MANUAL.md)  
+  *Comprehensive online user manual with table of contents, full keystroke tables, command syntax, configuration reference (`SXED.CFG`), and troubleshooting.*
+- **User Manual (MSX Text):** [`DOC/SXED.TXT`](DOC/SXED.TXT)  
+  *Plain text 61-column reference manual, formatted for viewing directly on vintage MSX hardware inside SXED.*
+- **System Architecture & Subsystems:** [`DEV/ARCHITECTURE.md`](DEV/ARCHITECTURE.md)  
+  *Detailed engineering specs: multi-target drivers, memory maps, variable-length line records, window engine, and error handling.*
+- **Font System & Custom Font Creation Guide:** [`DEV/FONTS.md`](DEV/FONTS.md)  
+  *Font specifications (6×8, 8×8, 4×8), derivation tools, and step-by-step instructions for creating your own custom fonts.*
 
 ---
 
